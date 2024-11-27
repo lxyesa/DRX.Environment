@@ -14,3 +14,10 @@
 | 函数名 | 参数 | 说明 | 返回值 |
 |-------|-----|-------|--------|
 | NetworkUtils | NetworkClientEventHandler^ event_handler, int heart_delay | 初始化网络工具，为下一步做准备，参数需要一个事件处理类，心跳包频率 | void |
+
+使用案例：
+```cpp
+using namespace NetworkCommonLibrary;   // 必须
+using namespace NetworkCommonLibrary::EventHandlers;   // 必须
+
+NetworkUtils^ networkUtils = gcnew NetworkUtils(eventHandler, heart_delay);
