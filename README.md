@@ -12,5 +12,5 @@
    - 任何在**NetworkCommonLibrary.EventHandlers**命名空间中的类都是抽象类，这些类需要你自己实现执行方法。
 ## API 文档
 | 函数名 | 参数 | 说明 | 返回值 |
---------------------------------
+|-------|-----|-------|--------|
 | NetworkUtils | NetworkClientEventHandler^ event_handler, int heart_delay | 初始化网络工具，为下一步做准备，参数需要一个事件处理类，心跳包频率 | void |
