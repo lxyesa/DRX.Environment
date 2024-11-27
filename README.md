@@ -13,11 +13,18 @@
 ## API 文档
 | 函数名 | 参数 | 说明 | 返回值 |
 |-------|-----|-------|--------|
-| NetworkUtils | NetworkClientEventHandler^ event_handler, int heart_delay | 初始化网络工具，为下一步做准备，参数需要一个事件处理类，心跳包频率 | void |
+| NetworkUtils(类) | NetworkClientEventHandler^ event_handler, int heart_delay | 初始化网络工具，为下一步做准备，参数需要一个事件处理类，心跳包频率 | void |
+| ConnectAsync | String^ ip, int port | 异步连接服务器 | Task<void>(可以是作为void) |
 
 使用案例：
 ```cpp
+#include <msclr/marshal_cppstd.h>
+#include <iostream>
+#using "xxxxx\NetworkCommonLibrary.dll"   // 根据你的库路径决定
+
 using namespace NetworkCommonLibrary;   // 必须
 using namespace NetworkCommonLibrary::EventHandlers;   // 必须
 
-NetworkUtils^ networkUtils = gcnew NetworkUtils(eventHandler, heart_delay);
+NetworkUtils^ networkUtils = gcnew NetworkUtils(eventHandler, heart_delay);   // 创建一个网络工具实例，使用gcnew托管（gc是一个前缀，你可以将其视作为托管给.NET的new，不用（也不能）手动管理内存，而是.NET为你管理）
+networkUtils->ConnectAsync("0.0.0.0",114514);   // 尝试连接服务器。
+// 如果你需要等待服务器连接后执行下一步，你可以使用以下写法：networkUtils->ConnectAsync("0.0.0.0",114514)->Wait();
