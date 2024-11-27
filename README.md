@@ -27,4 +27,5 @@ using namespace NetworkCommonLibrary::EventHandlers;   // 必须
 
 NetworkUtils^ networkUtils = gcnew NetworkUtils(eventHandler, heart_delay);   // 创建一个网络工具实例，使用gcnew托管（gc是一个前缀，你可以将其视作为托管给.NET的new，不用（也不能）手动管理内存，而是.NET为你管理）
 networkUtils->ConnectAsync("0.0.0.0",114514);   // 尝试连接服务器。
-// 如果你需要等待服务器连接后执行下一步，你可以使用以下写法：networkUtils->ConnectAsync("0.0.0.0",114514)->Wait();
+// 如果你需要等待服务器连接后执行下一步，你可以使用以下写法：
+networkUtils->ConnectAsync("0.0.0.0",114514)->Wait();
