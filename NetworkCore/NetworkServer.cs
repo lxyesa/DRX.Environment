@@ -173,8 +173,25 @@ public class NetworkServer
         {
             try
             {
-                // 接收数据并处理
+                // 添加连接状态检查
+                if (!IsSocketConnected(clientSocket))
+                {
+                    HandleClientDisconnection(clientSocket);
+                    break;
+                }
+
+                // 设置接收超时
+                clientSocket.ReceiveTimeout = 5000;
                 int received = clientSocket.Receive(buffer);
+                
+                // 检查连接是否已关闭
+                if (received == 0)
+                {
+                    HandleClientDisconnection(clientSocket);
+                    break;
+                }
+
+                // 接收数据并处理
                 if (received > 0)
                 {
                     byte[] data = new byte[received];
@@ -188,11 +205,35 @@ public class NetworkServer
                         _eventHandler.OnClientMessage(clientSocket, data);
                 }
             }
-            catch
+            catch (SocketException ex)
+            {
+                // 细化错误处理
+                if (ex.SocketErrorCode == SocketError.TimedOut ||
+                    ex.SocketErrorCode == SocketError.ConnectionReset ||
+                    ex.SocketErrorCode == SocketError.Disconnecting)
+                {
+                    HandleClientDisconnection(clientSocket);
+                }
+                break;
+            }
+            catch (Exception)
             {
                 HandleClientDisconnection(clientSocket);
                 break;
             }
+        }
+    }
+
+    // 添加新的辅助方法来检查socket连接状态
+    private bool IsSocketConnected(Socket socket)
+    {
+        try
+        {
+            return !(socket.Poll(1, SelectMode.SelectRead) && socket.Available == 0);
+        }
+        catch (SocketException)
+        {
+            return false;
         }
     }
     #endregion
@@ -251,7 +292,7 @@ public class NetworkServer
             {
                 HandleClientDisconnection(clientSocket);
             });
-            Thread.Sleep(1000); // 每秒检查一次
+            Thread.Sleep(5000); // 每秒检查一次
         }
     }
     #endregion

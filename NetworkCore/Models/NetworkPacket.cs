@@ -36,8 +36,7 @@ public class NetworkPacket
     public NetworkPacket(string header, object body, string key, PacketType type)
     {
         Header = header;
-        // 使用源生成的序列化器
-        Body = JsonSerializer.Serialize(body, typeof(object), NetworkPacketJsonContext.Default);
+        Body = JsonSerializer.Serialize(body, DefaultOptions);
         Key = key;
         Type = type;
     }
@@ -47,14 +46,7 @@ public class NetworkPacket
     //==========================================//
     public virtual byte[] Serialize()
     {
-        var options = new JsonSerializerOptions
-        {
-            Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
-            WriteIndented = false,
-            TypeInfoResolver = NetworkPacketJsonContext.Default
-        };
-        
-        string jsonString = JsonSerializer.Serialize(this, NetworkPacketJsonContext.Default.NetworkPacket);
+        string jsonString = JsonSerializer.Serialize(this, DefaultOptions);
         return Encoding.UTF8.GetBytes(jsonString);
     }
 
@@ -75,11 +67,7 @@ public class NetworkPacket
         {
             throw new InvalidOperationException("数据包体为空");
         }
-        // 修改反序列化方式
-        var result = JsonSerializer.Deserialize<T>(Body, new JsonSerializerOptions
-        {
-            TypeInfoResolver = NetworkPacketJsonContext.Default
-        });
+        var result = JsonSerializer.Deserialize<T>(Body, DefaultOptions);
         if (result == null)
         {
             throw new InvalidOperationException("反序列化Body失败");
@@ -118,5 +106,5 @@ public enum PacketType
     Error = 0x04,      // 错误，用于回应错误消息，或直接断开连接
     Message = 0x05,     // 消息，通常服务端无需回应，客户端也不需要回应
     Data = 0x06,        // 数据，通常由服务端下发，客户端无需回应，但客户端需要手动解析这类包。
-    Command = 0x07     // 命令，通常由服务器执��、下发，但客户端也可以发送命令，需要回应客户端是否拥有权限执行命令，或命令执行结果。
+    Command = 0x07     // 命令，通常由服务器执��、下发，但客户端也可以发送命令，需要回应客户端是否拥有权限执行命令，或命令���行结果。
 }

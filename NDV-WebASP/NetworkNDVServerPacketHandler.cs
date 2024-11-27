@@ -16,8 +16,7 @@ public class NetworkNDVServerPacketHandler : NetworkServerPacketHandler
     public override async Task HandlePacketAsync(Socket clientSocket, Socket serverSocket, NetworkPacket packet)
     {
         await base.HandlePacketAsync(clientSocket, serverSocket, packet);
-
-        Console.WriteLine("1");
+        Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}][Debug-NetworkNDVServerPacketHandler:19 line] 收到来自 {clientSocket.RemoteEndPoint} 的数据包: {packet.Header}");
         switch (packet.Type)
         {
             case PacketType.Request:

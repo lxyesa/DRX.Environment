@@ -21,8 +21,14 @@ public class DefaultNetworkServerEvent : INetworkServerEvent
     }
     public virtual void OnClientDisconnected(Socket clientSocket)
     {
-        if (clientSocket != null && clientSocket.Connected)
+        try
+        {
             Console.WriteLine($"{DateTime.Now:yyyy/mm/dd hh:mm:ss:ff} 客户端 {clientSocket.RemoteEndPoint} 断开连接");
+        }
+        catch
+        {
+            Console.WriteLine($"{DateTime.Now:yyyy/mm/dd hh:mm:ss:ff} 客户端断开连接");
+        }
     }
     public virtual void OnClientConnected(Socket clientSocket)
     {
