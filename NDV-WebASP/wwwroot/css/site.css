@@ -1,0 +1,232 @@
+.center-content {
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    align-items: center;
+    min-height: 100vh;
+    text-align: center;
+}
+
+#c1 {
+    font-weight: 300;
+    font-size: 1.0em;
+    background-color: rgb(230, 230, 230);
+    width: 76%;
+    height: 30vh;
+    border-radius: 4px;
+    margin-top: 30px;
+
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: flex-start;
+    text-align: left;
+    padding-left: 0px;
+
+    box-shadow: 0px 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+#c2 {
+    width: 80%;
+    height: 50%;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: flex-start;
+    text-align: left;
+    position: relative;
+    padding-left: 100px;
+}
+
+#c3 {
+    width: auto;
+    height: 100%;
+
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+
+#c4 {
+    height: 100%;
+    position: absolute;
+    right: 0;
+    width: 600px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: flex-end;
+    align-content: flex-end;
+}
+
+#图标 {
+    fill: rgba(76, 175, 80, 0.5);  /* 使用带有透明度的绿色 */
+    width: 250px;
+    height: 250px;
+}
+
+#标题{
+    font-size: 3em;
+    font-weight: 500;
+    color: black;
+    margin: 0px;
+    padding: 0px;
+    font-family: 'Microsoft YaHei', sans-serif;
+}
+
+#副标题{
+    font-size: 1.5em;
+    font-weight: 300;
+    color: black;
+    margin: 0px;
+    padding: 0px;
+    font-family: 'Microsoft YaHei', sans-serif;
+}
+
+#立刻查看按钮{
+    font-size: 1.2em;
+    font-weight: 300;
+    margin-top: 30px;
+    padding: 0px;
+    font-family: 'Microsoft YaHei', sans-serif;
+    background-color: #0067b8;
+    color: white;
+
+    width: 150px;
+    height: 40px;
+
+    border: none;
+    box-shadow: 0px 0px 0px rgba(0, 0, 0, 0);
+    transition: 0.3s;
+    border-radius: 4px;
+    cursor: pointer;
+    }
+
+    #立刻查看按钮:hover {
+        box-shadow: 0px 1px 5px rgba(0, 0, 0, 0.5);
+        background-color: #005291;
+}
+
+#header {
+    display: flex;
+    top: 0;
+    width: 100%;
+    height: 60px;
+    z-index: 1000;
+
+    flex-direction: row;
+    align-content: center;
+    align-items: flex-start;
+    justify-content: center;
+}
+
+#hc1 {
+    display: flex;
+    width: 65%;
+    height: 60px;
+    /* background-color: blue; */
+    flex-direction: row-reverse;
+    align-content: center;
+    justify-content: flex-start;
+    align-items: center;
+    flex-wrap: nowrap;
+}
+
+#hc2 {
+    display: flex;
+    width: 60px;
+    height: 60px;
+    /* background-color: black; */
+    flex-direction: row;
+    align-content: center;
+    justify-content: center;
+    align-items: center;
+}
+
+#hc3{
+    display: flex;
+    width: auto;
+    height: 60px;
+    margin-right: 15px;
+    /* background-color: black; */
+    flex-direction: row;
+    align-content: center;
+    justify-content: center;
+    align-items: center;
+}
+
+#用户名{
+    font-family: 'Microsoft YaHei', sans-serif;
+    font-size: 1.0em;
+    font-weight: 120;
+    text-decoration: none;
+    color: black;
+}
+
+#头像{
+    border-radius: 50%;
+    width: 40px;
+    height: 40px;
+}
+
+#竖线{
+    width: 1.5px;
+    height: 50%;
+    background-color: rgba(0, 0, 0, 0.2);
+}
+
+#无下划线超链接{
+    text-decoration: none;
+    color: #0067b8;
+}
+
+#info-header {
+    width: 76%;
+    height: 45px;
+    margin-top: 15px;
+    display: flex;
+    flex-direction: row;
+    align-content: center;
+    justify-content: flex-start;
+    align-items: center;
+}
+
+.auth-container {
+    width: 300px;
+    margin: 20px auto;
+    padding: 20px;
+    background-color: #fff;
+    border-radius: 8px;
+    box-shadow: 0 0 10px rgba(0,0,0,0.1);
+}
+
+.form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.form-group input {
+    padding: 8px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+}
+
+.auth-buttons {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+}
+
+.auth-buttons button {
+    padding: 8px 20px;
+    background-color: #007bff;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.auth-buttons button:hover {
+    background-color: #0056b3;
+}

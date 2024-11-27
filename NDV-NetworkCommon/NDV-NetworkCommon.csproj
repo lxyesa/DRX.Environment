@@ -1,0 +1,23 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <RootNamespace>NDV_NetworkCommon</RootNamespace>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <PublishAot>true</PublishAot>
+    <EnableDynamicLoading>true</EnableDynamicLoading>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <IlcGenerateDependencyReport>true</IlcGenerateDependencyReport>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <JsonSerializerIsReflectionEnabledByDefault>false</JsonSerializerIsReflectionEnabledByDefault>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\NetworkCore\NetworkCore.csproj" />
+    <ProjectReference Include="..\NetworkCore\NetworkCore.csproj" />
+    <JsonSerializerContext Include="NetworkPacketJsonContext" />
+    <JsonSerializerContext Include="ApplicationJsonContext" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,13 @@
+/.vs/
+/.vscode/
+/NDV-NetworkCommon/bin/
+/NDV-NetworkCommon/obj/
+/NDV-TestClient/
+/NDV-WebASP/bin/
+/NDV-WebASP/obj/
+/NetworkCore/bin/
+/NetworkCore/obj/
+/publish/
+/Templant/
+/NetworkCommonLibrary/bin/
+/NetworkCommonLibrary/obj/
