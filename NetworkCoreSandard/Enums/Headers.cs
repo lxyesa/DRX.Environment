@@ -1,5 +1,5 @@
 
-namespace NetworkCoreSandard.Enums;
+namespace NetworkCoreStandard.Enums;
 
 public enum Headers
 {

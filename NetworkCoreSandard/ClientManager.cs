@@ -3,9 +3,9 @@ using System.Net.Sockets;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net;
-using NetworkCoreSandard.Models;
+using NetworkCoreStandard.Models;
 
-namespace NetworkCoreSandard;
+namespace NetworkCoreStandard;
 
 /// <summary>
 /// 客户端连接管理器，负责管理所有已连接客户端的状态和生命周期

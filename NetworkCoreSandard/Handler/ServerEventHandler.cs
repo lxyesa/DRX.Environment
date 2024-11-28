@@ -1,8 +1,8 @@
 
 using System.Net.Sockets;
-using NetworkCoreSandard.Interface;
+using NetworkCoreStandard.Interface;
 
-namespace NetworkCoreSandard.Handler;
+namespace NetworkCoreStandard.Handler;
 
 public class ServerEventHandler : INetworkServerEvent
 {

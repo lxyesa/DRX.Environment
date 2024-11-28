@@ -1,11 +1,12 @@
 using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Hosting.Server.Features;
 using System.Net;
-using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
 using NDV.WebASP.Services;
 using NDV_WebASP;
+using NetworkCoreStandard;
 
 public partial class Program
 {

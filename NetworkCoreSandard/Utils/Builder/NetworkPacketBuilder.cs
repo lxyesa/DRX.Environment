@@ -2,7 +2,7 @@ using System;
 using System.Text.Json;
 using NetworkCoreStandard.Models;
 
-namespace NetworkCoreSandard.Utils.Builder;
+namespace NetworkCoreStandard.Utils.Builder;
 
 public class NetworkPacketBuilder
 {

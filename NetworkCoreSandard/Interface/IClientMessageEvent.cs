@@ -2,7 +2,7 @@
 using System.Net.Sockets;
 using NetworkCoreStandard.Models;
 
-namespace NetworkCoreSandard.Interface;
+namespace NetworkCoreStandard.Interface;
 
 public interface IClientMessageEvent
 {

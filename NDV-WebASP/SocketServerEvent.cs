@@ -1,6 +1,6 @@
 using System;
 using System.Net.Sockets;
-using NetworkCoreSandard.Handler;
+using NetworkCoreStandard.Handler;
 
 namespace NDV_WebASP;
 

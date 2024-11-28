@@ -7,7 +7,7 @@ using NetworkCoreStandard.Models;
 /// 网络服务器数据包处理器
 /// </summary>
 
-namespace NetworkCoreSandard.Handler;
+namespace NetworkCoreStandard.Handler;
 
 public class NetworkClientPacketHandler
 {

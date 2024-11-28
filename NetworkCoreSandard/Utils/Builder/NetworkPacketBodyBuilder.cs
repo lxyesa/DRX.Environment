@@ -1,7 +1,7 @@
 using System;
 using System.Text.Json;
 
-namespace NetworkCoreSandard.Utils.Builder;
+namespace NetworkCoreStandard.Utils.Builder;
 
 public class NetworkPacketBodyBuilder
 {

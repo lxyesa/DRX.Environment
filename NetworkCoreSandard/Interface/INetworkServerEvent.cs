@@ -1,6 +1,6 @@
 using System.Net.Sockets;
 
-namespace NetworkCoreSandard.Interface;
+namespace NetworkCoreStandard.Interface;
 
 public interface INetworkServerEvent{
     void OnServerStarted(Socket serverSocket);

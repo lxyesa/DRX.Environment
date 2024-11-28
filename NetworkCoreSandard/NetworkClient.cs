@@ -1,12 +1,12 @@
 using System.Net.Sockets;
-using NetworkCoreSandard.Handler;
-using NetworkCoreSandard.Interface;
+using NetworkCoreStandard.Handler;
+using NetworkCoreStandard.Interface;
 using NetworkCoreStandard.Models;
 
 /// <summary>
 /// 网络客户端类，用于处理TCP连接和消息传输
 /// </summary>
-namespace NetworkCoreSandard;
+namespace NetworkCoreStandard;
 public class NetworkClient : IDisposable
 {
     #region 字段

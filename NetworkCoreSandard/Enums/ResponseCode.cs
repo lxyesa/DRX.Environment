@@ -1,5 +1,5 @@
 
-namespace NetworkCoreSandard.Enums;
+namespace NetworkCoreStandard.Enums;
 public enum ResponseCode
 {
     Success = 0x00,    // 成功

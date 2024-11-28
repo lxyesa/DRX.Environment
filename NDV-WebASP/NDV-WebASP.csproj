@@ -8,12 +8,15 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\NDV-NetworkCommon\NDV-NetworkCommon.csproj" />
     <ProjectReference Include="..\NetworkCoreSandard\NetworkCoreSandard.csproj" />
   </ItemGroup>
 
   <ItemGroup>
     <Folder Include="wwwroot\js\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="9.0.0" />
   </ItemGroup>
 
 </Project>

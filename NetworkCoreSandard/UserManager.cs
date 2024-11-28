@@ -6,10 +6,10 @@ using System.Text;
 using System.Text.Json;
 using System.IO;
 using System.Threading.Tasks;
-using NetworkCoreSandard.Enums;
-using NetworkCoreSandard.Models;
+using NetworkCoreStandard.Enums;
+using NetworkCoreStandard.Models;
 
-namespace NetworkCoreSandard;
+namespace NetworkCoreStandard;
 
 public class UserManager
 {

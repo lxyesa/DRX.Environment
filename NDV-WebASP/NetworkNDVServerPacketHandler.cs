@@ -3,10 +3,10 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Net.Sockets;
 using System.Text.Json;
-using NetworkCoreSandard.Handler;
-using NetworkCoreSandard.Models;
-using NetworkCoreSandard.Utils.Builder;
+using NetworkCoreStandard;
+using NetworkCoreStandard.Handler;
 using NetworkCoreStandard.Models;
+using NetworkCoreStandard.Utils.Builder;
 
 namespace NDV_WebASP;
 

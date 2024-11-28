@@ -3,7 +3,7 @@ using System.Net;
 using Microsoft.AspNetCore.Authorization;
 using System.Security.Claims;
 using NDV.WebASP.Services;
-using NetworkCoreSandard.Models;
+using NetworkCoreStandard.Models;
 
 [ApiController]
 [Route("api/[controller]")]

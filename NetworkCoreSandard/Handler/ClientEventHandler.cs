@@ -1,8 +1,8 @@
 using System.Net.Sockets;
-using NetworkCoreSandard.Interface;
+using NetworkCoreStandard.Interface;
 using NetworkCoreStandard.Models;
 
-namespace NetworkCoreSandard.Handler;
+namespace NetworkCoreStandard.Handler;
 public class ClientEventHandler : IClientMessageEvent
 {
     public virtual void OnConnected(TcpClient client)

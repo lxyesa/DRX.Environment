@@ -8,7 +8,7 @@ using System.Threading;
 /// </summary>
 /// 
 
-namespace NetworkCoreSandard.Handler;
+namespace NetworkCoreStandard.Handler;
 
 public class NetworkServerPacketHandler
 {
