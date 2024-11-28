@@ -129,10 +129,10 @@ auto pack = gcnew NetworkPacket("a", bodyBuilder, 3);
 auto pack = gcnew NetworkPacket("a", bodyBuilder, 3);
 ```
 
-`gcnew NetworkPacket("a", bodyBuilder, 3)`: 创建一个新的 `NetworkPacket` 实例。
-`"a"`: 数据包的头。
-`bodyBuilder`: 使用 BodyBuilder 创建的数据包体。
-`3`: 数据包类型。
+- `gcnew NetworkPacket("a", bodyBuilder, 3)`: 创建一个新的 `NetworkPacket` 实例。
++ `"a"`: 数据包的头。
++ `bodyBuilder`: 使用 BodyBuilder 创建的数据包体。
++ `3`: 数据包类型。
 
 
 
