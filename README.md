@@ -36,7 +36,7 @@ networkUtils->ConnectAsync("0.0.0.0",114514)->Wait();
 ### 事件监听器
 1. NetworkClientEventHandler
 | 继承方需要实现的函数 | 参数 | 触发条件 |
-|-|-|
+|------------ | ----------- | ----------|
 | OnPacketReceived | TcpClient^ client, NetworkPacket^ packet | 当客户端接收到数据包时触发 |
 | OnConnected | TcpClient^ client | 当客户端连接时触发 |
 | OnHeartbeatSent | TcpClient^ client, NetworkPacket^ heartbeatPacket | 给服务器发送心跳包时触发 |
