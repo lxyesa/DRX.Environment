@@ -101,9 +101,38 @@ NetworkUtils^ networkUtils = gcnew NetworkUtils(eventHandler, heart_delay);
 networkUtils->ConnectAsync("0.0.0.0",114514);
 ```
 
+### 数据包构建
 
+此代码片段演示了如何创建一个 BodyBuilder 对象，向其添加键值对，并使用它创建一个带有指定头的 NetworkPacket。
 
+`BodyBuilder` 块:
 
+```cpp
+auto bodyBuilder = (gcnew BodyBuilder())
+	->Put("a", 1)
+	->Put("b", 2)
+	->Put("c", 3)
+	->Builder();
+
+auto pack = gcnew NetworkPacket("a", bodyBuilder, 3);
+```
+
+- gcnew BodyBuilder(): 创建一个新的 BodyBuilder 实例。
+- ->Put("a", 1): 向构建器添加键值对 ("a", 1)。
+- ->Put("b", 2): 向构建器添加键值对 ("b", 2)。
+- ->Put("c", 3): 向构建器添加键值对 ("c", 3)。
+- ->Builder(): 完成构建器的设置并准备使用。
+
+`NetworkPacket` 实例化
+
+```cpp
+auto pack = gcnew NetworkPacket("a", bodyBuilder, 3);
+```
+
+`gcnew NetworkPacket("a", bodyBuilder, 3)`: 创建一个新的 `NetworkPacket` 实例。
+`"a"`: 数据包的头。
+`bodyBuilder`: 使用 BodyBuilder 创建的数据包体。
+`3`: 数据包类型。
 
 
 
