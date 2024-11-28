@@ -2,30 +2,30 @@ using System;
 using System.Text.Json;
 using NetworkCoreStandard.Models;
 
-namespace NetworkCommonLibrary.Builder;
-public class PacketBuilder
+namespace NetworkCoreSandard.Utils.Builder;
+
+public class NetworkPacketBuilder
 {
     private NetworkPacket packet;
-
-    public PacketBuilder()
+    public NetworkPacketBuilder()
     {
         packet = new NetworkPacket();
     }
 
-    public PacketBuilder SetHeader(string header)
+    public NetworkPacketBuilder SetHeader(string header)
     {
         packet.Header = header;
         return this;
     }
 
-    public PacketBuilder SetBody(string jsonBody)
+    public NetworkPacketBuilder SetBody(string jsonBody)
     {
         // 将 JSON 字符串反序列化为对象
         packet.Body = jsonBody;
         return this;
     }
 
-    public PacketBuilder GenerateKey()
+    public NetworkPacketBuilder GenerateKey()
     {
         packet.Key = Guid.NewGuid().ToString("N");
         return this;
@@ -33,7 +33,7 @@ public class PacketBuilder
 
     public string Builder(int type)
     {
-        packet.Type = type;
+        packet.Type = (int)(PacketType)type;
         var options = new JsonSerializerOptions
         {
             Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping

@@ -3,6 +3,10 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Net.Sockets;
 using System.Text.Json;
+using NetworkCoreSandard.Handler;
+using NetworkCoreSandard.Models;
+using NetworkCoreSandard.Utils.Builder;
+using NetworkCoreStandard.Models;
 
 namespace NDV_WebASP;
 
@@ -16,23 +20,36 @@ public class NetworkNDVServerPacketHandler : NetworkServerPacketHandler
     public override async Task HandlePacketAsync(Socket clientSocket, Socket serverSocket, NetworkPacket packet)
     {
         await base.HandlePacketAsync(clientSocket, serverSocket, packet);
-        Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}][Debug-NetworkNDVServerPacketHandler:19 line] 收到来自 {clientSocket.RemoteEndPoint} 的数据包: {packet.Header}");
+
+        
+
         switch (packet.Type)
         {
-            case PacketType.Request:
+            case (int)PacketType.Request:
                 HandleRequestPacket(clientSocket, packet);
                 break;
-            case PacketType.Response:
-                
+            case (int)PacketType.Response:
+
                 break;
-            case PacketType.Command:
-                
+            case (int)PacketType.Command:
+
                 break;
-            case PacketType.Data:
-                
+            case (int)PacketType.Data:
+
                 break;
-            case PacketType.Error:
-                
+            case (int)PacketType.Error:
+
+                break;
+            case (int)PacketType.Heartbeat:
+                var heartbeat = new NetworkPacket()
+                {
+                    Header = "hb",
+                    Body = new NetworkPacketBodyBuilder()
+                        .Put("message", "pong")
+                        .Builder(),
+                    Type = (int)PacketType.Heartbeat
+                };
+                await SendAsync(clientSocket, heartbeat, PacketType.Heartbeat);
                 break;
             default:
                 break;
@@ -59,33 +76,53 @@ public class NetworkNDVServerPacketHandler : NetworkServerPacketHandler
     {
         try
         {
-            var request = packet.GetBodyObject<LoginRequestBody>();
             var ipString = socket?.RemoteEndPoint?.ToString()?.Split(":")[0];
-            Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] {request.Username} 正在尝试登录...");
 
+            Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] 登录请求ID{packet.Key},来自{ipString},"+
+                    $"用户名{packet.GetBodyValue("username")}，密码{packet.GetBodyValue("password")} 已被服务器受理");
             var (result, user) = await server.GetUserManager()
                 .LoginUserAsync(
-                        request.Username, request.Password, "machineCode", IPAddress.Parse(ipString!));
+                        packet.GetBodyValue("username")?.ToString() ?? throw new ArgumentNullException("username"),
+                        packet.GetBodyValue("password")?.ToString() ?? throw new ArgumentNullException("password"),
+                        "machineCode", IPAddress.Parse(ipString!));
 
             switch (result)
             {
                 case UserLoginResult.UserNotFound:
-                    await SendAsync(socket!, new LoginResponseBody(
-                        token: string.Empty,
-                        message: "用户不存在",
-                        success: false,
-                        username: request.Username,
-                        responseCode: ResponseCode.Failure
-                    ), PacketType.Error, packet.Key);
+                    await SendAsync(socket!, new NetworkPacket(){
+                        Header = "error",
+                        Body = new NetworkPacketBodyBuilder()
+                            .Put("message", "用户不存在")
+                            .Builder(),
+                        Type = (int)PacketType.Error
+                    }, PacketType.Error, packet.Key!);
                     break;
                 case UserLoginResult.WrongPassword:
-                    await SendAsync(socket!, "密码错误", PacketType.Error);
+                    await SendAsync(socket!, new NetworkPacket(){
+                        Header = "error",
+                        Body = new NetworkPacketBodyBuilder()
+                            .Put("message", "密码错误")
+                            .Builder(),
+                        Type = (int)PacketType.Error
+                    }, PacketType.Error, packet.Key!);
                     break;
                 case UserLoginResult.AlreadyOnline:
-                    await SendAsync(socket!, "用户已在线", PacketType.Error);
+                    await SendAsync(socket!, new NetworkPacket(){
+                        Header = "error",
+                        Body = new NetworkPacketBodyBuilder()
+                            .Put("message", "用户已在线")
+                            .Builder(),
+                        Type = (int)PacketType.Error
+                    }, PacketType.Error, packet.Key!);
                     break;
                 case UserLoginResult.Success:
-                    await SendAsync(socket!, "登录成功", PacketType.Response);
+                    await SendAsync(socket!, new NetworkPacket(){
+                        Header = "success",
+                        Body = new NetworkPacketBodyBuilder()
+                            .Put("message", "登录成功")
+                            .Builder(),
+                        Type = (int)PacketType.Error
+                    }, PacketType.Error, packet.Key!);
                     break;
                 default:
                     break;

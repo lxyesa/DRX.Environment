@@ -1,5 +1,7 @@
 using System.Net.Sockets;
 
+namespace NetworkCoreSandard.Interface;
+
 public interface INetworkServerEvent{
     void OnServerStarted(Socket serverSocket);
     void OnServerStopped(Socket serverSocket);

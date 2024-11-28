@@ -1,4 +1,5 @@
 
+namespace NetworkCoreSandard.Enums;
 public enum UserGroup
 {
     Guest = 0,      // 游客权限

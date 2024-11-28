@@ -1,5 +1,8 @@
 
 using System.Net.Sockets;
+using NetworkCoreStandard.Models;
+
+namespace NetworkCoreSandard.Interface;
 
 public interface IClientMessageEvent
 {

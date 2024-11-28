@@ -1,5 +1,6 @@
 using System.Text.Json.Serialization;
 using System.Collections.Generic;
+using NetworkCoreStandard.Models;
 
 [JsonSourceGenerationOptions(WriteIndented = false)]
 [JsonSerializable(typeof(Dictionary<string, object>))]

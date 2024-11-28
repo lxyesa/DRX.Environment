@@ -1,3 +1,6 @@
+
+namespace NetworkCoreSandard.Enums;
+
 public enum Headers
 {
     Register = 0x00,

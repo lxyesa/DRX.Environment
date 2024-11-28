@@ -3,6 +3,10 @@ using System.Net;
 using System.Net.Sockets;
 using System.Threading;
 using System.Collections.Generic;
+using NetworkCoreStandard.Models;
+using NetworkCoreSandard;
+using NetworkCoreSandard.Interface;
+using NetworkCoreSandard.Handler;
 
 /// <summary>
 /// 网络服务器类，用于处理TCP连接和消息传输
@@ -29,7 +33,7 @@ public class NetworkServer
     {
         _port = port;
         _serverSocket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
-        _eventHandler = eventHandler ?? new DefaultNetworkServerEvent();
+        _eventHandler = eventHandler ?? new ServerEventHandler();
         _clientManager = new ClientManager();
         _ntwsPacketHanlder = new NetworkServerPacketHandler(_serverSocket, this);
         _userManager = new UserManager();  // 初始化用户管理器
@@ -201,7 +205,7 @@ public class NetworkServer
                     HandlePacket(clientSocket, packet);
                     
                     // 如果包不是心跳包则触发消息事件
-                    if (packet.Type != PacketType.Heartbeat)
+                    if ((PacketType)packet.Type != PacketType.Heartbeat)
                         _eventHandler.OnClientMessage(clientSocket, data);
                 }
             }
@@ -249,29 +253,29 @@ public class NetworkServer
         await _ntwsPacketHanlder.HandlePacketAsync(clientSocket, _serverSocket, packet);   // 这里是外部处理
         switch (packet.Type)                                                    // 这里是内部处理
         {
-            case PacketType.Heartbeat:
+            case (int)PacketType.Heartbeat:
                 // 更新客户端心跳时间
                 _clientManager.UpdateClientLastHeartbeat(clientSocket);
                 break;
-            case PacketType.Message: 
+            case (int)PacketType.Message: 
                 // 处理消息包
                 break;
-            case PacketType.Unknown:
+            case (int)PacketType.Unknown:
                 // 未知包
                 break;
-            case PacketType.Request:
+            case (int)PacketType.Request:
                 // 请求包
                 break;
-            case PacketType.Response:
+            case (int)PacketType.Response:
                 // 响应包
                 break;
-            case PacketType.Command:
+            case (int)PacketType.Command:
                 // 命令包
                 break;
-            case PacketType.Data:
+            case (int)PacketType.Data:
                 // 数据包
                 break;
-            case PacketType.Error:
+            case (int)PacketType.Error:
                 // 错误包
                 break;
             // 处理其他类型的包...

@@ -1,6 +1,6 @@
 using System;
 using System.Net.Sockets;
-using NetworkCommonLibrary.Models;
+using NetworkCoreStandard.Models;
 
 namespace NetworkCommonLibrary.EventHandlers
 {

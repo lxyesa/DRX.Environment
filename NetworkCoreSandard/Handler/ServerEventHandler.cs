@@ -1,7 +1,10 @@
 
 using System.Net.Sockets;
+using NetworkCoreSandard.Interface;
 
-public class DefaultNetworkServerEvent : INetworkServerEvent
+namespace NetworkCoreSandard.Handler;
+
+public class ServerEventHandler : INetworkServerEvent
 {
     public virtual void OnServerStarted(Socket serverSocket)
     {

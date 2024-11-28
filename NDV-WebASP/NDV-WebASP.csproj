@@ -9,8 +9,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\NDV-NetworkCommon\NDV-NetworkCommon.csproj" />
-    <ProjectReference Include="..\NetworkCore\NetworkCore.csproj" />
-    <ProjectReference Include="..\NetworkCore\NetworkCore.csproj" />
+    <ProjectReference Include="..\NetworkCoreSandard\NetworkCoreSandard.csproj" />
   </ItemGroup>
 
   <ItemGroup>

@@ -1,8 +1,12 @@
 using System.Net.Sockets;
+using NetworkCoreSandard.Handler;
+using NetworkCoreSandard.Interface;
+using NetworkCoreStandard.Models;
 
 /// <summary>
 /// 网络客户端类，用于处理TCP连接和消息传输
 /// </summary>
+namespace NetworkCoreSandard;
 public class NetworkClient : IDisposable
 {
     #region 字段
@@ -23,7 +27,7 @@ public class NetworkClient : IDisposable
     public NetworkClient(string host, int port, IClientMessageEvent? eventHandler = null)
     {
         _client = new TcpClient();
-        _eventHandler = eventHandler ?? new DefaultClientMessageEvent();
+        _eventHandler = eventHandler ?? new ClientEventHandler();
         _cancellationTokenSource = new CancellationTokenSource();
     }
     #endregion
@@ -41,24 +45,6 @@ public class NetworkClient : IDisposable
         _eventHandler.OnConnected(_client);
         StartMessageLoop();
         StartHeartbeatLoop();
-    }
-
-    /// <summary>
-    /// 异步发送消息
-    /// </summary>
-    /// <param name="message">要发送的消息</param>
-    public async Task SendMessageAsync(string message)
-    {
-        await _packetHandler.SendChatMessageAsync(message);
-    }
-
-    /// <summary>
-    /// 异步发送数据
-    /// </summary>
-    /// <param name="data">要发送的数据</param>
-    public async Task SendDataAsync(object data)
-    {
-        await _packetHandler.SendDataAsync(data);
     }
 
     /// <summary>
@@ -115,7 +101,12 @@ public class NetworkClient : IDisposable
             {
                 while (_isRunning && !_cancellationTokenSource.Token.IsCancellationRequested)
                 {
-                    await _packetHandler.SendHeartbeatAsync();
+                    await _packetHandler.SendAsync(new NetworkPacket
+                    {
+                        Header = "Heartbeat",
+                        Type = (int)PacketType.Heartbeat,
+                        Body = DateTime.Now.ToString("o")
+                    });
                     await Task.Delay(2000);
                 }
             }
@@ -135,19 +126,19 @@ public class NetworkClient : IDisposable
         await _packetHandler.HandlePacketAsync(packet);
         switch (packet.Type)    // 根据数据包类型调用不同的事件处理方法。
         {
-            case PacketType.Response:
+            case (int)PacketType.Response:
                 _eventHandler.OnResponseReceived(packet);
                 break;
-            case PacketType.Error:
+            case (int)PacketType.Error:
                 _eventHandler.OnErrorReceived(packet);
                 break;
-            case PacketType.Data:
+            case (int)PacketType.Data:
                 _eventHandler.OnDataReceived(packet);
                 break;
-            case PacketType.Message:
+            case (int)PacketType.Message:
                 _eventHandler.OnMessageReceived(packet);
                 break;
-            case PacketType.Heartbeat:
+            case (int)PacketType.Heartbeat:
                 _eventHandler.OnHeartbeatResponse(packet);
                 break;
         }

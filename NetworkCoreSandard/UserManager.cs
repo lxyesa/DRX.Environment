@@ -5,6 +5,11 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.IO;
+using System.Threading.Tasks;
+using NetworkCoreSandard.Enums;
+using NetworkCoreSandard.Models;
+
+namespace NetworkCoreSandard;
 
 public class UserManager
 {
@@ -123,7 +128,7 @@ public class UserManager
             if (!File.Exists(filePath))
                 return false;
 
-            string jsonString = await File.ReadAllTextAsync(filePath);
+            string jsonString = await Task.Run(() => File.ReadAllText(filePath));
             var loadedUsers = JsonSerializer.Deserialize<ConcurrentDictionary<string, UserInstance>>(jsonString);
 
             if (loadedUsers != null)
@@ -185,7 +190,7 @@ public class UserManager
             string jsonString = JsonSerializer.Serialize(_users, options);
 
             // 异步写入文件
-            await File.WriteAllTextAsync(filePath, jsonString);
+            await Task.Run(() => File.WriteAllText(filePath, jsonString));
         }
         catch (Exception ex)
         {
@@ -205,7 +210,7 @@ public class UserManager
             if (!File.Exists(filePath))
                 return null;
 
-            string jsonString = await File.ReadAllTextAsync(filePath);
+            string jsonString = await Task.Run(() => File.ReadAllText(filePath));
             var users = JsonSerializer.Deserialize<ConcurrentDictionary<string, UserInstance>>(jsonString);
 
             if (users != null && users.TryGetValue(userName, out UserInstance? user))

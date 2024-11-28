@@ -21,5 +21,8 @@
   <ItemGroup>
     <Folder Include="Utils\" />
   </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\NetworkCoreSandard\NetworkCoreSandard.csproj" />
+  </ItemGroup>
 
 </Project>

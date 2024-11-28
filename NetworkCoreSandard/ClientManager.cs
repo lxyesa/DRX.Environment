@@ -3,6 +3,9 @@ using System.Net.Sockets;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net;
+using NetworkCoreSandard.Models;
+
+namespace NetworkCoreSandard;
 
 /// <summary>
 /// 客户端连接管理器，负责管理所有已连接客户端的状态和生命周期
@@ -14,7 +17,7 @@ public class ClientManager
     /// </summary>
     private class ClientInfo
     {
-        public required Socket Socket { get; set; }
+        public Socket Socket { get; set; } = null!;
         public DateTime LastHeartbeat { get; set; }
         public UserInstance? User { get; set; }
     }

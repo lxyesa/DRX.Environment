@@ -4,8 +4,8 @@ using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
-using NetworkCommonLibrary.Models;
 using NetworkCommonLibrary.EventHandlers;
+using NetworkCoreStandard.Models;
 
 namespace NetworkCommonLibrary;
 
@@ -97,7 +97,7 @@ public class NetworkUtils : IDisposable
                 {
                     Header = "Heartbeat",
                     Type = 3,
-                    Body = DateTime.Now
+                    Body = DateTime.Now.ToString("o") // Use the round-trip date/time pattern
                 };
 
                 await SendPacketAsync(heartbeatPacket);

@@ -1,9 +1,15 @@
 using System;
 using System.Net.Sockets;
+using NetworkCoreStandard.Models;
+using System.Threading;
 
 /// <summary>
 /// 网络服务器数据包处理器
 /// </summary>
+/// 
+
+namespace NetworkCoreSandard.Handler;
+
 public class NetworkServerPacketHandler
 {
     protected readonly Socket serverSocket;
@@ -28,7 +34,8 @@ public class NetworkServerPacketHandler
     public virtual async Task SendMessageAsync(Socket clientSocket, NetworkPacket message)
     {
         byte[] serializedData = message.Serialize();
-        await clientSocket.SendAsync(serializedData, SocketFlags.None);
+        var segment = new ArraySegment<byte>(serializedData);
+        await clientSocket.SendAsync(segment, SocketFlags.None);
     }
 
     /// <summary>
@@ -38,43 +45,12 @@ public class NetworkServerPacketHandler
     /// <param name="body">数据包主体</param>
     /// <param name="type">数据包类型</param>
     /// <param name="key">数据包键值</param>
-    public virtual async Task SendAsync(Socket clientSocket, INetworkPacketBody body, PacketType type, string key = "")
+    public virtual async Task SendAsync(Socket clientSocket, NetworkPacket body, PacketType type, string key = "")
     {
-        var packet = new NetworkPacket(
-            header: string.Empty,
-            body: body,
-            key: key,
-            type: type
-        );
-        await SendMessageAsync(clientSocket, packet);
+        await SendMessageAsync(clientSocket, body);
     }
 
-    /// <summary>
-    /// 发送指定类型的数据包
-    /// </summary>
-    /// <param name="clientSocket">客户端套接字</param>
-    /// <param name="body">数据包主体</param>
-    /// <param name="type">数据包类型</param>
-    /// <param name="key">数据包键值</param>
-    public virtual async Task SendAsync(Socket clientSocket, object body, PacketType type, string key = "")
-    {
-        var packet = new NetworkPacket(
-            header: string.Empty,
-            body: body,
-            key: key,
-            type: type
-        );
-        await SendMessageAsync(clientSocket, packet);
-    }
-
-    /// <summary>
-    /// 发送心跳包
-    /// </summary>
-    public virtual async Task SendHeartbeatAsync(Socket clientSocket)
-    {
-        await SendAsync(clientSocket, DateTime.Now, PacketType.Heartbeat);
-    }
-
+    
 
     /// <summary>
     /// 处理接收到的数据包

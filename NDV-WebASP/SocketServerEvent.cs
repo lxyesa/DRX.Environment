@@ -1,9 +1,10 @@
 using System;
 using System.Net.Sockets;
+using NetworkCoreSandard.Handler;
 
 namespace NDV_WebASP;
 
-public class SocketServerEvent : DefaultNetworkServerEvent
+public class SocketServerEvent : ServerEventHandler
 {
     public override void OnClientConnected(Socket clientSocket)
     {

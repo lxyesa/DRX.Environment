@@ -1,5 +1,8 @@
 using System;
 using System.Net;
+using NetworkCoreSandard.Enums;
+
+namespace NetworkCoreSandard.Models;
 
 public class UserInstance
 {
