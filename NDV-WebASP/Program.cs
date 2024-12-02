@@ -1,12 +1,5 @@
-using Microsoft.AspNetCore.Hosting.Server;
-using Microsoft.AspNetCore.Hosting.Server.Features;
-using System.Net;
-using Microsoft.AspNetCore.Authentication;
-using Microsoft.IdentityModel.Tokens;
-using System.Text;
-using NDV.WebASP.Services;
-using NDV_WebASP;
 using NetworkCoreStandard;
+using NetworkCoreStandard.Events;
 
 public partial class Program
 {
@@ -19,13 +12,16 @@ public partial class Program
         {
             Builder = WebApplication.CreateBuilder(args);
             Server = new NetworkServer(8463);
-            NetworkNDVServerPacketHandler networkNDVServerPacketHandler = 
-                new NetworkNDVServerPacketHandler(
-                    Server.GetSocket(), Server);
-            Server.SetNetworkServerPacketHandler(networkNDVServerPacketHandler);
+
+            NetworkEventBus.AddListener("OnServerStarted", (sender, args) =>
+            {
+                Console.WriteLine($"[{args.Timestamp}] 服务器已启动，监听端口: {args.Socket.LocalEndPoint}");
+            });
+
+            Server.Start();
+
 
             // 注册服务
-            Builder.Services.AddSingleton<JwtService>();
             Builder.Services.AddControllers();
             Builder.Services.AddCors(options =>
             {
@@ -38,8 +34,6 @@ public partial class Program
                 });
             });
 
-            // 配置JWT认证
-            JwtService.ConfigureJwtAuthentication(Builder.Services);
             Builder.Services.AddAuthorization();
 
             Builder.WebHost.UseUrls("http://0.0.0.0:8462");

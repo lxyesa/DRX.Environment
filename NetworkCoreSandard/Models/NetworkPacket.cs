@@ -8,82 +8,164 @@ namespace NetworkCoreStandard.Models
 {
     public class NetworkPacket
     {
+        [JsonPropertyName("h")]
         public string? Header { get; set; }
-        public string? Body { get; set; }
-        public string? Key { get; set; }
+        [JsonPropertyName("b")]
+        public object? Body { get; set; }
+        [JsonPropertyName("t")]
         public int Type { get; set; }
-        public string? Security { get; set; }
 
-        public NetworkPacket(string header, object body, int type)
-        {
-            Header = header;
-            Body = JsonSerializer.Serialize(body);
-            Key = Guid.NewGuid().ToString();
-            Type = type;
-        }
-
-        public NetworkPacket(string header, object body, int type, string key)
-        {
-            Header = header;
-            Body = JsonSerializer.Serialize(body);
-            Key = key;
-            Type = type;
-        }
-
-        public NetworkPacket(string header, object body, PacketType type, string key)
-        {
-            Header = header;
-            Body = JsonSerializer.Serialize(body);
-            Key = key;
-            Type = (int)type;
-        }
-
-        public void SetSecurity(string security)
-        {
-            Security = security;
-        }
+        private Dictionary<string, object> bodyDict;
 
         public NetworkPacket()
         {
+            Header = string.Empty;
+            Body = null;
+            Type = 0;
+            bodyDict = new Dictionary<string, object>();
         }
 
-        public string Unpack()
+        public virtual NetworkPacket SetHeader(string header)
         {
-            // 将自身序列化为Json字符串，返回
-            return JsonSerializer.Serialize(this);
+            Header = header;
+            return this;
+        }
+
+        public virtual NetworkPacket SetType(int type)
+        {
+            if (Enum.IsDefined(typeof(PacketType), type))
+            {
+                Type = type;
+            }
+            return this;
+        }
+
+        public virtual NetworkPacket PutBody(string key, object value)
+        {
+            bodyDict[key] = value;
+            return this;
+        }
+
+        public virtual NetworkPacket Builder()
+        {
+            if (bodyDict.Count > 0)
+            {
+                // 将字典转换为数组格式
+                Body = bodyDict.Select(kv => new Dictionary<string, object> { { kv.Key, kv.Value } }).ToArray();
+            }
+            else
+            {
+                Body = null;
+            }
+            return this;
+        }
+
+        public virtual string ToJson()
+        {
+            return JsonSerializer.Serialize(this, new JsonSerializerOptions
+            {
+                WriteIndented = false,
+            });
+        }
+
+        public virtual byte[] Serialize()
+        {
+            try
+            {
+                // 确保在序列化前调用 Builder()
+                if (bodyDict.Count > 0)
+                {
+                    Builder();
+                }
+
+                var options = new JsonSerializerOptions
+                {
+                    Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+                    DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+                    WriteIndented = false
+                };
+
+                // 创建一个匿名对象来序列化
+                var serializableObject = new
+                {
+                    h = Header,
+                    b = Body,
+                    t = Type
+                };
+
+                return JsonSerializer.SerializeToUtf8Bytes(serializableObject, options);
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException($"序列化数据包时发生错误: {ex.Message}", ex);
+            }
         }
 
         public static NetworkPacket Deserialize(byte[] data)
         {
-            return JsonSerializer.Deserialize<NetworkPacket>(data) ?? new NetworkPacket();
+            try
+            {
+                var options = new JsonSerializerOptions
+                {
+                    Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+                    // 如果遇到未知的属性不要抛出异常
+                    DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+                };
+
+                var packet = JsonSerializer.Deserialize<NetworkPacket>(data, options);
+                if (packet == null)
+                {
+                    throw new InvalidOperationException("反序列化结果为空");
+                }
+                return packet;
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException($"反序列化数据包时发生错误: {ex.Message}", ex);
+            }
         }
 
-        public object? GetBodyValue(string key)
+        public virtual string[]? GetBody()
         {
-            if (string.IsNullOrEmpty(Body))
-                return null;
+            return Body as string[]; // 使用显式类型转换
+        }
 
-            using (JsonDocument document = JsonDocument.Parse(Body ?? string.Empty))
+        public virtual string GetBodyString()
+        {
+            if (Body == null)
             {
-                if (document.RootElement.TryGetProperty(key, out JsonElement element))
+                return "[]";
+            }
+
+            // 直接使用 JsonSerializer 序列化 Body
+            return JsonSerializer.Serialize(Body);
+        }
+
+        public virtual T? GetBodyValue<T>(string key)
+        {
+            if (bodyDict.TryGetValue(key, out object? value))
+            {
+                if (value is T typedValue)
                 {
-                    switch (element.ValueKind)
-                    {
-                        case JsonValueKind.Number:
-                            if (element.ToString().Contains("."))
-                                return element.GetDouble();
-                            return element.GetInt64();
-                        default:
-                            return element.ToString();
-                    }
+                    return typedValue;
+                }
+                try
+                {
+                    // 尝试将值转换为请求的类型
+                    return JsonSerializer.Deserialize<T>(JsonSerializer.Serialize(value));
+                }
+                catch
+                {
+                    return default;
                 }
             }
-            return null;
+            return default;
         }
 
-        public byte[] Serialize()
+        // 添加一个非泛型版本方便使用
+        public virtual object? GetBodyValue(string key)
         {
-            return System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(this);
+            return bodyDict.TryGetValue(key, out object? value) ? value : null;
         }
     }
 
@@ -95,7 +177,7 @@ namespace NetworkCoreStandard.Models
         Unknown = 0x00,    // 未知，通常不做回应会直接断开连接
         Request = 0x01,    // 请求，需要回应
         Response = 0x02,   // 响应，对请求的回应，必须有请求的Key
-        Heartbeat = 0x03,  // 心跳包，用于保持连接
+        HeartBeat = 0x03,  // 心跳包，用于保持连接
         Error = 0x04,      // 错误，用于回应错误消息，或直接断开连接
         Message = 0x05,     // 消息，通常服务端无需回应，客户端也不需要回应
         Data = 0x06,        // 数据，通常由服务端下发，客户端无需回应，但客户端需要手动解析这类包。

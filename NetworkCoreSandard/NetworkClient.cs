@@ -1,156 +1,205 @@
+using System;
+using System.Net;
 using System.Net.Sockets;
-using NetworkCoreStandard.Handler;
-using NetworkCoreStandard.Interface;
+using NetworkCoreStandard.EventArgs;
+using NetworkCoreStandard.Events;
 using NetworkCoreStandard.Models;
+using NetworkCoreStandard.Utils;
+using static NetworkCoreStandard.Events.NetworkEventDelegate;
 
-/// <summary>
-/// 网络客户端类，用于处理TCP连接和消息传输
-/// </summary>
 namespace NetworkCoreStandard;
-public class NetworkClient : IDisposable
+
+public class NetworkClient : NetworkObject
 {
-    #region 字段
-    private readonly TcpClient _client; // TCP客户端实例
-    private NetworkClientPacketHandler _packetHandler = null!;   // 消息处理器
-    private readonly IClientMessageEvent _eventHandler;     // 客户端消息事件处理器
-    private readonly CancellationTokenSource _cancellationTokenSource;  // 取消令牌
-    private bool _isRunning;
-    #endregion
+    protected Socket _socket;
+    protected string _serverIP;
+    protected int _serverPort;
+    protected bool _isConnected;
 
-    #region 构造函数
     /// <summary>
-    /// 初始化网络客户端实例
+    /// 初始化网络客户端
     /// </summary>
-    /// <param name="host">服务器主机地址</param>
-    /// <param name="port">服务器端口</param>
-    /// <param name="eventHandler">客户端消息事件处理器，如果为null则使用默认处理器</param>
-    public NetworkClient(string host, int port, IClientMessageEvent? eventHandler = null)
+    public NetworkClient(string serverIP, int serverPort)
     {
-        _client = new TcpClient();
-        _eventHandler = eventHandler ?? new ClientEventHandler();
-        _cancellationTokenSource = new CancellationTokenSource();
+        _serverIP = serverIP;
+        _serverPort = serverPort;
+        _socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+        _isConnected = false;
     }
-    #endregion
-
-    #region 公共方法
     /// <summary>
-    /// 异步连接到服务器
+    /// 连接到服务器
     /// </summary>
-    /// <param name="host">服务器主机地址</param>
-    /// <param name="port">服务器端口</param>
-    public async Task ConnectAsync(string host, int port)
+    public virtual void Connect()
     {
-        await _client.ConnectAsync(host, port);
-        _packetHandler = new NetworkClientPacketHandler(_client.GetStream());
-        _eventHandler.OnConnected(_client);
-        StartMessageLoop();
-        StartHeartbeatLoop();
-    }
-
-    /// <summary>
-    /// 释放资源
-    /// </summary>
-    public void Dispose()
-    {
-        _isRunning = false;
-        _cancellationTokenSource.Cancel();
-        _client.Dispose();
-    }
-
-    // Getters
-    public TcpClient GetClient() => _client;
-    public NetworkClientPacketHandler GetPacketHandler() => _packetHandler;
-    #endregion
-
-    #region 私有方法
-    /// <summary>
-    /// 启动消息接收循环
-    /// </summary>
-    private void StartMessageLoop()
-    {
-        _isRunning = true;
-        Task.Run(async () =>
+        try
         {
-            try
-            {
-                while (_isRunning && !_cancellationTokenSource.Token.IsCancellationRequested)
-                {
-                    var packet = await _packetHandler.ReceivePacketAsync();
-                    if (packet != null)
-                    {
-                        HandlePacket(packet);
-                    }
-                    await Task.Delay(100);
-                }
-            }
-            catch (Exception)
-            {
-                HandleDisconnection();
-            }
-        }, _cancellationTokenSource.Token);
-    }
-
-    /// <summary>
-    /// 启动心跳包发送循环
-    /// </summary>
-    private void StartHeartbeatLoop()
-    {
-        Task.Run(async () =>
+            _socket.BeginConnect(new IPEndPoint(IPAddress.Parse(_serverIP), _serverPort),
+                new AsyncCallback(ConnectCallback), null);
+        }
+        catch (Exception ex)
         {
-            try
-            {
-                while (_isRunning && !_cancellationTokenSource.Token.IsCancellationRequested)
-                {
-                    await _packetHandler.SendAsync(new NetworkPacket
-                    {
-                        Header = "Heartbeat",
-                        Type = (int)PacketType.Heartbeat,
-                        Body = DateTime.Now.ToString("o")
-                    });
-                    await Task.Delay(2000);
-                }
-            }
-            catch (Exception)
-            {
-                HandleDisconnection();
-            }
-        }, _cancellationTokenSource.Token);
-    }
-
-    /// <summary>
-    /// 处理接收到的数据包
-    /// </summary>
-    /// <param name="packet">接收到的数据包</param>
-    private async void HandlePacket(NetworkPacket packet)
-    {
-        await _packetHandler.HandlePacketAsync(packet);
-        switch (packet.Type)    // 根据数据包类型调用不同的事件处理方法。
-        {
-            case (int)PacketType.Response:
-                _eventHandler.OnResponseReceived(packet);
-                break;
-            case (int)PacketType.Error:
-                _eventHandler.OnErrorReceived(packet);
-                break;
-            case (int)PacketType.Data:
-                _eventHandler.OnDataReceived(packet);
-                break;
-            case (int)PacketType.Message:
-                _eventHandler.OnMessageReceived(packet);
-                break;
-            case (int)PacketType.Heartbeat:
-                _eventHandler.OnHeartbeatResponse(packet);
-                break;
+            _ = RaiseEventAsync("OnError", new NetworkEventArgs(
+                socket: _socket,
+                eventType: NetworkEventType.HandlerEvent,
+                message: $"连接服务器时发生错误: {ex.Message}"
+            ));
         }
     }
 
     /// <summary>
-    /// 处理客户端断开连接
+    /// 处理连接回调
     /// </summary>
-    private void HandleDisconnection()
+    protected virtual void ConnectCallback(IAsyncResult ar)
     {
-        _isRunning = false;
-        _eventHandler.OnDisconnected(_client);
+        try
+        {
+            _socket.EndConnect(ar);
+            _isConnected = true;
+
+            _ = RaiseEventAsync("OnConnected", new NetworkEventArgs(
+                socket: _socket,
+                eventType: NetworkEventType.HandlerEvent
+            ));
+
+            BeginReceive();
+        }
+        catch (Exception ex)
+        {
+            _ = RaiseEventAsync("OnError", new NetworkEventArgs(
+                socket: _socket,
+                eventType: NetworkEventType.HandlerEvent,
+                message: $"连接服务器时发生错误: {ex.Message}"
+            ));
+        }
     }
-    #endregion
+
+    /// <summary>
+    /// 发送数据包
+    /// </summary>
+    public virtual void Send(NetworkPacket packet)
+    {
+        if (!_isConnected)
+        {
+            _ = RaiseEventAsync("OnError", new NetworkEventArgs(
+                socket: _socket,
+                eventType: NetworkEventType.HandlerEvent,
+                message: "未连接到服务器"
+            ));
+            return;
+        }
+        try
+        {
+            byte[] data = packet.Serialize();
+            _socket.BeginSend(data, 0, data.Length, SocketFlags.None,
+                new AsyncCallback(SendCallback), null);
+
+            _ = RaiseEventAsync("OnDataSent", new NetworkEventArgs(
+                socket: _socket,
+                eventType: NetworkEventType.HandlerEvent,
+                message: $"发送数据包: {packet.Header}",
+                packet: packet
+            ));
+        }
+        catch (Exception ex)
+        {
+            _ = RaiseEventAsync("OnError", new NetworkEventArgs(
+                socket: _socket,
+                eventType: NetworkEventType.HandlerEvent,
+                message: $"发送数据包时发生错误: {ex.Message}"
+            ));
+            HandleDisconnect();
+        }
+    }
+
+    // 发送数据回调
+    protected virtual void SendCallback(IAsyncResult ar)
+    {
+        try
+        {
+            _socket.EndSend(ar);
+        }
+        catch (Exception ex)
+        {
+            _ = RaiseEventAsync("OnError", new NetworkEventArgs(
+                socket: _socket,
+                eventType: NetworkEventType.HandlerEvent,
+                message: $"发送数据包时发生错误: {ex.Message}"
+            ));
+            HandleDisconnect();
+        }
+    }
+
+    /// <summary>
+    /// 开始接收数据
+    /// </summary>
+    protected virtual void BeginReceive()
+    {
+        byte[] buffer = new byte[8192];
+        try
+        {
+            _socket.BeginReceive(buffer, 0, buffer.Length, SocketFlags.None,
+                new AsyncCallback(ReceiveCallback), buffer);
+        }
+        catch
+        {
+            HandleDisconnect();
+        }
+    }
+
+    /// <summary>
+    /// 处理接收到的数据
+    /// </summary>
+    protected virtual void ReceiveCallback(IAsyncResult ar)
+    {
+        try
+        {
+            int bytesRead = _socket.EndReceive(ar);
+            if (bytesRead > 0)
+            {
+                byte[] buffer = (byte[])ar.AsyncState;
+                NetworkPacket packet = NetworkPacket.Deserialize(buffer.Take(bytesRead).ToArray());
+
+                _ = RaiseEventAsync("OnDataReceived", new NetworkEventArgs(
+                    socket: _socket,
+                    eventType: NetworkEventType.HandlerEvent,
+                    message: $"收到数据包: {packet.Header}",
+                    packet: packet
+                ));
+
+                // 继续接收数据
+                BeginReceive();
+            }
+            else
+            {
+                HandleDisconnect();
+            }
+        }
+        catch
+        {
+            HandleDisconnect();
+        }
+    }
+
+    /// <summary>
+    /// 处理断开连接
+    /// </summary>
+    protected virtual void HandleDisconnect()
+    {
+        if (_isConnected)
+        {
+            _ = RaiseEventAsync("OnDisconnected", new NetworkEventArgs(
+                socket: _socket,
+                eventType: NetworkEventType.HandlerEvent
+            ));
+            _socket.Close();
+        }
+    }
+    /// <summary>
+    /// 主动断开连接
+    /// </summary>
+    public virtual void Disconnect()
+    {
+        HandleDisconnect();
+    }
+
 }

@@ -1,324 +1,344 @@
 using System;
 using System.Net;
 using System.Net.Sockets;
-using System.Threading;
 using System.Collections.Generic;
+using NetworkCoreStandard.EventArgs;
+using NetworkCoreStandard.Events;
+using static NetworkCoreStandard.Events.NetworkEventDelegate;
 using NetworkCoreStandard.Models;
-using NetworkCoreStandard;
-using NetworkCoreStandard.Interface;
-using NetworkCoreStandard.Handler;
+using NetworkCoreStandard.Utils;
+
+namespace NetworkCoreStandard;
 
 /// <summary>
-/// 网络服务器类，用于处理TCP连接和消息传输
+/// 网络服务器类，处理TCP连接和事件分发
 /// </summary>
-namespace NetworkCoreStandard;
-/// 
-
-public class NetworkServer
+public class NetworkServer : NetworkObject
 {
-    #region 字段
-    private readonly Socket _serverSocket;
-    private readonly INetworkServerEvent _eventHandler;
-    private readonly ClientManager _clientManager;
-    private NetworkServerPacketHandler _ntwsPacketHanlder;
-    private readonly UserManager _userManager;
-    private bool _isRunning;
-    private readonly int _port;
-    #endregion
+    protected Socket _socket;
+    protected int _port;
+    protected string _ip;
+    protected HashSet<Socket> _clients = new HashSet<Socket>();
 
-    #region 构造函数
     /// <summary>
-    /// 初始化网络服务器实例
+    /// 初始化服务器并开始监听指定端口
     /// </summary>
-    /// <param name="port">服务器监听端口</param>
-    /// <param name="eventHandler">网络事件处理器，如果为null则使用默认处理器</param>
-    public NetworkServer(int port, INetworkServerEvent? eventHandler = null)
+    /// <param name="port">监听端口</param>
+    public NetworkServer(int port)
     {
+        AssemblyLoader.LoadEmbeddedAssemblies();
+        _ip = "0.0.0.0";
         _port = port;
-        _serverSocket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
-        _eventHandler = eventHandler ?? new ServerEventHandler();
-        _clientManager = new ClientManager();
-        _ntwsPacketHanlder = new NetworkServerPacketHandler(_serverSocket, this);
-        _userManager = new UserManager();  // 初始化用户管理器
-        Win32API.AllocConsole();
-    }
-    #endregion
-
-    #region 公共方法
-    /// <summary>
-    /// 启动网络服务器
-    /// </summary>
-    /// <remarks>
-    /// 启动服务器将开始监听指定端口，并创建接受连接和心跳检测的后台线程
-    /// </remarks>
-    public void Start()
-    {
-        // 绑定端口并开始监听
-        _serverSocket.Bind(new IPEndPoint(IPAddress.Any, _port));
-        _serverSocket.Listen(100);
-        _isRunning = true;
-        
-        _eventHandler.OnServerStarted(_serverSocket);
-        
-        // 启动接收连接的线程
-        Thread acceptThread = new Thread(AcceptConnections);
-        acceptThread.Start();
-        
-        // 启动心跳检测线程
-        Thread heartbeatThread = new Thread(CheckHeartbeats);
-        heartbeatThread.Start();
+        _socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
     }
 
     /// <summary>
-    /// 停止网络服务器
+    /// 初始化服务器并开始监听指定IP和端口
     /// </summary>
-    /// <remarks>
-    /// 停止服务器将断开所有客户端连接并释放相关资源
-    /// </remarks>
-    public void Stop()
+    /// <param name="ip">监听IP地址</param>
+    /// <param name="port">监听端口</param>
+    public NetworkServer(string ip, int port)
     {
-        // 停止服务器运行
-        _isRunning = false;
-        _clientManager.DisconnectAllClients();
-        _serverSocket.Close();
-        _eventHandler.OnServerStopped(_serverSocket);
+        _ip = ip;
+        _port = port;
+        _socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
     }
 
 
-    // Getters
-    public NetworkServerPacketHandler GetNetworkServerPacketHandler()
+    public virtual async void StartAsync()
     {
-        return _ntwsPacketHanlder;
-    }
-    public void SetNetworkServerPacketHandler(NetworkServerPacketHandler packetHandler)
-    {
-        _ntwsPacketHanlder = packetHandler;
-    }
-    public ClientManager GetClientManager()
-    {
-        return _clientManager;
+        await Task.Run(() => Start());
     }
 
-    // 添加用户管理器的访问器
-    public UserManager GetUserManager()
+    public virtual async void StopAsync()
     {
-        return _userManager;
+        await Task.Run(() => Stop());
     }
-    public Socket GetSocket()
-    {
-        return _serverSocket;
-    }
-    #endregion
 
-    #region 私有连接方法
+    public virtual async void RestartAsync(Action<NetworkServer> action)
+    {
+        await Task.Run(() => Restart(action));
+    }
+
+    public virtual void Restart(Action<NetworkServer> action)
+    {
+        if (_socket == null)
+        {
+            Console.WriteLine($"[{DateTime.Now}] [Warning] 这不是一个错误，而是因为你的服务器实例已被销毁或根本没有启动，所以无法重启服务器。");
+            return;
+        }
+        try
+        {
+            Stop();
+            action?.Invoke(this);
+            Start();
+        }
+        catch (Exception ex)
+        {
+            _ = RaiseEventAsync("OnError", new NetworkEventArgs(
+                    socket: _socket,
+                    eventType: NetworkEventType.HandlerEvent,
+                    message: $"重启服务器时发生错误: {ex.Message}"
+                ));
+
+            throw;
+        }
+    }
+
+    public virtual void Stop()
+    {
+        if (!_socket.IsBound)
+        {
+            Console.WriteLine($"[{DateTime.Now}] [Warning] 这不是一个错误，而是因为你的服务器实例已被销毁或根本没有启动，所以无法关闭服务器。");
+            return;
+        }
+        try
+        {
+            _socket.Close();
+            _clients.Clear();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"关闭服务器时发生错误: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// 启动服务器开始监听连接
+    /// </summary>
+    public virtual void Start()
+    {
+        try
+        {
+            _socket.Bind(new IPEndPoint(IPAddress.Parse(_ip), _port));
+            _socket.Listen(10);
+            _socket.BeginAccept(AcceptCallback, null);
+
+            _ = RaiseEventAsync("OnServerStarted", new NetworkEventArgs(
+                socket: _socket,
+                eventType: NetworkEventType.ServerStarted,
+                message: $"服务器已启动，监听 {_ip}:{_port}"
+            ));
+        }
+        catch (Exception ex)
+        {
+            _ = RaiseEventAsync("OnError", new NetworkEventArgs(
+                socket: _socket,
+                eventType: NetworkEventType.HandlerEvent,
+                message: $"启动服务器时发生错误: {ex.Message}"
+            ));
+        }
+    }
+
     /// <summary>
     /// 处理新的客户端连接
     /// </summary>
-    private void AcceptConnections()
+    protected virtual void AcceptCallback(IAsyncResult ar)
     {
-        while (_isRunning)
+        try
         {
-            try
-            {
-                // 接受新的客户端连接
-                Socket clientSocket = _serverSocket.Accept();
-                
-                // 检查是否为浏览器连接
-                if (IsBrowserConnection(clientSocket))
-                {
-                    clientSocket.Close();
-                    continue;
-                }
+            Socket clientSocket = _socket.EndAccept(ar);
+            _clients.Add(clientSocket);
 
-                // 添加客户端并启动接收消息的线程
-                _clientManager.AddClient(clientSocket);
-                _eventHandler.OnClientConnected(clientSocket);
-                
-                Thread receiveThread = new Thread(() => ReceiveMessages(clientSocket));
-                receiveThread.Start();
-            }
-            catch
-            {
-                if (_isRunning)
-                    throw;
-            }
+            _ = RaiseEventAsync("OnClientConnected", new NetworkEventArgs(
+                    socket: clientSocket,
+                    eventType: NetworkEventType.ServerClientConnected
+                ));
+
+            BeginReceive(clientSocket);
+            _socket.BeginAccept(AcceptCallback, null);
+        }
+        catch (Exception ex)
+        {
+            _ = RaiseEventAsync("OnError", new NetworkEventArgs(
+                    socket: _socket,
+                    eventType: NetworkEventType.HandlerEvent,
+                    message: $"处理客户端连接时发生错误: {ex.Message}"
+                ));
         }
     }
 
     /// <summary>
-    /// 检查是否为浏览器发起的HTTP连接
+    /// 开始异步接收客户端数据
     /// </summary>
-    /// <param name="socket">待检查的客户端Socket</param>
-    /// <returns>如果是浏览器连接返回true，否则返回false</returns>
-    private bool IsBrowserConnection(Socket socket)
+    protected virtual void BeginReceive(Socket clientSocket)
     {
+        byte[] buffer = new byte[8192]; // 增大缓冲区
         try
         {
-            // 接收数据并检查HTTP请求头特征
-            byte[] buffer = new byte[1024];
-            int received = socket.Receive(buffer, SocketFlags.Peek);
-            string data = System.Text.Encoding.ASCII.GetString(buffer, 0, received);
-            
-            return data.StartsWith("GET") || data.StartsWith("POST") || 
-                   data.StartsWith("HEAD") || data.StartsWith("HTTP");
+            clientSocket.BeginReceive(buffer, 0, buffer.Length, SocketFlags.None,
+                (ar) => HandleDataReceived(ar, clientSocket, buffer), null);
         }
         catch
         {
-            return false;
+            HandleDisconnect(clientSocket);
+        }
+
+
+    }
+
+    /// <summary>
+    /// 处理接收到的数据
+    /// </summary>
+    protected virtual void HandleDataReceived(IAsyncResult ar, Socket clientSocket, byte[] buffer)
+    {
+        try
+        {
+            int bytesRead = clientSocket.EndReceive(ar);
+            if (bytesRead > 0)
+            {
+                // 解析数据包
+                NetworkPacket packet = NetworkPacket.Deserialize(buffer.Take(bytesRead).ToArray());
+
+                _ = RaiseEventAsync("OnDataReceived", new NetworkEventArgs(
+                       socket: clientSocket,
+                       eventType: NetworkEventType.DataReceived,
+                       message: $"",
+                       packet: packet
+                   ));
+                // 继续接收数据
+                BeginReceive(clientSocket);
+            }
+            else
+            {
+                HandleDisconnect(clientSocket);
+            }
+        }
+        catch
+        {
+            HandleDisconnect(clientSocket);
         }
     }
 
     /// <summary>
-    /// 接收并处理客户端消息
+    /// 向指定客户端发送数据包
     /// </summary>
-    /// <param name="clientSocket">客户端Socket连接</param>
-    private void ReceiveMessages(Socket clientSocket)
+    public virtual void Send(Socket clientSocket, NetworkPacket packet)
     {
-        byte[] buffer = new byte[4096];
-        
-        while (_isRunning && clientSocket.Connected)
+        if (!_clients.Contains(clientSocket))
+        {
+            _ = RaiseEventAsync("OnError", new NetworkEventArgs(
+                    socket: clientSocket,
+                    eventType: NetworkEventType.HandlerEvent,
+                    message: "客户端未连接"
+                ));
+            return;
+        }
+
+        try
+        {
+            byte[] data = packet.Serialize();
+            clientSocket.BeginSend(data, 0, data.Length, SocketFlags.None,
+                new AsyncCallback(SendCallback), clientSocket);
+        }
+        catch (Exception ex)
+        {
+            _ = RaiseEventAsync("OnError", new NetworkEventArgs(
+                socket: clientSocket,
+                eventType: NetworkEventType.HandlerEvent,
+                message: $"发送数据时发生错误: {ex.Message}"
+            ));
+            HandleDisconnect(clientSocket);
+        }
+    }
+
+    /// <summary>
+    /// 向所有已连接的客户端广播数据包
+    /// </summary>
+    public virtual void Broadcast(NetworkPacket packet)
+    {
+        List<Socket> deadClients = new List<Socket>();
+
+        foreach (var client in _clients)
         {
             try
             {
-                // 添加连接状态检查
-                if (!IsSocketConnected(clientSocket))
-                {
-                    HandleClientDisconnection(clientSocket);
-                    break;
-                }
-
-                // 设置接收超时
-                clientSocket.ReceiveTimeout = 5000;
-                int received = clientSocket.Receive(buffer);
-                
-                // 检查连接是否已关闭
-                if (received == 0)
-                {
-                    HandleClientDisconnection(clientSocket);
-                    break;
-                }
-
-                // 接收数据并处理
-                if (received > 0)
-                {
-                    byte[] data = new byte[received];
-                    Array.Copy(buffer, data, received);
-                    
-                    var packet = NetworkPacket.Deserialize(data);
-                    HandlePacket(clientSocket, packet);
-                    
-                    // 如果包不是心跳包则触发消息事件
-                    if ((PacketType)packet.Type != PacketType.Heartbeat)
-                        _eventHandler.OnClientMessage(clientSocket, data);
-                }
+                byte[] data = packet.Serialize();
+                client.BeginSend(data, 0, data.Length, SocketFlags.None,
+                    new AsyncCallback(SendCallback), client);
             }
-            catch (SocketException ex)
+            catch (Exception ex)
             {
-                // 细化错误处理
-                if (ex.SocketErrorCode == SocketError.TimedOut ||
-                    ex.SocketErrorCode == SocketError.ConnectionReset ||
-                    ex.SocketErrorCode == SocketError.Disconnecting)
-                {
-                    HandleClientDisconnection(clientSocket);
-                }
-                break;
+                _ = RaiseEventAsync("OnError", new NetworkEventArgs(
+                    socket: client,
+                    eventType: NetworkEventType.HandlerEvent,
+                    message: $"广播数据时发生错误: {ex.Message}"
+                ));
+                Console.WriteLine($"客户端 {((IPEndPoint)client.RemoteEndPoint).Address} 发送数据时发生错误，断开连接。");
+                deadClients.Add(client);
             }
-            catch (Exception)
-            {
-                HandleClientDisconnection(clientSocket);
-                break;
-            }
+        }
+
+        // 清理断开连接的客户端
+        foreach (var client in deadClients)
+        {
+            HandleDisconnect(client);
         }
     }
 
-    // 添加新的辅助方法来检查socket连接状态
-    private bool IsSocketConnected(Socket socket)
+    protected virtual void SendCallback(IAsyncResult ar)
+    {
+        Socket clientSocket = (Socket)ar.AsyncState;
+        try
+        {
+            clientSocket.EndSend(ar);
+        }
+        catch (Exception ex)
+        {
+            _ = RaiseEventAsync("OnError", new NetworkEventArgs(
+                socket: clientSocket,
+                eventType: NetworkEventType.HandlerEvent,
+                message: $"发送数据时发生错误: {ex.Message}"
+            ));
+            HandleDisconnect(clientSocket);
+        }
+    }
+
+    /// <summary>
+    /// 处理客户端断开连接的清理工作
+    /// </summary>
+    protected virtual void HandleDisconnect(Socket clientSocket)
+    {
+        if (_clients.Remove(clientSocket))
+        {
+            _ = RaiseEventAsync("OnClientDisconnected", new NetworkEventArgs(
+                socket: clientSocket,
+                eventType: NetworkEventType.ServerClientDisconnected
+            ));
+            clientSocket.Close();
+        }
+    }
+
+    /// <summary>
+    /// 强制断开指定IP的客户端连接
+    /// </summary>
+    /// <param name="clientIP">客户端IP地址</param>
+    /// <returns>是否成功断开连接</returns>
+    public virtual bool DisconnectClient(string clientIP)
     {
         try
         {
-            return !(socket.Poll(1, SelectMode.SelectRead) && socket.Available == 0);
+            // 查找匹配IP的客户端Socket
+            var clientSocket = _clients.FirstOrDefault(socket =>
+                ((IPEndPoint)socket.RemoteEndPoint).Address.ToString() == clientIP);
+
+            if (clientSocket != null)
+            {
+                // 使用已有的断开连接处理方法
+                HandleDisconnect(clientSocket);
+                return true;
+            }
+
+            return false;
         }
-        catch (SocketException)
+        catch (Exception ex)
         {
+            _ = RaiseEventAsync("OnError", new NetworkEventArgs(
+                socket: null!,
+                eventType: NetworkEventType.HandlerEvent,
+                message: $"强制断开客户端连接时发生错误: {ex.Message}"
+            ));
             return false;
         }
     }
-    #endregion
-
-    #region 私有数据包处理
-    /// <summary>
-    /// 处理接收到的网络数据包
-    /// </summary>
-    /// <param name="clientSocket">客户端Socket连接</param>
-    /// <param name="packet">接收到的数据包</param>
-    private async void HandlePacket(Socket clientSocket, NetworkPacket packet)
-    {
-        await _ntwsPacketHanlder.HandlePacketAsync(clientSocket, _serverSocket, packet);   // 这里是外部处理
-        switch (packet.Type)                                                    // 这里是内部处理
-        {
-            case (int)PacketType.Heartbeat:
-                // 更新客户端心跳时间
-                _clientManager.UpdateClientLastHeartbeat(clientSocket);
-                break;
-            case (int)PacketType.Message: 
-                // 处理消息包
-                break;
-            case (int)PacketType.Unknown:
-                // 未知包
-                break;
-            case (int)PacketType.Request:
-                // 请求包
-                break;
-            case (int)PacketType.Response:
-                // 响应包
-                break;
-            case (int)PacketType.Command:
-                // 命令包
-                break;
-            case (int)PacketType.Data:
-                // 数据包
-                break;
-            case (int)PacketType.Error:
-                // 错误包
-                break;
-            // 处理其他类型的包...
-            default:
-                break;
-        }
-    }
-
-    /// <summary>
-    /// 执行心跳检测
-    /// </summary>
-    private void CheckHeartbeats()      // 心跳检测, 超时断开
-    {
-        while (_isRunning)
-        {
-            // 检查并移除不活跃的客户端
-            _clientManager.CheckAndRemoveInactiveClients((clientSocket) =>
-            {
-                HandleClientDisconnection(clientSocket);
-            });
-            Thread.Sleep(5000); // 每秒检查一次
-        }
-    }
-    #endregion
-
-    #region 私有客户端管理
-    /// <summary>
-    /// 处理客户端断开连接
-    /// </summary>
-    /// <param name="clientSocket">断开连接的客户端Socket</param>
-    private void HandleClientDisconnection(Socket clientSocket)
-    {
-        // 移除客户端并关闭连接
-        _clientManager.RemoveClient(clientSocket);
-        _eventHandler.OnClientDisconnected(clientSocket);
-        try
-        {
-            clientSocket.Close();
-        }
-        catch { }
-    }
-    #endregion
 }

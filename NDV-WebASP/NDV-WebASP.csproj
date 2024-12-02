@@ -8,7 +8,8 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\NetworkCoreSandard\NetworkCoreSandard.csproj" />
+    <ProjectReference Include="..\NetworkCoreCommunication\NetworkCoreCommunication.csproj" />
+    <ProjectReference Include="..\NetworkCoreSandard\NetworkCoreStandard.csproj" />
   </ItemGroup>
 
   <ItemGroup>
