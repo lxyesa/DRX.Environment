@@ -13,4 +13,9 @@ public abstract class IComponent
     {
         return Owner!;
     }
+
+    ~IComponent()
+    {
+        Owner = null;
+    }
 }
