@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using NetworkCoreStandard.Utils;
 
 namespace NetworkCoreStandard.Models
 {
@@ -166,6 +167,12 @@ namespace NetworkCoreStandard.Models
         public virtual object? GetBodyValue(string key)
         {
             return bodyDict.TryGetValue(key, out object? value) ? value : null;
+        }
+
+        ~NetworkPacket()
+        {
+            bodyDict.Clear();
+            bodyDict = null!;
         }
     }
 

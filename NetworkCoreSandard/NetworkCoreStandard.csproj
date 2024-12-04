@@ -25,6 +25,7 @@
 
   <ItemGroup>
     <Folder Include="Attributes\" />
+    <Folder Include="Command\" />
     <Folder Include="Services\" />
   </ItemGroup>
 

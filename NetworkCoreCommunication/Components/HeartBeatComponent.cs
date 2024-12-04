@@ -3,13 +3,12 @@ using NetworkCoreStandard.Interface;
 using NetworkCoreStandard.Models;
 using NetworkCoreStandard.Utils;
 
-namespace NetworkCoreCommunication.Components;
+namespace NetworkCoreStandard.Components;
 
 public class HeartBeatComponent : IComponent
 {
     private DateTime _lastHeartbeatTime;
-    private const int HEARTBEAT_TIMEOUT = 10 * 60 * 1000;  // 10 min to timeout (this is a default value)
-
+    private int HEARTBEAT_TIMEOUT = 10 * 60 * 1000;  // 10 min to timeout (this is a default value)
 
     public void UpdateHeartbeat()
     {
@@ -21,15 +20,24 @@ public class HeartBeatComponent : IComponent
         return (DateTime.Now - _lastHeartbeatTime).TotalMilliseconds > HEARTBEAT_TIMEOUT;
     }
 
+    public DateTime GetLastHeartbeatTime()
+    {
+        return _lastHeartbeatTime;
+    }
+
     public override void Start()
     {
         // set the last heartbeat
         _lastHeartbeatTime = DateTime.Now;
-        Logger.Log("HeartBeatComponent", $"HeartBeatComponent started {_lastHeartbeatTime}");
     }
 
     public override void Awake()
     {
         // Do nothing
+    }
+
+    public void SetHeartbeatTimeout(int timeout)
+    {
+        HEARTBEAT_TIMEOUT = timeout;
     }
 }

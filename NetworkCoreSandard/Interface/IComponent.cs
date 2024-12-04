@@ -1,5 +1,6 @@
 using System;
 using NetworkCoreStandard.Models;
+using NetworkCoreStandard.Utils;
 
 namespace NetworkCoreStandard.Interface;
 
@@ -17,5 +18,6 @@ public abstract class IComponent
     ~IComponent()
     {
         Owner = null;
+        GCManager.Instance.CollectGarbage();
     }
 }

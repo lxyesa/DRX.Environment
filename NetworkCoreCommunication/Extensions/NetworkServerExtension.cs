@@ -1,5 +1,5 @@
 using System;
-using NetworkCoreCommunication.Components;
+using NetworkCoreStandard.Components;
 using NetworkCoreStandard.Events;
 using NetworkCoreStandard.Models;
 using NetworkCoreStandard.Utils;
@@ -21,18 +21,10 @@ namespace NetworkCoreStandard.Extensions
                 if (isDebugging)
                 {
                     Logger.Log("Server", $"客户端 {args.RemoteEndPoint} 已连接");
-                    args.Model?.AddComponent<HeartBeatComponent>();
-                }
-            });
-
-            // 监听客户端断开连接事件。
-            server.AddListener("OnClientDisconnected", (sender, args) =>
-            {
-                if (isDebugging)
-                {
-                    Logger.Log("Server", $"客户端 {args.RemoteEndPoint} 已断开连接");
                     Logger.Log("Server", $"当前连接数：{server.GetClients().Count}");
                 }
+                args.Model?.AddComponent<HeartBeatComponent>();
+                args.Model?.GetComponent<HeartBeatComponent>()?.SetHeartbeatTimeout(10 * 60 * 1000);
             });
 
             server.AddListener("OnDataReceived", (sender, args) =>
@@ -47,6 +39,8 @@ namespace NetworkCoreStandard.Extensions
                         server.Send(args.Socket, new NetworkPacket()
                             .SetHeader("heartbeat")
                             .SetType((int)PacketType.HeartBeat));
+
+                        GC.Collect();
                     }
                 }
             });
@@ -60,7 +54,11 @@ namespace NetworkCoreStandard.Extensions
                         if (heartbeat.IsTimeout())
                         {
                             // 超时断开连接
-                            Logger.Log("Server", $"客户端 {client.Id} 心跳超时，断开连接");
+                            if (isDebugging)
+                            {
+                                Logger.Log("Server", $"客户端 {client.Id} 心跳超时，断开连接");
+                            }
+                            
                             server.HandleDisconnect(client.GetSocket());
                         }
                     }

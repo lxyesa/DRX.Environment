@@ -28,6 +28,20 @@ public class NetworkObject
     {
         AssemblyLoader.LoadEmbeddedAssemblies();
         _eventBus = new NetworkEventBus();
+        DoTickAsync(() =>
+        {
+            // 首先发布通知，告诉所有监听者垃圾回收即将执行
+            _ = RaiseEventAsync("OnGC", new NetworkEventArgs(
+                socket: null!,
+                eventType: NetworkEventType.HandlerEvent,
+                message: "执行垃圾回收"
+            ));
+            // 执行垃圾回收
+            GC.Collect(
+                generation: GC.MaxGeneration,
+                mode: GCCollectionMode.Forced
+            );
+        }, 5 * 1000 * 60, "DefaultTickTask");
     }
 
     /// <summary>

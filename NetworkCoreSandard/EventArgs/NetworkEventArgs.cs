@@ -115,12 +115,11 @@ public class NetworkEventArgs : System.EventArgs , IDisposable
 
     ~NetworkEventArgs()
     {
-        Logger.Log("GC",$"{this.GetType().Name}对象被销毁");
+        
     }
 
     public void Dispose()
     {
-        
         GC.SuppressFinalize(this);
     }
 }

@@ -12,6 +12,7 @@ public class Client : ModelObject
     public int Id { get; set; }
     public string IP { get; private set; }
     public int Port { get; private set; }
+    public int PermissionLevel { get; set; } = 1;
     
     public Client(Socket socket)
     {
@@ -19,6 +20,7 @@ public class Client : ModelObject
         var endpoint = (IPEndPoint)socket.RemoteEndPoint!;
         IP = endpoint.Address.ToString();
         Port = endpoint.Port;
+        Id = GetHashCode();
     }
     
 
@@ -32,15 +34,13 @@ public class Client : ModelObject
         return _socket;
     }
 
+    public void SetPermissionLevel(int level)
+    {
+        PermissionLevel = level;
+    }
+
     ~Client()
     {
-        if (_socket.Connected)
-        {
-            _socket.Shutdown(SocketShutdown.Both);
-            _socket.Close();
-        }
-
-        _socket.Dispose();
-        Logger.Log("GC", $"{this.GetType().Name}对象被销毁");
+        
     }
 }

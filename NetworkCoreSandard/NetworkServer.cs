@@ -9,6 +9,7 @@ using NetworkCoreStandard.Models;
 using NetworkCoreStandard.Utils;
 using System.Collections.Concurrent;
 using Microsoft.Extensions.ObjectPool;
+using NetworkCoreStandard.Interface;
 
 namespace NetworkCoreStandard;
 
@@ -21,7 +22,7 @@ public class NetworkServer : NetworkObject
     protected int _port;
     protected string _ip;
     private ConcurrentDictionary<Socket, Client> _clientsBySocket = new();
-    private ConcurrentDictionary<string, Client> _clientsByIP = new();
+    private ConcurrentDictionary<int, Client> _clientsByID = new();
     protected ConnectionConfig _config;
 
     /// <summary>
@@ -30,12 +31,12 @@ public class NetworkServer : NetworkObject
     /// <param name="port">监听端口</param>
     public NetworkServer(ConnectionConfig config) : base()
     {
-        AssemblyLoader.LoadEmbeddedAssemblies();
         _config = config;
         _ip = config.IP;
         _port = config.Port;
         _socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
     }
+
 
     protected virtual void ServerTick(){
         try
@@ -167,7 +168,7 @@ public class NetworkServer : NetworkObject
         {
             _socket.Close();
             _clientsBySocket.Clear();
-            _clientsByIP.Clear();
+            _clientsByID.Clear();
         }
         catch (Exception ex)
         {
@@ -228,7 +229,7 @@ public class NetworkServer : NetworkObject
 
             var client = new Client(clientSocket);
             _clientsBySocket[clientSocket] = client;
-            _clientsByIP[client.IP] = client;
+            _clientsByID[client.Id] = client;
 
             await RaiseEventAsync("OnClientConnected", new NetworkEventArgs(
                 socket: clientSocket,
@@ -293,6 +294,9 @@ public class NetworkServer : NetworkObject
                        message: $"",
                        packet: packet
                    ));
+
+                NetworkPacketParse(packet, clientSocket);
+
                 // 继续接收数据
                 BeginReceive(clientSocket);
             }
@@ -304,6 +308,20 @@ public class NetworkServer : NetworkObject
         catch
         {
             HandleDisconnect(clientSocket);
+        }
+    }
+
+    private void NetworkPacketParse(NetworkPacket packet, Socket clientSocket)
+    {
+        if (packet.Type == (int)PacketType.Command)
+        {
+            _ = RaiseEventAsync("OnCommandReceived", new NetworkEventArgs(
+                socket: clientSocket,
+                model: _clientsBySocket[clientSocket],
+                eventType: NetworkEventType.HandlerEvent,
+                message: $"",
+                packet: packet
+            ));
         }
     }
 
@@ -402,33 +420,53 @@ public class NetworkServer : NetworkObject
         try
         {
             var endpoint = clientSocket.RemoteEndPoint?.ToString() ?? "Unknown";
-            await RaiseEventAsync("OnClientDisconnected", new NetworkEventArgs(
-                socket: clientSocket!,
-                model: _clientsBySocket[clientSocket],
-                eventType: NetworkEventType.ServerClientDisconnected,
-                message: $"Client {endpoint} disconnected"
-            ));
 
-            if (_clientsBySocket.TryGetValue(clientSocket, out Client client))
+            // 首先尝试获取客户端信息
+            if (_clientsBySocket.TryGetValue(clientSocket, out Client? client))
             {
-                _clientsByIP.TryRemove(client.IP, out _);
+                await RaiseEventAsync("OnClientDisconnected", new NetworkEventArgs(
+                    socket: clientSocket!,
+                    model: client,
+                    eventType: NetworkEventType.ServerClientDisconnected,
+                    message: $"Client {endpoint} disconnected"
+                ));
+
+                // 移除客户端记录
+                _clientsByID.TryRemove(client.Id, out _);
                 _clientsBySocket.TryRemove(clientSocket, out _);
-                
+            }
+
+            // 关闭Socket连接
+            CloseSocketSafely(clientSocket);
+        }
+        catch (Exception)   // 异常将被忽略
+        {
+            // Console.WriteLine($"处理断开连接时发生错误: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// 辅助方法，安全地关闭Socket连接
+    /// </summary>
+    /// <param name="socket"></param>
+    private void CloseSocketSafely(Socket socket)
+    {
+        try
+        {
+            if (socket.Connected)
+            {
                 try
                 {
-                    clientSocket.Shutdown(SocketShutdown.Both); // 先优雅关闭
+                    socket.Shutdown(SocketShutdown.Both);
                 }
-                catch { } // 忽略可能的异常，因为连接可能已经关闭
+                catch { } // 忽略shutdown可能的异常
                 finally
                 {
-                    clientSocket.Close(); // 确保资源释放
+                    socket.Close();
                 }
             }
         }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"处理断开连接时发生错误: {ex.Message}");
-        }
+        catch { } // 忽略所有关闭过程中的异常
     }
 
     /// <summary>
@@ -436,11 +474,11 @@ public class NetworkServer : NetworkObject
     /// </summary>
     /// <param name="clientIP">客户端IP地址</param>
     /// <returns>是否成功断开连接</returns>
-    public virtual bool DisconnectClient(string clientIP)
+    public virtual bool DisconnectClient(int clientID)
     {
         try
         {
-            if (_clientsByIP.TryGetValue(clientIP, out Client client))
+            if (_clientsByID.TryGetValue(clientID, out Client client))
             {
                 HandleDisconnect(client.GetSocket());
                 return true;
@@ -469,14 +507,19 @@ public class NetworkServer : NetworkObject
         return _clientsBySocket[socket];
     }
 
-    public ModelObject GetClientByIP(string ip)
+    public ModelObject GetClientByID(int id)
     {
-        return _clientsByIP[ip];
+        return _clientsByID[id];
     }
 
     public List<ModelObject> GetClients()
     {
         return _clientsBySocket.Values.Cast<ModelObject>().ToList();
+    }
+
+    public bool HasClient(Socket socket)
+    {
+        return _clientsBySocket.ContainsKey(socket);
     }
 
     #endregion

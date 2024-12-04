@@ -15,7 +15,7 @@ public partial class Program
             {
                 IP = "0.0.0.0",
                 Port = 8463,
-                MaxClients = 100,
+                MaxClients = 50000000,
                 TickRate = 1f/30f,
             };
             Server = new NetworkServer(config);
