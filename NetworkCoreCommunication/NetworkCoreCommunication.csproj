@@ -11,8 +11,4 @@
     <ProjectReference Include="..\NetworkCoreSandard\NetworkCoreStandard.csproj" />
   </ItemGroup>
 
-  <ItemGroup>
-    <Folder Include="Extensions\" />
-  </ItemGroup>
-
 </Project>

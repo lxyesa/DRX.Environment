@@ -20,11 +20,11 @@
     <PackageReference Include="System.Runtime.CompilerServices.Unsafe" Version="6.0.0" />
     <PackageReference Include="System.Text.Encodings.Web" Version="9.0.0" />
     <PackageReference Include="Microsoft.Bcl.AsyncInterfaces" Version="9.0.0" />
+    <PackageReference Include="Microsoft.Extensions.ObjectPool" Version="7.0.0" />
   </ItemGroup>
 
   <ItemGroup>
     <Folder Include="Attributes\" />
-    <Folder Include="Interface\" />
     <Folder Include="Services\" />
   </ItemGroup>
 

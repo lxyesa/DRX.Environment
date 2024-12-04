@@ -1,6 +1,8 @@
 using System;
+using System.Collections.Concurrent;
 using System.Net.Sockets;
 using NetworkCoreStandard.Models;
+using NetworkCoreStandard.Utils;
 
 namespace NetworkCoreStandard.EventArgs;
 
@@ -59,9 +61,9 @@ public class NetworkError
 /// <summary>
 /// 网络事件参数类，用于传递网络事件相关信息
 /// </summary>
-public class NetworkEventArgs : System.EventArgs
+public class NetworkEventArgs : System.EventArgs , IDisposable
 {
-    /// <summary>与客户端通信的Socket对象</summary>
+    /// <summary>事件发生的Socket对象（可能为Null）</summary>
     public Socket Socket { get; }
 
     /// <summary>事件发生的时间戳</summary>
@@ -74,19 +76,51 @@ public class NetworkEventArgs : System.EventArgs
     public NetworkEventType EventType { get; }
 
     /// <summary>事件相关的消息描述</summary>
-    public string Message { get; }
+    public string? Message { get; }
+    /// <summary>
+    /// 事件的发送者
+    /// </summary>
+    public object? Sender { get; }
+    /// <summary>
+    /// 事件的远程终结点，格式为"IP:Port"
+    /// </summary>
+    public string? RemoteEndPoint { get; }
+    /// <summary>
+    /// 事件的模型对象，一般来说，Client、User等各种数据模型对象都可以作为事件的模型对象
+    /// </summary>
+    public ModelObject? Model { get; }
+    /// <summary>
+    /// 事件的模型对象集合，用于传递多个模型对象
+    /// </summary>
+    public List<ModelObject>? Models { get; }
+    
 
-    public NetworkEventArgs(Socket socket, NetworkEventType eventType, string message = "", NetworkPacket? packet = null)
+    public NetworkEventArgs(Socket socket, NetworkEventType eventType, string message = "", NetworkPacket? packet = null, object? sender = null, ModelObject? model = null, List<ModelObject>? models = null)
     {
         Socket = socket;
         EventType = eventType;
         Message = message;
         Timestamp = DateTime.Now;
         Packet = packet;
+        Sender = sender;
+        RemoteEndPoint = socket?.RemoteEndPoint?.ToString();
+        Model = model;
+        Models = models;
     }
-
+    
     // 添加无参构造函数
     public NetworkEventArgs() : this(null!, NetworkEventType.DataReceived, string.Empty)
     {
+    }
+
+    ~NetworkEventArgs()
+    {
+        Logger.Log("GC",$"{this.GetType().Name}对象被销毁");
+    }
+
+    public void Dispose()
+    {
+        
+        GC.SuppressFinalize(this);
     }
 }

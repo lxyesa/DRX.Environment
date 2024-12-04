@@ -20,3 +20,9 @@ dotnet_analyzer_diagnostic.severity = none
 
 # Default severity for all analyzer diagnostics
 dotnet_analyzer_diagnostic.severity = suggestion
+
+# IDE0058: 永远不会使用表达式值
+dotnet_diagnostic.IDE0058.severity = silent
+
+# Default severity for analyzer diagnostics with category 'Style'
+dotnet_analyzer_diagnostic.category-Style.severity = silent

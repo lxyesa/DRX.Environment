@@ -16,10 +16,12 @@ public class NetworkClient : NetworkObject
     protected int _serverPort;
     protected bool _isConnected;
 
+    public bool IsConnected => _isConnected;
+
     /// <summary>
     /// 初始化网络客户端
     /// </summary>
-    public NetworkClient(string serverIP, int serverPort)
+    public NetworkClient(string serverIP, int serverPort) : base()
     {
         _serverIP = serverIP;
         _serverPort = serverPort;
@@ -201,5 +203,4 @@ public class NetworkClient : NetworkObject
     {
         HandleDisconnect();
     }
-
 }

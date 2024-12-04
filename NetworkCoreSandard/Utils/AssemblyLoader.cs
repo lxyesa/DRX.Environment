@@ -18,24 +18,24 @@ namespace NetworkCoreStandard.Utils
 
         public static void LoadEmbeddedAssemblies()
         {
-            var assembly = Assembly.GetExecutingAssembly();
-            var resources = assembly.GetManifestResourceNames()
+            Assembly assembly = Assembly.GetExecutingAssembly();
+            IEnumerable<string> resources = assembly.GetManifestResourceNames()
                 .Where(x => x.EndsWith(".dll", StringComparison.OrdinalIgnoreCase));
 
-            foreach (var resource in resources)
+            foreach (string? resource in resources)
             {
                 try
                 {
-                    using (var stream = assembly.GetManifestResourceStream(resource))
+                    using (Stream stream = assembly.GetManifestResourceStream(resource))
                     {
                         if (stream == null) continue;
 
-                        using (var memStream = new MemoryStream())
+                        using (MemoryStream memStream = new MemoryStream())
                         {
                             stream.CopyTo(memStream);
-                            var assemblyData = memStream.ToArray();
-                            var loadedAssembly = Assembly.Load(assemblyData);
-                            var assemblyName = loadedAssembly.GetName().Name;
+                            byte[] assemblyData = memStream.ToArray();
+                            Assembly loadedAssembly = Assembly.Load(assemblyData);
+                            string assemblyName = loadedAssembly.GetName().Name;
                             
                             if (!_loadedAssemblies.ContainsKey(assemblyName))
                             {
@@ -54,8 +54,8 @@ namespace NetworkCoreStandard.Utils
 
         private static Assembly? ResolveAssembly(object sender, ResolveEventArgs args)
         {
-            var assemblyName = new AssemblyName(args.Name).Name;
-            return _loadedAssemblies.TryGetValue(assemblyName, out var assembly) ? assembly : null;
+            string assemblyName = new AssemblyName(args.Name).Name;
+            return _loadedAssemblies.TryGetValue(assemblyName, out Assembly? assembly) ? assembly : null;
         }
     }
 }

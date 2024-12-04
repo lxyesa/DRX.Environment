@@ -78,7 +78,7 @@ namespace NetworkCoreStandard.Models
                     Builder();
                 }
 
-                var options = new JsonSerializerOptions
+                JsonSerializerOptions options = new JsonSerializerOptions
                 {
                     Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
                     DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
@@ -105,14 +105,14 @@ namespace NetworkCoreStandard.Models
         {
             try
             {
-                var options = new JsonSerializerOptions
+                JsonSerializerOptions options = new JsonSerializerOptions
                 {
                     Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
                     // 如果遇到未知的属性不要抛出异常
                     DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
                 };
 
-                var packet = JsonSerializer.Deserialize<NetworkPacket>(data, options);
+                NetworkPacket? packet = JsonSerializer.Deserialize<NetworkPacket>(data, options);
                 if (packet == null)
                 {
                     throw new InvalidOperationException("反序列化结果为空");

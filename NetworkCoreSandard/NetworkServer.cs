@@ -7,6 +7,8 @@ using NetworkCoreStandard.Events;
 using static NetworkCoreStandard.Events.NetworkEventDelegate;
 using NetworkCoreStandard.Models;
 using NetworkCoreStandard.Utils;
+using System.Collections.Concurrent;
+using Microsoft.Extensions.ObjectPool;
 
 namespace NetworkCoreStandard;
 
@@ -18,32 +20,101 @@ public class NetworkServer : NetworkObject
     protected Socket _socket;
     protected int _port;
     protected string _ip;
-    protected HashSet<Socket> _clients = new HashSet<Socket>();
+    private ConcurrentDictionary<Socket, Client> _clientsBySocket = new();
+    private ConcurrentDictionary<string, Client> _clientsByIP = new();
+    protected ConnectionConfig _config;
 
     /// <summary>
     /// 初始化服务器并开始监听指定端口
     /// </summary>
     /// <param name="port">监听端口</param>
-    public NetworkServer(int port)
+    public NetworkServer(ConnectionConfig config) : base()
     {
         AssemblyLoader.LoadEmbeddedAssemblies();
-        _ip = "0.0.0.0";
-        _port = port;
+        _config = config;
+        _ip = config.IP;
+        _port = config.Port;
         _socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
     }
 
-    /// <summary>
-    /// 初始化服务器并开始监听指定IP和端口
-    /// </summary>
-    /// <param name="ip">监听IP地址</param>
-    /// <param name="port">监听端口</param>
-    public NetworkServer(string ip, int port)
+    protected virtual void ServerTick(){
+        try
+        {
+            _ = DoTickAsync(() => {
+                _ = RaiseEventAsync("OnServerTick", new NetworkEventArgs(
+                    socket: _socket,
+                    models: _clientsBySocket.Values.Cast<ModelObject>().ToList(),
+                    eventType: NetworkEventType.HandlerEvent
+                ));
+            }, (int)(1000 / _config.TickRate), "ServerTick");
+        }
+        catch (Exception ex)
+        {
+            _ = RaiseEventAsync("OnError", new NetworkEventArgs(
+                socket: _socket,
+                eventType: NetworkEventType.HandlerEvent,
+                message: $"服务器Tick时发生错误: {ex.Message}"
+            ));
+
+            Console.WriteLine($"服务器Tick时发生错误: {ex.Message}");
+        }
+    }
+
+    protected virtual bool ValidateConnection(Socket clientSocket)
     {
-        _ip = ip;
-        _port = port;
-        _socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
-    }
+        try
+        {
+            var clientIP = (clientSocket.RemoteEndPoint as IPEndPoint)?.Address.ToString();
 
+            // 检查最大连接数
+            if (_clientsBySocket.Count >= _config.MaxClients)
+            {
+                _ = RaiseEventAsync("OnError", new NetworkEventArgs(
+                    socket: clientSocket,
+                    eventType: NetworkEventType.HandlerEvent,
+                    message: $"[{DateTime.Now:yyyy/mm/dd hh:mm:ss}] [ConnectionFailed] 服务器已达到最大连接数 ({_config.MaxClients})，因此 {clientIP} 的连接被拒绝。"
+                ));
+                return false;
+            }
+
+            // 检查IP黑名单
+            if (clientIP != null && _config.BlacklistIPs.Contains(clientIP))
+            {
+                _ = RaiseEventAsync("OnError", new NetworkEventArgs(
+                    socket: clientSocket,
+                    eventType: NetworkEventType.HandlerEvent,
+                    message: $"[{DateTime.Now:yyyy/mm/dd hh:mm:ss}] [ConnectionFailed] {clientIP} 在IP黑名单中，因此服务器拒绝与其建立连接。"
+                ));
+                return false;
+            }
+
+            // 检查IP白名单(如果启用)
+            if (_config.WhitelistIPs.Any() &&
+                clientIP != null &&
+                !_config.WhitelistIPs.Contains(clientIP))
+            {
+                _ = RaiseEventAsync("OnError", new NetworkEventArgs(
+                    socket: clientSocket,
+                    eventType: NetworkEventType.HandlerEvent,
+                    message: $"[{DateTime.Now:yyyy/mm/dd hh:mm:ss}] [ConnectionFailed] {clientIP} 不在IP白名单中，因此服务器拒绝与其建立连接。"
+                ));
+                return false;
+            }
+
+            // 执行自定义验证
+            if (_config.CustomValidator != null)
+            {
+                return _config.CustomValidator(clientSocket);
+            }
+
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"验证连接时发生错误: {ex.Message}");
+            return false;
+        }
+    }
 
     public virtual async void StartAsync()
     {
@@ -95,7 +166,8 @@ public class NetworkServer : NetworkObject
         try
         {
             _socket.Close();
-            _clients.Clear();
+            _clientsBySocket.Clear();
+            _clientsByIP.Clear();
         }
         catch (Exception ex)
         {
@@ -119,6 +191,8 @@ public class NetworkServer : NetworkObject
                 eventType: NetworkEventType.ServerStarted,
                 message: $"服务器已启动，监听 {_ip}:{_port}"
             ));
+            
+            ServerTick(); // 启动服务器Tick
         }
         catch (Exception ex)
         {
@@ -133,28 +207,50 @@ public class NetworkServer : NetworkObject
     /// <summary>
     /// 处理新的客户端连接
     /// </summary>
-    protected virtual void AcceptCallback(IAsyncResult ar)
+    protected virtual async void AcceptCallback(IAsyncResult ar)
     {
         try
         {
             Socket clientSocket = _socket.EndAccept(ar);
-            _clients.Add(clientSocket);
 
-            _ = RaiseEventAsync("OnClientConnected", new NetworkEventArgs(
+            // 验证连接
+            if (!ValidateConnection(clientSocket))
+            {
+                await RaiseEventAsync("OnConnectionRejected", new NetworkEventArgs(
                     socket: clientSocket,
-                    eventType: NetworkEventType.ServerClientConnected
+                    eventType: NetworkEventType.HandlerEvent,
+                    message: "连接被拒绝"
                 ));
 
+                clientSocket.Close();
+                return;
+            }
+
+            var client = new Client(clientSocket);
+            _clientsBySocket[clientSocket] = client;
+            _clientsByIP[client.IP] = client;
+
+            await RaiseEventAsync("OnClientConnected", new NetworkEventArgs(
+                socket: clientSocket,
+                model: client,
+                eventType: NetworkEventType.ServerClientConnected,
+                message: $"客户端 {clientSocket.RemoteEndPoint} 已连接"
+            ));
+
             BeginReceive(clientSocket);
-            _socket.BeginAccept(AcceptCallback, null);
         }
         catch (Exception ex)
         {
-            _ = RaiseEventAsync("OnError", new NetworkEventArgs(
-                    socket: _socket,
-                    eventType: NetworkEventType.HandlerEvent,
-                    message: $"处理客户端连接时发生错误: {ex.Message}"
-                ));
+            await RaiseEventAsync("OnError", new NetworkEventArgs(
+                socket: _socket,
+                eventType: NetworkEventType.HandlerEvent,
+                message: $"接受客户端连接时发生错误: {ex.Message}"
+            ));
+        }
+        finally
+        {
+            // 继续监听下一个连接
+            _socket.BeginAccept(AcceptCallback, null);
         }
     }
 
@@ -192,6 +288,7 @@ public class NetworkServer : NetworkObject
 
                 _ = RaiseEventAsync("OnDataReceived", new NetworkEventArgs(
                        socket: clientSocket,
+                       model: _clientsBySocket[clientSocket],
                        eventType: NetworkEventType.DataReceived,
                        message: $"",
                        packet: packet
@@ -215,10 +312,11 @@ public class NetworkServer : NetworkObject
     /// </summary>
     public virtual void Send(Socket clientSocket, NetworkPacket packet)
     {
-        if (!_clients.Contains(clientSocket))
+        if (!_clientsBySocket.ContainsKey(clientSocket))
         {
             _ = RaiseEventAsync("OnError", new NetworkEventArgs(
                     socket: clientSocket,
+                    model: _clientsBySocket[clientSocket],
                     eventType: NetworkEventType.HandlerEvent,
                     message: "客户端未连接"
                 ));
@@ -235,6 +333,7 @@ public class NetworkServer : NetworkObject
         {
             _ = RaiseEventAsync("OnError", new NetworkEventArgs(
                 socket: clientSocket,
+                model: _clientsBySocket[clientSocket],
                 eventType: NetworkEventType.HandlerEvent,
                 message: $"发送数据时发生错误: {ex.Message}"
             ));
@@ -249,7 +348,7 @@ public class NetworkServer : NetworkObject
     {
         List<Socket> deadClients = new List<Socket>();
 
-        foreach (var client in _clients)
+        foreach (Socket client in _clientsBySocket.Keys)
         {
             try
             {
@@ -261,6 +360,7 @@ public class NetworkServer : NetworkObject
             {
                 _ = RaiseEventAsync("OnError", new NetworkEventArgs(
                     socket: client,
+                    model: _clientsBySocket[client],
                     eventType: NetworkEventType.HandlerEvent,
                     message: $"广播数据时发生错误: {ex.Message}"
                 ));
@@ -270,7 +370,7 @@ public class NetworkServer : NetworkObject
         }
 
         // 清理断开连接的客户端
-        foreach (var client in deadClients)
+        foreach (Socket client in deadClients)
         {
             HandleDisconnect(client);
         }
@@ -297,15 +397,37 @@ public class NetworkServer : NetworkObject
     /// <summary>
     /// 处理客户端断开连接的清理工作
     /// </summary>
-    protected virtual void HandleDisconnect(Socket clientSocket)
+    public virtual async void HandleDisconnect(Socket clientSocket)
     {
-        if (_clients.Remove(clientSocket))
+        try
         {
-            _ = RaiseEventAsync("OnClientDisconnected", new NetworkEventArgs(
-                socket: clientSocket,
-                eventType: NetworkEventType.ServerClientDisconnected
+            var endpoint = clientSocket.RemoteEndPoint?.ToString() ?? "Unknown";
+            await RaiseEventAsync("OnClientDisconnected", new NetworkEventArgs(
+                socket: clientSocket!,
+                model: _clientsBySocket[clientSocket],
+                eventType: NetworkEventType.ServerClientDisconnected,
+                message: $"Client {endpoint} disconnected"
             ));
-            clientSocket.Close();
+
+            if (_clientsBySocket.TryGetValue(clientSocket, out Client client))
+            {
+                _clientsByIP.TryRemove(client.IP, out _);
+                _clientsBySocket.TryRemove(clientSocket, out _);
+                
+                try
+                {
+                    clientSocket.Shutdown(SocketShutdown.Both); // 先优雅关闭
+                }
+                catch { } // 忽略可能的异常，因为连接可能已经关闭
+                finally
+                {
+                    clientSocket.Close(); // 确保资源释放
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"处理断开连接时发生错误: {ex.Message}");
         }
     }
 
@@ -318,14 +440,9 @@ public class NetworkServer : NetworkObject
     {
         try
         {
-            // 查找匹配IP的客户端Socket
-            var clientSocket = _clients.FirstOrDefault(socket =>
-                ((IPEndPoint)socket.RemoteEndPoint).Address.ToString() == clientIP);
-
-            if (clientSocket != null)
+            if (_clientsByIP.TryGetValue(clientIP, out Client client))
             {
-                // 使用已有的断开连接处理方法
-                HandleDisconnect(clientSocket);
+                HandleDisconnect(client.GetSocket());
                 return true;
             }
 
@@ -341,4 +458,26 @@ public class NetworkServer : NetworkObject
             return false;
         }
     }
+
+
+
+
+    #region Getters
+
+    public ModelObject GetClientBySocket(Socket socket)
+    {
+        return _clientsBySocket[socket];
+    }
+
+    public ModelObject GetClientByIP(string ip)
+    {
+        return _clientsByIP[ip];
+    }
+
+    public List<ModelObject> GetClients()
+    {
+        return _clientsBySocket.Values.Cast<ModelObject>().ToList();
+    }
+
+    #endregion
 }

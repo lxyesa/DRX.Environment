@@ -1,5 +1,6 @@
 using NetworkCoreStandard;
 using NetworkCoreStandard.Events;
+using NetworkCoreStandard.Extensions;
 
 public partial class Program
 {
@@ -10,17 +11,18 @@ public partial class Program
     {
         try
         {
-            Builder = WebApplication.CreateBuilder(args);
-            Server = new NetworkServer(8463);
-
-            NetworkEventBus.AddListener("OnServerStarted", (sender, args) =>
+            var config = new ConnectionConfig
             {
-                Console.WriteLine($"[{args.Timestamp}] 服务器已启动，监听端口: {args.Socket.LocalEndPoint}");
-            });
-
+                IP = "0.0.0.0",
+                Port = 8463,
+                MaxClients = 100,
+                TickRate = 1f/30f,
+            };
+            Server = new NetworkServer(config);
+            Server.BeginHeartBeatListener(5000, true);
             Server.Start();
 
-
+            Builder = WebApplication.CreateBuilder(args);
             // 注册服务
             Builder.Services.AddControllers();
             Builder.Services.AddCors(options =>
@@ -56,6 +58,7 @@ public partial class Program
 
             Server.Start();
             App.Run();
+
         }
         catch (Exception ex)
         {

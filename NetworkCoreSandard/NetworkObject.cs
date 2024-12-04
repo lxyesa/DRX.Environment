@@ -1,4 +1,5 @@
 using System;
+using System.Net.Sockets;
 using NetworkCoreStandard.EventArgs;
 using NetworkCoreStandard.Events;
 using NetworkCoreStandard.Models;
@@ -7,16 +8,26 @@ using NetworkEventHandlerDelegate = NetworkCoreStandard.Events.NetworkEventHandl
 
 namespace NetworkCoreStandard;
 
+public class ConnectionConfig
+{
+    public string IP { get; set; } = "0.0.0.0";
+    public int Port { get; set; } = 8888;
+    public int MaxClients { get; set; } = 100; // 最大客户端数
+    public List<string> BlacklistIPs { get; set; } = new(); // IP黑名单
+    public List<string> WhitelistIPs { get; set; } = new(); // IP白名单
+    public Func<Socket, bool>? CustomValidator { get; set; } // 自定义验证
+    public float TickRate { get; set; } = 20;
+}
+
 public class NetworkObject
 {
     protected Dictionary<string, TickTaskState> _tickTasks = new();
-    protected NetworkEventManager _eventManager;
-    
+    protected NetworkEventBus _eventBus;
 
     public NetworkObject()
     {
         AssemblyLoader.LoadEmbeddedAssemblies();
-        _eventManager = new NetworkEventManager();
+        _eventBus = new NetworkEventBus();
     }
 
     /// <summary>
@@ -33,8 +44,8 @@ public class NetworkObject
             throw new ArgumentException($"任务名称 {taskName} 已存在");
         }
 
-        var cts = new CancellationTokenSource();
-        var state = new TickTaskState(taskName, cts, intervalMs);
+        CancellationTokenSource cts = new CancellationTokenSource();
+        TickTaskState state = new TickTaskState(taskName, cts, intervalMs);
         _tickTasks[taskName] = state;
 
         Task.Run(async () =>
@@ -92,8 +103,8 @@ public class NetworkObject
             throw new ArgumentException($"任务名称 {taskName} 已存在");
         }
 
-        var cts = new CancellationTokenSource();
-        var state = new TickTaskState(taskName, cts, intervalMs)
+        CancellationTokenSource cts = new CancellationTokenSource();
+        TickTaskState state = new TickTaskState(taskName, cts, intervalMs)
         {
             MaxCount = count,
             CurrentCount = 0,
@@ -167,7 +178,7 @@ public class NetworkObject
     /// <returns>是否成功暂停</returns>
     public virtual bool PauseTickTask(string taskName)
     {
-        if (_tickTasks.TryGetValue(taskName, out var state) && !state.IsPaused)
+        if (_tickTasks.TryGetValue(taskName, out TickTaskState? state) && !state.IsPaused)
         {
             state.IsPaused = true;
             state.PausedTime = DateTime.Now;
@@ -185,7 +196,7 @@ public class NetworkObject
     /// <returns>是否成功恢复</returns>
     public virtual bool ResumeTickTask(string taskName)
     {
-        if (_tickTasks.TryGetValue(taskName, out var state) && state.IsPaused)
+        if (_tickTasks.TryGetValue(taskName, out TickTaskState? state) && state.IsPaused)
         {
             state.IsPaused = false;
             state.PausedTime = null;
@@ -200,7 +211,7 @@ public class NetworkObject
     /// <param name="taskName">任务名称</param>
     public virtual void CancelTickTask(string taskName)
     {
-        if (_tickTasks.TryGetValue(taskName, out var state))
+        if (_tickTasks.TryGetValue(taskName, out TickTaskState? state))
         {
             state.CancellationSource.Cancel();
             _tickTasks.Remove(taskName);
@@ -214,36 +225,17 @@ public class NetworkObject
     /// <returns>任务状态，如果任务不存在则返回null</returns>
     public virtual TickTaskState? GetTickTaskState(string taskName)
     {
-        _tickTasks.TryGetValue(taskName, out var state);
+        _tickTasks.TryGetValue(taskName, out TickTaskState? state);
         return state;
-    }
-
-    [Obsolete("事件订阅方法已不受支持，新版本将不再会有新的订阅事件，建议使用事件处理器")]
-    public virtual void SubscribeNetworkEvent(NetworkEventHandlerDelegate handler)
-    {
-        _eventManager.OnNetworkEvent += handler;
-    }
-
-    [Obsolete("事件订阅方法已不受支持，新版本将不再会有新的订阅事件，建议使用事件处理器")]
-    public virtual void SubscribeErrorEvent(NetworkErrorHandler handler)
-    {
-        _eventManager.OnNetworkError += handler;
-    }
-
-    [Obsolete("事件订阅方法已不受支持，新版本将不再会有新的订阅事件，建议使用事件处理器")]
-    public virtual void UnsubscribeNetworkEvent(NetworkEventHandlerDelegate handler)
-    {
-        _eventManager.OnNetworkEvent -= handler;
-    }
-
-    [Obsolete("事件订阅方法已不受支持，新版本将不再会有新的订阅事件，建议使用事件处理器")]
-    public virtual void UnsubscribeErrorEvent(NetworkErrorHandler handler)
-    {
-        _eventManager.OnNetworkError -= handler;
     }
 
     public virtual async Task RaiseEventAsync(string eventName, NetworkEventArgs args)
     {
-        await NetworkEventBus.RaiseEventAsync(eventName, args);
+        await _eventBus.RaiseEventAsync(eventName, args);
+    }
+
+    public void AddListener(string eventName, EventHandler<NetworkEventArgs> handler)
+    {
+        _eventBus.AddListener(eventName, handler);
     }
 }
