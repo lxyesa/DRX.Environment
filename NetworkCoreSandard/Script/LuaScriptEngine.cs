@@ -7,6 +7,7 @@ using NetworkCoreStandard.Attributes;
 using NetworkCoreStandard.Models;
 using NetworkCoreStandard.Utils;
 using NLua;
+using System.Collections.Concurrent;
 
 namespace NetworkCoreStandard.Script;
 
@@ -14,6 +15,7 @@ public class LuaScriptEngine : IDisposable
 {
     private readonly Lua _lua;
     private bool _disposed;
+    private static readonly ConcurrentDictionary<Type, LuaExportAttribute> _exportCache = new();
 
     public LuaScriptEngine()
     {
@@ -26,65 +28,82 @@ public class LuaScriptEngine : IDisposable
         // 注册基础函数
         _lua["Log"] = new Action<string, string>(Logger.Log);
 
-        // 自动导出标记了LuaExport的类型
         ExportMarkedTypes();
     }
 
+    /// <summary>
+    /// 导出标记了LuaExport的类型
+    /// </summary>
     private void ExportMarkedTypes()
     {
         var assemblies = AppDomain.CurrentDomain.GetAssemblies();
-
-        foreach (var assembly in assemblies)
+        
+        Parallel.ForEach(assemblies, assembly =>
         {
             try
             {
-                var types = assembly.GetTypes();
+                var types = assembly.GetTypes()
+                    .Where(t => !_exportCache.ContainsKey(t))
+                    .ToList();
+
                 foreach (var type in types)
                 {
                     var attr = type.GetCustomAttribute<LuaExportAttribute>();
                     if (attr != null)
                     {
-                        string luaName = attr.Name ?? type.Name;
-
-                        // 创建类型表
-                        _lua.NewTable(luaName);
-                        var typeTable = _lua[luaName];
-
-                        if (attr.ExportMembers)
-                        {
-                            // 导出静态成员
-                            foreach (var method in type.GetMethods(BindingFlags.Public | BindingFlags.Static))
-                            {
-                                var methodAttr = method.GetCustomAttribute<LuaExportAttribute>();
-                                if (methodAttr != null)
-                                {
-                                    string methodName = methodAttr.Name ?? method.Name;
-                                    var del = method.CreateDelegate(Expression.GetDelegateType(
-                                        (from p in method.GetParameters() select p.ParameterType)
-                                        .Concat(new[] { method.ReturnType })
-                                        .ToArray()));
-
-                                    ((LuaTable)typeTable)[methodName] = del;
-                                }
-                            }
-
-                            // 导出实例方法
-                            foreach (var method in type.GetMethods(BindingFlags.Public | BindingFlags.Instance))
-                            {
-                                var methodAttr = method.GetCustomAttribute<LuaExportAttribute>();
-                                if (methodAttr != null)
-                                {
-                                    _lua[type.FullName + "." + method.Name] = method;
-                                }
-                            }
-                        }
+                        _exportCache.TryAdd(type, attr);
+                        ExportType(type, attr);
                     }
                 }
             }
             catch
             {
-                continue;
+                // 忽略加载失败的程序集
             }
+        });
+    }
+
+    private void ExportType(Type type, LuaExportAttribute attr)
+    {
+        string luaName = attr.Name ?? type.Name;
+        lock (_lua)
+        {
+            _lua.NewTable(luaName);
+            var typeTable = _lua[luaName];
+
+            if (attr.ExportMembers)
+            {
+                ExportStaticMethods(type, (LuaTable)typeTable);
+                ExportInstanceMethods(type);
+            }
+        }
+    }
+
+    private void ExportStaticMethods(Type type, LuaTable typeTable)
+    {
+        var methods = type.GetMethods(BindingFlags.Public | BindingFlags.Static)
+            .Where(m => m.GetCustomAttribute<LuaExportAttribute>() != null);
+
+        foreach (var method in methods)
+        {
+            var methodAttr = method.GetCustomAttribute<LuaExportAttribute>();
+            string methodName = methodAttr.Name ?? method.Name;
+            var paramTypes = method.GetParameters().Select(p => p.ParameterType)
+                .Concat(new[] { method.ReturnType })
+                .ToArray();
+            var del = method.CreateDelegate(Expression.GetDelegateType(paramTypes));
+            typeTable[methodName] = del;
+        }
+    }
+
+    private void ExportInstanceMethods(Type type)
+    {
+        var methods = type.GetMethods(BindingFlags.Public | BindingFlags.Instance)
+            .Where(m => m.GetCustomAttribute<LuaExportAttribute>() != null);
+
+        foreach (var method in methods)
+        {
+            _lua[type.FullName + "." + method.Name] = method;
         }
     }
 
