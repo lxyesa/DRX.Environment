@@ -8,21 +8,11 @@ using NetworkEventHandlerDelegate = NetworkCoreStandard.Events.NetworkEventHandl
 
 namespace NetworkCoreStandard;
 
-public class ConnectionConfig
-{
-    public string IP { get; set; } = "0.0.0.0";
-    public int Port { get; set; } = 8888;
-    public int MaxClients { get; set; } = 100; // 最大客户端数
-    public List<string> BlacklistIPs { get; set; } = new(); // IP黑名单
-    public List<string> WhitelistIPs { get; set; } = new(); // IP白名单
-    public Func<Socket, bool>? CustomValidator { get; set; } // 自定义验证
-    public float TickRate { get; set; } = 20;
-}
-
 public class NetworkObject
 {
     protected Dictionary<string, TickTaskState> _tickTasks = new();
     protected NetworkEventBus _eventBus;
+    protected int GCInterval = 5 * 1000 * 60;
 
     public NetworkObject()
     {
@@ -41,7 +31,7 @@ public class NetworkObject
                 generation: GC.MaxGeneration,
                 mode: GCCollectionMode.Forced
             );
-        }, 5 * 1000 * 60, "DefaultTickTask");
+        }, GCInterval, "DefaultTickTask");
     }
 
     /// <summary>

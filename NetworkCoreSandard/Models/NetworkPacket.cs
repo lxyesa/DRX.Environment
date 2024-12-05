@@ -3,10 +3,12 @@ using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using NetworkCoreStandard.Attributes;
 using NetworkCoreStandard.Utils;
 
 namespace NetworkCoreStandard.Models
 {
+    [LuaExport("NetworkPacket", ExportMembers = true)]
     public class NetworkPacket
     {
         [JsonPropertyName("h")]
@@ -18,6 +20,8 @@ namespace NetworkCoreStandard.Models
 
         private Dictionary<string, object> bodyDict;
 
+        [LuaExport] public static NetworkPacket Create() => new NetworkPacket();
+
         public NetworkPacket()
         {
             Header = string.Empty;
@@ -26,12 +30,14 @@ namespace NetworkCoreStandard.Models
             bodyDict = new Dictionary<string, object>();
         }
 
+        [LuaExport]
         public virtual NetworkPacket SetHeader(string header)
         {
             Header = header;
             return this;
         }
 
+        [LuaExport]
         public virtual NetworkPacket SetType(int type)
         {
             if (Enum.IsDefined(typeof(PacketType), type))
@@ -41,12 +47,14 @@ namespace NetworkCoreStandard.Models
             return this;
         }
 
+        [LuaExport]
         public virtual NetworkPacket PutBody(string key, object value)
         {
             bodyDict[key] = value;
             return this;
         }
 
+        [LuaExport]
         public virtual NetworkPacket Builder()
         {
             if (bodyDict.Count > 0)
@@ -61,6 +69,7 @@ namespace NetworkCoreStandard.Models
             return this;
         }
 
+        [LuaExport]
         public virtual string ToJson()
         {
             return JsonSerializer.Serialize(this, new JsonSerializerOptions
@@ -69,6 +78,7 @@ namespace NetworkCoreStandard.Models
             });
         }
 
+        [LuaExport]
         public virtual byte[] Serialize()
         {
             try
@@ -102,6 +112,7 @@ namespace NetworkCoreStandard.Models
             }
         }
 
+
         public static NetworkPacket Deserialize(byte[] data)
         {
             try
@@ -126,6 +137,7 @@ namespace NetworkCoreStandard.Models
             }
         }
 
+        [LuaExport]
         public virtual string[]? GetBody()
         {
             return Body as string[]; // 使用显式类型转换
@@ -142,6 +154,7 @@ namespace NetworkCoreStandard.Models
             return JsonSerializer.Serialize(Body);
         }
 
+        [LuaExport]
         public virtual T? GetBodyValue<T>(string key)
         {
             if (bodyDict.TryGetValue(key, out object? value))
@@ -163,10 +176,22 @@ namespace NetworkCoreStandard.Models
             return default;
         }
 
-        // 添加一个非泛型版本方便使用
+        [LuaExport]
         public virtual object? GetBodyValue(string key)
         {
-            return bodyDict.TryGetValue(key, out object? value) ? value : null;
+            // 将body反序列化为字典
+            if (Body is JsonElement jsonElement && jsonElement.ValueKind == JsonValueKind.Array)
+            {
+                var dictionary = jsonElement.EnumerateArray()
+                    .SelectMany(element => element.EnumerateObject())
+                    .ToDictionary(property => property.Name, property => (object)property.Value);
+
+                if (dictionary.TryGetValue(key, out object? value))
+                {
+                    return value;
+                }
+            }
+            return null;
         }
 
         ~NetworkPacket()

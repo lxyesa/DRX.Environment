@@ -11,7 +11,7 @@ namespace NetworkCoreStandard.Extensions
         {
             if (isDebugging)
             {
-                Console.WriteLine("开始监听心跳包");
+                Logger.Log("Client", "拓展:心跳包拓展组件已启动");
             }
 
             client.AddListener("OnDataReceived", (sender, args) =>

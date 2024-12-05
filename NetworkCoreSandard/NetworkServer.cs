@@ -10,12 +10,15 @@ using NetworkCoreStandard.Utils;
 using System.Collections.Concurrent;
 using Microsoft.Extensions.ObjectPool;
 using NetworkCoreStandard.Interface;
+using NetworkCoreStandard.Config;
+using NetworkCoreStandard.Attributes;
 
 namespace NetworkCoreStandard;
 
 /// <summary>
 /// 网络服务器类，处理TCP连接和事件分发
 /// </summary>
+
 public class NetworkServer : NetworkObject
 {
     protected Socket _socket;
@@ -23,18 +26,42 @@ public class NetworkServer : NetworkObject
     protected string _ip;
     private ConcurrentDictionary<Socket, Client> _clientsBySocket = new();
     private ConcurrentDictionary<int, Client> _clientsByID = new();
-    protected ConnectionConfig _config;
+    protected ServerConfig _config;
+    // 添加消息队列
+    private readonly ConcurrentQueue<(NetworkPacket packet, Socket socket)> _messageQueue = new();
+    // 添加处理线程的取消令牌
+    private readonly CancellationTokenSource _processingCts = new();
+    // 处理线程数量(可配置)
+    private int _processorCount = Environment.ProcessorCount;
+    // 处理任务列表
+    private readonly List<Task> _processingTasks = new();
 
     /// <summary>
     /// 初始化服务器并开始监听指定端口
     /// </summary>
     /// <param name="port">监听端口</param>
-    public NetworkServer(ConnectionConfig config) : base()
+    public NetworkServer(ServerConfig config) : base()
     {
+        Logger.Log("Server", "服务器已初始化");
         _config = config;
         _ip = config.IP;
         _port = config.Port;
         _socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+    }
+
+    public NetworkServer() : base()
+    {
+        _config = new ServerConfig();
+        _ip = _config.IP;
+        _port = _config.Port;
+        _socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+    }
+
+    public virtual void SetConfig(ServerConfig config)
+    {
+        _config = config;
+        _ip = config.IP;
+        _port = config.Port;
     }
 
 
@@ -166,6 +193,8 @@ public class NetworkServer : NetworkObject
         }
         try
         {
+            _processingCts.Cancel();    // 取消处理任务
+            Task.WaitAll(_processingTasks.ToArray(), TimeSpan.FromSeconds(5));  // 等待任务完成
             _socket.Close();
             _clientsBySocket.Clear();
             _clientsByID.Clear();
@@ -187,6 +216,9 @@ public class NetworkServer : NetworkObject
             _socket.Listen(10);
             _socket.BeginAccept(AcceptCallback, null);
 
+            // 启动消息处理线程
+            StartMessageProcessors();
+
             _ = RaiseEventAsync("OnServerStarted", new NetworkEventArgs(
                 socket: _socket,
                 eventType: NetworkEventType.ServerStarted,
@@ -194,6 +226,8 @@ public class NetworkServer : NetworkObject
             ));
             
             ServerTick(); // 启动服务器Tick
+
+            Logger.Log("Server", _config.OnServerStartedTip);
         }
         catch (Exception ex)
         {
@@ -270,8 +304,42 @@ public class NetworkServer : NetworkObject
         {
             HandleDisconnect(clientSocket);
         }
+    }
 
-
+    /// <summary>
+    /// 开始处理消息队列
+    /// </summary>
+    protected virtual void StartMessageProcessors()
+    {
+        for (int i = 0; i < _processorCount; i++)
+        {
+            _processingTasks.Add(Task.Run(async () =>
+            {
+                while (!_processingCts.Token.IsCancellationRequested)
+                {
+                    if (_messageQueue.TryDequeue(out var message))
+                    {
+                        try
+                        {
+                            await ProcessMessageAsync(message.packet, message.socket);
+                        }
+                        catch (Exception ex)
+                        {
+                            await RaiseEventAsync("OnError", new NetworkEventArgs(
+                                socket: message.socket,
+                                eventType: NetworkEventType.HandlerEvent,
+                                message: $"处理消息时发生错误: {ex.Message}"
+                            ));
+                        }
+                    }
+                    else
+                    {
+                        // 队列为空时等待一小段时间
+                        await Task.Delay(1, _processingCts.Token);
+                    }
+                }
+            }, _processingCts.Token));
+        }
     }
 
     /// <summary>
@@ -287,15 +355,8 @@ public class NetworkServer : NetworkObject
                 // 解析数据包
                 NetworkPacket packet = NetworkPacket.Deserialize(buffer.Take(bytesRead).ToArray());
 
-                _ = RaiseEventAsync("OnDataReceived", new NetworkEventArgs(
-                       socket: clientSocket,
-                       model: _clientsBySocket[clientSocket],
-                       eventType: NetworkEventType.DataReceived,
-                       message: $"",
-                       packet: packet
-                   ));
-
-                NetworkPacketParse(packet, clientSocket);
+                // 将消息加入队列而不是直接处理
+                _messageQueue.Enqueue((packet, clientSocket));
 
                 // 继续接收数据
                 BeginReceive(clientSocket);
@@ -311,17 +372,34 @@ public class NetworkServer : NetworkObject
         }
     }
 
-    private void NetworkPacketParse(NetworkPacket packet, Socket clientSocket)
+    /// <summary>
+    /// 处理接收到的数据包
+    /// </summary>
+    /// <param name="packet"></param>
+    /// <param name="clientSocket"></param>
+    /// <returns></returns>
+    protected virtual async Task ProcessMessageAsync(NetworkPacket packet, Socket clientSocket)
     {
-        if (packet.Type == (int)PacketType.Command)
+        // 首先触发数据接收事件
+        await RaiseEventAsync("OnDataReceived", new NetworkEventArgs(
+            socket: clientSocket,
+            model: _clientsBySocket[clientSocket],
+            eventType: NetworkEventType.DataReceived,
+            message: string.Empty,
+            packet: packet
+        ));
+
+        // 然后处理具体的包类型
+        switch (packet.Type)
         {
-            _ = RaiseEventAsync("OnCommandReceived", new NetworkEventArgs(
-                socket: clientSocket,
-                model: _clientsBySocket[clientSocket],
-                eventType: NetworkEventType.HandlerEvent,
-                message: $"",
-                packet: packet
-            ));
+            case (int)PacketType.Command:
+                await RaiseEventAsync("OnCommandReceived", new NetworkEventArgs(
+                    socket: clientSocket,
+                    model: _clientsBySocket[clientSocket],
+                    eventType: NetworkEventType.HandlerEvent,
+                    packet: packet
+                ));
+                break;
         }
     }
 
@@ -449,7 +527,7 @@ public class NetworkServer : NetworkObject
     /// 辅助方法，安全地关闭Socket连接
     /// </summary>
     /// <param name="socket"></param>
-    private void CloseSocketSafely(Socket socket)
+    protected virtual void CloseSocketSafely(Socket socket)
     {
         try
         {
@@ -502,24 +580,52 @@ public class NetworkServer : NetworkObject
 
     #region Getters
 
-    public ModelObject GetClientBySocket(Socket socket)
+    /// <summary>
+    /// 根据Socket获取客户端
+    /// </summary>
+    /// <param name="socket"></param>
+    /// <returns></returns>
+    public virtual ModelObject GetClientBySocket(Socket socket)
     {
         return _clientsBySocket[socket];
     }
 
-    public ModelObject GetClientByID(int id)
+    /// <summary>
+    /// 根据ID获取客户端
+    /// </summary>
+    /// <param name="id"></param>
+    /// <returns></returns>
+    public virtual ModelObject GetClientByID(int id)
     {
         return _clientsByID[id];
     }
 
-    public List<ModelObject> GetClients()
+    /// <summary>
+    /// 获取所有已连接的客户端
+    /// </summary>
+    /// <returns></returns>
+    public virtual List<ModelObject> GetClients()
     {
         return _clientsBySocket.Values.Cast<ModelObject>().ToList();
     }
 
-    public bool HasClient(Socket socket)
+    /// <summary>
+    /// 检查指定Socket是否已连接
+    /// </summary>
+    /// <param name="socket"></param>
+    /// <returns></returns>
+    public virtual bool HasClient(Socket socket)
     {
         return _clientsBySocket.ContainsKey(socket);
+    }
+
+    /// <summary>
+    /// 获取当前连接的客户端数量
+    /// </summary>
+    /// <returns></returns>
+    public virtual int GetConnectedClientCount()
+    {
+        return _clientsBySocket.Count;
     }
 
     #endregion

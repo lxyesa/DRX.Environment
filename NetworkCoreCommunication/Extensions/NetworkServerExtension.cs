@@ -1,18 +1,22 @@
 using System;
+using NetworkCoreStandard.Attributes;
 using NetworkCoreStandard.Components;
+using NetworkCoreStandard.EventArgs;
 using NetworkCoreStandard.Events;
 using NetworkCoreStandard.Models;
 using NetworkCoreStandard.Utils;
 
 namespace NetworkCoreStandard.Extensions
 {
+    [LuaExport("netex", ExportMembers = true)]
     public static class NetworkServerExtension
     {
+        [LuaExport]
         public static void BeginHeartBeatListener(this NetworkServer server, int intervalMs, bool isDebugging = false)
         {
             if (isDebugging)
             {
-                Logger.Log("Server", "开始监听心跳包");
+                Logger.Log("Server", "拓展:心跳包拓展组件已启动");
             }
 
             // 监听客户端连接事件。
@@ -34,12 +38,24 @@ namespace NetworkCoreStandard.Extensions
                     if (args.Model?.GetComponent<HeartBeatComponent>() is HeartBeatComponent heartbeat)
                     {
                         heartbeat.UpdateHeartbeat();
-
+                        if (isDebugging)
+                        {
+                            Logger.Log("Server", $"客户端 {args.Socket.RemoteEndPoint} 发送心跳包");
+                        }
                         // 回复心跳包
                         server.Send(args.Socket, new NetworkPacket()
                             .SetHeader("heartbeat")
                             .SetType((int)PacketType.HeartBeat));
 
+                        _ = server.RaiseEventAsync("OnHeartbeatReceived", new NetworkEventArgs(
+                            model: args.Model,
+                            socket: args.Socket,
+                            packet: args.Packet,
+                            eventType: NetworkEventType.HandlerEvent,
+                            message: "接收到心跳包"
+                        ));
+
+                        // 回收内存
                         GC.Collect();
                     }
                 }

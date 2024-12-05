@@ -1,27 +1,25 @@
+using System.Text;
 using NetworkCoreStandard;
+using NetworkCoreStandard.Config;
 using NetworkCoreStandard.Events;
 using NetworkCoreStandard.Extensions;
+using NetworkCoreStandard.Script;
+using NetworkCoreStandard.Utils;
 
 public partial class Program
 {
     public static WebApplicationBuilder Builder { get; set; } = null!;
     public static WebApplication App { get; set; } = null!;
     public static NetworkServer Server { get; set; } = null!;
+    public static LuaScriptEngine LuaEngine { get; set; } = null!;
     public static void Main(string[] args)
     {
         try
         {
-            var config = new ConnectionConfig
-            {
-                IP = "0.0.0.0",
-                Port = 8463,
-                MaxClients = 50000000,
-                TickRate = 1f/30f,
-            };
-            Server = new NetworkServer(config);
-            Server.BeginHeartBeatListener(5000, true);
-            Server.Start();
-
+            Console.OutputEncoding = Encoding.UTF8;
+            // Windows平台还需要设置输入编码
+            Console.InputEncoding = Encoding.UTF8;
+            _ = LoadSocketServer();
             Builder = WebApplication.CreateBuilder(args);
             // 注册服务
             Builder.Services.AddControllers();
@@ -45,7 +43,7 @@ public partial class Program
             App.UseAuthentication();
             App.UseAuthorization();
             App.UseCors();
-            App.MapControllers();  // 替换 App.MapUserRoutes();
+            App.MapControllers();
 
             // 配置默认文件选项
             var defaultFileOptions = new DefaultFilesOptions();
@@ -63,6 +61,42 @@ public partial class Program
         catch (Exception ex)
         {
             Console.WriteLine(ex.Message);
+        }
+    }
+
+    public static async Task LoadSocketServer()
+    {
+        try
+        {
+            LuaEngine = new LuaScriptEngine();
+            var config = new ServerConfig
+            {
+                IP = "0.0.0.0",
+                Port = 8463,
+                MaxClients = 100,
+                TickRate = 1f / 30f,
+                OnServerStartedTip = "服务器已启动"
+            };
+            bool saved = await config.SaveToFileAsync(ConfigPath.ServerConfigPath);
+
+            if (!saved)
+            {
+                Logger.Log("Server", "保存配置文件失败");
+                bool loaded = await config.LoadFromFileAsync(ConfigPath.ServerConfigPath);
+                if (!loaded)
+                {
+                    Logger.Log("Server", "加载配置文件失败");
+                }
+            }
+
+            Server = new NetworkServer(config);
+            LuaEngine.LoadFile($"{PathFinder.GetAppPath()}Scripts\\Main.lua", Server);
+            Server.BeginHeartBeatListener(5000, false);
+            // Server.Start();
+        }
+        catch (Exception ex)
+        {
+            Logger.Log(NetworkCoreStandard.Utils.LogLevel.Error, "Server", ex.Message);
         }
     }
 }
