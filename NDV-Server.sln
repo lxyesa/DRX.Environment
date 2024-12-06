@@ -11,7 +11,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NetworkCoreStandard", "Netw
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NetworkCoreCommunication", "NetworkCoreCommunication\NetworkCoreCommunication.csproj", "{1404A9E5-46FF-49E2-B3FE-1EBDA7F1438D}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NetworkCoreStandard.File", "NetworkCoreStandard.File\NetworkCoreStandard.File.csproj", "{A06E49AD-E77E-41AF-8A80-3D446D1827F9}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NetworkCoreStandard.User", "NetworkCoreStandard.User\NetworkCoreStandard.User.csproj", "{E8C9D543-B997-4A72-9AD2-6498D4A646FF}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -35,10 +35,10 @@ Global
 		{1404A9E5-46FF-49E2-B3FE-1EBDA7F1438D}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{1404A9E5-46FF-49E2-B3FE-1EBDA7F1438D}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{1404A9E5-46FF-49E2-B3FE-1EBDA7F1438D}.Release|Any CPU.Build.0 = Release|Any CPU
-		{A06E49AD-E77E-41AF-8A80-3D446D1827F9}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{A06E49AD-E77E-41AF-8A80-3D446D1827F9}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{A06E49AD-E77E-41AF-8A80-3D446D1827F9}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{A06E49AD-E77E-41AF-8A80-3D446D1827F9}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E8C9D543-B997-4A72-9AD2-6498D4A646FF}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E8C9D543-B997-4A72-9AD2-6498D4A646FF}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E8C9D543-B997-4A72-9AD2-6498D4A646FF}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E8C9D543-B997-4A72-9AD2-6498D4A646FF}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

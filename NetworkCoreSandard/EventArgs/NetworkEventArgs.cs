@@ -93,7 +93,25 @@ public class NetworkEventArgs : System.EventArgs , IDisposable
     /// 事件的模型对象集合，用于传递多个模型对象
     /// </summary>
     public List<ModelObject>? Models { get; }
-    
+
+    private Dictionary<string, BaseEventArgs>? _extensionArgs;
+    private readonly object _lock = new();
+
+    public Dictionary<string, BaseEventArgs> ExtensionArgs
+    {
+        get
+        {
+            if (_extensionArgs == null)
+            {
+                lock (_lock)
+                {
+                    _extensionArgs ??= new Dictionary<string, BaseEventArgs>();
+                }
+            }
+            return _extensionArgs;
+        }
+    }
+
 
     public NetworkEventArgs(Socket socket, NetworkEventType eventType, string message = "", NetworkPacket? packet = null, object? sender = null, ModelObject? model = null, List<ModelObject>? models = null)
     {
@@ -115,7 +133,28 @@ public class NetworkEventArgs : System.EventArgs , IDisposable
 
     ~NetworkEventArgs()
     {
-        
+
+    }
+
+    public T AddExtensionArgs<T>() where T : BaseEventArgs, new()
+    {
+        var args = new T();
+        lock (_lock)
+        {
+            args.owner = this;
+            ExtensionArgs[typeof(T).Name] = args;
+        }
+        return args;
+    }
+
+    public T? GetExtensionArgs<T>() where T : BaseEventArgs
+    {
+        lock (_lock)
+        {
+            return _extensionArgs?.TryGetValue(typeof(T).Name, out var args) == true
+                ? (T)args
+                : default;
+        }
     }
 
     public void Dispose()

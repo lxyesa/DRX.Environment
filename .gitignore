@@ -13,3 +13,5 @@
 /NetworkCommonLibrary/obj/
 /NetworkCoreCommunication/bin/
 /NetworkCoreCommunication/obj/
+**/bin/
+**/obj/

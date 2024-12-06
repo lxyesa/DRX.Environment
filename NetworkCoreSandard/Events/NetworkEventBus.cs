@@ -12,6 +12,10 @@ public class NetworkEventBus
     private bool _isProcessingEvents = false;
     private readonly CancellationTokenSource _processingCts = new();
 
+    // 新增静态成员用于全局事件处理
+    private static readonly ConcurrentDictionary<string, List<EventHandler<NetworkEventArgs>>> _globalEventHandlers = new();
+    private static readonly object _globalLock = new();
+
 
     public NetworkEventBus()
     {
@@ -25,6 +29,48 @@ public class NetworkEventBus
         _processingCts.Dispose();
     }
 
+    /// <summary>
+    /// 添加全局事件监听器
+    /// </summary>
+    /// <param name="eventName"></param>
+    /// <param name="handler"></param>
+    public static void AddGlobalListener(string eventName, EventHandler<NetworkEventArgs> handler)
+    {
+        _globalEventHandlers.AddOrUpdate(
+            eventName,
+            new List<EventHandler<NetworkEventArgs>> { handler },
+            (_, existing) =>
+            {
+                lock (_globalLock)
+                {
+                    if (!existing.Contains(handler))
+                    {
+                        existing.Add(handler);
+                    }
+                    return existing;
+                }
+            });
+    }
+
+    /// <summary>
+    /// 移除全局事件监听器
+    /// </summary>
+    /// <param name="eventName"></param>
+    /// <param name="handler"></param>
+    public static void RemoveGlobalListener(string eventName, EventHandler<NetworkEventArgs> handler)
+    {
+        if (_globalEventHandlers.TryGetValue(eventName, out var handlers))
+        {
+            lock (_globalLock)
+            {
+                handlers.Remove(handler);
+                if (handlers.Count == 0)
+                {
+                    _globalEventHandlers.TryRemove(eventName, out _);
+                }
+            }
+        }
+    }
 
     /// <summary>
     /// 开始事件队列处理
@@ -91,9 +137,10 @@ public class NetworkEventBus
     /// </summary>
     private async Task ProcessEventAsync(string eventName, NetworkEventArgs args)
     {
-        if (_eventHandlers.TryGetValue(eventName, out List<EventHandler<NetworkEventArgs>>? handlers))
+        // 处理实例级别的事件处理器
+        if (_eventHandlers.TryGetValue(eventName, out var instanceHandlers))
         {
-            foreach (EventHandler<NetworkEventArgs>? handler in handlers.ToList())
+            foreach (var handler in instanceHandlers.ToList())
             {
                 try
                 {
@@ -101,7 +148,23 @@ public class NetworkEventBus
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"执行事件处理器时发生错误: {ex.Message}");
+                    Console.WriteLine($"执行实例事件处理器时发生错误: {ex.Message}");
+                }
+            }
+        }
+
+        // 处理全局事件处理器
+        if (_globalEventHandlers.TryGetValue(eventName, out var globalHandlers))
+        {
+            foreach (var handler in globalHandlers.ToList())
+            {
+                try
+                {
+                    await Task.Run(() => handler.Invoke(args.Sender, args));
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"执行全局事件处理器时发生错误: {ex.Message}");
                 }
             }
         }
@@ -195,5 +258,22 @@ public class NetworkEventBus
     public void ClearEventListeners(string eventName)
     {
         _eventHandlers.TryRemove(eventName, out _);
+    }
+
+    /// <summary>
+    /// 清除全局事件监听器
+    /// </summary>
+    public static void ClearGlobalListeners()
+    {
+        _globalEventHandlers.Clear();
+    }
+
+    /// <summary>
+    /// 清除指定全局事件的所有监听器
+    /// </summary>
+    /// <param name="eventName"></param>
+    public static void ClearGlobalEventListeners(string eventName)
+    {
+        _globalEventHandlers.TryRemove(eventName, out _);
     }
 }
