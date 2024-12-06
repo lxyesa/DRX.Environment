@@ -19,10 +19,16 @@ dotnet_diagnostic.CS1998.severity = suggestion
 dotnet_analyzer_diagnostic.severity = none
 
 # Default severity for all analyzer diagnostics
-dotnet_analyzer_diagnostic.severity = suggestion
+dotnet_analyzer_diagnostic.severity = silent
 
 # IDE0058: 永远不会使用表达式值
-dotnet_diagnostic.IDE0058.severity = silent
+dotnet_diagnostic.IDE0058.severity = suggestion
 
 # Default severity for analyzer diagnostics with category 'Style'
 dotnet_analyzer_diagnostic.category-Style.severity = silent
+
+# IDE0320: 使匿名函数成为静态函数
+dotnet_diagnostic.IDE0320.severity = silent
+
+# CS8600: 将 null 字面量或可能为 null 的值转换为非 null 类型。
+dotnet_diagnostic.CS8600.severity = suggestion

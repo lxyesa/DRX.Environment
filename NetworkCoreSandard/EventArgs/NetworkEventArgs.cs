@@ -85,35 +85,15 @@ public class NetworkEventArgs : System.EventArgs , IDisposable
     /// 事件的远程终结点，格式为"IP:Port"
     /// </summary>
     public string? RemoteEndPoint { get; }
-    /// <summary>
-    /// 事件的模型对象，一般来说，Client、User等各种数据模型对象都可以作为事件的模型对象
-    /// </summary>
-    public ModelObject? Model { get; }
-    /// <summary>
-    /// 事件的模型对象集合，用于传递多个模型对象
-    /// </summary>
-    public List<ModelObject>? Models { get; }
 
-    private Dictionary<string, BaseEventArgs>? _extensionArgs;
-    private readonly object _lock = new();
+    // 使用 ConcurrentDictionary 替代 Dictionary + lock，提供更好的并发性能
+    private ConcurrentDictionary<string, object>? _elements;
 
-    public Dictionary<string, BaseEventArgs> ExtensionArgs
-    {
-        get
-        {
-            if (_extensionArgs == null)
-            {
-                lock (_lock)
-                {
-                    _extensionArgs ??= new Dictionary<string, BaseEventArgs>();
-                }
-            }
-            return _extensionArgs;
-        }
-    }
+    // 使用 Lazy<T> 实现延迟初始化
+    private readonly Lazy<ConcurrentDictionary<string, object>> _lazyElements;
 
-
-    public NetworkEventArgs(Socket socket, NetworkEventType eventType, string message = "", NetworkPacket? packet = null, object? sender = null, ModelObject? model = null, List<ModelObject>? models = null)
+    public NetworkEventArgs(Socket socket, NetworkEventType eventType, string message = "", 
+        NetworkPacket? packet = null, object? sender = null)
     {
         Socket = socket;
         EventType = eventType;
@@ -122,8 +102,43 @@ public class NetworkEventArgs : System.EventArgs , IDisposable
         Packet = packet;
         Sender = sender;
         RemoteEndPoint = socket?.RemoteEndPoint?.ToString();
-        Model = model;
-        Models = models;
+
+        // 使用 Lazy<T> 初始化
+        _lazyElements = new Lazy<ConcurrentDictionary<string, object>>(
+            () => new ConcurrentDictionary<string, object>());
+    }
+
+    public ConcurrentDictionary<string, object> Elements => _lazyElements.Value;
+
+    // 使用 TryAdd 避免并发冲突
+    public bool TryAddElement(string key, object value)
+    {
+        if(string.IsNullOrEmpty(key)) return false;
+        return Elements.TryAdd(key, value);
+    }
+
+    // 使用 TryGetValue 优化获取操作
+    public bool TryGetElement<T>(string key, out T? value) where T : class
+    {
+        value = default;
+        if (Elements.TryGetValue(key, out object? obj) && obj is T typedValue)
+        {
+            value = typedValue;
+            return true;
+        }
+        return false;
+    }
+
+    // 为了兼容性保留原方法
+    public NetworkEventArgs AddElement(string key, object value)
+    {
+        Elements.TryAdd(key, value);
+        return this;
+    }
+
+    public object? GetElement(string key)
+    {
+        return Elements.TryGetValue(key, out object? value) ? value : null;
     }
     
     // 添加无参构造函数
@@ -134,27 +149,6 @@ public class NetworkEventArgs : System.EventArgs , IDisposable
     ~NetworkEventArgs()
     {
 
-    }
-
-    public T AddExtensionArgs<T>() where T : BaseEventArgs, new()
-    {
-        var args = new T();
-        lock (_lock)
-        {
-            args.owner = this;
-            ExtensionArgs[typeof(T).Name] = args;
-        }
-        return args;
-    }
-
-    public T? GetExtensionArgs<T>() where T : BaseEventArgs
-    {
-        lock (_lock)
-        {
-            return _extensionArgs?.TryGetValue(typeof(T).Name, out var args) == true
-                ? (T)args
-                : default;
-        }
     }
 
     public void Dispose()

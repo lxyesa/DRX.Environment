@@ -4,20 +4,18 @@ using NetworkCoreStandard.Utils;
 
 namespace NetworkCoreStandard.Interface;
 
-public abstract class IComponent
+public interface IComponent
 {
-    public abstract void Start();
-    public abstract void Awake();
-    public ModelObject? Owner { get; set; }
+    void Start();
+    void Awake();
+    object? Owner { get; set; }
+}
 
-    public ModelObject GetOwner()
-    {
-        return Owner!;
-    }
-
-    ~IComponent()
-    {
-        Owner = null;
-        GCManager.Instance.CollectGarbage();
-    }
+public interface IComponentContainer
+{
+    HashSet<IComponent> Components { get; }
+    void AddComponent<T>() where T : IComponent, new();
+    void RemoveComponent<T>() where T : IComponent;
+    T GetComponent<T>() where T : IComponent;
+    bool HasComponent<T>() where T : IComponent;
 }

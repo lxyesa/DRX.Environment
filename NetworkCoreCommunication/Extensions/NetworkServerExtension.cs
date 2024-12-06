@@ -1,6 +1,7 @@
 using System;
 using NetworkCoreStandard.Attributes;
 using NetworkCoreStandard.Components;
+using NetworkCoreStandard.Enums;
 using NetworkCoreStandard.EventArgs;
 using NetworkCoreStandard.Events;
 using NetworkCoreStandard.Models;
@@ -8,74 +9,85 @@ using NetworkCoreStandard.Utils;
 
 namespace NetworkCoreStandard.Extensions
 {
-    [LuaExport("netex", ExportMembers = true)]
     public static class NetworkServerExtension
     {
-        [LuaExport]
-        public static void BeginHeartBeatListener(this NetworkServer server, int intervalMs, bool isDebugging = false)
+        public static void BeginHeartBeatListener(this NetworkServer server, int intervalMs, TimeUnit timeUnit, int timeout, bool isDebugging = false)
         {
             if (isDebugging)
             {
                 Logger.Log("Server", "拓展:心跳包拓展组件已启动");
             }
 
-            // 监听客户端连接事件。
+            // 监听客户端连接事件
             server.AddListener("OnClientConnected", (sender, args) =>
             {
                 if (isDebugging)
                 {
-                    Logger.Log("Server", $"客户端 {args.RemoteEndPoint} 已连接");
-                    Logger.Log("Server", $"当前连接数：{server.GetClients().Count}");
+                    Logger.Log("Server", $"客户端 {args.Socket.RemoteEndPoint} 已连接");
+                    Logger.Log("Server", $"当前连接数：{server.GetConnectedSockets().Count}");
                 }
-                args.Model?.AddComponent<HeartBeatComponent>();
-                args.Model?.GetComponent<HeartBeatComponent>()?.SetHeartbeatTimeout(10 * 60 * 1000);
+
+                // 直接在Socket上添加组件
+                args.Socket.AddComponent<HeartBeatComponent>();
+                switch (timeUnit)
+                {
+                    case TimeUnit.Second:
+                        args.Socket.GetComponent<HeartBeatComponent>()?.SetHeartbeatTimeout(timeout * 1000);
+                        break;
+                    case TimeUnit.Minute:
+                        args.Socket.GetComponent<HeartBeatComponent>()?.SetHeartbeatTimeout(timeout * 1000 * 60);
+                        break;
+                    case TimeUnit.Hour:
+                        args.Socket.GetComponent<HeartBeatComponent>()?.SetHeartbeatTimeout(timeout * 1000 * 60 * 60);
+                        break;
+                    case TimeUnit.Millisecond:
+                        args.Socket.GetComponent<HeartBeatComponent>()?.SetHeartbeatTimeout(timeout);
+                        break;
+                    default:
+                        throw new ArgumentOutOfRangeException();
+                }
             });
 
             server.AddListener("OnDataReceived", (sender, args) =>
             {
                 if (args.Packet?.Header == "heartbeat")
                 {
-                    if (args.Model?.GetComponent<HeartBeatComponent>() is HeartBeatComponent heartbeat)
+                    if (args.Socket.GetComponent<HeartBeatComponent>() is HeartBeatComponent heartbeat)
                     {
                         heartbeat.UpdateHeartbeat();
                         if (isDebugging)
                         {
                             Logger.Log("Server", $"客户端 {args.Socket.RemoteEndPoint} 发送心跳包");
                         }
-                        // 回复心跳包
+
                         server.Send(args.Socket, new NetworkPacket()
                             .SetHeader("heartbeat")
                             .SetType((int)PacketType.HeartBeat));
 
                         _ = server.RaiseEventAsync("OnHeartbeatReceived", new NetworkEventArgs(
-                            model: args.Model,
                             socket: args.Socket,
-                            packet: args.Packet,
                             eventType: NetworkEventType.HandlerEvent,
-                            message: "接收到心跳包"
+                            message: "接收到心跳包",
+                            packet: args.Packet
                         ));
-
-                        // 回收内存
-                        GC.Collect();
                     }
                 }
             });
 
+            // 心跳检查
             server.DoTickAsync(() =>
             {
-                foreach (Client client in server.GetClients())
+                foreach (var socket in server.GetConnectedSockets())
                 {
-                    if (client.GetComponent<HeartBeatComponent>() is HeartBeatComponent heartbeat)
+                    if (socket.GetComponent<HeartBeatComponent>() is HeartBeatComponent heartbeat)
                     {
                         if (heartbeat.IsTimeout())
                         {
-                            // 超时断开连接
                             if (isDebugging)
                             {
-                                Logger.Log("Server", $"客户端 {client.Id} 心跳超时，断开连接");
+                                Logger.Log("Server", $"客户端 {socket.RemoteEndPoint} 心跳超时，断开连接");
                             }
-                            
-                            server.HandleDisconnect(client.GetSocket());
+                            server.DisconnectClient(socket);
                         }
                     }
                 }

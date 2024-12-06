@@ -11,7 +11,8 @@ using System.Collections.Concurrent;
 using Microsoft.Extensions.ObjectPool;
 using NetworkCoreStandard.Interface;
 using NetworkCoreStandard.Config;
-using NetworkCoreStandard.Attributes;
+using NetworkCoreStandard.Extensions;
+using NetworkCoreStandard.Components;
 
 namespace NetworkCoreStandard;
 
@@ -24,8 +25,7 @@ public class NetworkServer : NetworkObject
     protected Socket _socket;
     protected int _port;
     protected string _ip;
-    private ConcurrentDictionary<Socket, Client> _clientsBySocket = new();
-    private ConcurrentDictionary<int, Client> _clientsByID = new();
+    private HashSet<Socket> _clients = new();
     protected ServerConfig _config;
     // 添加消息队列
     private readonly ConcurrentQueue<(NetworkPacket packet, Socket socket)> _messageQueue = new();
@@ -68,10 +68,9 @@ public class NetworkServer : NetworkObject
     protected virtual void ServerTick(){
         try
         {
-            _ = DoTickAsync(() => {
+            _ = this.DoTickAsync(() => {
                 _ = RaiseEventAsync("OnServerTick", new NetworkEventArgs(
                     socket: _socket,
-                    models: _clientsBySocket.Values.Cast<ModelObject>().ToList(),
                     eventType: NetworkEventType.HandlerEvent
                 ));
             }, (int)(1000 / _config.TickRate), "ServerTick");
@@ -95,7 +94,7 @@ public class NetworkServer : NetworkObject
             var clientIP = (clientSocket.RemoteEndPoint as IPEndPoint)?.Address.ToString();
 
             // 检查最大连接数
-            if (_clientsBySocket.Count >= _config.MaxClients)
+            if (_clients.Count >= _config.MaxClients)
             {
                 _ = RaiseEventAsync("OnError", new NetworkEventArgs(
                     socket: clientSocket,
@@ -196,8 +195,7 @@ public class NetworkServer : NetworkObject
             _processingCts.Cancel();    // 取消处理任务
             Task.WaitAll(_processingTasks.ToArray(), TimeSpan.FromSeconds(5));  // 等待任务完成
             _socket.Close();
-            _clientsBySocket.Clear();
-            _clientsByID.Clear();
+            _clients.Clear();
         }
         catch (Exception ex)
         {
@@ -261,13 +259,11 @@ public class NetworkServer : NetworkObject
                 return;
             }
 
-            var client = new Client(clientSocket);
-            _clientsBySocket[clientSocket] = client;
-            _clientsByID[client.Id] = client;
+            _clients.Add(clientSocket);
+            clientSocket.AddComponent<ClientComponent>();
 
             await RaiseEventAsync("OnClientConnected", new NetworkEventArgs(
                 socket: clientSocket,
-                model: client,
                 eventType: NetworkEventType.ServerClientConnected,
                 message: $"客户端 {clientSocket.RemoteEndPoint} 已连接"
             ));
@@ -383,7 +379,6 @@ public class NetworkServer : NetworkObject
         // 首先触发数据接收事件
         await RaiseEventAsync("OnDataReceived", new NetworkEventArgs(
             socket: clientSocket,
-            model: _clientsBySocket[clientSocket],
             eventType: NetworkEventType.DataReceived,
             message: string.Empty,
             packet: packet
@@ -395,7 +390,6 @@ public class NetworkServer : NetworkObject
             case (int)PacketType.Command:
                 await RaiseEventAsync("OnCommandReceived", new NetworkEventArgs(
                     socket: clientSocket,
-                    model: _clientsBySocket[clientSocket],
                     eventType: NetworkEventType.HandlerEvent,
                     packet: packet
                 ));
@@ -408,11 +402,10 @@ public class NetworkServer : NetworkObject
     /// </summary>
     public virtual void Send(Socket clientSocket, NetworkPacket packet)
     {
-        if (!_clientsBySocket.ContainsKey(clientSocket))
+        if (!_clients.Contains(clientSocket))
         {
             _ = RaiseEventAsync("OnError", new NetworkEventArgs(
                     socket: clientSocket,
-                    model: _clientsBySocket[clientSocket],
                     eventType: NetworkEventType.HandlerEvent,
                     message: "客户端未连接"
                 ));
@@ -429,7 +422,6 @@ public class NetworkServer : NetworkObject
         {
             _ = RaiseEventAsync("OnError", new NetworkEventArgs(
                 socket: clientSocket,
-                model: _clientsBySocket[clientSocket],
                 eventType: NetworkEventType.HandlerEvent,
                 message: $"发送数据时发生错误: {ex.Message}"
             ));
@@ -444,7 +436,7 @@ public class NetworkServer : NetworkObject
     {
         List<Socket> deadClients = new List<Socket>();
 
-        foreach (Socket client in _clientsBySocket.Keys)
+        foreach (Socket client in _clients)
         {
             try
             {
@@ -456,7 +448,6 @@ public class NetworkServer : NetworkObject
             {
                 _ = RaiseEventAsync("OnError", new NetworkEventArgs(
                     socket: client,
-                    model: _clientsBySocket[client],
                     eventType: NetworkEventType.HandlerEvent,
                     message: $"广播数据时发生错误: {ex.Message}"
                 ));
@@ -500,18 +491,15 @@ public class NetworkServer : NetworkObject
             var endpoint = clientSocket.RemoteEndPoint?.ToString() ?? "Unknown";
 
             // 首先尝试获取客户端信息
-            if (_clientsBySocket.TryGetValue(clientSocket, out Client? client))
+            if (_clients.Contains(clientSocket))
             {
                 await RaiseEventAsync("OnClientDisconnected", new NetworkEventArgs(
                     socket: clientSocket!,
-                    model: client,
                     eventType: NetworkEventType.ServerClientDisconnected,
                     message: $"Client {endpoint} disconnected"
                 ));
 
-                // 移除客户端记录
-                _clientsByID.TryRemove(client.Id, out _);
-                _clientsBySocket.TryRemove(clientSocket, out _);
+                _clients.Remove(clientSocket);
             }
 
             // 关闭Socket连接
@@ -552,17 +540,12 @@ public class NetworkServer : NetworkObject
     /// </summary>
     /// <param name="clientIP">客户端IP地址</param>
     /// <returns>是否成功断开连接</returns>
-    public virtual bool DisconnectClient(int clientID)
+    public virtual bool DisconnectClient(Socket clientSocket)
     {
         try
         {
-            if (_clientsByID.TryGetValue(clientID, out Client client))
-            {
-                HandleDisconnect(client.GetSocket());
-                return true;
-            }
-
-            return false;
+            HandleDisconnect(clientSocket);
+            return true;
         }
         catch (Exception ex)
         {
@@ -580,53 +563,14 @@ public class NetworkServer : NetworkObject
 
     #region Getters
 
-    /// <summary>
-    /// 根据Socket获取客户端
-    /// </summary>
-    /// <param name="socket"></param>
-    /// <returns></returns>
-    public virtual ModelObject GetClientBySocket(Socket socket)
-    {
-        return _clientsBySocket[socket];
-    }
-
-    /// <summary>
-    /// 根据ID获取客户端
-    /// </summary>
-    /// <param name="id"></param>
-    /// <returns></returns>
-    public virtual ModelObject GetClientByID(int id)
-    {
-        return _clientsByID[id];
-    }
-
-    /// <summary>
-    /// 获取所有已连接的客户端
-    /// </summary>
-    /// <returns></returns>
-    public virtual List<ModelObject> GetClients()
-    {
-        return _clientsBySocket.Values.Cast<ModelObject>().ToList();
-    }
-
-    /// <summary>
-    /// 检查指定Socket是否已连接
-    /// </summary>
-    /// <param name="socket"></param>
-    /// <returns></returns>
-    public virtual bool HasClient(Socket socket)
-    {
-        return _clientsBySocket.ContainsKey(socket);
-    }
 
     /// <summary>
     /// 获取当前连接的客户端数量
     /// </summary>
     /// <returns></returns>
-    public virtual int GetConnectedClientCount()
+    public virtual HashSet<Socket> GetConnectedSockets()
     {
-        return _clientsBySocket.Count;
+        return _clients;
     }
-
     #endregion
 }

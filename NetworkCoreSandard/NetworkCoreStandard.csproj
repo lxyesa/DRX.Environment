@@ -33,4 +33,7 @@
   <ItemGroup>
     <EmbeddedResource Include="Librarys\*.dll" />
   </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\NetworkCoreStandard.Enums\NetworkCoreStandard.Enums.csproj" />
+  </ItemGroup>
 </Project>

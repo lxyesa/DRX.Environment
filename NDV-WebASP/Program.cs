@@ -1,6 +1,9 @@
 using System.Text;
 using NetworkCoreStandard;
+using NetworkCoreStandard.Components;
 using NetworkCoreStandard.Config;
+using NetworkCoreStandard.Enums;
+using NetworkCoreStandard.EventArgs;
 using NetworkCoreStandard.Events;
 using NetworkCoreStandard.Extensions;
 using NetworkCoreStandard.Script;
@@ -91,12 +94,36 @@ public partial class Program
 
             Server = new NetworkServer(config);
             LuaEngine.LoadFile($"{PathFinder.GetAppPath()}Scripts\\Main.lua", Server);
-            Server.BeginHeartBeatListener(5000, false);
+            Server.BeginHeartBeatListener(5000, TimeUnit.Minute, 10, false);
+            Server.AddComponent<UserManagerComponent>();
+            Server.AddListener("OnUserLogin", OnUserLogin);
+            Server.AddListener("OnUserRegister", OnUserRegister);
             // Server.Start();
         }
         catch (Exception ex)
         {
             Logger.Log(NetworkCoreStandard.Utils.LogLevel.Error, "Server", ex.Message);
+        }
+    }
+
+    public static void OnUserLogin(object? sender, NetworkEventArgs args)
+    {
+        Logger.Log("Server", $"用户 {args.Packet?.GetBodyValue("username")} 正在尝试登录");
+    }
+
+    public static void OnUserRegister(object? sender , NetworkEventArgs args)
+    {
+        // TODO：注册用户
+        // 1. 首先检查用户是否已存在
+        // 2. 如果不存在，则注册用户
+        // 3. 如果存在，则返回错误信息
+
+        var username = args.Packet?.GetBodyValue("username")?.ToString();
+        var password = args.Packet?.GetBodyValue("password")?.ToString();
+
+        if (username != null && password != null)
+        {
+
         }
     }
 }
