@@ -13,6 +13,9 @@ using NetworkCoreStandard.Interface;
 using NetworkCoreStandard.Config;
 using NetworkCoreStandard.Extensions;
 using NetworkCoreStandard.Components;
+using System.Threading;
+using System.Runtime.CompilerServices;
+using System.Buffers;
 
 namespace NetworkCoreStandard;
 
@@ -25,7 +28,8 @@ public class NetworkServer : NetworkObject
     protected Socket _socket;
     protected int _port;
     protected string _ip;
-    private HashSet<Socket> _clients = new();
+    // 替换HashSet为并发集合
+    private readonly ConcurrentDictionary<Socket, byte> _clients = new();
     protected ServerConfig _config;
     // 添加消息队列
     private readonly ConcurrentQueue<(NetworkPacket packet, Socket socket)> _messageQueue = new();
@@ -35,6 +39,12 @@ public class NetworkServer : NetworkObject
     private int _processorCount = Environment.ProcessorCount;
     // 处理任务列表
     private readonly List<Task> _processingTasks = new();
+    // 对象池定义
+    private readonly ObjectPool<NetworkPacket> _packetPool;
+    private readonly ObjectPool<byte[]> _bufferPool;
+    // 批处理相关
+    private const int BATCH_SIZE = 100;
+    private const int BUFFER_SIZE = 8192;
 
     /// <summary>
     /// 初始化服务器并开始监听指定端口
@@ -47,6 +57,33 @@ public class NetworkServer : NetworkObject
         _ip = config.IP;
         _port = config.Port;
         _socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+
+        // 初始化对象池
+        var packetPoolPolicy = new DefaultPooledObjectPolicy<NetworkPacket>();
+        _packetPool = new DefaultObjectPool<NetworkPacket>(packetPoolPolicy, 1000);
+        
+        var bufferPoolPolicy = new ByteArrayPoolPolicy(BUFFER_SIZE);
+        _bufferPool = new DefaultObjectPool<byte[]>(bufferPoolPolicy, 1000);
+    }
+
+    private class ByteArrayPoolPolicy : IPooledObjectPolicy<byte[]>
+    {
+        private readonly int _bufferSize;
+
+        public ByteArrayPoolPolicy(int bufferSize)
+        {
+            _bufferSize = bufferSize;
+        }
+
+        public byte[] Create()
+        {
+            return new byte[_bufferSize];
+        }
+
+        public bool Return(byte[] obj)
+        {
+            return true;
+        }
     }
 
     public NetworkServer() : base()
@@ -55,6 +92,13 @@ public class NetworkServer : NetworkObject
         _ip = _config.IP;
         _port = _config.Port;
         _socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+
+        // Initialize object pools
+        var packetPoolPolicy = new DefaultPooledObjectPolicy<NetworkPacket>();
+        _packetPool = new DefaultObjectPool<NetworkPacket>(packetPoolPolicy, 1000);
+        
+        var bufferPoolPolicy = new ByteArrayPoolPolicy(BUFFER_SIZE);
+        _bufferPool = new DefaultObjectPool<byte[]>(bufferPoolPolicy, 1000);
     }
 
     public virtual void SetConfig(ServerConfig config)
@@ -87,6 +131,11 @@ public class NetworkServer : NetworkObject
         }
     }
 
+    /// <summary>
+    /// 验证连接请求
+    /// </summary>
+    /// <param name="clientSocket"></param>
+    /// <returns></returns>
     protected virtual bool ValidateConnection(Socket clientSocket)
     {
         try
@@ -259,7 +308,7 @@ public class NetworkServer : NetworkObject
                 return;
             }
 
-            _clients.Add(clientSocket);
+            _clients.TryAdd(clientSocket, 0);
             clientSocket.AddComponent<ClientComponent>();
 
             await RaiseEventAsync("OnClientConnected", new NetworkEventArgs(
@@ -290,14 +339,25 @@ public class NetworkServer : NetworkObject
     /// </summary>
     protected virtual void BeginReceive(Socket clientSocket)
     {
-        byte[] buffer = new byte[8192]; // 增大缓冲区
+        var buffer = ArrayPool<byte>.Shared.Rent(BUFFER_SIZE);
         try
         {
             clientSocket.BeginReceive(buffer, 0, buffer.Length, SocketFlags.None,
-                (ar) => HandleDataReceived(ar, clientSocket, buffer), null);
+                ar => 
+                {
+                    try 
+                    {
+                        HandleDataReceived(ar, clientSocket, buffer);
+                    }
+                    finally 
+                    {
+                        ArrayPool<byte>.Shared.Return(buffer);
+                    }
+                }, null);
         }
         catch
         {
+            ArrayPool<byte>.Shared.Return(buffer);
             HandleDisconnect(clientSocket);
         }
     }
@@ -376,33 +436,42 @@ public class NetworkServer : NetworkObject
     /// <returns></returns>
     protected virtual async Task ProcessMessageAsync(NetworkPacket packet, Socket clientSocket)
     {
-        // 首先触发数据接收事件
-        await RaiseEventAsync("OnDataReceived", new NetworkEventArgs(
-            socket: clientSocket,
-            eventType: NetworkEventType.DataReceived,
-            message: string.Empty,
-            packet: packet
-        ));
-
-        // 然后处理具体的包类型
-        switch (packet.Type)
+        try
         {
-            case (int)PacketType.Command:
-                await RaiseEventAsync("OnCommandReceived", new NetworkEventArgs(
+            await using var batch = new BatchProcessor(BATCH_SIZE);
+            
+            // 处理消息
+            await batch.AddAsync(() => RaiseEventAsync("OnDataReceived", new NetworkEventArgs(
+                socket: clientSocket,
+                eventType: NetworkEventType.DataReceived,
+                packet: packet
+            )));
+
+            if (packet.Type == (int)PacketType.Command)
+            {
+                await batch.AddAsync(() => RaiseEventAsync("OnCommandReceived", new NetworkEventArgs(
                     socket: clientSocket,
                     eventType: NetworkEventType.HandlerEvent,
                     packet: packet
-                ));
-                break;
+                )));
+            }
+
+            await batch.ExecuteAsync();
+        }
+        finally
+        {
+            // 返回对象到池
+            _packetPool.Return(packet);
         }
     }
 
     /// <summary>
     /// 向指定客户端发送数据包
     /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public virtual void Send(Socket clientSocket, NetworkPacket packet)
     {
-        if (!_clients.Contains(clientSocket))
+        if (!_clients.ContainsKey(clientSocket))
         {
             _ = RaiseEventAsync("OnError", new NetworkEventArgs(
                     socket: clientSocket,
@@ -415,8 +484,21 @@ public class NetworkServer : NetworkObject
         try
         {
             byte[] data = packet.Serialize();
-            clientSocket.BeginSend(data, 0, data.Length, SocketFlags.None,
-                new AsyncCallback(SendCallback), clientSocket);
+            var sendBuffer = ArrayPool<byte>.Shared.Rent(data.Length);
+            Buffer.BlockCopy(data, 0, sendBuffer, 0, data.Length);
+            
+            clientSocket.BeginSend(sendBuffer, 0, data.Length, SocketFlags.None,
+                ar => 
+                {
+                    try 
+                    {
+                        SendCallback(ar);
+                    }
+                    finally 
+                    {
+                        ArrayPool<byte>.Shared.Return(sendBuffer);
+                    }
+                }, clientSocket);
         }
         catch (Exception ex)
         {
@@ -432,34 +514,44 @@ public class NetworkServer : NetworkObject
     /// <summary>
     /// 向所有已连接的客户端广播数据包
     /// </summary>
-    public virtual void Broadcast(NetworkPacket packet)
+    public virtual async Task BroadcastAsync(NetworkPacket packet)
     {
-        List<Socket> deadClients = new List<Socket>();
+        var tasks = new List<Task>();
+        var deadClients = new ConcurrentBag<Socket>();
+        
+        byte[] data = packet.Serialize();
+        var buffer = ArrayPool<byte>.Shared.Rent(data.Length);
+        Buffer.BlockCopy(data, 0, buffer, 0, data.Length);
 
-        foreach (Socket client in _clients)
+        try
         {
-            try
+            foreach (var client in _clients.Keys)
             {
-                byte[] data = packet.Serialize();
-                client.BeginSend(data, 0, data.Length, SocketFlags.None,
-                    new AsyncCallback(SendCallback), client);
+                tasks.Add(Task.Run(() =>
+                {
+                    try
+                    {
+                        client.BeginSend(buffer, 0, buffer.Length, SocketFlags.None,
+                            ar => SendCallback(ar), client);
+                    }
+                    catch
+                    {
+                        deadClients.Add(client);
+                    }
+                }));
             }
-            catch (Exception ex)
-            {
-                _ = RaiseEventAsync("OnError", new NetworkEventArgs(
-                    socket: client,
-                    eventType: NetworkEventType.HandlerEvent,
-                    message: $"广播数据时发生错误: {ex.Message}"
-                ));
-                Console.WriteLine($"客户端 {((IPEndPoint)client.RemoteEndPoint).Address} 发送数据时发生错误，断开连接。");
-                deadClients.Add(client);
-            }
+
+            await Task.WhenAll(tasks);
         }
-
-        // 清理断开连接的客户端
-        foreach (Socket client in deadClients)
+        finally
         {
-            HandleDisconnect(client);
+            ArrayPool<byte>.Shared.Return(buffer);
+            
+            // 清理断开的连接
+            foreach (var client in deadClients)
+            {
+                HandleDisconnect(client);
+            }
         }
     }
 
@@ -491,7 +583,7 @@ public class NetworkServer : NetworkObject
             var endpoint = clientSocket.RemoteEndPoint?.ToString() ?? "Unknown";
 
             // 首先尝试获取客户端信息
-            if (_clients.Contains(clientSocket))
+            if (_clients.ContainsKey(clientSocket))
             {
                 await RaiseEventAsync("OnClientDisconnected", new NetworkEventArgs(
                     socket: clientSocket!,
@@ -499,7 +591,7 @@ public class NetworkServer : NetworkObject
                     message: $"Client {endpoint} disconnected"
                 ));
 
-                _clients.Remove(clientSocket);
+                _clients.TryRemove(clientSocket, out _);
             }
 
             // 关闭Socket连接
@@ -570,7 +662,42 @@ public class NetworkServer : NetworkObject
     /// <returns></returns>
     public virtual HashSet<Socket> GetConnectedSockets()
     {
-        return _clients;
+        return new HashSet<Socket>(_clients.Keys);
     }
     #endregion
+
+    // 添加批处理处理器
+    private class BatchProcessor : IAsyncDisposable
+    {
+        private readonly int _batchSize;
+        private readonly List<Func<Task>> _actions;
+        
+        public BatchProcessor(int batchSize)
+        {
+            _batchSize = batchSize;
+            _actions = new List<Func<Task>>(batchSize);
+        }
+
+        public async Task AddAsync(Func<Task> action)
+        {
+            _actions.Add(action);
+            if (_actions.Count >= _batchSize)
+            {
+                await ExecuteAsync();
+            }
+        }
+
+        public async Task ExecuteAsync()
+        {
+            if (_actions.Count == 0) return;
+            
+            await Task.WhenAll(_actions.Select(a => a()));
+            _actions.Clear();
+        }
+
+        public async ValueTask DisposeAsync()
+        {
+            await ExecuteAsync();
+        }
+    }
 }

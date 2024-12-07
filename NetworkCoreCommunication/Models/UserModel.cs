@@ -1,32 +1,21 @@
 using System;
+using System.Net.Sockets;
 using NetworkCoreStandard.Interface;
 using NetworkCoreStandard.Utils;
 
-namespace NetworkCoreStandard.Components;
+namespace NetworkCoreStandard.Models;
 
-public class UserComponent : IComponent
+public class UserModel
 {
-    public object? Owner { get; set; }
     public string Username { get; set; } = string.Empty;
     public string Password { get; set; } = string.Empty;
-
-    public void Awake()
-    {
-        
-    }
-
-    public void Start()
-    {
-        
-    }
+    public string Email { get; set; } = string.Empty;
 
     public async Task Save()
     {
         try
         {
             string usersFilePath = Path.Combine(PathFinder.GetAppPath(), "config", "users.json");
-
-            // 使用我们的自定义 File 类的 WriteJsonKey 方法来添加/更新用户
             await NetworkCoreStandard.IO.File.WriteJsonKeyAsync(
                 usersFilePath,
                 Username,  // 使用用户名作为键

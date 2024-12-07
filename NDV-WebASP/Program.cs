@@ -14,6 +14,7 @@ public partial class Program
     public static WebApplicationBuilder Builder { get; set; } = null!;
     public static WebApplication App { get; set; } = null!;
     public static NetworkServer Server { get; set; } = null!;
+    public static NetworkServerUDP ServerUDP { get; set; } = null!;
     public static LuaScriptEngine LuaEngine { get; set; } = null!;
     public static void Main(string[] args)
     {
@@ -22,7 +23,10 @@ public partial class Program
             Console.OutputEncoding = Encoding.UTF8;
             // Windows平台还需要设置输入编码
             Console.InputEncoding = Encoding.UTF8;
+
             _ = LoadSocketServer();
+            
+
             Builder = WebApplication.CreateBuilder(args);
             // 注册服务
             Builder.Services.AddControllers();
@@ -123,7 +127,10 @@ public partial class Program
 
         if (username != null && password != null)
         {
+            Logger.Log("Server", $"用户 {args.GetElement("endpoint")?.ToString()} 正在尝试注册");
 
+            // 检查用户是否已存在
+            
         }
     }
 }

@@ -13,6 +13,7 @@ namespace NetworkCoreStandard.Components;
 public class UserManagerComponent : IComponent
 {
     public object? Owner { get; set; }
+    public HashSet<UserModel> Users { get; set; } = new HashSet<UserModel>();
 
     public void Awake()
     {
@@ -50,7 +51,8 @@ public class UserManagerComponent : IComponent
                             packet: args.Packet,
                             sender: this,
                             message: $"一个用户{args.Packet.GetBodyValue("username")}正在尝试登录",
-                            eventType: NetworkEventType.HandlerEvent));
+                            eventType: NetworkEventType.HandlerEvent)
+                            .AddElement("endpoint", args.Socket.RemoteEndPoint));
                 }
 
                 if (args?.Packet.Header == "register")
@@ -61,13 +63,14 @@ public class UserManagerComponent : IComponent
                             packet: args.Packet,
                             sender: this,
                             message: $"一个用户{args.Packet.GetBodyValue("username")}正在尝试注册",
-                            eventType: NetworkEventType.HandlerEvent));
+                            eventType: NetworkEventType.HandlerEvent)
+                            .AddElement("endpoint", args.Socket.RemoteEndPoint));
                 }
             }
         });
     }
 
-    public async Task<(bool success, T? user)> TryGetUser<T>(string username)
+    public async Task<(bool success, T? user)> TryGetFormFile<T>(string username)
     {
         try
         {
@@ -83,7 +86,33 @@ public class UserManagerComponent : IComponent
         }
     }
 
-    public async Task<(string result, bool success)> TryRegisterUser(UserComponent user)
+    public async Task<(bool success, T? user)> TryGetFormMemory<T>(string username) where T : UserModel
+    {
+        try
+        {
+            // 1. 从内存中查找用户
+            var existingUser = Users.FirstOrDefault(u =>
+                u.Username.Equals(username, StringComparison.OrdinalIgnoreCase));
+
+            // 2. 如果找到用户
+            if (existingUser != null)
+            {
+                Logger.Log("UserManager", $"从内存中找到用户 {username}");
+                return (true, existingUser as T);
+            }
+
+            // 3. 如果未找到用户
+            Logger.Log("UserManager", $"未在内存中找到用户 {username}");
+            return (false, null);
+        }
+        catch (Exception ex)
+        {
+            Logger.Log(LogLevel.Error, "UserManager", $"从内存中获取用户时发生错误: {ex.Message}");
+            return (false, null);
+        }
+    }
+
+    public async Task<(string result, bool success)> TryRegister(UserModel user)
     {
         try
         {
@@ -100,4 +129,45 @@ public class UserManagerComponent : IComponent
             return (ex.Message, false);
         }
     }
+
+    public async Task<bool> TryAdd(UserModel user)
+    {
+        try
+        {
+            // 1. 首先检查内存中是否已存在该用户
+            if (Users.Contains(user))
+            {
+                Logger.Log("UserManager", $"用户 {user.Username} 已存在于内存中");
+                return false;
+            }
+
+            // 2. 检查文件中是否存在该用户
+            var (fileExist, existingUser) = await TryGetFormFile<UserModel>(user.Username);
+            if (fileExist)
+            {
+                Logger.Log("UserManager", $"用户 {user.Username} 已存在于文件中，正在加载到内存");
+                Users.Add(existingUser ?? user);
+                return true;
+            }
+
+            // 3. 如果用户不存在，则尝试注册新用户
+            var (result, registerSuccess) = await TryRegister(user);
+            if (registerSuccess)
+            {
+                Logger.Log("UserManager", $"用户 {user.Username} 注册成功，已添加到内存");
+                Users.Add(user);
+                return true;
+            }
+
+            Logger.Log(LogLevel.Error, "UserManager", $"尝试添加用户 {user.Username} 时发生错误: {result}");
+            return false;
+        }
+        catch (Exception ex)
+        {
+            Logger.Log(LogLevel.Error, "UserManager", $"添加用户过程中发生异常: {ex.Message}");
+            return false;
+        }
+    }
+
+
 }
