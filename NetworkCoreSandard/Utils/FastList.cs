@@ -83,7 +83,7 @@ public class FastList<TKey, TValue> : IEnumerable<KeyValuePair<TKey, TValue>>, I
         else
             tail = node.Previous;
 
-        lookupTable.Remove(key);
+        _ = lookupTable.Remove(key);
         count--;
         return true;
     }

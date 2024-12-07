@@ -37,8 +37,8 @@ public class LuaScriptEngine : IDisposable
     private void ExportMarkedTypes()
     {
         var assemblies = AppDomain.CurrentDomain.GetAssemblies();
-        
-        Parallel.ForEach(assemblies, assembly =>
+
+        _ = Parallel.ForEach(assemblies, assembly =>
         {
             try
             {
@@ -51,7 +51,7 @@ public class LuaScriptEngine : IDisposable
                     var attr = type.GetCustomAttribute<LuaExportAttribute>();
                     if (attr != null)
                     {
-                        _exportCache.TryAdd(type, attr);
+                        _ = _exportCache.TryAdd(type, attr);
                         ExportType(type, attr);
                     }
                 }
@@ -123,14 +123,14 @@ public class LuaScriptEngine : IDisposable
             using (var stream = new StreamReader(filePath, Encoding.UTF8))
             {
                 string script = stream.ReadToEnd();
-                _lua.DoString(script);
+                _ = _lua.DoString(script);
             }
 
             // 调用脚本入口函数
             if (_lua["ScriptMain"] != null)
             {
                 var scriptMain = _lua["ScriptMain"] as LuaFunction;
-                scriptMain?.Call(server);
+                _ = (scriptMain?.Call(server));
             }
         }
         catch (Exception ex)
@@ -143,7 +143,7 @@ public class LuaScriptEngine : IDisposable
     {
         try
         {
-            _lua.DoString(script);
+            _ = _lua.DoString(script);
         }
         catch (Exception ex)
         {

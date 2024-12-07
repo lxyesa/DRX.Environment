@@ -30,22 +30,22 @@ namespace NetworkCoreStandard.Utils
         try
         {
           Console.OutputEncoding = Encoding.UTF8;
-          _sharedBuilder.Clear();
-          _sharedBuilder.Append('[')
-                       .Append(DateTime.Now.ToString(DateTimeFormat))
-                       .Append(']');
+                    _ = _sharedBuilder.Clear();
+                    _ = _sharedBuilder.Append('[')
+                                 .Append(DateTime.Now.ToString(DateTimeFormat))
+                                 .Append(']');
 
           if (!string.IsNullOrEmpty(header))
           {
-            _sharedBuilder.Append(" [")
-                         .Append(header)
-                         .Append(']');
+                        _ = _sharedBuilder.Append(" [")
+                                     .Append(header)
+                                     .Append(']');
           }
 
-          _sharedBuilder.Append(" [")
-                       .Append(level.ToString().ToUpper())
-                       .Append("] ")
-                       .Append(message);
+                    _ = _sharedBuilder.Append(" [")
+                                 .Append(level.ToString().ToUpper())
+                                 .Append("] ")
+                                 .Append(message);
 
           // 根据日志级别使用不同的控制台颜色
           var originalColor = Console.ForegroundColor;

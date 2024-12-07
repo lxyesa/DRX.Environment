@@ -36,7 +36,7 @@ public class NetworkEventBus
     /// <param name="handler"></param>
     public static void AddGlobalListener(string eventName, EventHandler<NetworkEventArgs> handler)
     {
-        _globalEventHandlers.AddOrUpdate(
+        _ = _globalEventHandlers.AddOrUpdate(
             eventName,
             new List<EventHandler<NetworkEventArgs>> { handler },
             (_, existing) =>
@@ -63,10 +63,10 @@ public class NetworkEventBus
         {
             lock (_globalLock)
             {
-                handlers.Remove(handler);
+                _ = handlers.Remove(handler);
                 if (handlers.Count == 0)
                 {
-                    _globalEventHandlers.TryRemove(eventName, out _);
+                    _ = _globalEventHandlers.TryRemove(eventName, out _);
                 }
             }
         }
@@ -101,7 +101,7 @@ public class NetworkEventBus
         _eventQueue.Enqueue((eventName, args));
         if (_isProcessingEvents)
         {
-            _eventSemaphore.Release(); // 通知处理线程有新事件
+            _ = _eventSemaphore.Release(); // 通知处理线程有新事件
         }
     }
 
@@ -177,7 +177,7 @@ public class NetworkEventBus
     /// <param name="handler">事件处理器</param>
     public void AddListener(string eventName, EventHandler<NetworkEventArgs> handler)
     {
-        _eventHandlers.AddOrUpdate(
+        _ = _eventHandlers.AddOrUpdate(
             eventName,
             new List<EventHandler<NetworkEventArgs>> { handler },
             (_, existing) =>
@@ -197,10 +197,10 @@ public class NetworkEventBus
     {
         if (_eventHandlers.TryGetValue(eventName, out List<EventHandler<NetworkEventArgs>>? handlers))
         {
-            handlers.Remove(handler);
+            _ = handlers.Remove(handler);
             if (handlers.Count == 0)
             {
-                _eventHandlers.TryRemove(eventName, out _);
+                _ = _eventHandlers.TryRemove(eventName, out _);
             }
         }
     }
@@ -257,7 +257,7 @@ public class NetworkEventBus
     /// <param name="eventName">事件名称</param>
     public void ClearEventListeners(string eventName)
     {
-        _eventHandlers.TryRemove(eventName, out _);
+        _ = _eventHandlers.TryRemove(eventName, out _);
     }
 
     /// <summary>
@@ -274,6 +274,6 @@ public class NetworkEventBus
     /// <param name="eventName"></param>
     public static void ClearGlobalEventListeners(string eventName)
     {
-        _globalEventHandlers.TryRemove(eventName, out _);
+        _ = _globalEventHandlers.TryRemove(eventName, out _);
     }
 }

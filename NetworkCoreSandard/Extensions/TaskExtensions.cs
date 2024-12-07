@@ -25,7 +25,7 @@ namespace NetworkCoreStandard.Extensions
             var state = new TickTaskState(taskName, cts, intervalMs);
             tasks[taskName] = state;
 
-            Task.Run(async () =>
+            _ = Task.Run(async () =>
             {
                 try
                 {
@@ -54,7 +54,7 @@ namespace NetworkCoreStandard.Extensions
                 }
                 finally
                 {
-                    tasks.Remove(taskName);
+                    _ = tasks.Remove(taskName);
                 }
             }, cts.Token);
 
@@ -96,7 +96,7 @@ namespace NetworkCoreStandard.Extensions
                 tasks.TryGetValue(taskName, out var state))
             {
                 state.CancellationSource.Cancel();
-                tasks.Remove(taskName);
+                _ = tasks.Remove(taskName);
             }
         }
 

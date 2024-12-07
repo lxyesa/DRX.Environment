@@ -6,6 +6,7 @@ using NetworkCoreStandard.Enums;
 using NetworkCoreStandard.EventArgs;
 using NetworkCoreStandard.Events;
 using NetworkCoreStandard.Extensions;
+using NetworkCoreStandard.Models;
 using NetworkCoreStandard.Script;
 using NetworkCoreStandard.Utils;
 
@@ -99,10 +100,14 @@ public partial class Program
             Server = new NetworkServer(config);
             LuaEngine.LoadFile($"{PathFinder.GetAppPath()}Scripts\\Main.lua", Server);
             Server.BeginHeartBeatListener(5000, TimeUnit.Minute, 10, false);
+
+            // 添加组件
             Server.AddComponent<UserManagerComponent>();
+            
+            // 添加事件监听
             Server.AddListener("OnUserLogin", OnUserLogin);
             Server.AddListener("OnUserRegister", OnUserRegister);
-            // Server.Start();
+            // Server.Start(); // 由于在 Lua 脚本中启动，所以这里不需要再次启动
         }
         catch (Exception ex)
         {
@@ -115,7 +120,7 @@ public partial class Program
         Logger.Log("Server", $"用户 {args.Packet?.GetBodyValue("username")} 正在尝试登录");
     }
 
-    public static void OnUserRegister(object? sender , NetworkEventArgs args)
+    public static async void OnUserRegister(object? sender , NetworkEventArgs args)
     {
         // TODO：注册用户
         // 1. 首先检查用户是否已存在
@@ -129,8 +134,21 @@ public partial class Program
         {
             Logger.Log("Server", $"用户 {args.GetElement("endpoint")?.ToString()} 正在尝试注册");
 
-            // 检查用户是否已存在
-            
+            // 1.1 首先检查用户在内存中是否已存在
+            bool result_f = await Server.GetComponent<UserManagerComponent>().HasUserFormFile(username);
+            // 1.2 然后检查用户在文件中是否已存在
+            bool result_m = await Server.GetComponent<UserManagerComponent>().HasUserFormMemory(username);
+
+            // 如果用户已存在，则返回错误信息
+            if (result_f || result_m)
+            {
+                Server.Send(args.Socket, new NetworkPacket()
+                    .SetHeader("register")
+                    .PutBody("response", false)
+                    .PutBody("message", "用户已存在")
+                    .SetType((int)PacketType.Response)
+                    .Builder());
+            }
         }
     }
 }

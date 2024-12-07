@@ -77,8 +77,8 @@ public class NetworkServerUDP : NetworkObject
         {
             EndPoint remoteEP = new IPEndPoint(IPAddress.Any, 0);
             byte[] buffer = new byte[8192];
-            
-            _socket.BeginReceiveFrom(buffer, 0, buffer.Length, SocketFlags.None, 
+
+            _ = _socket.BeginReceiveFrom(buffer, 0, buffer.Length, SocketFlags.None,
                 ref remoteEP, ar => HandleDataReceived(ar, buffer, remoteEP), null);
         }
         catch (Exception ex)
@@ -105,7 +105,7 @@ public class NetworkServerUDP : NetworkObject
             if (bytesRead > 0)
             {
                 NetworkPacket packet = NetworkPacket.Deserialize(buffer.Take(bytesRead).ToArray());
-                _clientEndpoints.AddOrUpdate(remoteEP, DateTime.Now, (_, __) => DateTime.Now);
+                _ = _clientEndpoints.AddOrUpdate(remoteEP, DateTime.Now, (_, __) => DateTime.Now);
                 _messageQueue.Enqueue((packet, remoteEP));
             }
         }
@@ -174,12 +174,12 @@ public class NetworkServerUDP : NetworkObject
         try
         {
             byte[] data = packet.Serialize();
-            _socket.BeginSendTo(data, 0, data.Length, SocketFlags.None, endpoint,
+            _ = _socket.BeginSendTo(data, 0, data.Length, SocketFlags.None, endpoint,
                 ar =>
                 {
                     try
                     {
-                        _socket.EndSendTo(ar);
+                        _ = _socket.EndSendTo(ar);
                     }
                     catch (Exception ex)
                     {
@@ -213,13 +213,13 @@ public class NetworkServerUDP : NetworkObject
             byte[] data = packet.Serialize();
             var endpoint = new IPEndPoint(IPAddress.Broadcast, port);
             _socket.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.Broadcast, 1);
-            
-            _socket.BeginSendTo(data, 0, data.Length, SocketFlags.None, endpoint,
+
+            _ = _socket.BeginSendTo(data, 0, data.Length, SocketFlags.None, endpoint,
                 ar =>
                 {
                     try
                     {
-                        _socket.EndSendTo(ar);
+                        _ = _socket.EndSendTo(ar);
                         _ = RaiseEventAsync("OnBroadcast", new NetworkEventArgs(
                             socket: _socket,
                             eventType: NetworkEventType.HandlerEvent,
@@ -258,7 +258,7 @@ public class NetworkServerUDP : NetworkObject
         {
             _isRunning = false;
             _processingCts.Cancel();
-            Task.WaitAll(_processingTasks.ToArray(), TimeSpan.FromSeconds(5));
+            _ = Task.WaitAll(_processingTasks.ToArray(), TimeSpan.FromSeconds(5));
             _socket.Close();
             _clientEndpoints.Clear();
             

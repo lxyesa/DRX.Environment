@@ -86,7 +86,7 @@ namespace NetworkCoreStandard.Models
                 // 确保在序列化前调用 Builder()
                 if (bodyDict.Count > 0)
                 {
-                    Builder();
+                    _ = Builder();
                 }
 
                 JsonSerializerOptions options = new JsonSerializerOptions

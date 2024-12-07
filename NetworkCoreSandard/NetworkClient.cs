@@ -35,7 +35,7 @@ public class NetworkClient : NetworkObject
     {
         try
         {
-            _socket.BeginConnect(new IPEndPoint(IPAddress.Parse(_serverIP), _serverPort),
+            _ = _socket.BeginConnect(new IPEndPoint(IPAddress.Parse(_serverIP), _serverPort),
                 new AsyncCallback(ConnectCallback), null);
         }
         catch (Exception ex)
@@ -92,7 +92,7 @@ public class NetworkClient : NetworkObject
         try
         {
             byte[] data = packet.Serialize();
-            _socket.BeginSend(data, 0, data.Length, SocketFlags.None,
+            _ = _socket.BeginSend(data, 0, data.Length, SocketFlags.None,
                 new AsyncCallback(SendCallback), null);
 
             _ = RaiseEventAsync("OnDataSent", new NetworkEventArgs(
@@ -118,7 +118,7 @@ public class NetworkClient : NetworkObject
     {
         try
         {
-            _socket.EndSend(ar);
+            _ = _socket.EndSend(ar);
         }
         catch (Exception ex)
         {
@@ -139,7 +139,7 @@ public class NetworkClient : NetworkObject
         byte[] buffer = new byte[8192];
         try
         {
-            _socket.BeginReceive(buffer, 0, buffer.Length, SocketFlags.None,
+            _ = _socket.BeginReceive(buffer, 0, buffer.Length, SocketFlags.None,
                 new AsyncCallback(ReceiveCallback), buffer);
         }
         catch

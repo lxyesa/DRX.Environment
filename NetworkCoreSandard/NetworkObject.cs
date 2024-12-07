@@ -11,9 +11,9 @@ public class NetworkObject
     protected int GCInterval = 5 * 1000 * 60;
     public NetworkObject()
     {
-        AssemblyLoader.LoadEmbeddedAssemblies();
+        // AssemblyLoader.LoadEmbeddedAssemblies();
         _eventBus = new NetworkEventBus();
-        this.DoTickAsync(() =>
+        _ = this.DoTickAsync(() =>
         {
             // 首先发布通知，告诉所有监听者垃圾回收即将执行
             _ = RaiseEventAsync("OnGC", new NetworkEventArgs(

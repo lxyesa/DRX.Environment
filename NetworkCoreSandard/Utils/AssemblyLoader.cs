@@ -13,7 +13,7 @@ namespace NetworkCoreStandard.Utils
 
         static AssemblyLoader()
         {
-            AppDomain.CurrentDomain.AssemblyResolve += ResolveAssembly;
+            // AppDomain.CurrentDomain.AssemblyResolve += ResolveAssembly;
         }
 
         public static void LoadEmbeddedAssemblies()

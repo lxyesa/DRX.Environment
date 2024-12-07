@@ -11,7 +11,7 @@ public class ComponentManager
     {
         var component = new T();
         component.Owner = owner;
-        _components.Add(component);
+        _ = _components.Add(component);
         component.Awake();
         component.Start();
     }
@@ -19,7 +19,7 @@ public class ComponentManager
     public void AddComponent<T>(object owner, T component) where T : IComponent
     {
         component.Owner = owner;
-        _components.Add(component);
+        _ = _components.Add(component);
         component.Awake();
         component.Start();
     }

@@ -64,16 +64,16 @@ public class NetworkError
 public class NetworkEventArgs : System.EventArgs , IDisposable
 {
     /// <summary>事件发生的Socket对象（可能为Null）</summary>
-    public Socket Socket { get; }
+    public Socket? Socket { get; }
 
     /// <summary>事件发生的时间戳</summary>
-    public DateTime Timestamp { get; }
+    public DateTime? Timestamp { get; }
 
     /// <summary>网络数据包(可选)</summary>
     public NetworkPacket? Packet { get; }
 
     /// <summary>事件类型</summary>
-    public NetworkEventType EventType { get; }
+    public NetworkEventType? EventType { get; }
 
     /// <summary>事件相关的消息描述</summary>
     public string? Message { get; }
@@ -86,13 +86,10 @@ public class NetworkEventArgs : System.EventArgs , IDisposable
     /// </summary>
     public string? RemoteEndPoint { get; }
 
-    // 使用 ConcurrentDictionary 替代 Dictionary + lock，提供更好的并发性能
-    private ConcurrentDictionary<string, object>? _elements;
-
     // 使用 Lazy<T> 实现延迟初始化
     private readonly Lazy<ConcurrentDictionary<string, object>> _lazyElements;
 
-    public NetworkEventArgs(Socket socket, NetworkEventType eventType, string message = "", 
+    public NetworkEventArgs(Socket? socket = null, NetworkEventType eventType = NetworkEventType.HandlerEvent, string message = "", 
         NetworkPacket? packet = null, object? sender = null)
     {
         Socket = socket;
@@ -132,7 +129,7 @@ public class NetworkEventArgs : System.EventArgs , IDisposable
     // 为了兼容性保留原方法
     public NetworkEventArgs AddElement(string key, object value)
     {
-        Elements.TryAdd(key, value);
+        _ = Elements.TryAdd(key, value);
         return this;
     }
 

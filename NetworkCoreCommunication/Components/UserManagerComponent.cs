@@ -13,8 +13,7 @@ namespace NetworkCoreStandard.Components;
 public class UserManagerComponent : IComponent
 {
     public object? Owner { get; set; }
-    public HashSet<UserModel> Users { get; set; } = new HashSet<UserModel>();
-
+    private ConcurrentDictionary<string, UserModel> _users = new ConcurrentDictionary<string, UserModel>();
     public void Awake()
     {
         Logger.Log("Server", $"{Owner?.GetType().Name} 的 UserManagerComponent 已启动");
@@ -39,6 +38,8 @@ public class UserManagerComponent : IComponent
     {
         // TODO: 初始化用户管理器
         var server = (NetworkServer)Owner!;
+
+        // 1. 添加事件监听，并转发为OnUserLogin和OnUserRegister事件
         server.AddListener("OnDataReceived", (sender, args) =>
         {
             if (args.Packet?.Type == (int)PacketType.Request)
@@ -68,106 +69,165 @@ public class UserManagerComponent : IComponent
                 }
             }
         });
+
+        // 2. 添加事件监听，并转发为 OnUserLogout 事件
+        server.AddListener("OnClientDisconnected", (sender, args) =>
+        {
+
+        });
     }
 
-    public async Task<(bool success, T? user)> TryGetFormFile<T>(string username)
+    /// <summary>
+    /// 从文件中查找用户信息
+    /// </summary>
+    /// <typeparam name="T">用户模型类型</typeparam>
+    /// <param name="username">要查找的用户名</param>
+    /// <param name="enableLogging">是否启用日志记录，默认为 false</param>
+    /// <returns>返回一个元组，包含操作是否成功和找到的用户对象</returns>
+    public async Task<(bool success, T? user)> TryGetFormFile<T>(string username, bool enableLogging = false) where T : UserModel
     {
+        if (string.IsNullOrWhiteSpace(username))
+        {
+            Logger.Log(LogLevel.Error, "UserManager", "用户名不能为空");
+            return (false, default);
+        }
+
         try
         {
             string usersFilePath = Path.Combine(PathFinder.GetAppPath(), "config", "users.json");
 
-            // 直接使用 File.ReadJsonKeyAsync 方法
-            return await NetworkCoreStandard.IO.File.ReadJsonKeyAsync<T>(usersFilePath, username);
+            if (!System.IO.File.Exists(usersFilePath))
+            {
+                if (enableLogging)
+                {
+                    Logger.Log("UserManager", "用户数据文件不存在");
+                }
+                return (false, default);
+            }
+
+            var result = await NetworkCoreStandard.IO.File.ReadJsonKeyAsync<T>(usersFilePath, username);
+
+            if (enableLogging && result.success)
+            {
+                Logger.Log("UserManager", $"成功从文件中读取用户 {username} 的数据");
+            }
+
+            return result;
         }
         catch (Exception ex)
         {
-            Logger.Log("UserManager", $"读取用户数据时发生错误: {ex.Message}");
+            Logger.Log(LogLevel.Error, "UserManager", $"读取用户 {username} 数据时发生错误: {ex.Message}");
             return (false, default);
         }
     }
 
-    public async Task<(bool success, T? user)> TryGetFormMemory<T>(string username) where T : UserModel
-    {
-        try
-        {
-            // 1. 从内存中查找用户
-            var existingUser = Users.FirstOrDefault(u =>
-                u.Username.Equals(username, StringComparison.OrdinalIgnoreCase));
 
-            // 2. 如果找到用户
-            if (existingUser != null)
+    /// <summary>
+    /// 从内存中查找用户信息
+    /// </summary>
+    /// <typeparam name="T">用户模型类型</typeparam>
+    /// <param name="username">要查找的用户名</param>
+    /// <param name="enableLogging">是否启用日志记录，默认为 false</param>
+    /// <returns>返回一个元组，包含操作是否成功和找到的用户对象</returns>
+    public async Task<(bool success, T? user)> TryGetFormMemory<T>(string username, bool enableLogging = false) where T : UserModel
+    {
+        // 步骤 1: 验证用户名是否有效
+        if (string.IsNullOrWhiteSpace(username))
+        {
+            Logger.Log(LogLevel.Error, "UserManager", "用户名不能为空");
+            return (false, default);
+        }
+
+        // 步骤 2: 从内存字典中尝试获取用户信息
+        if (_users.TryGetValue(username, out var user))
+        {
+            // 步骤 3: 如果找到用户且启用了日志，记录成功信息
+            if (enableLogging)
             {
-                Logger.Log("UserManager", $"从内存中找到用户 {username}");
-                return (true, existingUser as T);
+                Logger.Log("UserManager", $"成功从内存中读取用户 {username} 的数据");
             }
 
-            // 3. 如果未找到用户
-            Logger.Log("UserManager", $"未在内存中找到用户 {username}");
-            return (false, null);
+            // 步骤 4: 返回找到的用户信息，将用户对象转换为请求的类型
+            return (true, user as T);
         }
-        catch (Exception ex)
+
+        // 步骤 5: 如果未找到用户，返回失败结果
+        if (enableLogging)
         {
-            Logger.Log(LogLevel.Error, "UserManager", $"从内存中获取用户时发生错误: {ex.Message}");
-            return (false, null);
+            Logger.Log("UserManager", $"未在内存中找到用户 {username} 的数据");
         }
+        return (false, default);
     }
 
-    public async Task<(string result, bool success)> TryRegister(UserModel user)
+    /// <summary>
+    /// 检查文件中是否存在指定用户
+    /// </summary>
+    /// <param name="username">要检查的用户名</param>
+    /// <returns>如果用户存在返回true，否则返回false</returns>
+    public async Task<bool> HasUserFormFile(string username, bool enableLogging = false)
     {
+        // 步骤 1: 验证用户名是否有效
+        if (string.IsNullOrWhiteSpace(username))
+        {
+            Logger.Log(LogLevel.Error, "UserManager", "用户名不能为空");
+            return false;
+        }
+
         try
         {
+            // 步骤 2: 获取用户数据文件路径
             string usersFilePath = Path.Combine(PathFinder.GetAppPath(), "config", "users.json");
 
-            // 直接使用 File.WriteJsonKeyAsync 方法
-            await NetworkCoreStandard.IO.File.WriteJsonKeyAsync(usersFilePath, user.Username, user);
-
-            return ("注册成功", true);
-        }
-        catch (Exception ex)
-        {
-            Logger.Log("UserManager", $"注册用户时发生错误: {ex.Message}");
-            return (ex.Message, false);
-        }
-    }
-
-    public async Task<bool> TryAdd(UserModel user)
-    {
-        try
-        {
-            // 1. 首先检查内存中是否已存在该用户
-            if (Users.Contains(user))
+            // 步骤 3: 检查文件是否存在
+            if (!System.IO.File.Exists(usersFilePath))
             {
-                Logger.Log("UserManager", $"用户 {user.Username} 已存在于内存中");
+                if (enableLogging)
+                {
+                    Logger.Log("UserManager", "用户数据文件不存在");
+                }
                 return false;
             }
 
-            // 2. 检查文件中是否存在该用户
-            var (fileExist, existingUser) = await TryGetFormFile<UserModel>(user.Username);
-            if (fileExist)
-            {
-                Logger.Log("UserManager", $"用户 {user.Username} 已存在于文件中，正在加载到内存");
-                Users.Add(existingUser ?? user);
-                return true;
-            }
+            // 步骤 4: 尝试从文件中读取用户数据
+            var result = await NetworkCoreStandard.IO.File.ReadJsonKeyAsync<UserModel>(usersFilePath, username);
 
-            // 3. 如果用户不存在，则尝试注册新用户
-            var (result, registerSuccess) = await TryRegister(user);
-            if (registerSuccess)
-            {
-                Logger.Log("UserManager", $"用户 {user.Username} 注册成功，已添加到内存");
-                Users.Add(user);
-                return true;
-            }
-
-            Logger.Log(LogLevel.Error, "UserManager", $"尝试添加用户 {user.Username} 时发生错误: {result}");
-            return false;
+            // 步骤 5: 返回查找结果
+            return result.success;
         }
         catch (Exception ex)
         {
-            Logger.Log(LogLevel.Error, "UserManager", $"添加用户过程中发生异常: {ex.Message}");
+            // 步骤 6: 异常处理和日志记录
+            Logger.Log(LogLevel.Error, "UserManager", $"读取用户 {username} 数据时发生错误: {ex.Message}");
             return false;
         }
     }
 
+    /// <summary>
+    /// 检查内存中是否存在指定用户
+    /// </summary>
+    /// <param name="username">要检查的用户名</param>
+    /// <returns>如果用户存在返回true，否则返回false</returns>
+    public async Task<bool> HasUserFormMemory(string username, bool enableLogging = false)
+    {
+        // 步骤 1: 验证用户名参数
+        if (string.IsNullOrWhiteSpace(username))
+        {
+            Logger.Log(LogLevel.Error, "UserManager", "用户名不能为空");
+            return false;
+        }
 
+        // 步骤 2: 从内存字典中检查用户
+        var exists = _users.ContainsKey(username);
+
+        // 步骤 3: 记录检查结果（可选）
+        if (enableLogging)
+        {
+            Logger.Log("UserManager", exists
+                ? $"用户 {username} 在内存中找到"
+                : $"用户 {username} 在内存中未找到");
+        }
+
+        // 步骤 4: 返回检查结果
+        return exists;
+    }
 }

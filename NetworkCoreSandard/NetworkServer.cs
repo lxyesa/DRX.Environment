@@ -25,24 +25,19 @@ namespace NetworkCoreStandard;
 
 public class NetworkServer : NetworkObject
 {
+    #region 基础成员和初始化
+    // 基础字段
     protected Socket _socket;
     protected int _port;
     protected string _ip;
-    // 替换HashSet为并发集合
     private readonly ConcurrentDictionary<Socket, byte> _clients = new();
     protected ServerConfig _config;
-    // 添加消息队列
     private readonly ConcurrentQueue<(NetworkPacket packet, Socket socket)> _messageQueue = new();
-    // 添加处理线程的取消令牌
     private readonly CancellationTokenSource _processingCts = new();
-    // 处理线程数量(可配置)
     private int _processorCount = Environment.ProcessorCount;
-    // 处理任务列表
     private readonly List<Task> _processingTasks = new();
-    // 对象池定义
     private readonly ObjectPool<NetworkPacket> _packetPool;
     private readonly ObjectPool<byte[]> _bufferPool;
-    // 批处理相关
     private const int BATCH_SIZE = 100;
     private const int BUFFER_SIZE = 8192;
 
@@ -107,7 +102,84 @@ public class NetworkServer : NetworkObject
         _ip = config.IP;
         _port = config.Port;
     }
+    #endregion
 
+    #region 服务器核心操作
+    public virtual void Start()
+    {
+        try
+        {
+            _socket.Bind(new IPEndPoint(IPAddress.Parse(_ip), _port));
+            _socket.Listen(10);
+            _ = _socket.BeginAccept(AcceptCallback, null);
+
+            // 启动消息处理线程
+            StartMessageProcessors();
+
+            _ = RaiseEventAsync("OnServerStarted", new NetworkEventArgs(
+                socket: _socket,
+                eventType: NetworkEventType.ServerStarted,
+                message: $"服务器已启动，监听 {_ip}:{_port}"
+            ));
+            
+            ServerTick(); // 启动服务器Tick
+
+            Logger.Log("Server", _config.OnServerStartedTip);
+        }
+        catch (Exception ex)
+        {
+            _ = RaiseEventAsync("OnError", new NetworkEventArgs(
+                socket: _socket,
+                eventType: NetworkEventType.HandlerEvent,
+                message: $"启动服务器时发生错误: {ex.Message}"
+            ));
+        }
+    }
+
+    public virtual void Stop()
+    {
+        if (!_socket.IsBound)
+        {
+            Console.WriteLine($"[{DateTime.Now}] [Warning] 这不是一个错误，而是因为你的服务器实例已被销毁或根本没有启动，所以无法关闭服务器。");
+            return;
+        }
+        try
+        {
+            _processingCts.Cancel();    // 取消处理任务
+            _ = Task.WaitAll(_processingTasks.ToArray(), TimeSpan.FromSeconds(5));  // 等待任务完成
+            _socket.Close();
+            _clients.Clear();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"关闭服务器时发生错误: {ex.Message}");
+        }
+    }
+
+    public virtual void Restart(Action<NetworkServer> action)
+    {
+        if (_socket == null)
+        {
+            Console.WriteLine($"[{DateTime.Now}] [Warning] 这不是一个错误，而是因为你的服务器实例已被销毁或根本没有启动，所以无法重启服务器。");
+            return;
+        }
+        try
+        {
+            Stop();
+            action?.Invoke(this);
+            Start();
+        }
+        catch (Exception ex)
+        {
+            _ = RaiseEventAsync("OnError", new NetworkEventArgs(
+                    socket: _socket,
+                    eventType: NetworkEventType.HandlerEvent,
+                    message: $"重启服务器时发生错误: {ex.Message}"
+                ));
+
+            throw;
+        }
+    }
 
     protected virtual void ServerTick(){
         try
@@ -130,7 +202,9 @@ public class NetworkServer : NetworkObject
             Console.WriteLine($"服务器Tick时发生错误: {ex.Message}");
         }
     }
+    #endregion
 
+    #region 客户端连接管理
     /// <summary>
     /// 验证连接请求
     /// </summary>
@@ -192,100 +266,6 @@ public class NetworkServer : NetworkObject
         }
     }
 
-    public virtual async void StartAsync()
-    {
-        await Task.Run(() => Start());
-    }
-
-    public virtual async void StopAsync()
-    {
-        await Task.Run(() => Stop());
-    }
-
-    public virtual async void RestartAsync(Action<NetworkServer> action)
-    {
-        await Task.Run(() => Restart(action));
-    }
-
-    public virtual void Restart(Action<NetworkServer> action)
-    {
-        if (_socket == null)
-        {
-            Console.WriteLine($"[{DateTime.Now}] [Warning] 这不是一个错误，而是因为你的服务器实例已被销毁或根本没有启动，所以无法重启服务器。");
-            return;
-        }
-        try
-        {
-            Stop();
-            action?.Invoke(this);
-            Start();
-        }
-        catch (Exception ex)
-        {
-            _ = RaiseEventAsync("OnError", new NetworkEventArgs(
-                    socket: _socket,
-                    eventType: NetworkEventType.HandlerEvent,
-                    message: $"重启服务器时发生错误: {ex.Message}"
-                ));
-
-            throw;
-        }
-    }
-
-    public virtual void Stop()
-    {
-        if (!_socket.IsBound)
-        {
-            Console.WriteLine($"[{DateTime.Now}] [Warning] 这不是一个错误，而是因为你的服务器实例已被销毁或根本没有启动，所以无法关闭服务器。");
-            return;
-        }
-        try
-        {
-            _processingCts.Cancel();    // 取消处理任务
-            Task.WaitAll(_processingTasks.ToArray(), TimeSpan.FromSeconds(5));  // 等待任务完成
-            _socket.Close();
-            _clients.Clear();
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"关闭服务器时发生错误: {ex.Message}");
-        }
-    }
-
-    /// <summary>
-    /// 启动服务器开始监听连接
-    /// </summary>
-    public virtual void Start()
-    {
-        try
-        {
-            _socket.Bind(new IPEndPoint(IPAddress.Parse(_ip), _port));
-            _socket.Listen(10);
-            _socket.BeginAccept(AcceptCallback, null);
-
-            // 启动消息处理线程
-            StartMessageProcessors();
-
-            _ = RaiseEventAsync("OnServerStarted", new NetworkEventArgs(
-                socket: _socket,
-                eventType: NetworkEventType.ServerStarted,
-                message: $"服务器已启动，监听 {_ip}:{_port}"
-            ));
-            
-            ServerTick(); // 启动服务器Tick
-
-            Logger.Log("Server", _config.OnServerStartedTip);
-        }
-        catch (Exception ex)
-        {
-            _ = RaiseEventAsync("OnError", new NetworkEventArgs(
-                socket: _socket,
-                eventType: NetworkEventType.HandlerEvent,
-                message: $"启动服务器时发生错误: {ex.Message}"
-            ));
-        }
-    }
-
     /// <summary>
     /// 处理新的客户端连接
     /// </summary>
@@ -308,8 +288,8 @@ public class NetworkServer : NetworkObject
                 return;
             }
 
-            _clients.TryAdd(clientSocket, 0);
-            clientSocket.AddComponent<ClientComponent>();
+            _ = _clients.TryAdd(clientSocket, 0);
+            _ = clientSocket.AddComponent<ClientComponent>();
 
             await RaiseEventAsync("OnClientConnected", new NetworkEventArgs(
                 socket: clientSocket,
@@ -330,253 +310,11 @@ public class NetworkServer : NetworkObject
         finally
         {
             // 继续监听下一个连接
-            _socket.BeginAccept(AcceptCallback, null);
+            _ = _socket.BeginAccept(AcceptCallback, null);
         }
     }
 
-    /// <summary>
-    /// 开始异步接收客户端数据
-    /// </summary>
-    protected virtual void BeginReceive(Socket clientSocket)
-    {
-        var buffer = ArrayPool<byte>.Shared.Rent(BUFFER_SIZE);
-        try
-        {
-            clientSocket.BeginReceive(buffer, 0, buffer.Length, SocketFlags.None,
-                ar => 
-                {
-                    try 
-                    {
-                        HandleDataReceived(ar, clientSocket, buffer);
-                    }
-                    finally 
-                    {
-                        ArrayPool<byte>.Shared.Return(buffer);
-                    }
-                }, null);
-        }
-        catch
-        {
-            ArrayPool<byte>.Shared.Return(buffer);
-            HandleDisconnect(clientSocket);
-        }
-    }
-
-    /// <summary>
-    /// 开始处理消息队列
-    /// </summary>
-    protected virtual void StartMessageProcessors()
-    {
-        for (int i = 0; i < _processorCount; i++)
-        {
-            _processingTasks.Add(Task.Run(async () =>
-            {
-                while (!_processingCts.Token.IsCancellationRequested)
-                {
-                    if (_messageQueue.TryDequeue(out var message))
-                    {
-                        try
-                        {
-                            await ProcessMessageAsync(message.packet, message.socket);
-                        }
-                        catch (Exception ex)
-                        {
-                            await RaiseEventAsync("OnError", new NetworkEventArgs(
-                                socket: message.socket,
-                                eventType: NetworkEventType.HandlerEvent,
-                                message: $"处理消息时发生错误: {ex.Message}"
-                            ));
-                        }
-                    }
-                    else
-                    {
-                        // 队列为空时等待一小段时间
-                        await Task.Delay(1, _processingCts.Token);
-                    }
-                }
-            }, _processingCts.Token));
-        }
-    }
-
-    /// <summary>
-    /// 处理接收到的数据
-    /// </summary>
-    protected virtual void HandleDataReceived(IAsyncResult ar, Socket clientSocket, byte[] buffer)
-    {
-        try
-        {
-            int bytesRead = clientSocket.EndReceive(ar);
-            if (bytesRead > 0)
-            {
-                // 解析数据包
-                NetworkPacket packet = NetworkPacket.Deserialize(buffer.Take(bytesRead).ToArray());
-
-                // 将消息加入队列而不是直接处理
-                _messageQueue.Enqueue((packet, clientSocket));
-
-                // 继续接收数据
-                BeginReceive(clientSocket);
-            }
-            else
-            {
-                HandleDisconnect(clientSocket);
-            }
-        }
-        catch
-        {
-            HandleDisconnect(clientSocket);
-        }
-    }
-
-    /// <summary>
-    /// 处理接收到的数据包
-    /// </summary>
-    /// <param name="packet"></param>
-    /// <param name="clientSocket"></param>
-    /// <returns></returns>
-    protected virtual async Task ProcessMessageAsync(NetworkPacket packet, Socket clientSocket)
-    {
-        try
-        {
-            await using var batch = new BatchProcessor(BATCH_SIZE);
-            
-            // 处理消息
-            await batch.AddAsync(() => RaiseEventAsync("OnDataReceived", new NetworkEventArgs(
-                socket: clientSocket,
-                eventType: NetworkEventType.DataReceived,
-                packet: packet
-            )));
-
-            if (packet.Type == (int)PacketType.Command)
-            {
-                await batch.AddAsync(() => RaiseEventAsync("OnCommandReceived", new NetworkEventArgs(
-                    socket: clientSocket,
-                    eventType: NetworkEventType.HandlerEvent,
-                    packet: packet
-                )));
-            }
-
-            await batch.ExecuteAsync();
-        }
-        finally
-        {
-            // 返回对象到池
-            _packetPool.Return(packet);
-        }
-    }
-
-    /// <summary>
-    /// 向指定客户端发送数据包
-    /// </summary>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public virtual void Send(Socket clientSocket, NetworkPacket packet)
-    {
-        if (!_clients.ContainsKey(clientSocket))
-        {
-            _ = RaiseEventAsync("OnError", new NetworkEventArgs(
-                    socket: clientSocket,
-                    eventType: NetworkEventType.HandlerEvent,
-                    message: "客户端未连接"
-                ));
-            return;
-        }
-
-        try
-        {
-            byte[] data = packet.Serialize();
-            var sendBuffer = ArrayPool<byte>.Shared.Rent(data.Length);
-            Buffer.BlockCopy(data, 0, sendBuffer, 0, data.Length);
-            
-            clientSocket.BeginSend(sendBuffer, 0, data.Length, SocketFlags.None,
-                ar => 
-                {
-                    try 
-                    {
-                        SendCallback(ar);
-                    }
-                    finally 
-                    {
-                        ArrayPool<byte>.Shared.Return(sendBuffer);
-                    }
-                }, clientSocket);
-        }
-        catch (Exception ex)
-        {
-            _ = RaiseEventAsync("OnError", new NetworkEventArgs(
-                socket: clientSocket,
-                eventType: NetworkEventType.HandlerEvent,
-                message: $"发送数据时发生错误: {ex.Message}"
-            ));
-            HandleDisconnect(clientSocket);
-        }
-    }
-
-    /// <summary>
-    /// 向所有已连接的客户端广播数据包
-    /// </summary>
-    public virtual async Task BroadcastAsync(NetworkPacket packet)
-    {
-        var tasks = new List<Task>();
-        var deadClients = new ConcurrentBag<Socket>();
-        
-        byte[] data = packet.Serialize();
-        var buffer = ArrayPool<byte>.Shared.Rent(data.Length);
-        Buffer.BlockCopy(data, 0, buffer, 0, data.Length);
-
-        try
-        {
-            foreach (var client in _clients.Keys)
-            {
-                tasks.Add(Task.Run(() =>
-                {
-                    try
-                    {
-                        client.BeginSend(buffer, 0, buffer.Length, SocketFlags.None,
-                            ar => SendCallback(ar), client);
-                    }
-                    catch
-                    {
-                        deadClients.Add(client);
-                    }
-                }));
-            }
-
-            await Task.WhenAll(tasks);
-        }
-        finally
-        {
-            ArrayPool<byte>.Shared.Return(buffer);
-            
-            // 清理断开的连接
-            foreach (var client in deadClients)
-            {
-                HandleDisconnect(client);
-            }
-        }
-    }
-
-    protected virtual void SendCallback(IAsyncResult ar)
-    {
-        Socket clientSocket = (Socket)ar.AsyncState;
-        try
-        {
-            clientSocket.EndSend(ar);
-        }
-        catch (Exception ex)
-        {
-            _ = RaiseEventAsync("OnError", new NetworkEventArgs(
-                socket: clientSocket,
-                eventType: NetworkEventType.HandlerEvent,
-                message: $"发送数据时发生错误: {ex.Message}"
-            ));
-            HandleDisconnect(clientSocket);
-        }
-    }
-
-    /// <summary>
-    /// 处理客户端断开连接的清理工作
-    /// </summary>
-    public virtual async void HandleDisconnect(Socket clientSocket)
+    public virtual async Task HandleDisconnectAsync(Socket clientSocket)
     {
         try
         {
@@ -591,7 +329,7 @@ public class NetworkServer : NetworkObject
                     message: $"Client {endpoint} disconnected"
                 ));
 
-                _clients.TryRemove(clientSocket, out _);
+                _ = _clients.TryRemove(clientSocket, out _);
             }
 
             // 关闭Socket连接
@@ -636,7 +374,7 @@ public class NetworkServer : NetworkObject
     {
         try
         {
-            HandleDisconnect(clientSocket);
+            _ = HandleDisconnectAsync(clientSocket);
             return true;
         }
         catch (Exception ex)
@@ -649,23 +387,255 @@ public class NetworkServer : NetworkObject
             return false;
         }
     }
+    #endregion
 
+    #region 消息处理和队列
+    /// <summary>
+    /// 开始处理消息队列
+    /// </summary>
+    protected virtual void StartMessageProcessors()
+    {
+        for (int i = 0; i < _processorCount; i++)
+        {
+            _processingTasks.Add(Task.Run(async () =>
+            {
+                while (!_processingCts.Token.IsCancellationRequested)
+                {
+                    if (_messageQueue.TryDequeue(out var message))
+                    {
+                        try
+                        {
+                            await ProcessMessageAsync(message.packet, message.socket);
+                        }
+                        catch (Exception ex)
+                        {
+                            await RaiseEventAsync("OnError", new NetworkEventArgs(
+                                socket: message.socket,
+                                eventType: NetworkEventType.HandlerEvent,
+                                message: $"处理消息时发生错误: {ex.Message}"
+                            ));
+                        }
+                    }
+                    else
+                    {
+                        // 队列为空时等待一小段时间
+                        await Task.Delay(1, _processingCts.Token);
+                    }
+                }
+            }, _processingCts.Token));
+        }
+    }
 
+   /// <summary>
+   /// 处理接收到的消息，你可以覆盖这个方法以实现自定义的消息处理逻辑，无论如何，你应该在这个方法的最后使用 ReturnPacket 方法将消息对象返回到对象池
+   /// </summary>
+   /// <param name="packet"></param>
+   /// <param name="clientSocket"></param>
+   /// <returns></returns>
+    protected virtual async Task ProcessMessageAsync(NetworkPacket packet, Socket clientSocket)
+    {
+        try
+        {
+            await using var batch = new BatchProcessor(BATCH_SIZE);
+            
+            // 处理消息
+            await batch.AddAsync(() => RaiseEventAsync("OnDataReceived", new NetworkEventArgs(
+                socket: clientSocket,
+                eventType: NetworkEventType.DataReceived,
+                packet: packet
+            )));
 
+            if (packet.Type == (int)PacketType.Command)
+            {
+                await batch.AddAsync(() => RaiseEventAsync("OnCommandReceived", new NetworkEventArgs(
+                    socket: clientSocket,
+                    eventType: NetworkEventType.HandlerEvent,
+                    packet: packet
+                )));
+            }
 
-    #region Getters
-
+            await batch.ExecuteAsync();
+        }
+        finally
+        {
+            // 返回对象到池
+           ReturnPacket(packet);
+        }
+    }
 
     /// <summary>
-    /// 获取当前连接的客户端数量
+    /// 处理接收到的数据
     /// </summary>
-    /// <returns></returns>
-    public virtual HashSet<Socket> GetConnectedSockets()
+    protected virtual void HandleDataReceived(IAsyncResult ar, Socket clientSocket, byte[] buffer)
     {
-        return new HashSet<Socket>(_clients.Keys);
+        try
+        {
+            int bytesRead = clientSocket.EndReceive(ar);
+            if (bytesRead > 0)
+            {
+                // 解析数据包
+                NetworkPacket packet = NetworkPacket.Deserialize(buffer.Take(bytesRead).ToArray());
+
+                // 将消息加入队列而不是直接处理
+                _messageQueue.Enqueue((packet, clientSocket));
+
+                // 继续接收数据
+                BeginReceive(clientSocket);
+            }
+            else
+            {
+                _ = HandleDisconnectAsync(clientSocket);
+            }
+        }
+        catch
+        {
+            _ = HandleDisconnectAsync(clientSocket);
+        }
     }
     #endregion
 
+    #region 异步通信
+    /// <summary>
+    /// 开始异步接收客户端数据
+    /// </summary>
+    protected virtual void BeginReceive(Socket clientSocket)
+    {
+        var buffer = ArrayPool<byte>.Shared.Rent(BUFFER_SIZE);
+        try
+        {
+            _ = clientSocket.BeginReceive(buffer, 0, buffer.Length, SocketFlags.None,
+                ar =>
+                {
+                    try
+                    {
+                        HandleDataReceived(ar, clientSocket, buffer);
+                    }
+                    finally
+                    {
+                        ArrayPool<byte>.Shared.Return(buffer);
+                    }
+                }, null);
+        }
+        catch
+        {
+            ArrayPool<byte>.Shared.Return(buffer);
+            _ = HandleDisconnectAsync(clientSocket);
+        }
+    }
+
+    /// <summary>
+    /// 向指定客户端发送数据包
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public virtual void Send(Socket clientSocket, NetworkPacket packet)
+    {
+        if (!_clients.ContainsKey(clientSocket))
+        {
+            _ = RaiseEventAsync("OnError", new NetworkEventArgs(
+                    socket: clientSocket,
+                    eventType: NetworkEventType.HandlerEvent,
+                    message: "客户端未连接"
+                ));
+            return;
+        }
+
+        try
+        {
+            byte[] data = packet.Serialize();
+            var sendBuffer = ArrayPool<byte>.Shared.Rent(data.Length);
+            Buffer.BlockCopy(data, 0, sendBuffer, 0, data.Length);
+
+            _ = clientSocket.BeginSend(sendBuffer, 0, data.Length, SocketFlags.None,
+                ar =>
+                {
+                    try
+                    {
+                        SendCallback(ar);
+                    }
+                    finally
+                    {
+                        ArrayPool<byte>.Shared.Return(sendBuffer);
+                    }
+                }, clientSocket);
+        }
+        catch (Exception ex)
+        {
+            _ = RaiseEventAsync("OnError", new NetworkEventArgs(
+                socket: clientSocket,
+                eventType: NetworkEventType.HandlerEvent,
+                message: $"发送数据时发生错误: {ex.Message}"
+            ));
+            _ = HandleDisconnectAsync(clientSocket);
+        }
+    }
+
+    /// <summary>
+    /// 向所有已连接的客户端广播数据包
+    /// </summary>
+    public virtual async Task BroadcastAsync(NetworkPacket packet)
+    {
+        var tasks = new List<Task>();
+        var deadClients = new ConcurrentBag<Socket>();
+        
+        byte[] data = packet.Serialize();
+        var buffer = ArrayPool<byte>.Shared.Rent(data.Length);
+        Buffer.BlockCopy(data, 0, buffer, 0, data.Length);
+
+        try
+        {
+            foreach (var client in _clients.Keys)
+            {
+                tasks.Add(Task.Run(() =>
+                {
+                    try
+                    {
+                        _ = client.BeginSend(buffer, 0, buffer.Length, SocketFlags.None,
+                            ar => SendCallback(ar), client);
+                    }
+                    catch
+                    {
+                        deadClients.Add(client);
+                    }
+                }));
+            }
+
+            await Task.WhenAll(tasks);
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(buffer);
+            
+            // 清理断开的连接
+            foreach (var client in deadClients)
+            {
+                _ = HandleDisconnectAsync(client);
+            }
+        }
+    }
+
+    /// <summary>
+    /// 异步发送数据的回调
+    /// </summary>
+    protected virtual void SendCallback(IAsyncResult ar)
+    {
+        Socket clientSocket = (Socket)ar.AsyncState;
+        try
+        {
+            _ = clientSocket.EndSend(ar);
+        }
+        catch (Exception ex)
+        {
+            _ = RaiseEventAsync("OnError", new NetworkEventArgs(
+                socket: clientSocket,
+                eventType: NetworkEventType.HandlerEvent,
+                message: $"发送数据时发生错误: {ex.Message}"
+            ));
+            _ = HandleDisconnectAsync(clientSocket);
+        }
+    }
+    #endregion
+
+    #region 工具类和辅助方法
     // 添加批处理处理器
     private class BatchProcessor : IAsyncDisposable
     {
@@ -700,4 +670,24 @@ public class NetworkServer : NetworkObject
             await ExecuteAsync();
         }
     }
+
+    /// <summary>
+    /// 将数据包对象遣返到对象池
+    /// </summary>
+    /// <param name="packet">数据包</param>
+    public virtual void ReturnPacket(NetworkPacket packet)
+    {
+        _packetPool.Return(packet);
+    }
+    #region Getters
+    /// <summary>
+    /// 获取当前连接的客户端数量
+    /// </summary>
+    /// <returns></returns>
+    public virtual HashSet<Socket> GetConnectedSockets()
+    {
+        return new HashSet<Socket>(_clients.Keys);
+    }
+    #endregion
+    #endregion
 }
