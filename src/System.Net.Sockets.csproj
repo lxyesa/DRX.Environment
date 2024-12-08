@@ -1,0 +1,42 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0-windows</TargetFramework>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <DefineConstants>$(DefineConstants);SYSTEM_NET_SOCKETS_DLL</DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Windows 平台的核心文件 -->
+    <Compile Include="System\Net\Sockets\*.cs" />
+    
+    <!-- Windows 特定实现 -->
+    <Compile Include="System\Net\Sockets\DynamicWinsockMethods.cs" />
+    <Compile Include="System\Net\Sockets\SafeSocketHandle.Windows.cs" />
+    <Compile Include="System\Net\Sockets\Socket.Windows.cs" />
+    <Compile Include="System\Net\Sockets\SocketAsyncEventArgs.Windows.cs" />
+    <Compile Include="System\Net\Sockets\IOControlKeepAlive.Windows.cs" />
+    <Compile Include="System\Net\Sockets\SocketPal.Windows.cs" />
+    <Compile Include="System\Net\Sockets\UnixDomainSocketEndPoint.Windows.cs" />
+
+    <!-- Windows 互操作性文件 -->
+    <Compile Include="$(CommonPath)Interop\Windows\WinSock\*.cs" />
+    <Compile Include="$(CommonPath)Interop\Windows\Kernel32\*.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\NetworkCoreStandard.Utils\NetworkCoreStandard.Utils.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 基础依赖项 -->
+    <Reference Include="Microsoft.Win32.Primitives" />
+    <Reference Include="System.Collections" />
+    <Reference Include="System.Collections.Concurrent" />
+    <Reference Include="System.Memory" />
+    <Reference Include="System.Net.Primitives" />
+    <Reference Include="System.Runtime" />
+    <Reference Include="System.Threading" />
+  </ItemGroup>
+
+</Project>

@@ -2,11 +2,10 @@ using System;
 using System.Net;
 using System.Net.Sockets;
 using NetworkCoreStandard.EventArgs;
-using NetworkCoreStandard.Events;
 using NetworkCoreStandard.Models;
 using NetworkCoreStandard.Utils;
 using NetworkCoreStandard.Utils.Common;
-using static NetworkCoreStandard.Events.NetworkEventDelegate;
+using NetworkCoreStandard.Utils.Extensions;
 
 namespace NetworkCoreStandard;
 
@@ -100,7 +99,7 @@ public class NetworkClient : NetworkObject
                 socket: _socket,
                 eventType: NetworkEventType.HandlerEvent,
                 message: $"发送数据包: {packet.Header}",
-                packet: packet
+                packet: packet.GetBytes()
             ));
         }
         catch (Exception ex)
@@ -166,7 +165,7 @@ public class NetworkClient : NetworkObject
                     socket: _socket,
                     eventType: NetworkEventType.HandlerEvent,
                     message: $"收到数据包: {packet.Header}",
-                    packet: packet
+                    packet: packet.GetBytes()
                 ));
 
                 // 继续接收数据

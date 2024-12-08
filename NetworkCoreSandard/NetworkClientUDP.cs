@@ -4,6 +4,7 @@ using NetworkCoreStandard.EventArgs;
 using NetworkCoreStandard.Models;
 using NetworkCoreStandard.Utils;
 using NetworkCoreStandard.Utils.Common;
+using NetworkCoreStandard.Utils.Extensions;
 
 namespace NetworkCoreStandard;
 
@@ -86,7 +87,7 @@ public class NetworkClientUDP : NetworkObject
                     socket: _socket,
                     eventType: NetworkEventType.DataReceived,
                     message: $"从 {remoteEP} 接收到数据",
-                    packet: packet
+                    packet: packet.GetBytes()
                 ));
             }
         }
@@ -122,7 +123,7 @@ public class NetworkClientUDP : NetworkObject
                             socket: _socket,
                             eventType: NetworkEventType.HandlerEvent,
                             message: "数据包已发送",
-                            packet: packet
+                            packet: packet.GetBytes()
                         ));
                     }
                     catch (Exception ex)

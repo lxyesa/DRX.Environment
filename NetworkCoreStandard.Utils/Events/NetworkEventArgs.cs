@@ -2,7 +2,6 @@ using System;
 using System.Collections.Concurrent;
 using System.Net.Sockets;
 using System.Text.Json;
-using NetworkCoreStandard.Models;
 using NetworkCoreStandard.Utils.Common;
 
 namespace NetworkCoreStandard.EventArgs;
@@ -71,7 +70,7 @@ public class NetworkEventArgs : System.EventArgs , IDisposable
     public DateTime? Timestamp { get; }
 
     /// <summary>网络数据包(可选)</summary>
-    public NetworkPacket? Packet { get; }
+    public byte[]? Packet { get; }
 
     /// <summary>事件类型</summary>
     public NetworkEventType? EventType { get; }
@@ -90,8 +89,8 @@ public class NetworkEventArgs : System.EventArgs , IDisposable
     // 使用 Lazy<T> 实现延迟初始化
     private readonly Lazy<ConcurrentDictionary<string, object>> _lazyElements;
 
-    public NetworkEventArgs(DRXSocket? socket = null, NetworkEventType eventType = NetworkEventType.HandlerEvent, string message = "", 
-        NetworkPacket? packet = null, object? sender = null)
+    public NetworkEventArgs(DRXSocket? socket = null, NetworkEventType eventType = NetworkEventType.HandlerEvent, string message = "",
+        byte[]? packet = null, object? sender = null)
     {
         Socket = socket;
         EventType = eventType;

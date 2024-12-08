@@ -4,7 +4,6 @@ using NetworkCoreStandard.Components;
 using NetworkCoreStandard.Config;
 using NetworkCoreStandard.Enums;
 using NetworkCoreStandard.EventArgs;
-using NetworkCoreStandard.Events;
 using NetworkCoreStandard.Extensions;
 using NetworkCoreStandard.Models;
 using NetworkCoreStandard.Script;
@@ -99,7 +98,7 @@ public partial class Program
 
             Server = new NetworkServer(config);
             LuaEngine.LoadFile($"{PathFinder.GetAppPath()}Scripts\\Main.lua", Server);
-            Server.BeginHeartBeatListener(5000, TimeUnit.Minute, 10, true);
+            Server.BeginHeartBeatListener(5000, TimeUnit.Minute, 10, false);
             Server.AddListener("OnError", (sender, e) =>
             {
                 Logger.Log(NetworkCoreStandard.Utils.LogLevel.Error, "Server", e.Message);

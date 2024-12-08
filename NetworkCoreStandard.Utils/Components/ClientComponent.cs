@@ -3,6 +3,7 @@ using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Sockets;
 using NetworkCoreStandard.Utils;
+using NetworkCoreStandard.Utils.Common;
 using NetworkCoreStandard.Utils.Interface;
 
 namespace NetworkCoreStandard.Components;
@@ -15,9 +16,9 @@ public class ClientComponent : IComponent
     public int PermissionLevel { get; set; } = 1;
     public object? Owner { get; set; }
 
-    public Socket? GetSocket()
+    public DRXSocket? GetSocket()
     {
-        return Owner as Socket;
+        return Owner as DRXSocket;
     }
 
     public void SetPermissionLevel(int level)
@@ -27,7 +28,7 @@ public class ClientComponent : IComponent
 
     public void Start()
     {
-        var socket = Owner as Socket;
+        var socket = Owner as DRXSocket;
         if(socket?.RemoteEndPoint is IPEndPoint endpoint)
         {
             IP = endpoint.Address.ToString();

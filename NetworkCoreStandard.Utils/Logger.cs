@@ -84,7 +84,7 @@ namespace NetworkCoreStandard.Utils
                         Console.OutputEncoding = Encoding.UTF8;
                         var originalColor = Console.ForegroundColor;
                         Console.ForegroundColor = GetLogLevelColor(level);
-                        Console.WriteLine(logText);
+                        Console.Write(logText);
                         Console.ForegroundColor = originalColor;
                         return;
                     }

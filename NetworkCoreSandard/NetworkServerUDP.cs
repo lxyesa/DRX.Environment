@@ -7,6 +7,7 @@ using NetworkCoreStandard.EventArgs;
 using NetworkCoreStandard.Models;
 using NetworkCoreStandard.Utils;
 using NetworkCoreStandard.Utils.Common;
+using NetworkCoreStandard.Utils.Extensions;
 
 public class NetworkServerUDP : NetworkObject
 {
@@ -160,7 +161,7 @@ public class NetworkServerUDP : NetworkObject
             socket: _socket,
             eventType: NetworkEventType.DataReceived,
             message: $"从 {endpoint} 接收到数据",
-            packet: packet
+            packet: packet.GetBytes()
         ).AddElement("endpoint", endpoint)
         .AddElement("clientEndpoints", _clientEndpoints));
     }
@@ -225,7 +226,7 @@ public class NetworkServerUDP : NetworkObject
                             socket: _socket,
                             eventType: NetworkEventType.HandlerEvent,
                             message: "广播数据包已发送",
-                            packet: packet
+                            packet: packet.GetBytes()
                         ));
                     }
                     catch (Exception ex)

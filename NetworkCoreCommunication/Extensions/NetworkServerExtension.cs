@@ -3,7 +3,6 @@ using NetworkCoreStandard.Attributes;
 using NetworkCoreStandard.Components;
 using NetworkCoreStandard.Enums;
 using NetworkCoreStandard.EventArgs;
-using NetworkCoreStandard.Events;
 using NetworkCoreStandard.Models;
 using NetworkCoreStandard.Utils;
 using NetworkCoreStandard.Utils.Common;
@@ -52,8 +51,8 @@ namespace NetworkCoreStandard.Extensions
 
             server.AddListener("OnDataReceived", (sender, args) =>
             {
-                if (args.Packet?.Header == "heartbeat")
-                {
+                if (args.Packet?.GetObject<NetworkPacket>().Header == "heartbeat")
+                {   
                     if (args.Socket.GetComponent<HeartBeatComponent>() is HeartBeatComponent heartbeat)
                     {
                         heartbeat.UpdateHeartbeat();

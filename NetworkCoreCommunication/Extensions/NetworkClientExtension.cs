@@ -1,5 +1,4 @@
 using System;
-using NetworkCoreStandard.Events;
 using NetworkCoreStandard.Models;
 using NetworkCoreStandard.Utils;
 using NetworkCoreStandard.Utils.Extensions;
@@ -17,7 +16,7 @@ namespace NetworkCoreStandard.Extensions
 
             client.AddListener("OnDataReceived", (sender, args) =>
             {
-                if (args.Packet != null && args.Packet.Header == "heartbeat")
+                if (args.Packet != null && args.Packet.GetObject<NetworkPacket>().Header == "heartbeat")
                 {
                     if (isDebugging)
                     {

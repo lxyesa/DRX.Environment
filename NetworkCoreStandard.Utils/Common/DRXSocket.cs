@@ -1,22 +1,12 @@
 using System;
-using System.Collections.Concurrent;
 using System.Net.Sockets;
 using NetworkCoreStandard.Utils.Interface;
 
 namespace NetworkCoreStandard.Utils.Common;
 
-public class DRXSocket : Socket, IDisposable
+public class DRXSocket : Socket
 {
-    private readonly DRXBehaviour _componentBehaviour = new ComponentBehaviourImplementation();
-
-    // 委托组件方法
-    public T AddComponent<T>() where T : IComponent, new() => _componentBehaviour.AddComponent<T>();
-    public T AddComponent<T>(T component) where T : IComponent => _componentBehaviour.AddComponent(component);
-    public T? GetComponent<T>() where T : IComponent => _componentBehaviour.GetComponent<T>();
-    public void RemoveComponent<T>() where T : IComponent => _componentBehaviour.RemoveComponent<T>();
-    public bool HasComponent<T>() where T : IComponent => _componentBehaviour.HasComponent<T>();
-
-
+    private HashSet<IComponent> _components = new();
     public DRXSocket(SafeSocketHandle handle) : base(handle)
     {
     }
@@ -33,14 +23,67 @@ public class DRXSocket : Socket, IDisposable
     {
     }
 
-    protected override void Dispose(bool disposing)
+    public T AddComponent<T>() where T : IComponent, new()
     {
-        if (disposing)
+        if (HasComponent<T>())
         {
-            (_componentBehaviour as IDisposable)?.Dispose();
+            throw new InvalidOperationException($"Component {typeof(T).Name} already exists");
         }
-        base.Dispose(disposing);
+        var component = new T();
+        _components.Add(component);
+        component.Owner = this;
+        component.Awake();
+        component.Start();
+        return component;
     }
 
-    private class ComponentBehaviourImplementation : DRXBehaviour { }
+    public T AddComponent<T>(T component) where T : IComponent
+    {
+        if (HasComponent<T>())
+        {
+            throw new InvalidOperationException($"Component {typeof(T).Name} already exists");
+        }
+        _components.Add(component);
+        component.Owner = this;
+        component.Awake();
+        component.Start();
+        return component;
+    }
+
+    public T? GetComponent<T>() where T : IComponent
+    {
+        foreach (var component in _components)
+        {
+            if (component is T t)
+            {
+                return t;
+            }
+        }
+        return default;
+    }
+
+    public void RemoveComponent<T>() where T : IComponent
+    {
+        foreach (var component in _components)
+        {
+            if (component is T)
+            {
+                _components.Remove(component);
+                component.Dispose();
+                break;
+            }
+        }
+    }
+
+    public bool HasComponent<T>() where T : IComponent
+    {
+        foreach (var component in _components)
+        {
+            if (component is T)
+            {
+                return true;
+            }
+        }
+        return false;
+    }
 }

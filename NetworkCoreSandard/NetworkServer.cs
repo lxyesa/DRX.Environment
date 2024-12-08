@@ -3,8 +3,6 @@ using System.Net;
 using System.Net.Sockets;
 using System.Collections.Generic;
 using NetworkCoreStandard.EventArgs;
-using NetworkCoreStandard.Events;
-using static NetworkCoreStandard.Events.NetworkEventDelegate;
 using NetworkCoreStandard.Models;
 using NetworkCoreStandard.Utils;
 using System.Collections.Concurrent;
@@ -457,33 +455,24 @@ public class NetworkServer : NetworkObject
         }
     }
 
-   /// <summary>
-   /// 处理接收到的消息，你可以覆盖这个方法以实现自定义的消息处理逻辑，无论如何，你应该在这个方法的最后使用 ReturnPacket 方法将消息对象返回到对象池
-   /// </summary>
-   /// <param name="packet"></param>
-   /// <param name="clientSocket"></param>
-   /// <returns></returns>
+    /// <summary>
+    /// 处理接收到的消息，你可以覆盖这个方法以实现自定义的消息处理逻辑，无论如何，你应该在这个方法的最后使用 ReturnPacket 方法将消息对象返回到对象池
+    /// </summary>
+    /// <param name="packet"></param>
+    /// <param name="clientSocket"></param>
+    /// <returns></returns>
     protected virtual async Task ProcessMessageAsync(NetworkPacket packet, DRXSocket clientSocket)
     {
         try
         {
             await using var batch = new BatchProcessor(BATCH_SIZE);
-            
+
             // 处理消息
             await batch.AddAsync(() => RaiseEventAsync("OnDataReceived", new NetworkEventArgs(
                 socket: clientSocket,
                 eventType: NetworkEventType.DataReceived,
-                packet: packet
+                packet: packet.GetBytes()
             )));
-
-            if (packet.Type == (int)PacketType.Command)
-            {
-                await batch.AddAsync(() => RaiseEventAsync("OnCommandReceived", new NetworkEventArgs(
-                    socket: clientSocket,
-                    eventType: NetworkEventType.HandlerEvent,
-                    packet: packet
-                )));
-            }
 
             await batch.ExecuteAsync();
         }
