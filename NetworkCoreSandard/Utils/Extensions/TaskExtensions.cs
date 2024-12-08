@@ -4,7 +4,7 @@ using System.Collections.Concurrent;
 using NetworkCoreStandard.Models;
 using NetworkCoreStandard.EventArgs;
 
-namespace NetworkCoreStandard.Extensions
+namespace NetworkCoreStandard.Utils.Extensions
 {
     public static class TaskExtensions  
     {

@@ -2,6 +2,7 @@ using System;
 using NetworkCoreStandard.Events;
 using NetworkCoreStandard.Models;
 using NetworkCoreStandard.Utils;
+using NetworkCoreStandard.Utils.Extensions;
 
 namespace NetworkCoreStandard.Extensions
 {

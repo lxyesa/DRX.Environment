@@ -3,12 +3,13 @@ using System.Net.Sockets;
 using NetworkCoreStandard.EventArgs;
 using NetworkCoreStandard.Models;
 using NetworkCoreStandard.Utils;
+using NetworkCoreStandard.Utils.Common;
 
 namespace NetworkCoreStandard;
 
 public class NetworkClientUDP : NetworkObject
 {
-    protected Socket _socket;
+    protected DRXSocket _socket;
     protected string _serverIP;
     protected int _serverPort;
     protected EndPoint _serverEndPoint;
@@ -19,7 +20,7 @@ public class NetworkClientUDP : NetworkObject
     {
         _serverIP = "127.0.0.1";  // 本地回环地址
         _serverPort = serverPort;
-        _socket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
+        _socket = new DRXSocket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
         _serverEndPoint = new IPEndPoint(IPAddress.Parse(_serverIP), _serverPort);
         _processingCts = new CancellationTokenSource();
     }

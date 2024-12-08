@@ -1,6 +1,5 @@
 using System;
 using System.Net.Sockets;
-using NetworkCoreStandard.Interface;
 using NetworkCoreStandard.Utils;
 
 namespace NetworkCoreStandard.Models;

@@ -1,11 +1,11 @@
 using NetworkCoreStandard.EventArgs;
 using NetworkCoreStandard.Events;
-using NetworkCoreStandard.Extensions;
-using NetworkCoreStandard.Utils;
+using NetworkCoreStandard.Utils.Common;
+using NetworkCoreStandard.Utils.Extensions;
 
 namespace NetworkCoreStandard;
 
-public class NetworkObject
+public class NetworkObject : DRXBehaviour
 {
     protected NetworkEventBus _eventBus;
     protected int GCInterval = 5 * 1000 * 60;

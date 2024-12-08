@@ -11,11 +11,13 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NetworkCoreStandard", "Netw
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NetworkCoreCommunication", "NetworkCoreCommunication\NetworkCoreCommunication.csproj", "{1404A9E5-46FF-49E2-B3FE-1EBDA7F1438D}"
 EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "AOT", "AOT", "{00DC21DD-0C80-47AB-8FF4-DC2A399100BE}"
-EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NetworkCoreStantard.AOT", "AOT\NetworkCoreStantard.AOT\NetworkCoreStantard.AOT.csproj", "{E0ED5C35-1037-4B0E-AB11-3479278E0881}"
-EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NetworkCoreStandard.Utils", "NetworkCoreStandard.Utils\NetworkCoreStandard.Utils.csproj", "{21AC4A6E-4436-48FD-A400-6992E9E27CEE}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Client", "Client", "{02EA681E-C7D8-13C7-8484-4AC65E1B71E8}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NDV-Client", "NDV-Client\NDV-Client.csproj", "{EDCA2032-2A98-4E2E-94C6-0C219C9C5072}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NetworkStandard.Pip", "NetworkStandard.Pip\NetworkStandard.Pip.csproj", "{622FE201-87E6-4BCD-9E1F-88D9B4E04C07}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -39,19 +41,26 @@ Global
 		{1404A9E5-46FF-49E2-B3FE-1EBDA7F1438D}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{1404A9E5-46FF-49E2-B3FE-1EBDA7F1438D}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{1404A9E5-46FF-49E2-B3FE-1EBDA7F1438D}.Release|Any CPU.Build.0 = Release|Any CPU
-		{E0ED5C35-1037-4B0E-AB11-3479278E0881}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{E0ED5C35-1037-4B0E-AB11-3479278E0881}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{E0ED5C35-1037-4B0E-AB11-3479278E0881}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{E0ED5C35-1037-4B0E-AB11-3479278E0881}.Release|Any CPU.Build.0 = Release|Any CPU
 		{21AC4A6E-4436-48FD-A400-6992E9E27CEE}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{21AC4A6E-4436-48FD-A400-6992E9E27CEE}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{21AC4A6E-4436-48FD-A400-6992E9E27CEE}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{21AC4A6E-4436-48FD-A400-6992E9E27CEE}.Release|Any CPU.Build.0 = Release|Any CPU
+		{EDCA2032-2A98-4E2E-94C6-0C219C9C5072}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{EDCA2032-2A98-4E2E-94C6-0C219C9C5072}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{EDCA2032-2A98-4E2E-94C6-0C219C9C5072}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{EDCA2032-2A98-4E2E-94C6-0C219C9C5072}.Release|Any CPU.Build.0 = Release|Any CPU
+		{622FE201-87E6-4BCD-9E1F-88D9B4E04C07}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{622FE201-87E6-4BCD-9E1F-88D9B4E04C07}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{622FE201-87E6-4BCD-9E1F-88D9B4E04C07}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{622FE201-87E6-4BCD-9E1F-88D9B4E04C07}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
-		{E0ED5C35-1037-4B0E-AB11-3479278E0881} = {00DC21DD-0C80-47AB-8FF4-DC2A399100BE}
+		{EDCA2032-2A98-4E2E-94C6-0C219C9C5072} = {02EA681E-C7D8-13C7-8484-4AC65E1B71E8}
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {ABA6D5DA-BED8-4F66-8621-571E8319164A}
 	EndGlobalSection
 EndGlobal

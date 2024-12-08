@@ -1,6 +1,7 @@
 using System.Net.Sockets;
 using NetworkCoreStandard.EventArgs;
 using NetworkCoreStandard.Models;
+using NetworkCoreStandard.Utils.Common;
 using static NetworkCoreStandard.Events.NetworkEventDelegate;
 
 namespace NetworkCoreStandard.Events;
@@ -29,7 +30,7 @@ public class NetworkEventManager
     /// <summary>
     /// 触发数据包接收事件
     /// </summary>
-    public virtual void RaiseDataReceived(object sender, Socket socket, NetworkPacket packet)
+    public virtual void RaiseDataReceived(object sender, DRXSocket socket, NetworkPacket packet)
     {
         OnNetworkEvent?.Invoke(sender, new NetworkEventArgs(
             socket,
@@ -46,7 +47,7 @@ public class NetworkEventManager
     /// <summary>
     /// 触发客户端连接到服务器事件
     /// </summary>
-    public virtual void RaiseClientConnected(object sender, Socket socket, string serverIP, int port)
+    public virtual void RaiseClientConnected(object sender, DRXSocket socket, string serverIP, int port)
     {
         OnNetworkEvent?.Invoke(sender, new NetworkEventArgs(
             socket,
@@ -58,7 +59,7 @@ public class NetworkEventManager
     /// <summary>
     /// 触发客户端断开连接事件
     /// </summary>
-    public virtual void RaiseClientDisconnected(object sender, Socket socket, string serverIP, int port)
+    public virtual void RaiseClientDisconnected(object sender, DRXSocket socket, string serverIP, int port)
     {
         OnNetworkEvent?.Invoke(sender, new NetworkEventArgs(
             socket,
@@ -76,7 +77,7 @@ public class NetworkEventManager
     public virtual void RaiseServerStarted(object sender, string ip, int port)
     {
         OnNetworkEvent?.Invoke(sender, new NetworkEventArgs(
-            new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp), // 临时Socket对象
+            new DRXSocket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp), // 临时Socket对象
             NetworkEventType.ServerStarted,
             $"服务器在 {ip}:{port} 启动成功！"
         ));
@@ -85,7 +86,7 @@ public class NetworkEventManager
     /// <summary>
     /// 触发服务器端的客户端连接事件
     /// </summary>
-    public virtual void RaiseServerClientConnected(object sender, Socket clientSocket)
+    public virtual void RaiseServerClientConnected(object sender, DRXSocket clientSocket)
     {
         OnNetworkEvent?.Invoke(sender, new NetworkEventArgs(
             clientSocket,
@@ -97,7 +98,7 @@ public class NetworkEventManager
     /// <summary>
     /// 触发服务器端的客户端断开事件
     /// </summary>
-    public virtual void RaiseServerClientDisconnected(object sender, Socket clientSocket)
+    public virtual void RaiseServerClientDisconnected(object sender, DRXSocket clientSocket)
     {
         OnNetworkEvent?.Invoke(sender, new NetworkEventArgs(
             clientSocket,

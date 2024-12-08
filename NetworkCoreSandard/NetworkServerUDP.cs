@@ -6,10 +6,11 @@ using NetworkCoreStandard.Config;
 using NetworkCoreStandard.EventArgs;
 using NetworkCoreStandard.Models;
 using NetworkCoreStandard.Utils;
+using NetworkCoreStandard.Utils.Common;
 
 public class NetworkServerUDP : NetworkObject
 {
-    protected Socket _socket;
+    protected DRXSocket _socket;
     protected int _port;
     protected string _ip;
     protected ServerConfig _config;
@@ -25,7 +26,7 @@ public class NetworkServerUDP : NetworkObject
         _config = config;
         _ip = config.IP;
         _port = config.Port;
-        _socket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
+        _socket = new DRXSocket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
         _clientEndpoints = new ConcurrentDictionary<EndPoint, DateTime>();
         _messageQueue = new ConcurrentQueue<(NetworkPacket, EndPoint)>();
         _processingCts = new CancellationTokenSource();

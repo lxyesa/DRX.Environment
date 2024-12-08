@@ -9,13 +9,14 @@ using NetworkCoreStandard.Models;
 using NetworkCoreStandard.Utils;
 using System.Collections.Concurrent;
 using Microsoft.Extensions.ObjectPool;
-using NetworkCoreStandard.Interface;
 using NetworkCoreStandard.Config;
-using NetworkCoreStandard.Extensions;
 using NetworkCoreStandard.Components;
 using System.Threading;
 using System.Runtime.CompilerServices;
 using System.Buffers;
+using NetworkCoreStandard.Utils.Extensions;
+using NetworkCoreStandard.Utils.Common;
+using System.Diagnostics;
 
 namespace NetworkCoreStandard;
 
@@ -27,12 +28,12 @@ public class NetworkServer : NetworkObject
 {
     #region 基础成员和初始化
     // 基础字段
-    protected Socket _socket;
+    protected DRXSocket _socket;
     protected int _port;
     protected string _ip;
-    private readonly ConcurrentDictionary<Socket, byte> _clients = new();
+    private readonly ConcurrentDictionary<DRXSocket, byte> _clients = new();
     protected ServerConfig _config;
-    private readonly ConcurrentQueue<(NetworkPacket packet, Socket socket)> _messageQueue = new();
+    private readonly ConcurrentQueue<(NetworkPacket packet, DRXSocket socket)> _messageQueue = new();
     private readonly CancellationTokenSource _processingCts = new();
     private int _processorCount = Environment.ProcessorCount;
     private readonly List<Task> _processingTasks = new();
@@ -51,7 +52,7 @@ public class NetworkServer : NetworkObject
         _config = config;
         _ip = config.IP;
         _port = config.Port;
-        _socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+        _socket = new DRXSocket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
 
         // 初始化对象池
         var packetPoolPolicy = new DefaultPooledObjectPolicy<NetworkPacket>();
@@ -86,7 +87,7 @@ public class NetworkServer : NetworkObject
         _config = new ServerConfig();
         _ip = _config.IP;
         _port = _config.Port;
-        _socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+        _socket = new DRXSocket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
 
         // Initialize object pools
         var packetPoolPolicy = new DefaultPooledObjectPolicy<NetworkPacket>();
@@ -210,7 +211,7 @@ public class NetworkServer : NetworkObject
     /// </summary>
     /// <param name="clientSocket"></param>
     /// <returns></returns>
-    protected virtual bool ValidateConnection(Socket clientSocket)
+    protected virtual bool ValidateConnection(DRXSocket clientSocket)
     {
         try
         {
@@ -271,11 +272,12 @@ public class NetworkServer : NetworkObject
     /// </summary>
     protected virtual async void AcceptCallback(IAsyncResult ar)
     {
+        DRXSocket? clientSocket = null;
         try
         {
-            Socket clientSocket = _socket.EndAccept(ar);
+            Socket baseSocket = _socket.EndAccept(ar);
+            clientSocket = baseSocket.TakeOver<DRXSocket>();
 
-            // 验证连接
             if (!ValidateConnection(clientSocket))
             {
                 await RaiseEventAsync("OnConnectionRejected", new NetworkEventArgs(
@@ -283,38 +285,67 @@ public class NetworkServer : NetworkObject
                     eventType: NetworkEventType.HandlerEvent,
                     message: "连接被拒绝"
                 ));
-
                 clientSocket.Close();
                 return;
             }
 
-            _ = _clients.TryAdd(clientSocket, 0);
-            _ = clientSocket.AddComponent<ClientComponent>();
-
-            await RaiseEventAsync("OnClientConnected", new NetworkEventArgs(
-                socket: clientSocket,
-                eventType: NetworkEventType.ServerClientConnected,
-                message: $"客户端 {clientSocket.RemoteEndPoint} 已连接"
-            ));
-
-            BeginReceive(clientSocket);
+            if (_clients.TryAdd(clientSocket, 1))
+            {
+                await InitializeClientSocket(clientSocket);
+                BeginReceive(clientSocket);
+            }
+            else
+            {
+                clientSocket.Close();
+                Logger.Log("Server", "无法添加客户端到连接列表");
+            }
         }
         catch (Exception ex)
         {
-            await RaiseEventAsync("OnError", new NetworkEventArgs(
-                socket: _socket,
-                eventType: NetworkEventType.HandlerEvent,
-                message: $"接受客户端连接时发生错误: {ex.Message}"
-            ));
+            Logger.Log(LogLevel.Error, "Server", $"处理客户端连接时发生错误: {ex.Message}");
+            clientSocket?.Close();
         }
         finally
         {
-            // 继续监听下一个连接
-            _ = _socket.BeginAccept(AcceptCallback, null);
+            ContinueAccepting();
         }
     }
 
-    public virtual async Task HandleDisconnectAsync(Socket clientSocket)
+    /// <summary>
+    /// 初始化客户端Socket
+    /// </summary>
+    /// <param name="clientSocket"></param>
+    /// <returns></returns>
+    private async Task InitializeClientSocket(DRXSocket clientSocket)
+    {
+        _ = clientSocket.AddComponent<ClientComponent>();
+
+        await RaiseEventAsync("OnClientConnected", new NetworkEventArgs(
+            socket: clientSocket,
+            eventType: NetworkEventType.ServerClientConnected,
+            message: $"客户端 {clientSocket.RemoteEndPoint} 已连接"
+        ));
+    }
+
+    /// <summary>
+    /// 继续接受新的连接
+    /// </summary>
+    private void ContinueAccepting()
+    {
+        if (_socket?.IsBound == true)
+        {
+            try
+            {
+                _socket.BeginAccept(AcceptCallback, null);
+            }
+            catch (Exception ex)
+            {
+                Logger.Log(LogLevel.Error, "Server", $"继续监听连接时发生错误: {ex.Message}");
+            }
+        }
+    }
+
+    public virtual async Task HandleDisconnectAsync(DRXSocket clientSocket)
     {
         try
         {
@@ -370,7 +401,7 @@ public class NetworkServer : NetworkObject
     /// </summary>
     /// <param name="clientIP">客户端IP地址</param>
     /// <returns>是否成功断开连接</returns>
-    public virtual bool DisconnectClient(Socket clientSocket)
+    public virtual bool DisconnectClient(DRXSocket clientSocket)
     {
         try
         {
@@ -432,7 +463,7 @@ public class NetworkServer : NetworkObject
    /// <param name="packet"></param>
    /// <param name="clientSocket"></param>
    /// <returns></returns>
-    protected virtual async Task ProcessMessageAsync(NetworkPacket packet, Socket clientSocket)
+    protected virtual async Task ProcessMessageAsync(NetworkPacket packet, DRXSocket clientSocket)
     {
         try
         {
@@ -466,7 +497,7 @@ public class NetworkServer : NetworkObject
     /// <summary>
     /// 处理接收到的数据
     /// </summary>
-    protected virtual void HandleDataReceived(IAsyncResult ar, Socket clientSocket, byte[] buffer)
+    protected virtual void HandleDataReceived(IAsyncResult ar, DRXSocket clientSocket, byte[] buffer)
     {
         try
         {
@@ -498,7 +529,7 @@ public class NetworkServer : NetworkObject
     /// <summary>
     /// 开始异步接收客户端数据
     /// </summary>
-    protected virtual void BeginReceive(Socket clientSocket)
+    protected virtual void BeginReceive(DRXSocket clientSocket)
     {
         var buffer = ArrayPool<byte>.Shared.Rent(BUFFER_SIZE);
         try
@@ -527,7 +558,7 @@ public class NetworkServer : NetworkObject
     /// 向指定客户端发送数据包
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public virtual void Send(Socket clientSocket, NetworkPacket packet)
+    public virtual void Send(DRXSocket clientSocket, NetworkPacket packet)
     {
         if (!_clients.ContainsKey(clientSocket))
         {
@@ -575,7 +606,7 @@ public class NetworkServer : NetworkObject
     public virtual async Task BroadcastAsync(NetworkPacket packet)
     {
         var tasks = new List<Task>();
-        var deadClients = new ConcurrentBag<Socket>();
+        var deadClients = new ConcurrentBag<DRXSocket>();
         
         byte[] data = packet.Serialize();
         var buffer = ArrayPool<byte>.Shared.Rent(data.Length);
@@ -583,7 +614,7 @@ public class NetworkServer : NetworkObject
 
         try
         {
-            foreach (var client in _clients.Keys)
+            foreach (DRXSocket client in _clients.Keys)
             {
                 tasks.Add(Task.Run(() =>
                 {
@@ -618,7 +649,7 @@ public class NetworkServer : NetworkObject
     /// </summary>
     protected virtual void SendCallback(IAsyncResult ar)
     {
-        Socket clientSocket = (Socket)ar.AsyncState;
+        DRXSocket clientSocket = (DRXSocket)ar.AsyncState;
         try
         {
             _ = clientSocket.EndSend(ar);
@@ -684,9 +715,9 @@ public class NetworkServer : NetworkObject
     /// 获取当前连接的客户端数量
     /// </summary>
     /// <returns></returns>
-    public virtual HashSet<Socket> GetConnectedSockets()
+    public virtual HashSet<DRXSocket> GetConnectedSockets()
     {
-        return new HashSet<Socket>(_clients.Keys);
+        return new HashSet<DRXSocket>(_clients.Keys);
     }
     #endregion
     #endregion

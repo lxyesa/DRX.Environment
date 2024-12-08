@@ -1,7 +1,7 @@
 using System;
-using NetworkCoreStandard.Interface;
 using NetworkCoreStandard.Models;
 using NetworkCoreStandard.Utils;
+using NetworkCoreStandard.Utils.Interface;
 
 namespace NetworkCoreStandard.Components;
 
@@ -43,5 +43,15 @@ public class HeartBeatComponent : IComponent
     public void SetHeartbeatTimeout(int timeout)
     {
         HEARTBEAT_TIMEOUT = timeout;
+    }
+
+    public void OnDestroy()
+    {
+        
+    }
+
+    public void Dispose()
+    {
+        
     }
 }

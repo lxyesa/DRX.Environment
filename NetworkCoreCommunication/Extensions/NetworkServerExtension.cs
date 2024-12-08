@@ -6,6 +6,8 @@ using NetworkCoreStandard.EventArgs;
 using NetworkCoreStandard.Events;
 using NetworkCoreStandard.Models;
 using NetworkCoreStandard.Utils;
+using NetworkCoreStandard.Utils.Common;
+using NetworkCoreStandard.Utils.Extensions;
 
 namespace NetworkCoreStandard.Extensions
 {
@@ -77,7 +79,7 @@ namespace NetworkCoreStandard.Extensions
             // 心跳检查
             server.DoTickAsync(() =>
             {
-                foreach (var socket in server.GetConnectedSockets())
+                foreach (DRXSocket socket in server.GetConnectedSockets())
                 {
                     if (socket.GetComponent<HeartBeatComponent>() is HeartBeatComponent heartbeat)
                     {

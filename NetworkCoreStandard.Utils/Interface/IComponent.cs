@@ -1,20 +1,12 @@
 using System;
 using NetworkCoreStandard.Utils;
 
-namespace NetworkCoreStandard.Interface;
+namespace NetworkCoreStandard.Utils.Interface;
 
-public interface IComponent
+public interface IComponent : IDisposable
 {
     void Start();
     void Awake();
     object? Owner { get; set; }
-}
-
-public interface IComponentContainer
-{
-    HashSet<IComponent> Components { get; }
-    void AddComponent<T>() where T : IComponent, new();
-    void RemoveComponent<T>() where T : IComponent;
-    T GetComponent<T>() where T : IComponent;
-    bool HasComponent<T>() where T : IComponent;
+    void OnDestroy(); // 组件销毁时调用
 }

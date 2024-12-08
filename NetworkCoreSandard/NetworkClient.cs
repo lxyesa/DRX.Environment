@@ -5,13 +5,14 @@ using NetworkCoreStandard.EventArgs;
 using NetworkCoreStandard.Events;
 using NetworkCoreStandard.Models;
 using NetworkCoreStandard.Utils;
+using NetworkCoreStandard.Utils.Common;
 using static NetworkCoreStandard.Events.NetworkEventDelegate;
 
 namespace NetworkCoreStandard;
 
 public class NetworkClient : NetworkObject
 {
-    protected Socket _socket;
+    protected DRXSocket _socket;
     protected string _serverIP;
     protected int _serverPort;
     protected bool _isConnected;
@@ -25,7 +26,7 @@ public class NetworkClient : NetworkObject
     {
         _serverIP = serverIP;
         _serverPort = serverPort;
-        _socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+        _socket = new DRXSocket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
         _isConnected = false;
     }
     /// <summary>

@@ -1,8 +1,9 @@
 using System;
 using System.Collections.Concurrent;
 using System.Net.Sockets;
+using System.Text.Json;
 using NetworkCoreStandard.Models;
-using NetworkCoreStandard.Utils;
+using NetworkCoreStandard.Utils.Common;
 
 namespace NetworkCoreStandard.EventArgs;
 
@@ -64,7 +65,7 @@ public class NetworkError
 public class NetworkEventArgs : System.EventArgs , IDisposable
 {
     /// <summary>事件发生的Socket对象（可能为Null）</summary>
-    public Socket? Socket { get; }
+    public DRXSocket? Socket { get; }
 
     /// <summary>事件发生的时间戳</summary>
     public DateTime? Timestamp { get; }
@@ -89,7 +90,7 @@ public class NetworkEventArgs : System.EventArgs , IDisposable
     // 使用 Lazy<T> 实现延迟初始化
     private readonly Lazy<ConcurrentDictionary<string, object>> _lazyElements;
 
-    public NetworkEventArgs(Socket? socket = null, NetworkEventType eventType = NetworkEventType.HandlerEvent, string message = "", 
+    public NetworkEventArgs(DRXSocket? socket = null, NetworkEventType eventType = NetworkEventType.HandlerEvent, string message = "", 
         NetworkPacket? packet = null, object? sender = null)
     {
         Socket = socket;

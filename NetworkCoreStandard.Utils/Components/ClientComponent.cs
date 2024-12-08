@@ -2,8 +2,8 @@ using System;
 using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Sockets;
-using NetworkCoreStandard.Interface;
 using NetworkCoreStandard.Utils;
+using NetworkCoreStandard.Utils.Interface;
 
 namespace NetworkCoreStandard.Components;
 
@@ -39,5 +39,15 @@ public class ClientComponent : IComponent
     public void Awake()
     {
 
+    }
+
+    public void OnDestroy()
+    {
+        
+    }
+
+    public void Dispose()
+    {
+        
     }
 }

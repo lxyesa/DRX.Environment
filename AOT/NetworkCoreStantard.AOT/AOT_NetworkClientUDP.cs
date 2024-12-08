@@ -1,11 +1,9 @@
 #region 引用声明
-using System;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
-using NetworkCoreStandard.Managers;
-using NetworkCoreStandard.Api;
-using System.Text;
 using NetworkCoreStandard.Enums;
+using NetworkCoreStandard.EventArgs;
+using NetworkCoreStandard.Utils;
 using NetworkCoreStandard.Utils.Extensions;
 #endregion
 
@@ -20,7 +18,20 @@ namespace NetworkCoreStandard.AOT
         #region 构造函数
         #endregion
 
+        #region 委托
+        [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+        public delegate void NetworkEventCallback(IntPtr args);
+        #endregion
+
         #region 导出函数
+        
+        /// <summary>
+        /// DllMain函数，用于处理DLL的加载和卸载事件。
+        /// </summary>
+        /// <param name="hModule">DLL模块的句柄</param>
+        /// <param name="ulReasonForCall">调用原因代码</param>
+        /// <param name="lpReserved">保留参数</param>
+        /// <returns></returns>
         [UnmanagedCallersOnly(EntryPoint = "DllMain", CallConvs = new[] { typeof(CallConvStdcall) })]
         public static bool DllMain(IntPtr hModule, uint ulReasonForCall, IntPtr lpReserved)
         {
@@ -37,17 +48,17 @@ namespace NetworkCoreStandard.AOT
             return true;
         }
 
+        
+        /// <summary>
+        /// 创建一个新的UDP客户端。
+        /// </summary>
         [UnmanagedCallersOnly(EntryPoint = "NetworkClientUDP_Start", CallConvs = new[] { typeof(CallConvStdcall) })]
         public static void NetworkClientUDP_Start()
         {
             _clientUDP?.Start();
+            Logger.Log("NetworkClientUDP", "UDP客户端已启动");
         }
 
-        [UnmanagedCallersOnly(EntryPoint = "NetworkClientUDP_AddListener", CallConvs = new[] { typeof(CallConvStdcall) })]
-        public static void NetworkClientUDP_AddListener(IntPtr eventName, IntPtr callback)
-        {
-            var event_name = eventName.GetObject<string>();
-        }
 
         #endregion
 
