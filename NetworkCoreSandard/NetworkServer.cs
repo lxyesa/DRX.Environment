@@ -115,7 +115,7 @@ public class NetworkServer : NetworkObject
             // 启动消息处理线程
             StartMessageProcessors();
 
-            _ = RaiseEventAsync("OnServerStarted", new NetworkEventArgs(
+            _ = PushEventAsync("OnServerStarted", new NetworkEventArgs(
                 socket: _socket,
                 eventType: NetworkEventType.ServerStarted,
                 message: $"服务器已启动，监听 {_ip}:{_port}"
@@ -127,7 +127,7 @@ public class NetworkServer : NetworkObject
         }
         catch (Exception ex)
         {
-            _ = RaiseEventAsync("OnError", new NetworkEventArgs(
+            _ = PushEventAsync("OnError", new NetworkEventArgs(
                 socket: _socket,
                 eventType: NetworkEventType.HandlerEvent,
                 message: $"启动服务器时发生错误: {ex.Message}"
@@ -170,7 +170,7 @@ public class NetworkServer : NetworkObject
         }
         catch (Exception ex)
         {
-            _ = RaiseEventAsync("OnError", new NetworkEventArgs(
+            _ = PushEventAsync("OnError", new NetworkEventArgs(
                     socket: _socket,
                     eventType: NetworkEventType.HandlerEvent,
                     message: $"重启服务器时发生错误: {ex.Message}"
@@ -184,7 +184,7 @@ public class NetworkServer : NetworkObject
         try
         {
             _ = this.DoTickAsync(() => {
-                _ = RaiseEventAsync("OnServerTick", new NetworkEventArgs(
+                _ = PushEventAsync("OnServerTick", new NetworkEventArgs(
                     socket: _socket,
                     eventType: NetworkEventType.HandlerEvent
                 ));
@@ -192,7 +192,7 @@ public class NetworkServer : NetworkObject
         }
         catch (Exception ex)
         {
-            _ = RaiseEventAsync("OnError", new NetworkEventArgs(
+            _ = PushEventAsync("OnError", new NetworkEventArgs(
                 socket: _socket,
                 eventType: NetworkEventType.HandlerEvent,
                 message: $"服务器Tick时发生错误: {ex.Message}"
@@ -218,7 +218,7 @@ public class NetworkServer : NetworkObject
             // 检查最大连接数
             if (_clients.Count >= _config.MaxClients)
             {
-                _ = RaiseEventAsync("OnError", new NetworkEventArgs(
+                _ = PushEventAsync("OnError", new NetworkEventArgs(
                     socket: clientSocket,
                     eventType: NetworkEventType.HandlerEvent,
                     message: $"[{DateTime.Now:yyyy/mm/dd hh:mm:ss}] [ConnectionFailed] 服务器已达到最大连接数 ({_config.MaxClients})，因此 {clientIP} 的连接被拒绝。"
@@ -229,7 +229,7 @@ public class NetworkServer : NetworkObject
             // 检查IP黑名单
             if (clientIP != null && _config.BlacklistIPs.Contains(clientIP))
             {
-                _ = RaiseEventAsync("OnError", new NetworkEventArgs(
+                _ = PushEventAsync("OnError", new NetworkEventArgs(
                     socket: clientSocket,
                     eventType: NetworkEventType.HandlerEvent,
                     message: $"[{DateTime.Now:yyyy/mm/dd hh:mm:ss}] [ConnectionFailed] {clientIP} 在IP黑名单中，因此服务器拒绝与其建立连接。"
@@ -242,7 +242,7 @@ public class NetworkServer : NetworkObject
                 clientIP != null &&
                 !_config.WhitelistIPs.Contains(clientIP))
             {
-                _ = RaiseEventAsync("OnError", new NetworkEventArgs(
+                _ = PushEventAsync("OnError", new NetworkEventArgs(
                     socket: clientSocket,
                     eventType: NetworkEventType.HandlerEvent,
                     message: $"[{DateTime.Now:yyyy/mm/dd hh:mm:ss}] [ConnectionFailed] {clientIP} 不在IP白名单中，因此服务器拒绝与其建立连接。"
@@ -278,7 +278,7 @@ public class NetworkServer : NetworkObject
 
             if (!ValidateConnection(clientSocket))
             {
-                await RaiseEventAsync("OnConnectionRejected", new NetworkEventArgs(
+                await PushEventAsync("OnConnectionRejected", new NetworkEventArgs(
                     socket: clientSocket,
                     eventType: NetworkEventType.HandlerEvent,
                     message: "连接被拒绝"
@@ -318,7 +318,7 @@ public class NetworkServer : NetworkObject
     {
         _ = clientSocket.AddComponent<ClientComponent>();
 
-        await RaiseEventAsync("OnClientConnected", new NetworkEventArgs(
+        await PushEventAsync("OnClientConnected", new NetworkEventArgs(
             socket: clientSocket,
             eventType: NetworkEventType.ServerClientConnected,
             message: $"客户端 {clientSocket.RemoteEndPoint} 已连接"
@@ -352,7 +352,7 @@ public class NetworkServer : NetworkObject
             // 首先尝试获取客户端信息
             if (_clients.ContainsKey(clientSocket))
             {
-                await RaiseEventAsync("OnClientDisconnected", new NetworkEventArgs(
+                await PushEventAsync("OnClientDisconnected", new NetworkEventArgs(
                     socket: clientSocket!,
                     eventType: NetworkEventType.ServerClientDisconnected,
                     message: $"Client {endpoint} disconnected"
@@ -408,7 +408,7 @@ public class NetworkServer : NetworkObject
         }
         catch (Exception ex)
         {
-            _ = RaiseEventAsync("OnError", new NetworkEventArgs(
+            _ = PushEventAsync("OnError", new NetworkEventArgs(
                 socket: null!,
                 eventType: NetworkEventType.HandlerEvent,
                 message: $"强制断开客户端连接时发生错误: {ex.Message}"
@@ -438,7 +438,7 @@ public class NetworkServer : NetworkObject
                         }
                         catch (Exception ex)
                         {
-                            await RaiseEventAsync("OnError", new NetworkEventArgs(
+                            await PushEventAsync("OnError", new NetworkEventArgs(
                                 socket: message.socket,
                                 eventType: NetworkEventType.HandlerEvent,
                                 message: $"处理消息时发生错误: {ex.Message}"
@@ -468,7 +468,7 @@ public class NetworkServer : NetworkObject
             await using var batch = new BatchProcessor(BATCH_SIZE);
 
             // 处理消息
-            await batch.AddAsync(() => RaiseEventAsync("OnDataReceived", new NetworkEventArgs(
+            await batch.AddAsync(() => PushEventAsync("OnDataReceived", new NetworkEventArgs(
                 socket: clientSocket,
                 eventType: NetworkEventType.DataReceived,
                 packet: packet.GetBytes()
@@ -551,7 +551,7 @@ public class NetworkServer : NetworkObject
     {
         if (!_clients.ContainsKey(clientSocket))
         {
-            _ = RaiseEventAsync("OnError", new NetworkEventArgs(
+            _ = PushEventAsync("OnError", new NetworkEventArgs(
                     socket: clientSocket,
                     eventType: NetworkEventType.HandlerEvent,
                     message: "客户端未连接"
@@ -580,7 +580,7 @@ public class NetworkServer : NetworkObject
         }
         catch (Exception ex)
         {
-            _ = RaiseEventAsync("OnError", new NetworkEventArgs(
+            _ = PushEventAsync("OnError", new NetworkEventArgs(
                 socket: clientSocket,
                 eventType: NetworkEventType.HandlerEvent,
                 message: $"发送数据时发生错误: {ex.Message}"
@@ -645,7 +645,7 @@ public class NetworkServer : NetworkObject
         }
         catch (Exception ex)
         {
-            _ = RaiseEventAsync("OnError", new NetworkEventArgs(
+            _ = PushEventAsync("OnError", new NetworkEventArgs(
                 socket: clientSocket,
                 eventType: NetworkEventType.HandlerEvent,
                 message: $"发送数据时发生错误: {ex.Message}"

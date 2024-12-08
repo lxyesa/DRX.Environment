@@ -13,7 +13,7 @@ public class NetworkObject : DRXBehaviour
         _ = this.DoTickAsync(() =>
         {
             // 首先发布通知，告诉所有监听者垃圾回收即将执行
-            _ = RaiseEventAsync("OnGC", new NetworkEventArgs(
+            _ = PushEventAsync("OnGC", new NetworkEventArgs(
                 socket: null!,
                 eventType: NetworkEventType.HandlerEvent,
                 message: "执行垃圾回收"

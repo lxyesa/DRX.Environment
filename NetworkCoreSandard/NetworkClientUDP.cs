@@ -36,7 +36,7 @@ public class NetworkClientUDP : NetworkObject
             // 开始接收数据
             BeginReceive();
 
-            _ = RaiseEventAsync("OnUDPClientStarted", new NetworkEventArgs(
+            _ = PushEventAsync("OnUDPClientStarted", new NetworkEventArgs(
                 socket: _socket,
                 eventType: NetworkEventType.ClientConnected,
                 message: "UDP客户端已启动"
@@ -44,7 +44,7 @@ public class NetworkClientUDP : NetworkObject
         }
         catch (Exception ex)
         {
-            _ = RaiseEventAsync("OnError", new NetworkEventArgs(
+            _ = PushEventAsync("OnError", new NetworkEventArgs(
                 socket: _socket,
                 eventType: NetworkEventType.HandlerEvent,
                 message: $"启动UDP客户端时发生错误: {ex.Message}"
@@ -66,7 +66,7 @@ public class NetworkClientUDP : NetworkObject
         }
         catch (Exception ex)
         {
-            _ = RaiseEventAsync("OnError", new NetworkEventArgs(
+            _ = PushEventAsync("OnError", new NetworkEventArgs(
                 socket: _socket,
                 eventType: NetworkEventType.HandlerEvent,
                 message: $"开始接收数据时发生错误: {ex.Message}"
@@ -83,7 +83,7 @@ public class NetworkClientUDP : NetworkObject
             {
                 NetworkPacket packet = NetworkPacket.Deserialize(buffer.Take(bytesRead).ToArray());
                 
-                _ = RaiseEventAsync("OnDataReceived", new NetworkEventArgs(
+                _ = PushEventAsync("OnDataReceived", new NetworkEventArgs(
                     socket: _socket,
                     eventType: NetworkEventType.DataReceived,
                     message: $"从 {remoteEP} 接收到数据",
@@ -93,7 +93,7 @@ public class NetworkClientUDP : NetworkObject
         }
         catch (Exception ex)
         {
-            _ = RaiseEventAsync("OnError", new NetworkEventArgs(
+            _ = PushEventAsync("OnError", new NetworkEventArgs(
                 socket: _socket,
                 eventType: NetworkEventType.HandlerEvent,
                 message: $"处理接收数据时发生错误: {ex.Message}"
@@ -119,7 +119,7 @@ public class NetworkClientUDP : NetworkObject
                     try
                     {
                         _ = _socket.EndSendTo(ar);
-                        _ = RaiseEventAsync("OnDataSent", new NetworkEventArgs(
+                        _ = PushEventAsync("OnDataSent", new NetworkEventArgs(
                             socket: _socket,
                             eventType: NetworkEventType.HandlerEvent,
                             message: "数据包已发送",
@@ -128,7 +128,7 @@ public class NetworkClientUDP : NetworkObject
                     }
                     catch (Exception ex)
                     {
-                        _ = RaiseEventAsync("OnError", new NetworkEventArgs(
+                        _ = PushEventAsync("OnError", new NetworkEventArgs(
                             socket: _socket,
                             eventType: NetworkEventType.HandlerEvent,
                             message: $"发送数据时发生错误: {ex.Message}"
@@ -138,7 +138,7 @@ public class NetworkClientUDP : NetworkObject
         }
         catch (Exception ex)
         {
-            _ = RaiseEventAsync("OnError", new NetworkEventArgs(
+            _ = PushEventAsync("OnError", new NetworkEventArgs(
                 socket: _socket,
                 eventType: NetworkEventType.HandlerEvent,
                 message: $"准备发送数据时发生错误: {ex.Message}"
@@ -156,7 +156,7 @@ public class NetworkClientUDP : NetworkObject
             _processingCts.Cancel();
             _socket.Close();
             
-            _ = RaiseEventAsync("OnStopped", new NetworkEventArgs(
+            _ = PushEventAsync("OnStopped", new NetworkEventArgs(
                 socket: _socket,
                 eventType: NetworkEventType.ClientDisconnected,
                 message: "UDP客户端已停止"

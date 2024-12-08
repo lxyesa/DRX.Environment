@@ -40,7 +40,7 @@ public class NetworkClient : NetworkObject
         }
         catch (Exception ex)
         {
-            _ = RaiseEventAsync("OnError", new NetworkEventArgs(
+            _ = PushEventAsync("OnError", new NetworkEventArgs(
                 socket: _socket,
                 eventType: NetworkEventType.HandlerEvent,
                 message: $"连接服务器时发生错误: {ex.Message}"
@@ -58,7 +58,7 @@ public class NetworkClient : NetworkObject
             _socket.EndConnect(ar);
             _isConnected = true;
 
-            _ = RaiseEventAsync("OnConnected", new NetworkEventArgs(
+            _ = PushEventAsync("OnConnected", new NetworkEventArgs(
                 socket: _socket,
                 eventType: NetworkEventType.HandlerEvent
             ));
@@ -67,7 +67,7 @@ public class NetworkClient : NetworkObject
         }
         catch (Exception ex)
         {
-            _ = RaiseEventAsync("OnError", new NetworkEventArgs(
+            _ = PushEventAsync("OnError", new NetworkEventArgs(
                 socket: _socket,
                 eventType: NetworkEventType.HandlerEvent,
                 message: $"连接服务器时发生错误: {ex.Message}"
@@ -82,7 +82,7 @@ public class NetworkClient : NetworkObject
     {
         if (!_isConnected)
         {
-            _ = RaiseEventAsync("OnError", new NetworkEventArgs(
+            _ = PushEventAsync("OnError", new NetworkEventArgs(
                 socket: _socket,
                 eventType: NetworkEventType.HandlerEvent,
                 message: "未连接到服务器"
@@ -95,7 +95,7 @@ public class NetworkClient : NetworkObject
             _ = _socket.BeginSend(data, 0, data.Length, SocketFlags.None,
                 new AsyncCallback(SendCallback), null);
 
-            _ = RaiseEventAsync("OnDataSent", new NetworkEventArgs(
+            _ = PushEventAsync("OnDataSent", new NetworkEventArgs(
                 socket: _socket,
                 eventType: NetworkEventType.HandlerEvent,
                 message: $"发送数据包: {packet.Header}",
@@ -104,7 +104,7 @@ public class NetworkClient : NetworkObject
         }
         catch (Exception ex)
         {
-            _ = RaiseEventAsync("OnError", new NetworkEventArgs(
+            _ = PushEventAsync("OnError", new NetworkEventArgs(
                 socket: _socket,
                 eventType: NetworkEventType.HandlerEvent,
                 message: $"发送数据包时发生错误: {ex.Message}"
@@ -122,7 +122,7 @@ public class NetworkClient : NetworkObject
         }
         catch (Exception ex)
         {
-            _ = RaiseEventAsync("OnError", new NetworkEventArgs(
+            _ = PushEventAsync("OnError", new NetworkEventArgs(
                 socket: _socket,
                 eventType: NetworkEventType.HandlerEvent,
                 message: $"发送数据包时发生错误: {ex.Message}"
@@ -161,7 +161,7 @@ public class NetworkClient : NetworkObject
                 byte[] buffer = (byte[])ar.AsyncState;
                 NetworkPacket packet = NetworkPacket.Deserialize(buffer.Take(bytesRead).ToArray());
 
-                _ = RaiseEventAsync("OnDataReceived", new NetworkEventArgs(
+                _ = PushEventAsync("OnDataReceived", new NetworkEventArgs(
                     socket: _socket,
                     eventType: NetworkEventType.HandlerEvent,
                     message: $"收到数据包: {packet.Header}",
@@ -189,7 +189,7 @@ public class NetworkClient : NetworkObject
     {
         if (_isConnected)
         {
-            _ = RaiseEventAsync("OnDisconnected", new NetworkEventArgs(
+            _ = PushEventAsync("OnDisconnected", new NetworkEventArgs(
                 socket: _socket,
                 eventType: NetworkEventType.HandlerEvent
             ));

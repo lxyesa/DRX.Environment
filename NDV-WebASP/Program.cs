@@ -25,7 +25,7 @@ public partial class Program
             Console.InputEncoding = Encoding.UTF8;
 
             _ = LoadSocketServer();
-            
+
 
             Builder = WebApplication.CreateBuilder(args);
             // 注册服务

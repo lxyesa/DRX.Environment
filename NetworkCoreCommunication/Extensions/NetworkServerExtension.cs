@@ -52,7 +52,7 @@ namespace NetworkCoreStandard.Extensions
             server.AddListener("OnDataReceived", (sender, args) =>
             {
                 if (args.Packet?.GetObject<NetworkPacket>().Header == "heartbeat")
-                {   
+                {
                     if (args.Socket.GetComponent<HeartBeatComponent>() is HeartBeatComponent heartbeat)
                     {
                         heartbeat.UpdateHeartbeat();
@@ -65,7 +65,7 @@ namespace NetworkCoreStandard.Extensions
                             .SetHeader("heartbeat")
                             .SetType((int)PacketType.HeartBeat));
 
-                        _ = server.RaiseEventAsync("OnHeartbeatReceived", new NetworkEventArgs(
+                        _ = server.PushEventAsync("OnHeartbeatReceived", new NetworkEventArgs(
                             socket: args.Socket,
                             eventType: NetworkEventType.HandlerEvent,
                             message: "接收到心跳包",
@@ -93,6 +93,55 @@ namespace NetworkCoreStandard.Extensions
                     }
                 }
             }, intervalMs, "HeartbeatCheck");
+        }
+
+        // 额外监听器
+        public static void BeginExtraListener(this NetworkServer server, bool isDebugging = false)
+        {
+            if (isDebugging)
+            {
+                Logger.Log("Server", "拓展:额外拓展组件已启动");
+            }
+
+            server.AddListener("OnDataReceived", (sender, args) =>
+            {
+                if (isDebugging)
+                {
+                    Logger.Log("Server", $"客户端 {args.Socket.RemoteEndPoint} 发送数据包");
+                }
+
+                // 注册包
+                if (args.Packet?.GetObject<NetworkPacket>().Header == "register")
+                {
+                    if (isDebugging)
+                    {
+                        Logger.Log("Server", $"客户端 {args.Socket.RemoteEndPoint} 发送注册包");
+                    }
+
+                    _ = server.PushEventAsync("OnRegister", new NetworkEventArgs(
+                        socket: args.Socket,
+                        eventType: NetworkEventType.HandlerEvent,
+                        message: "接收到注册包",
+                        packet: args.Packet
+                    ));
+                }
+
+                // 登录包
+                if (args.Packet?.GetObject<NetworkPacket>().Header == "login")
+                {
+                    if (isDebugging)
+                    {
+                        Logger.Log("Server", $"客户端 {args.Socket.RemoteEndPoint} 发送登录包");
+                    }
+
+                    _ = server.PushEventAsync("OnLogin", new NetworkEventArgs(
+                        socket: args.Socket,
+                        eventType: NetworkEventType.HandlerEvent,
+                        message: "接收到登录包",
+                        packet: args.Packet
+                    ));
+                }
+            });
         }
     }
 }
