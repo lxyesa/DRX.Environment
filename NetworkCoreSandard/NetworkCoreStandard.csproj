@@ -1,10 +1,11 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
+    <TargetFramework>net9.0-windows</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <LangVersion>11.0</LangVersion>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <!-- <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <IlcGenerateDependencyFile>true</IlcGenerateDependencyFile> -->
@@ -28,5 +29,6 @@
   </ItemGroup> -->
   <ItemGroup>
     <ProjectReference Include="..\NetworkCoreStandard.Enums\NetworkCoreStandard.Enums.csproj" />
+    <ProjectReference Include="..\NetworkCoreStandard.Utils\NetworkCoreStandard.Utils.csproj" />
   </ItemGroup>
 </Project>

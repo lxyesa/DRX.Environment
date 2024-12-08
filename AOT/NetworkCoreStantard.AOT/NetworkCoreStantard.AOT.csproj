@@ -1,0 +1,20 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0-windows</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <PublishAot>true</PublishAot>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <Platform>x64</Platform>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\NetworkCoreCommunication\NetworkCoreCommunication.csproj" />
+    <ProjectReference Include="..\..\NetworkCoreSandard\NetworkCoreStandard.csproj" />
+    <ProjectReference Include="..\..\NetworkCoreStandard.Enums\NetworkCoreStandard.Enums.csproj" />
+  </ItemGroup>
+
+</Project>
