@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using NetworkCoreStandard.EventArgs;
 using NetworkCoreStandard.Models;
+using NetworkCoreStandard.Utils.Common.Models;
 
 namespace NetworkCoreStandard.Utils;
 

@@ -1,6 +1,7 @@
 using System;
 using NetworkCoreStandard.Models;
 using NetworkCoreStandard.Utils;
+using NetworkCoreStandard.Utils.Common.Models;
 using NetworkCoreStandard.Utils.Extensions;
 
 namespace NetworkCoreStandard.Extensions
@@ -16,7 +17,7 @@ namespace NetworkCoreStandard.Extensions
 
             client.AddListener("OnDataReceived", (sender, args) =>
             {
-                if (args.Packet != null && args.Packet.GetObject<NetworkPacket>().Header == "heartbeat")
+                if (args.Packet != null && args.Packet.GetObject<NetworkPacket>().GetHeader() == 3)
                 {
                     if (isDebugging)
                     {
@@ -32,11 +33,33 @@ namespace NetworkCoreStandard.Extensions
                     Logger.Log("Client", "已连接到服务器");
                 }
 
-                client.DoTickAsync(() =>
+                client.AddTask(() =>
                 {
-                    client.Send(new NetworkPacket().SetHeader("heartbeat"));
+                    client.Send(new NetworkPacket().SetHeader(3));
                 }, 30 * 1000, "Heartbeat");
             });
+        }
+
+        /// <summary>
+        /// 发送心跳包
+        /// </summary>
+        /// <param name="client">客户端</param>
+        /// <param name="packet">心跳包</param>
+        /// <returns></returns>
+        public static void SendHeartbeat(this NetworkClient client, NetworkPacket packet)
+        {
+            client.Send(packet);
+        }
+
+        /// <summary>
+        /// 以字节数组形式发送心跳包
+        /// </summary>
+        /// <param name="client">客户端</param>
+        /// <param name="packet">心跳包的字节数组</param>
+        /// <returns></returns>
+        public static void SendHeartbeat(this NetworkClient client, byte[] packet)
+        {
+            client.Send(packet.GetObject<NetworkPacket>());
         }
     }
 }

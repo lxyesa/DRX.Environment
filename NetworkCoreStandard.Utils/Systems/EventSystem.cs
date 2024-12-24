@@ -1,89 +1,142 @@
+using System.Collections.Concurrent;
+using System.Runtime.InteropServices;
 using NetworkCoreStandard.Utils.Interface;
 using NetworkCoreStandard.EventArgs;
-using System.Collections.Concurrent;
+using System.Threading.Channels;
 
-namespace NetworkCoreStandard.Utils.Systems;
-
-public class EventSystem : IEventSystem, IDisposable
+namespace NetworkCoreStandard.Utils.Systems
 {
-    private readonly ConcurrentDictionary<string, List<EventHandler<NetworkEventArgs>>> _eventHandlers = new();
-    private readonly ConcurrentQueue<(string eventName, NetworkEventArgs args)> _eventQueue = new();
-    private readonly SemaphoreSlim _eventSemaphore = new(1);
-    private bool _isProcessingEvents = false;
-    private readonly CancellationTokenSource _processingCts = new();
-
-    // 全局事件处理
-    private static readonly ConcurrentDictionary<string, List<EventHandler<NetworkEventArgs>>> _globalEventHandlers = new();
-    private static readonly object _globalLock = new();
-
-    public EventSystem()
+    public class EventSystem : IEventSystem, IDisposable
     {
-        StartEventProcessing();
-    }
+        // Win32 API 常量和导入
+        private const uint WM_USER = 0x0400;
+        private const uint WM_EVENT = WM_USER + 1;
+        
+        [DllImport("user32.dll")]
+        private static extern bool PostThreadMessage(uint threadId, uint msg, IntPtr wParam, IntPtr lParam);
+        
+        [DllImport("kernel32.dll")]
+        private static extern uint GetCurrentThreadId();
 
-    public void AddListener(string eventName, EventHandler<NetworkEventArgs> handler)
-    {
-        _ = _eventHandlers.AddOrUpdate(
-            eventName,
-            new List<EventHandler<NetworkEventArgs>> { handler },
-            (_, existing) =>
-            {
-                existing.Add(handler);
-                return existing;
-            });
-    }
-
-    public void RemoveListener(string eventName, EventHandler<NetworkEventArgs> handler)
-    {
-        if (_eventHandlers.TryGetValue(eventName, out var handlers))
+        // 高性能并发集合
+        private readonly ConcurrentDictionary<string, ConcurrentBag<EventHandler<NetworkEventArgs>>> _eventHandlers = new();
+        private readonly Channel<(string eventName, NetworkEventArgs args)> _eventChannel;
+        private readonly uint _processingThreadId;
+        private volatile bool _isProcessing;
+        private readonly CancellationTokenSource _cts;
+        
+        public EventSystem()
         {
-            _ = handlers.Remove(handler);
-            if (handlers.Count == 0)
+            var options = new BoundedChannelOptions(10000)
             {
-                _ = _eventHandlers.TryRemove(eventName, out _);
+                FullMode = BoundedChannelFullMode.Wait,
+                SingleReader = true,
+                SingleWriter = false
+            };
+            
+            _eventChannel = Channel.CreateBounded<(string, NetworkEventArgs)>(options);
+            _cts = new CancellationTokenSource();
+            _processingThreadId = GetCurrentThreadId();
+            StartEventProcessing();
+        }
+
+        public void AddListener(string eventName, EventHandler<NetworkEventArgs> handler)
+        {
+            _eventHandlers.AddOrUpdate(
+                eventName,
+                new ConcurrentBag<EventHandler<NetworkEventArgs>>(new[] { handler }),
+                (_, bag) =>
+                {
+                    bag.Add(handler);
+                    return bag;
+                });
+        }
+
+        public void RemoveListener(string eventName, EventHandler<NetworkEventArgs> handler)
+        {
+            if (_eventHandlers.TryGetValue(eventName, out var handlers))
+            {
+                var newBag = new ConcurrentBag<EventHandler<NetworkEventArgs>>(
+                    handlers.Where(h => h != handler));
+                
+                _eventHandlers.TryUpdate(eventName, newBag, handlers);
+                if (newBag.IsEmpty)
+                {
+                    _eventHandlers.TryRemove(eventName, out _);
+                }
             }
         }
-    }
 
-    public Task PushEventAsync(string eventName, NetworkEventArgs args)
-    {
-        _eventQueue.Enqueue((eventName, args));
-        if (_isProcessingEvents)
+        public async Task PushEventAsync(string eventName, NetworkEventArgs args)
         {
-            _ = _eventSemaphore.Release();
+            await _eventChannel.Writer.WriteAsync((eventName, args), _cts.Token);
+            PostThreadMessage(_processingThreadId, WM_EVENT, IntPtr.Zero, IntPtr.Zero);
         }
-        return Task.CompletedTask;
-    }
 
-    public void StartEventProcessing()
-    {
-        if (!_isProcessingEvents)
+        public void StartEventProcessing()
         {
-            _isProcessingEvents = true;
-            _ = ProcessEventQueueAsync(_processingCts.Token);
+            if (_isProcessing) return;
+            
+            _isProcessing = true;
+            Task.Factory.StartNew(
+                ProcessEventsAsync,
+                _cts.Token,
+                TaskCreationOptions.LongRunning,
+                TaskScheduler.Default);
         }
-    }
 
-    public void StopEventProcessing()
-    {
-        _isProcessingEvents = false;
-        _processingCts.Cancel();
-    }
+        public void StopEventProcessing()
+        {
+            _isProcessing = false;
+            _cts.Cancel();
+        }
 
-    private async Task ProcessEventQueueAsync(CancellationToken cancellationToken)
-    {
-        // ... 与原来的ProcessEventQueueAsync相同 ...
-    }
+        private async Task ProcessEventsAsync()
+        {
+            try
+            {
+                while (_isProcessing && !_cts.Token.IsCancellationRequested)
+                {
+                    var (eventName, args) = await _eventChannel.Reader.ReadAsync(_cts.Token);
+                    await ProcessSingleEventAsync(eventName, args);
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                // 正常取消，忽略异常
+            }
+            catch (Exception ex)
+            {
+                Logger.Log(LogLevel.Error, "EventSystem", $"事件处理循环发生错误: {ex}");
+            }
+        }
 
-    private async Task ProcessEventAsync(string eventName, NetworkEventArgs args)
-    {
-        // ... 与原来的ProcessEventAsync相同 ...
-    }
+        private async Task ProcessSingleEventAsync(string eventName, NetworkEventArgs args)
+        {
+            if (!_eventHandlers.TryGetValue(eventName, out var handlers))
+                return;
 
-    public void Dispose()
-    {
-        StopEventProcessing();
-        _eventSemaphore.Dispose();
-        _processingCts.Dispose();
+            var tasks = handlers.Select(handler => Task.Run(() =>
+            {
+                try
+                {
+                    handler.Invoke(this, args);
+                }
+                catch (Exception ex)
+                {
+                    Logger.Log(LogLevel.Error, "EventSystem", 
+                        $"处理事件 {eventName} 时发生异常: {ex.Message}");
+                }
+            }, _cts.Token));
+
+            await Task.WhenAll(tasks);
+        }
+
+        public void Dispose()
+        {
+            StopEventProcessing();
+            _cts.Dispose();
+            _eventChannel.Writer.Complete();
+        }
     }
 }

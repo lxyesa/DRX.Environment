@@ -5,11 +5,12 @@ using NetworkCoreStandard.EventArgs;
 using NetworkCoreStandard.Models;
 using NetworkCoreStandard.Utils;
 using NetworkCoreStandard.Utils.Common;
+using NetworkCoreStandard.Utils.Common.Models;
 using NetworkCoreStandard.Utils.Extensions;
 
 namespace NetworkCoreStandard;
 
-public class NetworkClient : NetworkObject
+public class NetworkClient : DRXNetworkObject
 {
     protected DRXSocket _socket;
     protected string _serverIP;
@@ -91,14 +92,14 @@ public class NetworkClient : NetworkObject
         }
         try
         {
-            byte[] data = packet.Serialize();
+            byte[] data = packet.GetBytes();
             _ = _socket.BeginSend(data, 0, data.Length, SocketFlags.None,
                 new AsyncCallback(SendCallback), null);
 
             _ = PushEventAsync("OnDataSent", new NetworkEventArgs(
                 socket: _socket,
                 eventType: NetworkEventType.HandlerEvent,
-                message: $"发送数据包: {packet.Header}",
+                message: $"发送数据包: {packet.GetHeader()}",
                 packet: packet.GetBytes()
             ));
         }
@@ -164,8 +165,8 @@ public class NetworkClient : NetworkObject
                 _ = PushEventAsync("OnDataReceived", new NetworkEventArgs(
                     socket: _socket,
                     eventType: NetworkEventType.HandlerEvent,
-                    message: $"收到数据包: {packet.Header}",
-                    packet: packet.GetBytes()
+                    message: $"收到数据包: {packet.GetHeader()}",
+                    packet: buffer
                 ));
 
                 // 继续接收数据

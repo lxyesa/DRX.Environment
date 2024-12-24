@@ -14,7 +14,7 @@ public class UserModel
         try
         {
             string usersFilePath = Path.Combine(PathFinder.GetAppPath(), "config", "users.json");
-            await NetworkCoreStandard.IO.File.WriteJsonKeyAsync(
+            await NetworkCoreStandard.Utils.File.WriteJsonKeyAsync(
                 usersFilePath,
                 Username,  // 使用用户名作为键
                 this      // 将整个用户对象作为值

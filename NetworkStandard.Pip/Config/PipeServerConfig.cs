@@ -4,7 +4,7 @@ using NetworkCoreStandard.Utils;
 
 namespace NetworkStandard.Pip.Config;
 
-public class PipeServerConfig : BaseConfig
+public class PipeServerConfig : ConfigItem
 {
     public string PipeName { get; set; } = "NDV_Pipe";
     public int BufferSize { get; set; } = 4096;

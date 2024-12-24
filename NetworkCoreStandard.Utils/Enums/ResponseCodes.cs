@@ -6,8 +6,30 @@ public enum ResponseCodes
     BadRequest = -1,
 }
 
+public enum HeaderType
+{
+    None = 0, // 无/未知
+    Request = 1, // 请求
+    Response = 2, // 响应
+    Heartbeat = 3, // 心跳
+    Notification = 4, // 通知
+    Command = 5, // 命令
+    Error = 6, // 错误
+    Warning = 7, // 警告
+    Info = 8, // 信息
+    Debug = 9, // 调试
+    Custom = 10, // 自定义
+}
+
+public enum RequestIdentifier
+{
+    None = 0, // 无/未知
+    Login = 1, // 登录
+    Register = 2, // 注册
+}
+
 // 错误原因
-public enum SourceError
+public enum ErrorCauses
 {
     // 用户相关 - 登录 (1 - 10)
     UserNotFound = 1, // 用户不存在

@@ -4,13 +4,13 @@ using NetworkCoreStandard.Utils.Extensions;
 
 namespace NetworkCoreStandard;
 
-public class NetworkObject : DRXBehaviour
+public class DRXNetworkObject : DRXBehaviour
 {
     protected int GCInterval = 5 * 1000 * 60;
-    public NetworkObject()
+    public DRXNetworkObject()
     {
         // AssemblyLoader.LoadEmbeddedAssemblies();
-        _ = this.DoTickAsync(() =>
+        _ = this.AddTask(() =>
         {
             // 首先发布通知，告诉所有监听者垃圾回收即将执行
             _ = PushEventAsync("OnGC", new NetworkEventArgs(

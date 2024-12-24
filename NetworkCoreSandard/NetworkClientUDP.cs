@@ -4,11 +4,12 @@ using NetworkCoreStandard.EventArgs;
 using NetworkCoreStandard.Models;
 using NetworkCoreStandard.Utils;
 using NetworkCoreStandard.Utils.Common;
+using NetworkCoreStandard.Utils.Common.Models;
 using NetworkCoreStandard.Utils.Extensions;
 
 namespace NetworkCoreStandard;
 
-public class NetworkClientUDP : NetworkObject
+public class NetworkClientUDP : DRXNetworkObject
 {
     protected DRXSocket _socket;
     protected string _serverIP;
@@ -112,7 +113,7 @@ public class NetworkClientUDP : NetworkObject
     {
         try
         {
-            byte[] data = packet.Serialize();
+            byte[] data = packet.ToJson().GetBytes();
             _ = _socket.BeginSendTo(data, 0, data.Length, SocketFlags.None, _serverEndPoint,
                 ar =>
                 {

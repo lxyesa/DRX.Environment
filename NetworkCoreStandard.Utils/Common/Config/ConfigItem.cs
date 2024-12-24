@@ -1,10 +1,11 @@
-using System;
+
+
 using System.IO;
 using System.Text.Json;
 
-namespace NetworkCoreStandard.Utils;
+namespace NetworkCoreStandard.Utils.Common.Config;
 
-public class BaseConfig
+public abstract class ConfigItem
 {
     public virtual async Task<bool> SaveToFileAsync(string path)
     {
@@ -13,7 +14,7 @@ public class BaseConfig
             throw new ArgumentNullException(nameof(path), "文件路径不能为空");
         }
 
-        if (File.Exists(path))
+        if (System.IO.File.Exists(path))
         {
             Console.WriteLine($"文件已存在: {path}");
             return false;
@@ -62,7 +63,7 @@ public class BaseConfig
             throw new ArgumentNullException(nameof(path), "文件路径不能为空");
         }
 
-        if (!File.Exists(path))
+        if (!System.IO.File.Exists(path))
         {
             Console.WriteLine($"找不到配置文件: {path}");
             return false;

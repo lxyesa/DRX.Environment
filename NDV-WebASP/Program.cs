@@ -8,6 +8,7 @@ using NetworkCoreStandard.Extensions;
 using NetworkCoreStandard.Models;
 using NetworkCoreStandard.Script;
 using NetworkCoreStandard.Utils;
+using NetworkCoreStandard.Utils.Common.Config;
 
 public partial class Program
 {
@@ -75,14 +76,13 @@ public partial class Program
     {
         try
         {
-            LuaEngine = new LuaScriptEngine();
             var config = new ServerConfig
             {
                 IP = "0.0.0.0",
                 Port = 8463,
-                MaxClients = 100,
-                TickRate = 1f / 30f,
-                OnServerStartedTip = "服务器已启动"
+                MessageQueueChannels = 1,
+                MessageQueueSize = 1024,
+                MessageQueueDelay = 500,
             };
             bool saved = await config.SaveToFileAsync(ConfigPath.ServerConfigPath);
 
@@ -97,14 +97,21 @@ public partial class Program
             }
 
             Server = new NetworkServer(config);
-            LuaEngine.LoadFile($"{PathFinder.GetAppPath()}Scripts\\Main.lua", Server);
+
             Server.BeginHeartBeatListener(5000, TimeUnit.Minute, 10, false);
+            Server.BeginExtraListener(false);
+
             Server.AddListener("OnError", (sender, e) =>
             {
                 Logger.Log(NetworkCoreStandard.Utils.LogLevel.Error, "Server", e.Message);
             });
+            Server.AddListener("OnClientConnected", (sender, e) =>
+            {
+                Logger.Log("Server", $"客户端 {e.Socket.RemoteEndPoint} 已连接");
+                Logger.Log("Server", $"当前连接数：{Server.GetConnectedSockets().Count}");
+            });
 
-            // Server.Start(); // 由于在 Lua 脚本中启动，所以这里不需要再次启动
+            Server.Start();
         }
         catch (Exception ex)
         {

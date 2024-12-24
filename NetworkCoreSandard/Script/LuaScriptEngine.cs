@@ -111,7 +111,7 @@ public class LuaScriptEngine : IDisposable
     {
         try
         {
-            if (!File.Exists(filePath))
+            if (!System.IO.File.Exists(filePath))
             {
                 throw new FileNotFoundException($"Lua脚本文件不存在: {filePath}");
             }

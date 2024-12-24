@@ -7,9 +7,10 @@ using NetworkCoreStandard.EventArgs;
 using NetworkCoreStandard.Models;
 using NetworkCoreStandard.Utils;
 using NetworkCoreStandard.Utils.Common;
+using NetworkCoreStandard.Utils.Common.Models;
 using NetworkCoreStandard.Utils.Extensions;
 
-public class NetworkServerUDP : NetworkObject
+public class NetworkServerUDP : DRXNetworkObject
 {
     protected DRXSocket _socket;
     protected int _port;
@@ -55,8 +56,6 @@ public class NetworkServerUDP : NetworkObject
                 eventType: NetworkEventType.ServerStarted,
                 message: $"UDP服务器已启动，监听 {_ip}:{_port}"
             ));
-
-            Logger.Log("Server", _config.OnServerStartedTip);
         }
         catch (Exception ex)
         {
@@ -175,7 +174,7 @@ public class NetworkServerUDP : NetworkObject
     {
         try
         {
-            byte[] data = packet.Serialize();
+            byte[] data = packet.ToJson().GetBytes();
             _ = _socket.BeginSendTo(data, 0, data.Length, SocketFlags.None, endpoint,
                 ar =>
                 {
@@ -212,7 +211,7 @@ public class NetworkServerUDP : NetworkObject
     {
         try
         {
-            byte[] data = packet.Serialize();
+            byte[] data = packet.ToJson().GetBytes();
             var endpoint = new IPEndPoint(IPAddress.Broadcast, port);
             _socket.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.Broadcast, 1);
 
