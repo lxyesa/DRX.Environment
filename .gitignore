@@ -15,3 +15,6 @@
 /NetworkCoreCommunication/obj/
 **/bin/
 **/obj/
+/NetworkCore/x64/Release
+/NetworkCore/x64/Debug
+/x64
