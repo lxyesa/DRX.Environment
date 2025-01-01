@@ -67,6 +67,11 @@ namespace NetworkCoreStandard.Utils.Systems
             return taskName;
         }
 
+        /// <summary>
+        /// 暂停任务
+        /// </summary>
+        /// <param name="taskName"></param>
+        /// <returns></returns>
         public bool PauseTask(string taskName)
         {
             if (_taskStates.TryGetValue(taskName, out var state) && !state.IsPaused)

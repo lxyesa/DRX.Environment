@@ -15,6 +15,7 @@ public class ClientComponent : IComponent
     public int Port { get; private set; }
     public int PermissionLevel { get; set; } = 1;
     public object? Owner { get; set; }
+    public DateTime LastActiveTime { get; private set; } = DateTime.Now;
 
     public DRXSocket? GetSocket()
     {
@@ -50,5 +51,15 @@ public class ClientComponent : IComponent
     public void Dispose()
     {
         
+    }
+
+    public void UpdateLastActiveTime()
+    {
+        LastActiveTime = DateTime.Now;
+    }
+
+    public DateTime GetLastActiveTime()
+    {
+        return LastActiveTime;
     }
 }

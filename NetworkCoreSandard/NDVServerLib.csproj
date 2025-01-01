@@ -18,16 +18,12 @@
     <PackageReference Include="NLua" Version="1.6.0" />
   </ItemGroup>
 
-  <ItemGroup>
-    <Folder Include="Services\" />
-  </ItemGroup>
-
     <!-- 添加资源文件配置 -->
   <!-- <ItemGroup>
     <EmbeddedResource Include="Librarys\*.dll" />
   </ItemGroup> -->
   <ItemGroup>
     <ProjectReference Include="..\NetworkCoreStandard.Enums\NetworkCoreStandard.Enums.csproj" />
-    <ProjectReference Include="..\NetworkCoreStandard.Utils\NetworkCoreStandard.Utils.csproj" />
+    <ProjectReference Include="..\NetworkCoreStandard.Utils\NetworkCoreStandard.csproj" />
   </ItemGroup>
 </Project>

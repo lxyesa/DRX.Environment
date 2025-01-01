@@ -20,6 +20,7 @@ namespace NetworkCoreStandard.Utils.Systems
 
         // 高性能并发集合
         private readonly ConcurrentDictionary<string, ConcurrentBag<EventHandler<NetworkEventArgs>>> _eventHandlers = new();
+        private readonly ConcurrentDictionary<uint, string> _eventIdToNameMap = new();
         private readonly Channel<(string eventName, NetworkEventArgs args)> _eventChannel;
         private readonly uint _processingThreadId;
         private volatile bool _isProcessing;
@@ -52,6 +53,18 @@ namespace NetworkCoreStandard.Utils.Systems
                 });
         }
 
+        public void AddListener(uint eventId, EventHandler<NetworkEventArgs> handler)
+        {
+            if (_eventIdToNameMap.ContainsKey(eventId))
+            {
+                throw new ArgumentException($"Event ID {eventId} already exists.");
+            }
+
+            var eventName = eventId.ToString(); 
+            _ = _eventIdToNameMap.TryAdd(eventId, eventName);
+            AddListener(eventName, handler);
+        }
+
         public void RemoveListener(string eventName, EventHandler<NetworkEventArgs> handler)
         {
             if (_eventHandlers.TryGetValue(eventName, out var handlers))
@@ -71,6 +84,18 @@ namespace NetworkCoreStandard.Utils.Systems
         {
             await _eventChannel.Writer.WriteAsync((eventName, args), _cts.Token);
             PostThreadMessage(_processingThreadId, WM_EVENT, IntPtr.Zero, IntPtr.Zero);
+        }
+
+        public async Task PushEventAsync(uint eventId, NetworkEventArgs args)
+        {
+            if (_eventIdToNameMap.TryGetValue(eventId, out var eventName))
+            {
+                await PushEventAsync(eventName, args);
+            }
+            else
+            {
+                throw new ArgumentException($"Event ID {eventId} not found.");
+            }
         }
 
         public void StartEventProcessing()

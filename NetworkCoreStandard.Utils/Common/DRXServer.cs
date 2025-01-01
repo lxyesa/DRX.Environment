@@ -10,6 +10,10 @@ using NetworkCoreStandard.Utils.Common.Pool;
 using NetworkCoreStandard.Utils.Extensions;
 using System.Runtime.CompilerServices;
 using NetworkCoreStandard.Models;
+using NetworkCoreStandard.Utils.Common.Models;
+using Microsoft.Graph.Models;
+using NetworkCoreStandard.Enums;
+using Org.BouncyCastle.Tls;
 
 namespace NetworkCoreStandard.Utils.Common;
 
@@ -133,7 +137,7 @@ public abstract class DRXServer : DRXBehaviour
         _ = PushEventAsync("OnError", new NetworkEventArgs(
             socket: _socket,
             eventType: NetworkEventType.HandlerEvent,
-            message: $"启动服务器时发生错误: {ex.Message}"
+            message: $"启动服务器时发生错误: {ex.Message}(若能尝试连接服务器成功，则无视该错误)"
         ));
     }
 
@@ -389,6 +393,62 @@ public abstract class DRXServer : DRXBehaviour
         }
         catch { } // 忽略关闭过程中的异常
     }
+
+    /// <summary>
+    /// 启动客户端验证任务
+    /// </summary>
+    public virtual void BeginVerifyClient()
+    {
+        _ = AddTask(VerifyClientTask, 1000 * 60, "verify_client");
+        AddListener("OnDataReceived", VerifyClientHeartBeat);
+    }
+
+    protected virtual async void VerifyClientHeartBeat(object? sender, NetworkEventArgs args)
+    {
+        await PushEventAsync("OnVerifyClient", args);  // 通知客户端连接验证事件
+
+        if (args.Socket is not DRXSocket socket) return;
+        var client = socket.GetComponent<ClientComponent>();
+        if (client == null) return;
+        client.UpdateLastActiveTime();
+
+        /* 这里回应客户端一个心跳包 */
+        var responsePacket = new NetworkPacket()
+            .SetHeader((uint)HeaderType.Heartbeat);
+        Send(socket, responsePacket);
+    }
+
+    /// <summary>
+    /// 允许子类重写以实现自定义的客户端验证逻辑
+    /// </summary>
+    protected virtual void VerifyClientTask()
+    {
+        var sockets = GetConnectedSockets();
+        foreach (var socket in sockets)
+        {
+            var client = socket.GetComponent<ClientComponent>();
+
+            if (client == null)
+            {
+                // 断开没有ClientComponent的连接
+                socket.Disconnect(false);
+                continue;
+            }
+
+            /* 检查客户端是否长时间未活动 */
+            var lastActiveTime = client.GetLastActiveTime();
+
+            /* 超过5分钟未活动则断开连接 */
+            if ((DateTime.Now - lastActiveTime).TotalMinutes > 5)
+            {
+                if (socket != null)
+                {
+                    Logger.Log(LogLevel.Info, "Server", $"客户端 {socket.RemoteEndPoint} 由于长时间未活动而被断开");
+                    _ = DisconnectClient(socket);
+                }
+            }
+        }
+    }
     #endregion
 
     #region 数据处理
@@ -474,6 +534,12 @@ public abstract class DRXServer : DRXBehaviour
     protected virtual void OnDataReceived(DRXSocket clientSocket, byte[] data)
     {
         _ = PushEventAsync("OnDataReceived", new NetworkEventArgs(
+            socket: clientSocket,
+            eventType: NetworkEventType.DataReceived,
+            packet: data
+        ));
+
+        _ = PushEventAsync(1, new NetworkEventArgs(
             socket: clientSocket,
             eventType: NetworkEventType.DataReceived,
             packet: data
@@ -602,11 +668,12 @@ public abstract class DRXServer : DRXBehaviour
     /// 向指定客户端发送数据
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public virtual void Send(DRXSocket clientSocket, byte[] data)
+    public virtual void Send(DRXSocket clientSocket, NetworkPacket packet, string key)
     {
         try
         {
             if (!ValidateClientForSend(clientSocket)) return;
+            var data = packet.Serialize(key);
 
             byte[] sendBuffer = PrepareDataForSend(data);
             ExecuteSend(clientSocket, sendBuffer, data.Length);
@@ -618,12 +685,74 @@ public abstract class DRXServer : DRXBehaviour
     }
 
     /// <summary>
-    /// 向所有已连接的客户端广播数据
+    /// 向指定客户端发送数据（不使用数据包校验系统）
     /// </summary>
-    public virtual async Task BroadcastAsync(byte[] data)
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public virtual void Send(DRXSocket clientSocket, NetworkPacket packet)
+    {
+        try
+        {
+            if (!ValidateClientForSend(clientSocket)) return;
+            var data = packet.Serialize();
+
+            byte[] sendBuffer = PrepareDataForSend(data);
+            ExecuteSend(clientSocket, sendBuffer, data.Length);
+        }
+        catch (Exception ex)
+        {
+            OnSendError(clientSocket, ex);
+        }
+    }
+
+    /// <summary>
+    /// 向所有已连接的客户端广播数据（不使用数据包校验系统）
+    /// </summary>
+    public virtual async Task BroadcastAsync(NetworkPacket packet)
     {
         var tasks = new List<Task>();
         var deadClients = new ConcurrentBag<DRXSocket>();
+        var data = packet.Serialize();
+        var buffer = PrepareDataForSend(data);
+
+        try
+        {
+            foreach (DRXSocket client in _clients.Keys)
+            {
+                tasks.Add(Task.Run(() =>
+                {
+                    try
+                    {
+                        ExecuteSend(client, buffer, data.Length);
+                    }
+                    catch
+                    {
+                        deadClients.Add(client);
+                    }
+                }));
+            }
+
+            await Task.WhenAll(tasks);
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(buffer);
+
+            // 清理断开的连接
+            foreach (var client in deadClients)
+            {
+                _ = HandleDisconnectAsync(client);
+            }
+        }
+    }
+
+    /// <summary>
+    /// 向所有已连接的客户端广播数据
+    /// </summary>
+    public virtual async Task BroadcastAsync(NetworkPacket packet, string key)
+    {
+        var tasks = new List<Task>();
+        var deadClients = new ConcurrentBag<DRXSocket>();
+        var data = packet.Serialize(key);
         var buffer = PrepareDataForSend(data);
 
         try

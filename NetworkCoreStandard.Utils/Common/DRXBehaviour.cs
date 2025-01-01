@@ -43,10 +43,14 @@ public abstract class DRXBehaviour : IDisposable
 
     public virtual void AddListener(string eventName, EventHandler<NetworkEventArgs> handler) 
         => _eventSystem.AddListener(eventName, handler);
+    public virtual void AddListener(uint eventId, EventHandler<NetworkEventArgs> handler)
+        => _eventSystem.AddListener(eventId, handler);
     public virtual void RemoveListener(string eventName, EventHandler<NetworkEventArgs> handler) 
         => _eventSystem.RemoveListener(eventName, handler);
     public virtual Task PushEventAsync(string eventName, NetworkEventArgs args) 
         => _eventSystem.PushEventAsync(eventName, args);
+    public virtual Task PushEventAsync(uint id , NetworkEventArgs args)
+        => _eventSystem.PushEventAsync(id, args);
 
 
     //------------------------------------------------------------------------------ task system methods

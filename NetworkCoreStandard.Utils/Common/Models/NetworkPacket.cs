@@ -143,6 +143,16 @@ namespace NetworkCoreStandard.Utils.Common.Models
             return packet;
         }
 
+        public static NetworkPacket FormBytes(byte[] bytes)
+        {
+            return Deserialize(bytes);
+        }
+
+        public static NetworkPacket FormBytes(byte[] bytes, string key)
+        {
+            return Deserialize(bytes, key);
+        }
+
         /// <summary>
         /// 将字节数组反序列化为网络包
         /// </summary>
@@ -185,6 +195,22 @@ namespace NetworkCoreStandard.Utils.Common.Models
             {
                 throw new InvalidOperationException($"Failed to deserialize network packet: {ex.Message}", ex);
             }
+        }
+
+        /// <summary>
+        /// 将网络包序列化为字节数组
+        /// </summary>
+        /// <param name="packet">要序列化的网络包</param>
+        /// <param name="key">密钥（可选）</param>
+        /// <returns>序列化后的字节数组</returns>
+        public byte[] Serialize(string? key = null)
+        {
+            if (key != null)
+            {
+                hash = GenerateSHA256(key, ToJson());
+            }
+            string jsonStr = ToJson();
+            return Encoding.UTF8.GetBytes(jsonStr);
         }
 
         /// <summary>

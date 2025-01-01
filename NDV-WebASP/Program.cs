@@ -1,22 +1,16 @@
 using System.Text;
 using NetworkCoreStandard;
-using NetworkCoreStandard.Components;
 using NetworkCoreStandard.Config;
-using NetworkCoreStandard.Enums;
-using NetworkCoreStandard.EventArgs;
-using NetworkCoreStandard.Extensions;
-using NetworkCoreStandard.Models;
-using NetworkCoreStandard.Script;
 using NetworkCoreStandard.Utils;
 using NetworkCoreStandard.Utils.Common.Config;
+using NetworkCoreStandard.Utils.Common.Models;
+using NetworkCoreStandard.Utils.Extensions;
 
 public partial class Program
 {
     public static WebApplicationBuilder Builder { get; set; } = null!;
     public static WebApplication App { get; set; } = null!;
-    public static NetworkServer Server { get; set; } = null!;
-    public static NetworkServerUDP ServerUDP { get; set; } = null!;
-    public static LuaScriptEngine LuaEngine { get; set; } = null!;
+    public static NDVServer Server { get; set; } = null!;
     public static void Main(string[] args)
     {
         try
@@ -96,10 +90,7 @@ public partial class Program
                 }
             }
 
-            Server = new NetworkServer(config);
-
-            Server.BeginHeartBeatListener(5000, TimeUnit.Minute, 10, false);
-            Server.BeginExtraListener(false);
+            Server = new NDVServer(config);
 
             Server.AddListener("OnError", (sender, e) =>
             {
@@ -111,6 +102,7 @@ public partial class Program
                 Logger.Log("Server", $"当前连接数：{Server.GetConnectedSockets().Count}");
             });
 
+            Server.BeginVerifyClient();
             Server.Start();
         }
         catch (Exception ex)

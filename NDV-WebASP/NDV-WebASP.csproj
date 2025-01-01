@@ -8,11 +8,11 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\NetworkCoreCommunication\NetworkCoreCommunication.csproj" />
-    <ProjectReference Include="..\NetworkCoreSandard\NetworkCoreStandard.csproj" />
+    <ProjectReference Include="..\NetworkCoreSandard\NDVServerLib.csproj" />
   </ItemGroup>
 
   <ItemGroup>
+    <Folder Include="Models\" />
     <Folder Include="wwwroot\js\" />
   </ItemGroup>
 
