@@ -619,18 +619,6 @@ public class DRXClient : DRXBehaviour
 - **描述:** 主动断开与服务器的连接。
 - **访问修饰符:** `public virtual void`
 
-## 使用示例
-
-using NetworkCoreStandard.Common; using NetworkCoreStandard.Common.Enums.Packet;
-// 初始化客户端 var client = new DRXClient("127.0.0.1", 8463, "your-encryption-key");
-// 订阅事件 client.OnConnectedCallback += (sender, e) => Console.WriteLine("已连接到服务器"); client.OnReceiveCallback += (sender, e) => Console.WriteLine("接收到数据"); client.OnErrorCallback += (sender, e) => Console.WriteLine($"错误: {e.Message}"); client.OnDisconnectedCallback += (sender, e) => Console.WriteLine("已断开与服务器的连接");
-// 连接到服务器 client.Connect();
-// 构建数据包 var packet = new DRXPacket() { Headers = new PacketObject { { "type", PacketTypes.Command }, }, Body = new PacketObject { { "command", "test" }, { "args", new object[] { "testArg" } } } };
-// 发送数据包并等待响应 try { var responseBytes = await client.SendAsync(packet, 5000); // 等待5秒 if (responseBytes != null) { var responsePacket = BasePacket.Unpack(responseBytes, "your-encryption-key"); Console.WriteLine($"响应: {responsePacket?.Body[PacketBodyKey.CommandResponse]}"); } } catch (TimeoutException) { Console.WriteLine("等待响应超时"); } catch (Exception ex) { Console.WriteLine($"发送数据包时发生错误: {ex.Message}"); }
-// 主线程阻塞，防止程序提前退出 Console.ReadLine();
-// 断开连接 client.Disconnect();
-
-
 ## 摘要
 
 `DRXClient` 提供了一个全面的网络客户端实现，支持与服务器的异步连接、数据发送与接收。通过事件机制，用户可以轻松处理连接、接收数据、发送数据及错误等各种网络事件。`SendAsync` 方法允许发送数据包并等待响应，适用于需要同步通信的场景。同时，`DRXClient` 还提供了断开连接的功能，确保资源的正确管理和释放。
