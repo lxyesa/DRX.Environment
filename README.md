@@ -493,4 +493,145 @@
 
 `DRXServer` 提供了一个全面的服务器管理框架，包括客户端连接管理、数据发送与接收、命令处理、客户端验证及广播功能。通过扩展此类，可以实现定制化的服务器行为，以满足特定的应用需求。
 
+# DRXClient 类 API 文档
+
+`DRXClient` 是一个用于连接和通信服务器的网络客户端类。它继承自 `DRXBehaviour`，提供了连接管理、数据发送与接收以及错误处理等功能。
+
+## 类定义
+
+public class DRXClient : DRXBehaviour
+
+
+## 构造函数
+
+### `DRXClient(string serverIP, int serverPort, string key)`
+
+初始化 `DRXClient` 的新实例。
+
+- **参数:**
+  - `serverIP` (`string`): 服务器的IP地址。
+  - `serverPort` (`int`): 服务器的端口号。
+  - `key` (`string`): 用于加密的密钥。
+
+## 事件
+
+### `OnReceiveCallback`
+
+- **描述:** 在接收到数据时触发的事件。
+- **类型:** `EventHandler<NetworkEventArgs>?`
+
+### `OnErrorCallback`
+
+- **描述:** 在发生错误时触发的事件。
+- **类型:** `EventHandler<NetworkEventArgs>?`
+
+### `OnConnectedCallback`
+
+- **描述:** 在成功连接到服务器时触发的事件。
+- **类型:** `EventHandler<NetworkEventArgs>?`
+
+### `OnDisconnectedCallback`
+
+- **描述:** 在断开与服务器的连接时触发的事件。
+- **类型:** `EventHandler<NetworkEventArgs>?`
+
+### `OnDataSentCallback`
+
+- **描述:** 在数据发送完成时触发的事件。
+- **类型:** `EventHandler<NetworkEventArgs>?`
+
+## 属性
+
+### `IsConnected`
+
+- **描述:** 获取客户端的连接状态。
+- **类型:** `bool`
+- **访问修饰符:** `public`
+
+## 方法
+
+### 连接方法
+
+#### `Connect()`
+
+- **描述:** 连接到服务器。
+- **访问修饰符:** `public virtual void`
+
+#### `ConnectCallback(IAsyncResult ar)`
+
+- **描述:** 处理连接回调。
+- **参数:**
+  - `ar` (`IAsyncResult`): 异步操作结果。
+- **访问修饰符:** `protected virtual void`
+
+### 发送方法
+
+#### `SendAsync<T>(T packet, int timeout = 0)`
+
+- **描述:** 发送基于 `BasePacket` 的数据包，并等待服务器的响应。
+- **类型参数:**
+  - `T`: 数据包类型，必须继承自 `BasePacket`。
+- **参数:**
+  - `packet` (`T`): 要发送的数据包。
+  - `timeout` (`int`, 可选): 等待响应的超时时间（毫秒）。默认为 `0` 表示无超时。
+- **返回值:**
+  - `Task<byte[]>`: 服务器响应的数据包字节数组。
+- **访问修饰符:** `public virtual async Task<byte[]>`
+- **说明:** 
+  - 该方法会为每个请求生成一个唯一的 `requestID`，并将其添加到数据包的头部。
+  - 使用 `TaskCompletionSource<byte[]>` 来等待服务器的响应。
+  - 支持通过 `timeout` 参数设置超时时间，超时后会抛出 `TimeoutException`。
+
+#### `SendCallback(IAsyncResult ar)`
+
+- **描述:** 处理发送数据的回调。
+- **参数:**
+  - `ar` (`IAsyncResult`): 异步操作结果。
+- **访问修饰符:** `protected virtual void`
+
+### 接收方法
+
+#### `BeginReceive()`
+
+- **描述:** 开始接收来自服务器的数据。
+- **访问修饰符:** `protected virtual void`
+
+#### `ReceiveCallback(IAsyncResult ar)`
+
+- **描述:** 处理接收到的数据回调。
+- **参数:**
+  - `ar` (`IAsyncResult`): 异步操作结果。
+- **访问修饰符:** `protected virtual void`
+
+### 断开连接方法
+
+#### `HandleDisconnect()`
+
+- **描述:** 处理与服务器断开连接的逻辑。
+- **访问修饰符:** `protected virtual void`
+- **说明:** 
+  - 更新连接状态。
+  - 触发 `OnDisconnectedCallback` 事件。
+  - 关闭 Socket 连接。
+
+#### `Disconnect()`
+
+- **描述:** 主动断开与服务器的连接。
+- **访问修饰符:** `public virtual void`
+
+## 使用示例
+
+using NetworkCoreStandard.Common; using NetworkCoreStandard.Common.Enums.Packet;
+// 初始化客户端 var client = new DRXClient("127.0.0.1", 8463, "your-encryption-key");
+// 订阅事件 client.OnConnectedCallback += (sender, e) => Console.WriteLine("已连接到服务器"); client.OnReceiveCallback += (sender, e) => Console.WriteLine("接收到数据"); client.OnErrorCallback += (sender, e) => Console.WriteLine($"错误: {e.Message}"); client.OnDisconnectedCallback += (sender, e) => Console.WriteLine("已断开与服务器的连接");
+// 连接到服务器 client.Connect();
+// 构建数据包 var packet = new DRXPacket() { Headers = new PacketObject { { "type", PacketTypes.Command }, }, Body = new PacketObject { { "command", "test" }, { "args", new object[] { "testArg" } } } };
+// 发送数据包并等待响应 try { var responseBytes = await client.SendAsync(packet, 5000); // 等待5秒 if (responseBytes != null) { var responsePacket = BasePacket.Unpack(responseBytes, "your-encryption-key"); Console.WriteLine($"响应: {responsePacket?.Body[PacketBodyKey.CommandResponse]}"); } } catch (TimeoutException) { Console.WriteLine("等待响应超时"); } catch (Exception ex) { Console.WriteLine($"发送数据包时发生错误: {ex.Message}"); }
+// 主线程阻塞，防止程序提前退出 Console.ReadLine();
+// 断开连接 client.Disconnect();
+
+
+## 摘要
+
+`DRXClient` 提供了一个全面的网络客户端实现，支持与服务器的异步连接、数据发送与接收。通过事件机制，用户可以轻松处理连接、接收数据、发送数据及错误等各种网络事件。`SendAsync` 方法允许发送数据包并等待响应，适用于需要同步通信的场景。同时，`DRXClient` 还提供了断开连接的功能，确保资源的正确管理和释放。
 
