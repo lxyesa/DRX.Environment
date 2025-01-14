@@ -16,4 +16,8 @@
     <PackageReference Include="System.Drawing.Common" Version="6.0.0" />
     <PackageReference Include="Microsoft.Extensions.ObjectPool" Version="7.0.0" />
   </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="Common\Blazor\" />
+  </ItemGroup>
 </Project>

@@ -1,4 +1,4 @@
-using NetworkCoreStandard.EventArgs;
+using NetworkCoreStandard.Common.Events;
 using NetworkCoreStandard.Utils.Common;
 using NetworkCoreStandard.Utils.Extensions;
 

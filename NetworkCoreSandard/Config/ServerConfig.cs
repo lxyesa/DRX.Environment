@@ -12,4 +12,5 @@ public class ServerConfig : ConfigItem
     public int MessageQueueChannels { get; set; } = Environment.ProcessorCount;
     public int MessageQueueSize { get; set; } = 10000;
     public int MessageQueueDelay { get; set; } = 500;
+    public string Key { get; set; } = Guid.NewGuid().ToString();
 }

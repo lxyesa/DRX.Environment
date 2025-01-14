@@ -73,8 +73,7 @@ namespace NetworkCoreStandard.Utils
                     _ = _sharedBuilder.Append(" [")
                         .Append(level.ToString().ToUpper())
                         .Append("] ")
-                        .Append(message)
-                        .Append(Environment.NewLine);
+                        .Append(message);
 
                     string logText = _sharedBuilder.ToString();
 
@@ -86,6 +85,7 @@ namespace NetworkCoreStandard.Utils
                         Console.ForegroundColor = GetLogLevelColor(level);
                         Console.Write(logText);
                         Console.ForegroundColor = originalColor;
+                        Console.WriteLine();
                         return;
                     }
 

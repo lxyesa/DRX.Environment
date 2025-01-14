@@ -76,13 +76,34 @@ namespace NetworkCoreStandard.Utils.Common.Models
         /// <param name="key">键名</param>
         /// <returns>指定类型的值</returns>
         /// <exception cref="KeyNotFoundException">当键不存在时抛出</exception>
-        public T GetBody<T>(string key)
+        public T? GetBody<T>(string key)
         {
-            if (!body.ContainsKey(key))
+            try
             {
-                throw new KeyNotFoundException("Key not found in body");
+                if (!body.ContainsKey(key))
+                {
+                    throw new KeyNotFoundException("Key not found in body");
+                }
+
+                var node = body[key];
+                if (node is JsonValue jsonValue)
+                {
+                    return jsonValue.GetValue<T>();
+                }
+                else if (node is JsonArray jsonArray)
+                {
+                    return JsonSerializer.Deserialize<T>(jsonArray.ToJsonString());
+                }
+                else
+                {
+                    throw new InvalidOperationException($"The node for key '{key}' is not of type 'JsonValue' or 'JsonArray'");
+                }
             }
-            return body[key]!.GetValue<T>();
+            catch (Exception e)
+            {
+                Logger.Log(LogLevel.Error, "NetworkPacket", e.Message);
+                return default;
+            }
         }
 
         /// <summary>
@@ -143,12 +164,12 @@ namespace NetworkCoreStandard.Utils.Common.Models
             return packet;
         }
 
-        public static NetworkPacket FormBytes(byte[] bytes)
+        public static NetworkPacket? FormBytes(byte[] bytes)
         {
             return Deserialize(bytes);
         }
 
-        public static NetworkPacket FormBytes(byte[] bytes, string key)
+        public static NetworkPacket? FormBytes(byte[] bytes, string key)
         {
             return Deserialize(bytes, key);
         }
@@ -185,7 +206,7 @@ namespace NetworkCoreStandard.Utils.Common.Models
                     bool isValid = new NetworkPacket().VerifySHA256(key, jsonStr, hash);
                     if (!isValid)
                     {
-                        throw new InvalidOperationException("Data has been tampered");
+                        throw new InvalidOperationException("Hash verification failed");
                     }
                 }
 
@@ -193,7 +214,7 @@ namespace NetworkCoreStandard.Utils.Common.Models
             }
             catch (Exception ex)
             {
-                throw new InvalidOperationException($"Failed to deserialize network packet: {ex.Message}", ex);
+                throw new InvalidOperationException("Failed to deserialize data", ex);
             }
         }
 

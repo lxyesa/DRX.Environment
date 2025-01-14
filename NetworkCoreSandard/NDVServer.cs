@@ -1,7 +1,9 @@
 using NetworkCoreStandard.Utils;
 using NetworkCoreStandard.Config;
 using NetworkCoreStandard.Utils.Common;
-using NetworkCoreStandard.Components;
+using NetworkCoreStandard.Common.Events;
+using NetworkCoreStandard.Common.Models;
+using NetworkCoreStandard.Common.Enums;
 
 namespace NetworkCoreStandard;
 
@@ -12,10 +14,11 @@ namespace NetworkCoreStandard;
 public class NDVServer : DRXServer 
 {
     private readonly ServerConfig _config;
-    
+
     public NDVServer(ServerConfig config) : base(config.MessageQueueChannels, config.MessageQueueSize, config.MessageQueueDelay)
     {
         _config = config;
+        _key = _config.Key;
     }
 
     public void Start()
@@ -27,5 +30,10 @@ public class NDVServer : DRXServer
     {
         base.BeginVerifyClient();
         Logger.Log("Server", "客户端连接检查已启动");
+    }
+
+    public string? GetKey()
+    {
+        return _key;
     }
 }

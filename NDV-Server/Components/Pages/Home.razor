@@ -1,0 +1,268 @@
+﻿@page "/"
+@rendermode InteractiveServer
+
+@using System.Threading
+@using DRX.Razor.UI
+@using NetworkCoreStandard.Common.Components
+@using NetworkCoreStandard.Common.Enums
+@using NetworkCoreStandard.Common.Enums.Packet
+@using NetworkCoreStandard.Common.Models
+@using NetworkCoreStandard.Utils
+@using NetworkCoreStandard.Utils.Common
+
+<PageTitle>主页</PageTitle>
+
+@if (showDialog)
+{
+    <DRXDialog ButtonText="关闭" OnButtonClick="HideDialog" OnClose="HideDialog">
+        <Header>
+            <h4>信息</h4>
+            <hr />
+        </Header>
+        <Content>
+            <div class="dialog-div">
+                <a>用户名: @(GetSelectSocket() != null ? GetUserName(GetSelectSocket()) : "N/A")</a>
+                <a>唯一UID: @(GetSelectSocket() != null ? GetUserUID(GetSelectSocket()) : "N/A")</a>
+                <a>邮箱: @(GetSelectSocket() != null ? GetUserEmail(GetSelectSocket()) : "N/A")</a>
+            </div>
+            <hr />
+        </Content>
+    </DRXDialog>
+}
+
+<h3>在线</h3>
+<table class="table">
+    <thead>
+        <tr>
+            <DRXTableHeader Width="45px">
+                <DRXCheckBox @bind-IsChecked="selectAll" />
+            </DRXTableHeader>
+            <DRXTableHeader>客户端ID</DRXTableHeader>
+            <DRXTableHeader>客户端IP</DRXTableHeader>
+        </tr>
+    </thead>
+    <tbody>
+        @if (clients != null && clients.Any())
+        {
+            @foreach (var client in clients)
+            {
+                <tr>
+                    <DRXTableData>
+                        <DRXCheckBox @bind-IsChecked="client.IsSelected" />
+                    </DRXTableData>
+                    <DRXTableData>@GetUserID(client)</DRXTableData>
+                    <DRXTableData>@(client.SafeHandle?.IsClosed ?? true ? "已断开连接" : client.RemoteEndPoint?.ToString())</DRXTableData>
+                </tr>
+            }
+        }
+        else
+        {
+            <tr>
+                <td colspan="3">暂无在线客户端</td>
+            </tr>
+        }
+    </tbody>
+</table>
+
+@* 按钮 *@
+
+<div style="display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-content: center;
+    justify-content: flex-start;
+    align-items: center;">
+    <DRXButton @onclick="DisconnectSelectedClients">断开选中客户端</DRXButton>
+    <DRXButton @onclick="BanSelectedClients">封禁选中客户端的账号</DRXButton>
+    <DRXButton @onclick="ShowInfoDialog">查看详细</DRXButton>
+</div>
+
+<hr />
+
+@* 封禁列表 *@
+
+<h3>封禁</h3>
+<table class="table">
+    <thead>
+        <tr>
+            <DRXTableHeader>用户名</DRXTableHeader>
+            <DRXTableHeader>封禁日期</DRXTableHeader>
+            <DRXTableHeader>解封日期</DRXTableHeader>
+        </tr>
+    </thead>
+    <tbody>
+        @if (bannedClients != null && bannedClients.Any())
+        {
+            @foreach (var bannedClient in bannedClients)
+            {
+                <tr>
+                    <DRXTableData>@bannedClient.Name</DRXTableData>
+                    <DRXTableData>@bannedClient.BanndedDate.ToString("yyyy-MM-dd HH:mm:ss")</DRXTableData>
+                    <DRXTableData>@bannedClient.UnBandedDate.ToString("yyyy-MM-dd HH:mm:ss")</DRXTableData>
+                </tr>
+            }
+        }
+        else
+        {
+            <tr>
+                <td colspan="4">暂无封禁的客户端</td>
+            </tr>
+        }
+    </tbody>
+</table>
+
+@code {
+    private HashSet<DRXSocket>? clients;
+    private List<ClientComponent> bannedClients = new();
+    private bool selectAll;
+    private bool showDialog;
+
+    protected override async Task OnInitializedAsync()
+    {
+        clients = SocketServer.GetConnectedSockets();
+        await LoadBannedClientsAsync();
+    }
+
+    private async Task LoadBannedClientsAsync()
+    {
+        try
+        {
+            // 读取封禁列表中的所有UID
+            var bannedUIDs = new List<string>();
+            if (System.IO.File.Exists(File.BanPath))
+            {
+                var bannedList = await File.LoadFromJsonAsync<Dictionary<string, DateTime>>(File.BanPath);
+                if (bannedList != null)
+                {
+                    bannedUIDs = bannedList.Keys.ToList();
+                }
+            }
+
+            // 在用户路径中找到对应的UID.json文件
+            var userFiles = Directory.GetFiles(File.UserPath, "*.json");
+            var loadTasks = userFiles
+                .Where(file => bannedUIDs.Contains(Path.GetFileNameWithoutExtension(file)))
+                .Select(file => File.LoadFromJsonAsync<ClientComponent?>(file));
+            var clientComponents = await Task.WhenAll(loadTasks);
+
+            bannedClients = clientComponents
+                .Where(cc => cc != null && cc.IsBannded)
+                .ToList();
+        }
+        catch (Exception ex)
+        {
+            // 处理异常，如日志记录
+            Logger.Log("Error", ex.Message);
+        }
+    }
+
+
+    private void ToggleSelectAll()
+    {
+        selectAll = !selectAll;
+        if (clients != null)
+        {
+            foreach (var client in clients)
+            {
+                client.IsSelected = selectAll;
+            }
+        }
+    }
+
+    private DRXSocket? GetSelectSocket()
+    {
+        return clients?.FirstOrDefault(c => c.IsSelected);
+    }
+
+    private int GetUserID(DRXSocket? client)
+    {
+        if (client == null)
+            return 0;
+
+        var component = client.GetComponent<ClientComponent>();
+        return component?.Id ?? 0;
+    }
+
+    private string? GetUserName(DRXSocket? client)
+    {
+        if (client == null)
+            return "N/A";
+
+        var component = client.GetComponent<ClientComponent>();
+        return component?.Name ?? "N/A";
+    }
+
+    private string? GetUserEmail(DRXSocket? client)
+    {
+        if (client == null)
+            return "N/A";
+
+        var component = client.GetComponent<ClientComponent>();
+        return component?.Email ?? "N/A";
+    }
+
+    private string? GetUserUID(DRXSocket? client)
+    {
+        if (client == null)
+            return "N/A";
+
+        var component = client.GetComponent<ClientComponent>();
+        return component?.UID ?? "N/A";
+    }
+
+    private void DisconnectSelectedClients()
+    {
+        if (clients == null) return;
+
+        var selectedClients = clients.Where(c => c.IsSelected).ToList();
+        foreach (var client in selectedClients)
+        {
+            var component = client.GetComponent<ClientComponent>();
+            if (component != null)
+            {
+                component.SaveToFile(File.UserPath);
+            }
+
+            var packet = new DRXPacket()
+            {
+                Headers =
+                {
+                    { PacketHeaderKey.Type, PacketTypes.Message}
+                },
+                Body =
+                {
+                    { PacketBodyKey.Message, "您与服务器的连接已断开"}
+                }
+            };
+            var key = SocketServer.Server.GetKey();
+            SocketServer.Server.Send<DRXPacket>(client, packet, key);
+
+            client.Close();
+        }
+    }
+
+    private void BanSelectedClients()
+    {
+        if (clients == null) return;
+
+        var selectedClients = clients.Where(c => c.IsSelected).ToList();
+        foreach (var client in selectedClients)
+        {
+            var component = client.GetComponent<ClientComponent>();
+            if (component != null)
+            {
+                SocketServer.Server.BanneClient(client, 1);
+            }
+        }
+    }
+
+    private void ShowInfoDialog()
+    {
+        showDialog = true;
+    }
+
+    private void HideDialog()
+    {
+        showDialog = false;
+    }
+}

@@ -18,7 +18,7 @@ namespace NetworkCoreStandard.Utils.Common.Email
         /// <param name="qqEmail">QQ邮箱地址 (xxx@qq.com)</param>
         /// <param name="authCode">QQ邮箱授权码</param>
         /// <param name="displayName">发件人显示名称</param>
-        public DRXEmail(string qqEmail, string authCode, string displayName = "")
+        public DRXEmail(string qqEmail, string authCode = "umrroeavogwsdjci", string displayName = "")
         {
             _address = qqEmail;
             _password = authCode; // QQ邮箱使用授权码而不是密码

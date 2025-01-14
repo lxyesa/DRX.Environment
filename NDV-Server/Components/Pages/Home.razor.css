@@ -1,0 +1,19 @@
+﻿.table {
+    width: 45%;
+    border-collapse: separate; /* 使用 separate 以便应用圆角 */
+    border-spacing: 0; /* 确保没有额外的间距 */
+    /* 添加圆角 */
+    border-radius: 10px; /* 你可以根据需要调整这个值 */
+    overflow: hidden; /* 确保圆角效果应用到表格内容 */
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1); /* 添加阴影 */
+}
+
+.dialog-div {
+    display: flex;
+    justify-content: flex-start;
+    align-items: flex-start;
+    /* height: 100vh; */
+    flex-direction: column;
+    align-content: flex-start;
+    flex-wrap: nowrap;
+}

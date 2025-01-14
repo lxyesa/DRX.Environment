@@ -28,7 +28,7 @@ public abstract class ConfigItem
             {
                 Indented = true,
                 SkipValidation = true,
-                Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping // 添加这行
+                Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
             });
 
             // 使用运行时类型进行序列化

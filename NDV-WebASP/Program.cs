@@ -1,5 +1,6 @@
 using System.Text;
 using NetworkCoreStandard;
+using NetworkCoreStandard.Common.Command;
 using NetworkCoreStandard.Config;
 using NetworkCoreStandard.Utils;
 using NetworkCoreStandard.Utils.Common.Config;
@@ -21,7 +22,6 @@ public partial class Program
 
             _ = LoadSocketServer();
 
-
             Builder = WebApplication.CreateBuilder(args);
             // 注册服务
             Builder.Services.AddControllers();
@@ -37,6 +37,7 @@ public partial class Program
             });
 
             Builder.Services.AddAuthorization();
+            Builder.Services.AddRazorPages(); // 添加Razor Pages支持
 
             Builder.WebHost.UseUrls("http://0.0.0.0:8462");
             App = Builder.Build();
@@ -50,11 +51,14 @@ public partial class Program
             // 配置默认文件选项
             var defaultFileOptions = new DefaultFilesOptions();
             defaultFileOptions.DefaultFileNames.Clear();
-            defaultFileOptions.DefaultFileNames.Add("/Pages/Index.html");
+            defaultFileOptions.DefaultFileNames.Add("Index.cshtml");
             App.UseDefaultFiles(defaultFileOptions);
 
             // 添加静态文件支持
             App.UseStaticFiles();
+
+            // 映射Razor Pages
+            App.MapRazorPages();
 
             Server.Start();
             App.Run();
@@ -98,11 +102,18 @@ public partial class Program
             });
             Server.AddListener("OnClientConnected", (sender, e) =>
             {
-                Logger.Log("Server", $"客户端 {e.Socket.RemoteEndPoint} 已连接");
-                Logger.Log("Server", $"当前连接数：{Server.GetConnectedSockets().Count}");
+                Logger.Log(
+                    "Server", "user_connected".I18n("server", new Variable("user_name", e.Socket.LocalEndPoint.ToString())));
+            });
+            Server.AddListener("OnServerStarted", (sender, e) =>
+            {
+                Logger.Log("Server", "server_started".I18n("server"));
             });
 
+            Server.RegisterCommand("test", new Test());
+
             Server.BeginVerifyClient();
+            Server.BeginReceiveCommand();
             Server.Start();
         }
         catch (Exception ex)
