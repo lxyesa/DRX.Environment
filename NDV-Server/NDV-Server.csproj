@@ -9,8 +9,8 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\DRX.Razor.UI\DRX.Razor.UI.csproj" />
-    <ProjectReference Include="..\NetworkCoreSandard\NDVServerLib.csproj" />
+    <ProjectReference Include="..\DRX.Framework.Blazor\DRX.Framework.Blazor.csproj" />
+    <ProjectReference Include="..\NDVServerLib\NDVServerLib.csproj" />
   </ItemGroup>
 
 </Project>

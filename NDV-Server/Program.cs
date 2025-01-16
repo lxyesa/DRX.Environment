@@ -4,13 +4,14 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using NetworkCoreStandard;
 using NetworkCoreStandard.Config;
-using NetworkCoreStandard.Utils.Common.Config;
 using NetworkCoreStandard.Utils;
 using NDV_Server.Components.Pages;
 using NetworkCoreStandard.Utils.Common;
-using NetworkCoreStandard.Common.Command;
 using NetworkCoreStandard.Common.Models;
 using NetworkCoreStandard.Common.Enums;
+using NetworkCoreStandard.Common.Base;
+using NetworkCoreStandard.Common.Base.Command;
+using NDVServerLib.Command;
 
 namespace NDV_Server
 {
@@ -85,7 +86,7 @@ namespace NDV_Server
 
             Server.OnDataReceived += (sender, e) =>
             {
-                var packet = BasePacket.Unpack<DRXPacket>(e.Packet, config.Key);
+                var packet = DRXPacket.Unpack(e.Packet, config.Key);
             };
         }
 
@@ -94,12 +95,16 @@ namespace NDV_Server
             InitCommanad();
 
             Server.BeginReceiveCommand();
+            Server.OnError += (sender, e) =>
+            {
+                Logger.Log("Server", e.Message);
+            };
             Server.Start();
         }
 
         public static void InitCommanad()
         {
-            Server.RegisterCommand("test", new Test());
+            Server.RegisterCommand("test", new NDVRegister());
         }
 
         public static int GetConnectionCount()

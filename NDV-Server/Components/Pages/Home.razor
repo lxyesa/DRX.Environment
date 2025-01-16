@@ -2,11 +2,12 @@
 @rendermode InteractiveServer
 
 @using System.Threading
-@using DRX.Razor.UI
+@using DRX.Razor.UI.Common
 @using NetworkCoreStandard.Common.Components
 @using NetworkCoreStandard.Common.Enums
 @using NetworkCoreStandard.Common.Enums.Packet
 @using NetworkCoreStandard.Common.Models
+@using NetworkCoreStandard.Common.Utility
 @using NetworkCoreStandard.Utils
 @using NetworkCoreStandard.Utils.Common
 
@@ -129,9 +130,9 @@
         {
             // 读取封禁列表中的所有UID
             var bannedUIDs = new List<string>();
-            if (System.IO.File.Exists(File.BanPath))
+            if (System.IO.File.Exists(DRXFile.BanPath))
             {
-                var bannedList = await File.LoadFromJsonAsync<Dictionary<string, DateTime>>(File.BanPath);
+                var bannedList = await DRXFile.LoadFromJsonAsync<Dictionary<string, DateTime>>(DRXFile.BanPath);
                 if (bannedList != null)
                 {
                     bannedUIDs = bannedList.Keys.ToList();
@@ -139,10 +140,10 @@
             }
 
             // 在用户路径中找到对应的UID.json文件
-            var userFiles = Directory.GetFiles(File.UserPath, "*.json");
+            var userFiles = Directory.GetFiles(DRXFile.UserPath, "*.json");
             var loadTasks = userFiles
                 .Where(file => bannedUIDs.Contains(Path.GetFileNameWithoutExtension(file)))
-                .Select(file => File.LoadFromJsonAsync<ClientComponent?>(file));
+                .Select(file => DRXFile.LoadFromJsonAsync<ClientComponent?>(file));
             var clientComponents = await Task.WhenAll(loadTasks);
 
             bannedClients = clientComponents
@@ -220,7 +221,7 @@
             var component = client.GetComponent<ClientComponent>();
             if (component != null)
             {
-                component.SaveToFile(File.UserPath);
+                component.SaveToFile(DRXFile.UserPath);
             }
 
             var packet = new DRXPacket()
@@ -231,7 +232,7 @@
                 },
                 Body =
                 {
-                    { PacketBodyKey.Message, "您与服务器的连接已断开"}
+                    { PacketBodyKey.Message, "client_disconnected".GetGroup("message")}
                 }
             };
             var key = SocketServer.Server.GetKey();
