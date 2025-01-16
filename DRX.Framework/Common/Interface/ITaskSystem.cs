@@ -1,4 +1,4 @@
-using DRX.Framework.Models;
+using DRX.Framework.Common.Models;
 
 namespace DRX.Framework.Common.Interface;
 

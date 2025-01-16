@@ -1,4 +1,4 @@
-using DRX.Framework.Utils.Common.Config;
+using DRX.Framework.Common.Item;
 using System.Collections.Concurrent;
 using System.Diagnostics;
 

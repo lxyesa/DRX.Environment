@@ -1,4 +1,4 @@
-namespace DRX.Framework.Models;
+namespace DRX.Framework.Common.Models;
 
 public class TickTaskState
 {

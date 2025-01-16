@@ -1,7 +1,6 @@
-using System;
-using NetworkCoreStandard.Common.Base;
+using DRX.Framework.Common.Base;
 
-namespace NetworkCoreStandard.Config;
+namespace NDVServerLib.Config;
 
 public class ServerConfig : BaseConfig
 {

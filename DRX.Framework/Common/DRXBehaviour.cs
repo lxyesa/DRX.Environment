@@ -1,9 +1,9 @@
 using DRX.Framework.Common.Args;
 using DRX.Framework.Common.Interface;
+using DRX.Framework.Common.Models;
 using DRX.Framework.Common.Systems;
-using DRX.Framework.Models;
 
-namespace DRX.Framework.Utils.Common;
+namespace DRX.Framework.Common;
 
 public abstract class DRXBehaviour : IDisposable
 {

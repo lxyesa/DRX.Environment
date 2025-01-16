@@ -1,7 +1,7 @@
 ﻿using Markdig;
 using System.Net.Mail;
 
-namespace DRX.Framework.Utils.Common.Email
+namespace DRX.Framework.Common.Email
 {
     public class DRXEmail
     {

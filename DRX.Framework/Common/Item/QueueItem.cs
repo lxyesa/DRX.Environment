@@ -1,4 +1,4 @@
-namespace DRX.Framework.Utils.Common.Config;
+namespace DRX.Framework.Common.Item;
 
 public class QueueItem
 {
@@ -21,7 +21,7 @@ public class QueueItem
     public QueueItem(Action callback, int priority, TimeSpan? timeout = null)
     {
         Callback = callback;
-        CallbackWithCancellation = (token) => 
+        CallbackWithCancellation = (token) =>
         {
             if (_isCancellationRequested || token.IsCancellationRequested)
             {
@@ -47,8 +47,8 @@ public class QueueItem
     }
 
     public bool IsCancelled => _isCancellationRequested || CancellationSource.Token.IsCancellationRequested;
-    
-    public bool IsExpired => Timeout.HasValue && (DateTime.Now - EnqueueTime) > Timeout.Value;
+
+    public bool IsExpired => Timeout.HasValue && DateTime.Now - EnqueueTime > Timeout.Value;
 }
 
 public enum QueueItemStatus

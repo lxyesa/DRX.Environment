@@ -1,6 +1,6 @@
 // NetworkCoreStandard.Utils/Systems/TaskSystem.cs
 using DRX.Framework.Common.Interface;
-using DRX.Framework.Models;
+using DRX.Framework.Common.Models;
 using System.Collections.Concurrent;
 
 namespace DRX.Framework.Common.Systems

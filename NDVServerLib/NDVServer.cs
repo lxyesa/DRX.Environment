@@ -1,16 +1,14 @@
-using NetworkCoreStandard.Utils;
-using NetworkCoreStandard.Config;
-using NetworkCoreStandard.Utils.Common;
-using NetworkCoreStandard.Common.Models;
-using NetworkCoreStandard.Common.Enums;
+using DRX.Framework;
+using DRX.Framework.Common;
+using NDVServerLib.Config;
 
-namespace NetworkCoreStandard;
+namespace NDVServerLib;
 
 /// <summary>
 /// 网络服务器类，处理TCP连接和事件分发
 /// </summary>
 
-public class NDVServer : DRXServer 
+public class NDVServer : DRXServer
 {
     private readonly ServerConfig _config;
 

@@ -1,11 +1,9 @@
-using NetworkCoreStandard.Common;
-using NetworkCoreStandard.Common.Args;
-using NetworkCoreStandard.Common.Enums.Packet;
-using NetworkCoreStandard.Common.Models;
-using NetworkCoreStandard.Utils;
-using System.Windows.Input;
+using DRX.Framework.Common;
+using DRX.Framework.Common.Args;
+using DRX.Framework.Common.Enums.Packet;
+using DRX.Framework.Common.Models;
 
-namespace NetworkCoreStandard;
+namespace NDVServerLib;
 
 public class NDVClient : DRXClient
 {

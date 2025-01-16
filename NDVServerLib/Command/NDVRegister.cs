@@ -1,12 +1,7 @@
-﻿using NetworkCoreStandard.Common.Args;
-using NetworkCoreStandard.Common.Base.Command;
-using NetworkCoreStandard.Common.Utility;
-using NetworkCoreStandard.Utils;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿using DRX.Framework;
+using DRX.Framework.Common.Args;
+using DRX.Framework.Common.Base.Command;
+using DRX.Framework.Common.Utility;
 
 namespace NDVServerLib.Command
 {
@@ -21,7 +16,7 @@ namespace NDVServerLib.Command
                 Input = assd,
                 Param1 = "[",
                 Param2 = "]",
-                ReturnMode = NetworkCoreStandard.Common.Utility.DRXRegex.ReturnMode.ReturnMatchedStrings,
+                ReturnMode = DRXRegex.ReturnMode.ReturnMatchedStrings,
             };
 
             Logger.Log("abc",DRXRegex.Execute(par).ToString());

@@ -1,3 +1,4 @@
+using DRX.Framework.Common.Models;
 using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
 

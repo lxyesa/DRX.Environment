@@ -3,7 +3,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
-namespace DRX.Framework.Utils.Common.Models
+namespace DRX.Framework.Common.Models
 {
     /// <summary>
     /// 网络数据包结构
