@@ -13,7 +13,7 @@ namespace DRX.Framework.Common.Base
     public abstract class BasePacket<T> where T : BasePacket<T>, new()
     {
         private ArgObject _headers = new ArgObject();
-        private ArgObject _body = new ArgObject();
+        private ArgObject _data = new ArgObject();
         private ArgObject _state = new ArgObject();
         private string _hash = string.Empty;
 
@@ -25,7 +25,7 @@ namespace DRX.Framework.Common.Base
         /// <summary>
         /// 获取或设置数据包的主体。
         /// </summary>
-        public ArgObject Body { get => _body; set => _body = value; }
+        public ArgObject Data { get => _data; set => _data = value; }
 
         /// <summary>
         /// 获取或设置数据包的状态。
@@ -43,7 +43,7 @@ namespace DRX.Framework.Common.Base
         public BasePacket()
         {
             Headers = new ArgObject();
-            Body = new ArgObject();
+            Data = new ArgObject();
             State = new ArgObject();
             Hash = string.Empty;
         }
@@ -57,7 +57,7 @@ namespace DRX.Framework.Common.Base
             var jsonObject = new JsonObject
             {
                 { "headers", Headers.ToJsonObject() },
-                { "body", Body.ToJsonObject() },
+                { "data", Data.ToJsonObject() },
                 { "state", State.ToJsonObject() },
                 { "hash", JsonValue.Create(Hash) }
             };
@@ -90,9 +90,9 @@ namespace DRX.Framework.Common.Base
                 packet.Headers = ArgObject.FromJsonObject(headers.AsObject());
             }
 
-            if (jsonObject.TryGetPropertyValue("body", out var body))
+            if (jsonObject.TryGetPropertyValue("data", out var data))
             {
-                packet.Body = ArgObject.FromJsonObject(body.AsObject());
+                packet.Data = ArgObject.FromJsonObject(data.AsObject());
             }
 
             if (jsonObject.TryGetPropertyValue("state", out var state))
@@ -151,6 +151,24 @@ namespace DRX.Framework.Common.Base
             throw new ArgumentException("Invalid JSON structure for hashing", nameof(originalJson));
         }
 
+        public T TryGenerateHash(string key16char)
+        {
+            var packet = new T();
+
+            try
+            {
+                string jsonString = ToJson();
+                Hash = GenerateSHA256(key16char, jsonString);
+                jsonString = ToJson(); // 更新后的 JSON 字符串包含哈希值
+                packet = FromJson(jsonString, key16char);
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException("Hash generation failed", ex);
+            }
+            return packet;
+        }
+
         /// <summary>
         /// 验证 SHA256 哈希值。
         /// </summary>
@@ -199,7 +217,38 @@ namespace DRX.Framework.Common.Base
             }
 
             string jsonString = Encoding.UTF8.GetString(data);
+
             return FromJson(jsonString, key);
+        }
+
+        /// <summary>
+        /// 解包 Base64 字符串为数据包。
+        /// </summary>
+        /// <param name="base64">Base64 编码的字符串。</param>
+        /// <param name="key">用于哈希验证的密钥。</param>
+        /// <returns>数据包的实例。</returns>
+        /// <exception cref="ArgumentException">当密钥长度不是 16 个字符或 Base64 格式无效时抛出。</exception>
+        public static T UnpackBase64(string base64, string key)
+        {
+            if (string.IsNullOrWhiteSpace(base64))
+            {
+                throw new ArgumentException("Base64 字符串不能为空。", nameof(base64));
+            }
+
+            // 去除字符串两端的引号
+            string trimmedBase64 = base64.Trim('"');
+
+            byte[] decodedBytes;
+            try
+            {
+                decodedBytes = Convert.FromBase64String(trimmedBase64);
+            }
+            catch (FormatException ex)
+            {
+                throw new ArgumentException("提供的字符串不是有效的 Base64 格式。", nameof(base64), ex);
+            }
+
+            return Unpack(decodedBytes, key);
         }
 
         /// <summary>

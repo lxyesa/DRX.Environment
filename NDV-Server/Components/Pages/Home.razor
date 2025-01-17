@@ -3,7 +3,7 @@
 
 @using System.Threading
 @using DRX.Framework
-@using DRX.Framework.Blazor.UI.Common
+@using DRX.Framework.Blazor.Common.UI
 @using DRX.Framework.Common
 @using DRX.Framework.Common.Components
 @using DRX.Framework.Common.Enums.Packet
@@ -228,7 +228,7 @@
                 {
                     { PacketHeaderKey.Type, PacketTypes.Message}
                 },
-                Body =
+                Data =
                 {
                     { PacketBodyKey.Message, "client_disconnected".GetGroup("message")}
                 }

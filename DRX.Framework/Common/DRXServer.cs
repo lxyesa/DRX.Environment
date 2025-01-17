@@ -592,7 +592,7 @@ public abstract class DRXServer : DRXBehaviour
             {
                 { "type", "heartbeat" }
             },
-            Body = { { "message", "pong" } }
+            Data = { { "message", "pong" } }
         };
         Send<DRXPacket>(socket, responsePacket, _key);
     }
@@ -659,12 +659,12 @@ public abstract class DRXServer : DRXBehaviour
         var type = packet.Headers["type"];
         if (type == null || type.ToString() != "command") return;
 
-        var command = packet.Body["command"].ToString();
+        var command = packet.Data["command"].ToString();
         if (command == null) return;
 
         if (HasCommand(command))
         {
-            var commandArgs = packet.Body.ToArray("args");
+            var commandArgs = packet.Data.ToArray("args");
             ExecuteCommandAndRespond(command, commandArgs, socket, packet);
         }
         else
@@ -700,7 +700,7 @@ public abstract class DRXServer : DRXBehaviour
                 {
                     { PacketHeaderKey.Type, PacketTypes.CommandResponse }
                 },
-                Body =
+                Data =
                 {
                     { PacketBodyKey.Message, "" },
                     { PacketBodyKey.CommandResponse, commandResult }

@@ -2,6 +2,7 @@ using DRX.Framework;
 using DRX.Framework.Common;
 using DRX.Framework.Common.Base;
 using DRX.Framework.Common.Models;
+using DRX.Framework.Common.Utility;
 using NDV_Server.Components;
 using NDVServerLib;
 using NDVServerLib.Command;
@@ -13,13 +14,29 @@ namespace NDV_Server
     {
         public static void Main(string[] args)
         {
+            SocketServer.Start();
+
             var builder = WebApplication.CreateBuilder(args);
 
             // Add services to the container.
             builder.Services.AddRazorComponents()
                 .AddInteractiveServerComponents();
+            // 添加控制器服务
+            builder.Services.AddControllers();
+
+            // 配置跨域（根据需求）
+            builder.Services.AddCors(options =>
+            {
+                options.AddPolicy("AllowAll",
+                    builder => builder.AllowAnyOrigin()
+                                      .AllowAnyMethod()
+                                      .AllowAnyHeader());
+            });
 
             var app = builder.Build();
+
+            // 使用跨域策略
+            app.UseCors("AllowAll");
 
             // Configure the HTTP request pipeline.
             if (!app.Environment.IsDevelopment())
@@ -37,7 +54,8 @@ namespace NDV_Server
             app.MapRazorComponents<App>()
                 .AddInteractiveServerRenderMode();
 
-            SocketServer.Start();
+            // 配置控制器路由
+            app.MapControllers();
 
             app.Run();
         }
@@ -59,14 +77,14 @@ namespace NDV_Server
                 MessageQueueDelay = 2000,
                 Key = "ffffffffffffffff"
             };
-            var savedTask = config.SaveToFileAsync(ConfigPath.ServerConfigPath);
+            var savedTask = config.SaveToFileAsync(DRXFile.ConfigPath);
             savedTask.Wait();
             bool saved = savedTask.Result;
 
             if (!saved)
             {
                 Logger.Log("Server", "保存配置文件失败");
-                var loadedTask = config.LoadFromFileAsync(ConfigPath.ServerConfigPath);
+                var loadedTask = config.LoadFromFileAsync(DRXFile.ConfigPath);
                 loadedTask.Wait();
                 bool loaded = loadedTask.Result;
                 if (!loaded)
@@ -81,6 +99,7 @@ namespace NDV_Server
             Server.OnDataReceived += (sender, e) =>
             {
                 var packet = DRXPacket.Unpack(e.Packet, config.Key);
+                Logger.Log("Server", $"Received packet: {packet?.Hash}");
             };
         }
 

@@ -7,7 +7,7 @@ namespace DRX.Framework.Common.Utility;
 
 public class DRXFile : IDisposable
 {
-    public static readonly string ConfigPath = Path.Combine(AppContext.BaseDirectory, "config.json");
+    public static readonly string ConfigPath = Path.Combine(AppContext.BaseDirectory, "data", "configs", "config.json");
     public static readonly string DataPath = Path.Combine(AppContext.BaseDirectory, "data");
     public static readonly string UserPath = Path.Combine(AppContext.BaseDirectory, "data", "users");
     public static readonly string BanPath = Path.Combine(AppContext.BaseDirectory, "data", "banned_list.json");
