@@ -17,12 +17,11 @@ Wiki编辑者 :<[<strong>蓝龙</strong>](https://space.bilibili.com/168162766)>
 
 - ### [DRX.Framework](https://github.com/lxyesa/DRX.Environment/tree/master/DRX.Framework)  包含对DRX提供支持的基本开发环境
 
----
 
 - ### [DRX.Framework.Media](https://github.com/lxyesa/DRX.Environment/tree/master/DRX.Framework.Media)  为WinUI (Windows)设计的拓展库
-  ***依赖于 [DRX.Framework](https://github.com/lxyesa/DRX.Environment/tree/master/DRX.Framework)***
+    >***依赖于 [DRX.Framework](https://github.com/lxyesa/DRX.Environment/tree/master/DRX.Framework)***
 
----
-  
+
 - ### [DRX.Framework.Blazor](https://github.com/lxyesa/DRX.Environment/tree/master/DRX.Framework.Blazor)  为 Blazor 平台设计的基于Web服务器的拓展库
-  ***依赖于 [DRX.Framework](https://github.com/lxyesa/DRX.Environment/tree/master/DRX.Framework)***
+    >***依赖于 [DRX.Framework](https://github.com/lxyesa/DRX.Environment/tree/master/DRX.Framework)***
+
