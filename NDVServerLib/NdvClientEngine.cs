@@ -1,11 +1,11 @@
-using DRX.Framework.Common;
 using DRX.Framework.Common.Args;
+using DRX.Framework.Common.Engine;
 using DRX.Framework.Common.Enums.Packet;
 using DRX.Framework.Common.Models;
 
 namespace NDVServerLib;
 
-public class NDVClient : DRXClient
+public class NdvClientEngine : ClientEngine
 {
     // ------------------------------------------------------------- 私有事件
     public event EventHandler<NetworkEventArgs>? OnReceiveMessage; // 接收消息事件
@@ -15,7 +15,7 @@ public class NDVClient : DRXClient
     /// <summary>
     /// 初始化网络客户端
     /// </summary>
-    public NDVClient(string serverIP, int serverPort, string key) : base(serverIP, serverPort, key)
+    public NdvClientEngine(string serverIP, int serverPort, string key) : base(serverIP, serverPort, key)
     {
         OnReceiveCallback += _client_OnReceiveCallback;
     }

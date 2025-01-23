@@ -1,0 +1,12 @@
+﻿<VSTemplate Version="3.0.0" Type="Item" xmlns="http://schemas.microsoft.com/developer/vstemplate/2005">
+  <TemplateData>
+    <Name>My Window Template</Name>
+    <Description>A template for creating a new window with Mica effect.</Description>
+    <ProjectType>CSharp</ProjectType>
+    <DefaultName>MyWindow</DefaultName>
+  </TemplateData>
+  <TemplateContent>
+    <ProjectItem ReplaceParameters="true">MainWindow.xaml</ProjectItem>
+    <ProjectItem ReplaceParameters="true">MainWindow.xaml.cs</ProjectItem>
+  </TemplateContent>
+</VSTemplate>
