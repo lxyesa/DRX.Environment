@@ -12,54 +12,58 @@ using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Sockets;
 using System.Runtime.CompilerServices;
+using DRX.Framework.Common.Interface;
 
-namespace DRX.Framework.Common;
+namespace DRX.Framework.Common.Engine;
 
 /// <summary>
 /// 抽象服务器类，负责管理客户端连接、事件处理和数据传输。
 /// </summary>
-public abstract class DRXServer : DRXBehaviour
+public abstract class ServerEngine : DrxBehaviour, IEngine
 {
+    /* 服务器引擎类型 */
+    public EngineType Type => EngineType.Server;
+
     #region 字段
     /// <summary>
     /// 服务器Socket实例。
     /// </summary>
-    protected DRXSocket _socket;
+    protected DRXSocket Socket;
 
     /// <summary>
     /// 服务器监听端口。
     /// </summary>
-    protected int _port;
+    protected int Port;
 
     /// <summary>
     /// 服务器IP地址。
     /// </summary>
-    protected string _ip = string.Empty;
+    protected string Ip = string.Empty;
 
     /// <summary>
     /// 存储连接的客户端Socket。
     /// </summary>
-    protected readonly ConcurrentDictionary<DRXSocket, byte> _clients = new();
+    protected readonly ConcurrentDictionary<DRXSocket, byte> Clients = new();
 
     /// <summary>
     /// 存储等待响应的请求。
     /// </summary>
-    protected readonly ConcurrentDictionary<string, TaskCompletionSource<byte[]>> _pendingRequests = new();
+    protected readonly ConcurrentDictionary<string, TaskCompletionSource<byte[]>> PendingRequests = new();
 
     /// <summary>
     /// 消息队列池。
     /// </summary>
-    protected readonly DRXQueuePool _messageQueue;
+    protected readonly DrxQueuePool MessageQueue;
 
     /// <summary>
     /// 缓冲区大小常量。
     /// </summary>
-    protected const int BUFFER_SIZE = 8192;
+    protected const int BufferSize = 8192;
 
     /// <summary>
     /// 加密密钥（可选）。
     /// </summary>
-    protected string? _key;
+    protected string? Key;
     #endregion
 
     #region 事件
@@ -102,18 +106,26 @@ public abstract class DRXServer : DRXBehaviour
     /// 命令执行完成时触发的事件。
     /// </summary>
     public event EventHandler<NetworkEventArgs>? OnCommandExecuted;
+    /// <summary>
+    /// 当客户端被封禁时触发的事件。
+    /// </summary>
+    public EventHandler<NetworkEventArgs>? OnClientBlocked;
+    /// <summary>
+    /// 当客户端被解封时触发的事件。
+    /// </summary>
+    public EventHandler<NetworkEventArgs>? OnUnBlockedClient;
     #endregion
 
     #region 构造函数
     /// <summary>
     /// 初始化DRXServer的新实例。
     /// </summary>
-    protected DRXServer()
+    protected ServerEngine()
     {
-        _socket = new DRXSocket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+        Socket = new DRXSocket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
 
         // 初始化消息队列
-        _messageQueue = new DRXQueuePool(
+        MessageQueue = new DrxQueuePool(
             maxChannels: Environment.ProcessorCount,
             maxQueueSize: 10000,
             defaultDelay: 500
@@ -128,12 +140,12 @@ public abstract class DRXServer : DRXBehaviour
     /// <param name="maxChannels">最大通道数。</param>
     /// <param name="maxQueueSize">最大队列大小。</param>
     /// <param name="defaultDelay">默认延迟时间。</param>
-    protected DRXServer(int maxChannels, int maxQueueSize, int defaultDelay)
+    protected ServerEngine(int maxChannels, int maxQueueSize, int defaultDelay)
     {
-        _socket = new DRXSocket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+        Socket = new DRXSocket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
 
         // 初始化消息队列
-        _messageQueue = new DRXQueuePool(
+        MessageQueue = new DrxQueuePool(
             maxChannels: maxChannels,
             maxQueueSize: maxQueueSize,
             defaultDelay: defaultDelay
@@ -145,10 +157,10 @@ public abstract class DRXServer : DRXBehaviour
     /// <summary>
     /// 初始化服务器组件和事件订阅。
     /// </summary>
-    protected virtual void Initialize()
+    protected void Initialize()
     {
         // 订阅队列事件
-        _messageQueue.ItemFailed += (sender, args) =>
+        MessageQueue.ItemFailed += (_, args) =>
         {
             OnError?.Invoke(this, new NetworkEventArgs(
                 socket: null!,
@@ -157,8 +169,8 @@ public abstract class DRXServer : DRXBehaviour
             ));
         };
 
-        var _pg = AddComponent<PermissionGroup>();
-        _pg.SetPermissionGroup(PermissionGroupType.Terminal);
+        var pg = AddComponent<PermissionGroup>();
+        pg.SetPermissionGroup(PermissionGroupType.Terminal);
     }
     #endregion
 
@@ -176,6 +188,7 @@ public abstract class DRXServer : DRXBehaviour
             // InitializeEvent();
             StartListening();
             NotifyServerStarted();
+            BeginReceiveCommand();
         }
         catch (Exception ex)
         {
@@ -190,9 +203,9 @@ public abstract class DRXServer : DRXBehaviour
     /// <param name="port">服务器端口。</param>
     protected virtual void InitializeServer(string ip, int port)
     {
-        _ip = ip;
-        _port = port;
-        _socket.Bind(new IPEndPoint(IPAddress.Parse(_ip), _port));
+        Ip = ip;
+        Port = port;
+        Socket.Bind(new IPEndPoint(IPAddress.Parse(Ip), Port));
     }
 
     /// <summary>
@@ -200,8 +213,8 @@ public abstract class DRXServer : DRXBehaviour
     /// </summary>
     protected virtual void StartListening()
     {
-        _socket.Listen(10);
-        _ = _socket.BeginAccept(AcceptCallback, null);
+        Socket.Listen(10);
+        _ = Socket.BeginAccept(AcceptCallback, null);
     }
 
     /// <summary>
@@ -210,9 +223,9 @@ public abstract class DRXServer : DRXBehaviour
     protected virtual void NotifyServerStarted()
     {
         OnServerStarted?.Invoke(this, new NetworkEventArgs(
-            socket: _socket,
+            socket: Socket,
             eventType: NetworkEventType.HandlerEvent,
-            message: $"服务器已启动，监听 {_ip}:{_port}"
+            message: $"服务器已启动，监听 {Ip}:{Port}"
         ));
     }
 
@@ -223,7 +236,7 @@ public abstract class DRXServer : DRXBehaviour
     protected virtual void HandleStartupError(Exception ex)
     {
         OnError?.Invoke(this, new NetworkEventArgs(
-            socket: _socket,
+            socket: Socket,
             eventType: NetworkEventType.HandlerEvent,
             message: $"启动服务器时发生错误: {ex.Message}(若能尝试连接服务器成功，则无视该错误)"
         ));
@@ -234,7 +247,7 @@ public abstract class DRXServer : DRXBehaviour
     /// </summary>
     public virtual void Stop()
     {
-        if (_socket?.IsBound != true) return;
+        if (Socket?.IsBound != true) return;
 
         try
         {
@@ -253,8 +266,8 @@ public abstract class DRXServer : DRXBehaviour
     /// </summary>
     protected virtual void StopMessageQueue()
     {
-        _messageQueue.Stop();
-        _messageQueue.Dispose();
+        MessageQueue.Stop();
+        MessageQueue.Dispose();
     }
 
     /// <summary>
@@ -262,7 +275,7 @@ public abstract class DRXServer : DRXBehaviour
     /// </summary>
     protected virtual void CloseServerSocket()
     {
-        _socket.Close();
+        Socket.Close();
     }
 
     /// <summary>
@@ -270,11 +283,11 @@ public abstract class DRXServer : DRXBehaviour
     /// </summary>
     protected virtual void ClearConnections()
     {
-        foreach (DRXSocket client in _clients.Keys)
+        foreach (var client in Clients.Keys)
         {
             _ = HandleDisconnectAsync(client);
         }
-        _clients.Clear();
+        Clients.Clear();
     }
 
     /// <summary>
@@ -284,7 +297,7 @@ public abstract class DRXServer : DRXBehaviour
     protected virtual void HandleStopError(Exception ex)
     {
         OnError?.Invoke(this, new NetworkEventArgs(
-            socket: _socket,
+            socket: Socket,
             eventType: NetworkEventType.HandlerEvent,
             message: $"停止服务器时发生错误: {ex.Message}"
         ));
@@ -297,54 +310,56 @@ public abstract class DRXServer : DRXBehaviour
     /// 封禁客户端。
     /// </summary>
     /// <param name="clientSocket">客户端Socket对象。</param>
-    /// <param name="time_h">封禁时长（小时）。</param>
-    public virtual void BanneClient(DRXSocket clientSocket, int time_h)
+    /// <param name="timeH">封禁时长（小时）。</param>
+    public virtual void BlockClient(DRXSocket clientSocket, int timeH)
     {
         var client = clientSocket.GetComponent<ClientComponent>();
         if (client == null) return;
 
-        var path = DRXFile.BanPath;
+        var path = DrxFile.BanPath;
 
         // 设置封禁时间
-        client.Ban(DateTime.Now.AddHours(time_h));
+        client.Ban(DateTime.Now.AddHours(timeH));
 
         // 写入封禁信息到文件
-        _ = DRXFile.WriteJsonKeyAsync(path, client.UID, client.UnBandedDate).ConfigureAwait(false);
+        _ = DrxFile.WriteJsonKeyAsync(path, client.UID, client.UnBandedDate).ConfigureAwait(false);
 
-        client.SaveToFile(DRXFile.UserPath);
+        client.SaveToFile(DrxFile.UserPath);
 
         _ = HandleDisconnectAsync(clientSocket);
+        OnClientBlocked?.Invoke(this, new NetworkEventArgs(clientSocket));
     }
 
     /// <summary>
     /// 解封客户端。
     /// </summary>
     /// <param name="clientSocket">客户端Socket对象。</param>
-    public virtual void UnBanneClient(DRXSocket clientSocket)
+    public virtual void UnBlockClient(DRXSocket clientSocket)
     {
         var client = clientSocket.GetComponent<ClientComponent>();
         if (client == null) return;
 
-        var path = DRXFile.BanPath;
+        var path = DrxFile.BanPath;
 
         // 移除封禁信息
-        _ = DRXFile.RemoveJsonKeyAsync(path, client.UID).ConfigureAwait(false);
+        _ = DrxFile.RemoveJsonKeyAsync(path, client.UID).ConfigureAwait(false);
 
         client.UnBan();
+        OnUnBlockedClient?.Invoke(this, new NetworkEventArgs(clientSocket));
     }
 
     /// <summary>
     /// 开始检查被封禁的客户端。
     /// </summary>
-    public virtual void BeginCheckBanndedClient()
+    public virtual void BeginCheckBlockClient()
     {
-        _ = AddTask(CheckBanndedClient, 1000 * 60, "check_bannded_client");
+        _ = AddTask(CheckBlockClient, 1000 * 60, "check_block_client");
     }
 
     /// <summary>
     /// 检查被封禁的客户端。
     /// </summary>
-    protected virtual void CheckBanndedClient()
+    protected virtual void CheckBlockClient()
     {
         var sockets = GetConnectedSockets();
         foreach (var socket in sockets)
@@ -377,13 +392,14 @@ public abstract class DRXServer : DRXBehaviour
     protected virtual async void AcceptCallback(IAsyncResult ar)
     {
         DRXSocket? clientSocket = null;
+        clientSocket = AcceptClientSocket(ar);
         try
         {
-            clientSocket = AcceptClientSocket(ar);
             if (clientSocket != null)
             {
                 await HandleNewClientAsync(clientSocket);
             }
+
         }
         catch (Exception ex)
         {
@@ -402,7 +418,7 @@ public abstract class DRXServer : DRXBehaviour
     /// <returns>转换后的DRXSocket对象，如果失败返回null。</returns>
     protected virtual DRXSocket? AcceptClientSocket(IAsyncResult ar)
     {
-        Socket baseSocket = _socket.EndAccept(ar);
+        var baseSocket = Socket.EndAccept(ar);
         return baseSocket.TakeOver<DRXSocket>();
     }
 
@@ -412,7 +428,7 @@ public abstract class DRXServer : DRXBehaviour
     /// <param name="clientSocket">客户端Socket对象。</param>
     protected virtual async Task HandleNewClientAsync(DRXSocket clientSocket)
     {
-        if (_clients.TryAdd(clientSocket, 1))
+        if (Clients.TryAdd(clientSocket, 1))
         {
             await InitializeClientSocket(clientSocket);
             BeginReceive(clientSocket);
@@ -427,7 +443,7 @@ public abstract class DRXServer : DRXBehaviour
     /// 初始化客户端Socket。
     /// </summary>
     /// <param name="clientSocket">客户端Socket对象。</param>
-    protected virtual async Task InitializeClientSocket(DRXSocket clientSocket)
+    protected virtual Task InitializeClientSocket(DRXSocket clientSocket)
     {
         _ = clientSocket.AddComponent<Verify>();
         _ = clientSocket.AddComponent<PermissionGroup>();
@@ -436,6 +452,7 @@ public abstract class DRXServer : DRXBehaviour
             socket: clientSocket,
             eventType: NetworkEventType.HandlerEvent
         ));
+        return Task.CompletedTask;
     }
 
     /// <summary>
@@ -443,7 +460,7 @@ public abstract class DRXServer : DRXBehaviour
     /// </summary>
     /// <param name="clientSocket">客户端Socket对象。</param>
     /// <param name="ex">异常信息。</param>
-    protected virtual async Task HandleAcceptErrorAsync(DRXSocket? clientSocket, Exception ex)
+    protected virtual Task HandleAcceptErrorAsync(DRXSocket? clientSocket, Exception ex)
     {
         OnError?.Invoke(this, new NetworkEventArgs(
             socket: clientSocket,
@@ -451,6 +468,7 @@ public abstract class DRXServer : DRXBehaviour
             message: $"处理客户端连接时发生错误: {ex.Message}"
         ));
         clientSocket?.Close();
+        return Task.CompletedTask;
     }
 
     /// <summary>
@@ -458,20 +476,18 @@ public abstract class DRXServer : DRXBehaviour
     /// </summary>
     protected virtual void ContinueAccepting()
     {
-        if (_socket?.IsBound == true)
+        if (Socket?.IsBound != true) return;
+        try
         {
-            try
-            {
-                _socket.BeginAccept(AcceptCallback, null);
-            }
-            catch (Exception ex)
-            {
-                OnError?.Invoke(this, new NetworkEventArgs(
-                    socket: _socket,
-                    eventType: NetworkEventType.HandlerEvent,
-                    message: $"继续接受连接时发生错误: {ex.Message}"
-                ));
-            }
+            Socket.BeginAccept(AcceptCallback, null);
+        }
+        catch (Exception ex)
+        {
+            OnError?.Invoke(this, new NetworkEventArgs(
+                socket: Socket,
+                eventType: NetworkEventType.HandlerEvent,
+                message: $"继续接受连接时发生错误: {ex.Message}"
+            ));
         }
     }
 
@@ -518,9 +534,9 @@ public abstract class DRXServer : DRXBehaviour
     /// 处理客户端断开连接的具体逻辑。
     /// </summary>
     /// <param name="clientSocket">断开连接的客户端Socket。</param>
-    protected virtual async Task HandleClientDisconnection(DRXSocket clientSocket)
+    protected virtual Task HandleClientDisconnection(DRXSocket clientSocket)
     {
-        if (_clients.TryRemove(clientSocket, out _))
+        if (Clients.TryRemove(clientSocket, out _))
         {
             OnClientDisconnected?.Invoke(this, new NetworkEventArgs(
                 socket: clientSocket,
@@ -528,6 +544,7 @@ public abstract class DRXServer : DRXBehaviour
             ));
         }
         CloseSocketSafely(clientSocket);
+        return Task.CompletedTask;
     }
 
     /// <summary>
@@ -535,13 +552,14 @@ public abstract class DRXServer : DRXBehaviour
     /// </summary>
     /// <param name="clientSocket">客户端Socket。</param>
     /// <param name="ex">异常信息。</param>
-    protected virtual async Task HandleDisconnectErrorAsync(DRXSocket clientSocket, Exception ex)
+    protected virtual Task HandleDisconnectErrorAsync(DRXSocket clientSocket, Exception ex)
     {
         OnError?.Invoke(this, new NetworkEventArgs(
             socket: clientSocket,
             eventType: NetworkEventType.HandlerEvent,
             message: $"处理断开连接时发生错误: {ex.Message}"
         ));
+        return Task.CompletedTask;
     }
 
     /// <summary>
@@ -552,19 +570,24 @@ public abstract class DRXServer : DRXBehaviour
     {
         try
         {
-            if (socket.Connected)
+            if (!socket.Connected) return;
+            try { socket.Shutdown(SocketShutdown.Both); }
+            catch
             {
-                try { socket.Shutdown(SocketShutdown.Both); }
-                catch { } // 忽略潜在的异常
-                finally { socket.Close(); }
-            }
+                // ignored
+            } // 忽略潜在的异常
+            finally { socket.Close(); }
         }
-        catch { } // 忽略关闭过程中的异常
+        catch
+        {
+            // ignored
+        } // 忽略关闭过程中的异常
     }
 
     /// <summary>
     /// 启动客户端验证任务。
     /// </summary>
+    [Obsolete("这个方法目前已经不应该再使用，因为这是一个臃肿的方法，因此我们将不再对其进行维护。")]
     public virtual void BeginVerifyClient()
     {
         _ = AddTask(VerifyClientTask, 1000 * 60, "verify_client");
@@ -576,11 +599,12 @@ public abstract class DRXServer : DRXBehaviour
     /// </summary>
     /// <param name="sender">事件发送者。</param>
     /// <param name="args">网络事件参数。</param>
+    [Obsolete("这个方法目前已经不应该再使用，因为这是一个臃肿的方法，因此我们将不再对其进行维护。")]
     protected virtual async void VerifyClientHeartBeat(object? sender, NetworkEventArgs args)
     {
         OnVerifyClient?.Invoke(this, args);  // 通知客户端连接验证事件
 
-        if (args.Socket is not DRXSocket socket) return;
+        if (args.Socket is not { } socket) return;
         var client = socket.GetComponent<Verify>();
         if (client == null) return;
         client.UpdateLastActiveTime();
@@ -594,7 +618,7 @@ public abstract class DRXServer : DRXBehaviour
             },
             Data = { { "message", "pong" } }
         };
-        Send<DRXPacket>(socket, responsePacket, _key);
+        Send(socket, responsePacket, Key);
     }
 
     /// <summary>
@@ -605,9 +629,9 @@ public abstract class DRXServer : DRXBehaviour
         var sockets = GetConnectedSockets();
         foreach (var socket in sockets)
         {
-            var client_verify = socket.GetComponent<Verify>();
+            var clientVerify = socket.GetComponent<Verify>();
 
-            if (client_verify == null)
+            if (clientVerify == null)
             {
                 // 断开没有ClientComponent的连接
                 socket.Disconnect(false);
@@ -615,17 +639,12 @@ public abstract class DRXServer : DRXBehaviour
             }
 
             /* 检查客户端是否长时间未活动 */
-            var lastActiveTime = client_verify.GetLastActiveTime();
+            var lastActiveTime = clientVerify.GetLastActiveTime();
 
             /* 超过5分钟未活动则断开连接 */
-            if ((DateTime.Now - lastActiveTime).TotalMinutes > 5)
-            {
-                if (socket != null)
-                {
-                    Logger.Log(LogLevel.Info, "Server", $"客户端 {socket.RemoteEndPoint} 由于长时间未活动而被断开");
-                    _ = DisconnectClient(socket);
-                }
-            }
+            if (!((DateTime.Now - lastActiveTime).TotalMinutes > 5)) continue;
+            Logger.Log(LogLevel.Info, "Server", $"客户端 {socket.RemoteEndPoint} 由于长时间未活动而被断开");
+            _ = DisconnectClient(socket);
         }
     }
     #endregion
@@ -634,16 +653,14 @@ public abstract class DRXServer : DRXBehaviour
     /// <summary>
     /// 开始接收命令。
     /// </summary>
-    public virtual void BeginReceiveCommand()
+    protected virtual void BeginReceiveCommand()
     {
         OnDataReceived += (sender, args) =>
         {
             if (args.Packet == null) return;
-            var packet = DRXPacket.Unpack(args.Packet, _key);
-            if (packet == null) return;
+            var packet = DRXPacket.Unpack(args.Packet, Key);
 
             var type = packet.Headers["type"];
-            if (type == null) return;
 
             HandleCommandPacket(packet, args.Socket);
         };
@@ -657,7 +674,7 @@ public abstract class DRXServer : DRXBehaviour
     protected virtual void HandleCommandPacket(DRXPacket packet, DRXSocket? socket)
     {
         var type = packet.Headers["type"];
-        if (type == null || type.ToString() != "command") return;
+        if (type.ToString() != "command") return;
 
         var command = packet.Data["command"].ToString();
         if (command == null) return;
@@ -689,10 +706,9 @@ public abstract class DRXServer : DRXBehaviour
         OnCommandExecuted?.Invoke(this, new NetworkEventArgs(
             socket: socket,
             eventType: NetworkEventType.HandlerEvent,
-            packet: orgPacket.Pack(_key),
-            data: new object[] { command, commandArgs, commandResult }
+            packet: orgPacket.Pack(Key),
+            data: [command, commandArgs, commandResult]
         ));
-        if (commandResult != null)
         {
             var responsePacket = new DRXPacket()
             {
@@ -706,7 +722,7 @@ public abstract class DRXServer : DRXBehaviour
                     { PacketBodyKey.CommandResponse, commandResult }
                 }
             };
-            Send<DRXPacket>(socket, orgPacket, responsePacket, _key);
+            Send(socket, orgPacket, responsePacket, Key);
         }
     }
 
@@ -718,7 +734,7 @@ public abstract class DRXServer : DRXBehaviour
     /// <param name="clientSocket">客户端Socket对象。</param>
     protected virtual void BeginReceive(DRXSocket clientSocket)
     {
-        var buffer = ArrayPool<byte>.Shared.Rent(BUFFER_SIZE);
+        var buffer = ArrayPool<byte>.Shared.Rent(BufferSize);
         try
         {
             _ = clientSocket.BeginReceive(buffer, 0, buffer.Length, SocketFlags.None,
@@ -758,7 +774,7 @@ public abstract class DRXServer : DRXBehaviour
                 var data = new byte[bytesRead];
                 Buffer.BlockCopy(buffer, 0, data, 0, bytesRead);
 
-                _ = _messageQueue.PushAsync(
+                _ = MessageQueue.PushAsync(
                     () => ProcessReceivedData(clientSocket, data), 0);
                 BeginReceive(clientSocket);
             }
@@ -783,15 +799,15 @@ public abstract class DRXServer : DRXBehaviour
         try
         {
             // 解析收到的数据包
-            DRXPacket receivedPacket = DRXPacket.Unpack(data, _key);
+            var receivedPacket = DRXPacket.Unpack(data, Key);
 
             // 获取请求ID
-            string? requestID = receivedPacket.Headers.ContainsKey(PacketHeaderKey.RequestID)
-                ? receivedPacket.Headers[PacketHeaderKey.RequestID]?.ToString()
+            var requestId = receivedPacket.Headers.TryGetValue(PacketHeaderKey.RequestID, out var header)
+                ? header?.ToString()
                 : null;
 
             // 如果存在请求ID且在等待队列中,则完成对应的TaskCompletionSource 
-            if (!string.IsNullOrEmpty(requestID) && _pendingRequests.TryRemove(requestID, out var tcs))
+            if (!string.IsNullOrEmpty(requestId) && PendingRequests.TryRemove(requestId, out var tcs))
             {
                 tcs.SetResult(data);
             }
@@ -821,7 +837,7 @@ public abstract class DRXServer : DRXBehaviour
     /// <returns>连接的客户端Socket集合。</returns>
     public virtual HashSet<DRXSocket> GetConnectedSockets()
     {
-        return new HashSet<DRXSocket>(_clients.Keys);
+        return [.. Clients.Keys];
     }
 
     /// <summary>
@@ -829,9 +845,9 @@ public abstract class DRXServer : DRXBehaviour
     /// </summary>
     /// <param name="uid">客户端UID。</param>
     /// <returns>对应的客户端Socket，如果未找到则返回null。</returns>
-    public virtual DRXSocket? GetClientByUID(string uid)
+    public virtual DRXSocket? GetClientByUid(string uid)
     {
-        return _clients.Keys.FirstOrDefault(client =>
+        return Clients.Keys.FirstOrDefault(client =>
         {
             var clientComponent = client.GetComponent<ClientComponent>();
             return clientComponent != null && clientComponent.UID == uid;
@@ -888,7 +904,7 @@ public abstract class DRXServer : DRXBehaviour
     /// <returns>如果客户端有效则返回true，否则返回false。</returns>
     protected virtual bool ValidateClientForSend(DRXSocket clientSocket)
     {
-        if (!_clients.ContainsKey(clientSocket))
+        if (!Clients.ContainsKey(clientSocket))
         {
             OnError?.Invoke(this, new NetworkEventArgs(
                 socket: clientSocket,
@@ -928,7 +944,7 @@ public abstract class DRXServer : DRXBehaviour
 
         try
         {
-            int bytesSent = clientSocket.EndSend(ar);
+            var bytesSent = clientSocket.EndSend(ar);
             OnDataSent?.Invoke(this, new NetworkEventArgs(
                 socket: clientSocket,
                 eventType: NetworkEventType.HandlerEvent,
@@ -982,7 +998,6 @@ public abstract class DRXServer : DRXBehaviour
     /// <param name="packet">网络数据包。</param>
     /// <param name="key">加密密钥。</param>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    [Obsolete("此方法已弃用，请使用新的基于 BasePacket 的方法。")]
     public virtual void Send(DRXSocket clientSocket, NetworkPacket packet, string key)
     {
         try
@@ -990,7 +1005,7 @@ public abstract class DRXServer : DRXBehaviour
             if (!ValidateClientForSend(clientSocket)) return;
             var data = packet.Serialize(key);
 
-            byte[] sendBuffer = PrepareDataForSend(data);
+            var sendBuffer = PrepareDataForSend(data);
             ExecuteSend(clientSocket, sendBuffer, data.Length);
         }
         catch (Exception ex)
@@ -1007,7 +1022,6 @@ public abstract class DRXServer : DRXBehaviour
     /// <param name="packet">数据包对象。</param>
     /// <param name="key">加密密钥。</param>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    [Obsolete("此方法已弃用，请使用新的基于 BasePacket 的方法。")]
     public virtual void Send<T>(DRXSocket clientSocket, T packet, string key) where T : BasePacket<T>, new()
     {
         try
@@ -1016,9 +1030,9 @@ public abstract class DRXServer : DRXBehaviour
 
             packet.Headers.Add(PacketHeaderKey.RequestID, Guid.NewGuid().ToString());   // 添加请求 ID
             // 将泛型包序列化为字节数组
-            byte[] packetData = packet.Pack(key);
+            var packetData = packet.Pack(key);
 
-            byte[] sendBuffer = PrepareDataForSend(packetData);
+            var sendBuffer = PrepareDataForSend(packetData);
             ExecuteSend(clientSocket, sendBuffer, packetData.Length);
         }
         catch (Exception ex)
@@ -1036,7 +1050,6 @@ public abstract class DRXServer : DRXBehaviour
     /// <param name="responsePacket">响应的数据包。</param>
     /// <param name="key">加密密钥。</param>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    [Obsolete("此方法已弃用，请使用新的基于 SendAndWaitAsync 的方法。")]
     public virtual void Send<T>(DRXSocket clientSocket, T originPacket, T responsePacket, string key) where T : BasePacket<T>, new()
     {
         try
@@ -1047,11 +1060,11 @@ public abstract class DRXServer : DRXBehaviour
                 return;
             };
 
-            var originPacketRequestID = originPacket.Headers[PacketHeaderKey.RequestID];
-            responsePacket.Headers.Add(PacketHeaderKey.RequestID, originPacketRequestID);
+            var originPacketRequestId = originPacket.Headers[PacketHeaderKey.RequestID];
+            responsePacket.Headers.Add(PacketHeaderKey.RequestID, originPacketRequestId);
 
-            byte[] packetData = responsePacket.Pack(key);
-            byte[] sendBuffer = PrepareDataForSend(packetData);
+            var packetData = responsePacket.Pack(key);
+            var sendBuffer = PrepareDataForSend(packetData);
             ExecuteSend(clientSocket, sendBuffer, packetData.Length);
         }
         catch (Exception ex)
@@ -1081,12 +1094,12 @@ public abstract class DRXServer : DRXBehaviour
             }
 
             // 添加请求ID 
-            string requestID = Guid.NewGuid().ToString();
-            packet.Headers.Add(PacketHeaderKey.RequestID, requestID);
+            var requestId = Guid.NewGuid().ToString();
+            packet.Headers.Add(PacketHeaderKey.RequestID, requestId);
 
             // 准备TaskCompletionSource用于等待响应
             var tcs = new TaskCompletionSource<byte[]>();
-            if (!_pendingRequests.TryAdd(requestID, tcs))
+            if (!PendingRequests.TryAdd(requestId, tcs))
             {
                 throw new InvalidOperationException("无法添加待处理请求");
             }
@@ -1094,8 +1107,8 @@ public abstract class DRXServer : DRXBehaviour
             try
             {
                 // 发送数据包
-                byte[] packetData = packet.Pack(key);
-                byte[] sendBuffer = PrepareDataForSend(packetData);
+                var packetData = packet.Pack(key);
+                var sendBuffer = PrepareDataForSend(packetData);
                 ExecuteSend(clientSocket, sendBuffer, packetData.Length);
 
                 // 等待响应或超时
@@ -1103,7 +1116,7 @@ public abstract class DRXServer : DRXBehaviour
                 {
                     if (await Task.WhenAny(tcs.Task, Task.Delay(timeout)) != tcs.Task)
                     {
-                        _pendingRequests.TryRemove(requestID, out _);
+                        PendingRequests.TryRemove(requestId, out _);
                         throw new TimeoutException("等待响应超时");
                     }
                 }
@@ -1113,7 +1126,7 @@ public abstract class DRXServer : DRXBehaviour
             finally
             {
                 // 确保请求被移除
-                _pendingRequests.TryRemove(requestID, out _);
+                PendingRequests.TryRemove(requestId, out _);
             }
         }
         catch (Exception ex)
@@ -1127,6 +1140,53 @@ public abstract class DRXServer : DRXBehaviour
         }
     }
 
+    public virtual async Task<byte[]> SendAsync<T>(DRXSocket socket, T packet, T originPacket, string key, int timeout = 0) where T : BasePacket<T>, new()
+    {
+        try
+        {
+            if (!ValidateClientForSend(socket))
+            {
+                Logger.Log(LogLevel.Warning, "Server", "客户端未连接");
+                throw new InvalidOperationException("客户端未连接");
+            }
+
+            var requestId = originPacket.Headers[PacketHeaderKey.RequestID].ToString();
+            packet.Headers.Add(PacketHeaderKey.RequestID, requestId);
+            var tcs = new TaskCompletionSource<byte[]>();
+            if (!PendingRequests.TryAdd(requestId, tcs))
+            {
+                throw new InvalidOperationException("无法添加待处理请求");
+            }
+            try
+            {
+                var packetData = packet.Pack(key);
+                var sendBuffer = PrepareDataForSend(packetData);
+                ExecuteSend(socket, sendBuffer, packetData.Length);
+                if (timeout > 0)
+                {
+                    if (await Task.WhenAny(tcs.Task, Task.Delay(timeout)) != tcs.Task)
+                    {
+                        PendingRequests.TryRemove(requestId, out _);
+                        throw new TimeoutException("等待响应超时");
+                    }
+                }
+                return await tcs.Task;
+            }
+            finally
+            {
+                PendingRequests.TryRemove(requestId, out _);
+            }
+        }
+        catch (Exception ex)
+        {
+            OnError?.Invoke(this, new NetworkEventArgs(
+                socket: socket,
+                eventType: NetworkEventType.HandlerEvent,
+                message: $"发送数据包时发生错误: {ex.Message}"
+            ));
+            throw;
+        }
+    }
 
     /// <summary>
     /// 向所有已连接的客户端广播数据（不使用数据包校验系统）。
@@ -1141,20 +1201,17 @@ public abstract class DRXServer : DRXBehaviour
 
         try
         {
-            foreach (DRXSocket client in _clients.Keys)
+            tasks.AddRange(Clients.Keys.Select(client => Task.Run(() =>
             {
-                tasks.Add(Task.Run(() =>
+                try
                 {
-                    try
-                    {
-                        ExecuteSend(client, buffer, data.Length);
-                    }
-                    catch
-                    {
-                        deadClients.Add(client);
-                    }
-                }));
-            }
+                    ExecuteSend(client, buffer, data.Length);
+                }
+                catch
+                {
+                    deadClients.Add(client);
+                }
+            })));
 
             await Task.WhenAll(tasks);
         }
@@ -1184,20 +1241,17 @@ public abstract class DRXServer : DRXBehaviour
 
         try
         {
-            foreach (DRXSocket client in _clients.Keys)
+            tasks.AddRange(Clients.Keys.Select(client => Task.Run(() =>
             {
-                tasks.Add(Task.Run(() =>
+                try
                 {
-                    try
-                    {
-                        ExecuteSend(client, buffer, data.Length);
-                    }
-                    catch
-                    {
-                        deadClients.Add(client);
-                    }
-                }));
-            }
+                    ExecuteSend(client, buffer, data.Length);
+                }
+                catch
+                {
+                    deadClients.Add(client);
+                }
+            })));
 
             await Task.WhenAll(tasks);
         }

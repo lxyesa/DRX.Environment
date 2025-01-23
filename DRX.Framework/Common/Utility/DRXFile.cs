@@ -5,21 +5,23 @@ using System.Text.Json.Nodes;
 
 namespace DRX.Framework.Common.Utility;
 
-public class DRXFile : IDisposable
+public class DrxFile : IDisposable
 {
     public static readonly string ConfigPath = Path.Combine(AppContext.BaseDirectory, "data", "configs", "config.json");
     public static readonly string DataPath = Path.Combine(AppContext.BaseDirectory, "data");
     public static readonly string UserPath = Path.Combine(AppContext.BaseDirectory, "data", "users");
     public static readonly string BanPath = Path.Combine(AppContext.BaseDirectory, "data", "banned_list.json");
-    public static readonly string I18Path = Path.Combine(AppContext.BaseDirectory, "data", "i8n");
-    public static readonly string I18DictPath = Path.Combine(AppContext.BaseDirectory, "data", "i8n", "dicts");
+    public static readonly string I18Path = Path.Combine(AppContext.BaseDirectory, "data", "i18n");
+    public static readonly string I18DictPath = Path.Combine(AppContext.BaseDirectory, "data", "i18n", "dicts");
+    public static readonly string I18LangPath = Path.Combine(AppContext.BaseDirectory, "data", "i18n", "langs");
+    public static readonly string PluginPath = Path.Combine(AppContext.BaseDirectory, "data", "plugins");
 
     public void Dispose()
     {
         // Implement your cleanup code here if needed
     }
 
-    private static readonly JsonSerializerOptions _jsonOptions = new()
+    private static readonly JsonSerializerOptions JsonOptions = new()
     {
         WriteIndented = true,
         Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
@@ -33,8 +35,8 @@ public class DRXFile : IDisposable
         if (string.IsNullOrEmpty(path))
             throw new ArgumentException("路径不能为空", nameof(path));
 
-        using FileStream fs = new(path, FileMode.Create, FileAccess.Write, FileShare.None);
-        await JsonSerializer.SerializeAsync(fs, data, _jsonOptions);
+        await using FileStream fs = new(path, FileMode.Create, FileAccess.Write, FileShare.None);
+        await JsonSerializer.SerializeAsync(fs, data, JsonOptions);
     }
 
     public static async Task<T?> LoadFromJsonAsync<T>(string path)
@@ -45,8 +47,8 @@ public class DRXFile : IDisposable
         if (!System.IO.File.Exists(path))
             throw new FileNotFoundException($"找不到文件: {path}");
 
-        using FileStream fs = new(path, FileMode.Open, FileAccess.Read, FileShare.Read);
-        return await JsonSerializer.DeserializeAsync<T>(fs, _jsonOptions);
+        await using FileStream fs = new(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+        return await JsonSerializer.DeserializeAsync<T>(fs, JsonOptions);
     }
 
     public static async Task<(bool success, T? value)> ReadJsonKeyAsync<T>(string path, string key)
@@ -148,13 +150,54 @@ public class DRXFile : IDisposable
                 // 写回文件
                 fs.SetLength(0); // 清空文件
                 fs.Seek(0, SeekOrigin.Begin);
-                await JsonSerializer.SerializeAsync(fs, jsonObj, _jsonOptions);
+                await JsonSerializer.SerializeAsync(fs, jsonObj, JsonOptions);
             }
         }
         catch (Exception ex)
         {
             Logger.Log("File", $"移除JSON键值时发生错误: {ex.Message}");
             throw;
+        }
+    }
+
+    public static async Task<bool> CreateFileAsync(string filePath)
+    {
+        if (string.IsNullOrEmpty(filePath))
+            throw new ArgumentException("文件路径不能为空", nameof(filePath));
+
+        try
+        {
+            if (File.Exists(filePath))
+                return false;
+
+            await using FileStream fs = new(filePath, FileMode.CreateNew, FileAccess.Write, FileShare.None);
+            await fs.FlushAsync();
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Logger.Log("File", $"创建文件时发生错误: {ex.Message}");
+            return false;
+        }
+    }
+
+    public static async Task<bool> CreateDirectoryAsync(string directoryPath)
+    {
+        if (string.IsNullOrEmpty(directoryPath))
+            throw new ArgumentException("目录路径不能为空", nameof(directoryPath));
+
+        try
+        {
+            if (Directory.Exists(directoryPath))
+                return false;
+
+            Directory.CreateDirectory(directoryPath);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Logger.Log("File", $"创建目录时发生错误: {ex.Message}");
+            return false;
         }
     }
 

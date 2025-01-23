@@ -1,4 +1,5 @@
-using System;
+using System.Diagnostics;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Windows.Controls;
 using System.Windows.Documents;
@@ -8,13 +9,29 @@ namespace DRX.Framework;
 
 public static class Logger
 {
-    private static readonly object _lock = new();
-    private static readonly StringBuilder _sharedBuilder = new(128);
+    private static readonly Lock Lock = new();
+    private static readonly StringBuilder SharedBuilder = new(128);
     private const string DateTimeFormat = "yyyy/MM/dd HH:mm:ss";
-    
+
     private static TextBox? _boundTextBox;
     private static TextBlock? _boundTextBlock;
     private static RichTextBox? _boundRichTextBox;
+
+    /* P/Invoke 声明 */
+    [DllImport("kernel32.dll")]
+    private static extern bool AllocConsole();
+
+    [DllImport("kernel32.dll")]
+    private static extern bool FreeConsole();
+
+    /* 静态构造函数 */
+    static Logger()
+    {
+#if DEBUG
+        AllocConsole();
+        Debug("debug模式启动");
+#endif
+    }
 
     // 绑定方法
     public static void Bind(TextBox textBox)
@@ -50,32 +67,63 @@ public static class Logger
         LogInternal(level, header, message);
     }
 
+    // 新增 Error 方法
+    public static void Error(string message)
+    {
+        var callerInfo = GetCallerInfo();
+        LogInternal(LogLevel.Error, callerInfo, message);
+    }
+
+    // 新增 Debug 方法
+    public static void Debug(string message)
+    {
+        var callerInfo = GetCallerInfo();
+        LogInternal(LogLevel.Debug, callerInfo, message);
+    }
+
+    public static void Warring(string message)
+    {
+        var callerInfo = GetCallerInfo();
+        LogInternal(LogLevel.Warning, callerInfo, message);
+    }
+
+    private static string GetCallerInfo()
+    {
+        var stackTrace = new StackTrace();
+        // 跳过当前方法和 Debug/Error 方法
+        var frame = stackTrace.GetFrame(3);
+        var method = frame?.GetMethod();
+        var className = method?.DeclaringType?.Name ?? "UnknownClass";
+        var methodName = method?.Name ?? "UnknownMethod";
+        return $"{className}.{methodName}";
+    }
+
     private static void LogInternal(LogLevel level, string header, string message)
     {
         if (string.IsNullOrEmpty(message)) return;
 
-        lock (_lock)
+        lock (Lock)
         {
             try
             {
-                _ = _sharedBuilder.Clear();
-                _ = _sharedBuilder.Append('[')
-                    .Append(DateTime.Now.ToString(DateTimeFormat))
-                    .Append(']');
+                SharedBuilder.Clear();
+                SharedBuilder.Append('[')
+                             .Append(DateTime.Now.ToString(DateTimeFormat))
+                             .Append(']');
 
                 if (!string.IsNullOrEmpty(header))
                 {
-                    _ = _sharedBuilder.Append(" [")
-                        .Append(header)
-                        .Append(']');
+                    SharedBuilder.Append(" [")
+                                 .Append(header)
+                                 .Append(']');
                 }
 
-                _ = _sharedBuilder.Append(" [")
-                    .Append(level.ToString().ToUpper())
-                    .Append("] ")
-                    .Append(message);
+                SharedBuilder.Append(" [")
+                             .Append(level.ToString().ToUpper())
+                             .Append("] ")
+                             .Append(message);
 
-                string logText = _sharedBuilder.ToString();
+                var logText = SharedBuilder.ToString();
 
                 // 控制台输出
                 if (_boundTextBox == null && _boundTextBlock == null && _boundRichTextBox == null)
@@ -94,12 +142,12 @@ public static class Logger
                 {
                     if (_boundTextBox != null)
                     {
-                        _boundTextBox.AppendText(logText);
+                        _boundTextBox.AppendText(logText + Environment.NewLine);
                         _boundTextBox.ScrollToEnd();
                     }
                     else if (_boundTextBlock != null)
                     {
-                        _boundTextBlock.Text += logText;
+                        _boundTextBlock.Text += logText + Environment.NewLine;
                     }
                     else if (_boundRichTextBox != null)
                     {

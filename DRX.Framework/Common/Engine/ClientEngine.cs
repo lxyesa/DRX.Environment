@@ -7,12 +7,12 @@ using System.Net;
 using System.Net.Http;
 using System.Net.Sockets;
 
-namespace DRX.Framework.Common
+namespace DRX.Framework.Common.Engine
 {
     /// <summary>
     /// 网络客户端类，用于连接和通信与服务器。
     /// </summary>
-    public abstract class DRXClient : DRXBehaviour
+    public abstract class ClientEngine : DrxBehaviour
     {
         #region 字段
         /// <summary>
@@ -88,11 +88,11 @@ namespace DRX.Framework.Common
 
         #region 构造函数
         /// <summary>
-        /// 初始化 <see cref="DRXClient"/> 的新实例。
+        /// 初始化 <see cref="ClientEngine"/> 的新实例。
         /// </summary>
         /// <param name="serverIP">服务器的IP地址。</param>
         /// <param name="serverPort">服务器的端口号。</param>
-        public DRXClient(string serverIP, int serverPort, string key) : base()
+        public ClientEngine(string serverIP, int serverPort, string key) : base()
         {
             _serverIP = serverIP;
             _serverPort = serverPort;
@@ -173,18 +173,18 @@ namespace DRX.Framework.Common
             try
             {
                 // 添加请求 ID
-                string requestID = Guid.NewGuid().ToString();
-                packet.Headers.Add(PacketHeaderKey.RequestID, requestID);
+                var requestId = Guid.NewGuid().ToString();
+                packet.Headers.Add(PacketHeaderKey.RequestID, requestId);
 
                 // 准备 TaskCompletionSource 用于等待响应
                 var tcs = new TaskCompletionSource<byte[]>();
-                if (!_pendingRequests.TryAdd(requestID, tcs))
+                if (!_pendingRequests.TryAdd(requestId, tcs))
                 {
                     throw new InvalidOperationException("无法添加待处理请求");
                 }
 
                 // 发送数据包
-                byte[] data = packet.Pack(_key);
+                var data = packet.Pack(_key);
                 _ = _socket.BeginSend(data, 0, data.Length, SocketFlags.None,
                    new AsyncCallback(SendCallback), null);
 
@@ -203,7 +203,7 @@ namespace DRX.Framework.Common
                 }
                 else
                 {
-                    _pendingRequests.TryRemove(requestID, out _); // 移除请求
+                    _pendingRequests.TryRemove(requestId, out _); // 移除请求
                     BeginReceive();
                     throw new TimeoutException("发送数据包等待响应超时");
                 }
@@ -218,6 +218,8 @@ namespace DRX.Framework.Common
                 throw;
             }
         }
+
+        // TODO: 添加其他重载的 SendAsync 方法
 
         /// <summary>
         /// 处理发送数据回调。

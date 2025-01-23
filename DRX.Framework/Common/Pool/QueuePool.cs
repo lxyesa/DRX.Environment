@@ -4,7 +4,7 @@ using System.Diagnostics;
 
 namespace DRX.Framework.Common.Pool;
 
-public class DRXQueuePool : IDisposable
+public class DrxQueuePool : IDisposable
 {
     private readonly int _maxChannels;
     private readonly int _maxQueueSize;
@@ -21,7 +21,7 @@ public class DRXQueuePool : IDisposable
 
     public QueueStatistics Statistics { get; } = new();
 
-    public DRXQueuePool(int maxChannels, int maxQueueSize, int defaultDelay = 10)
+    public DrxQueuePool(int maxChannels, int maxQueueSize, int defaultDelay = 10)
     {
         _maxChannels = maxChannels;
         _maxQueueSize = maxQueueSize;

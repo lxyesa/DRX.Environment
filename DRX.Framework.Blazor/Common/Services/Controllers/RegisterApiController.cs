@@ -17,9 +17,9 @@ namespace DRX.Framework.Blazor.Common.Services.Controllers
                 Action = "Register"
             };
 
-            var packed = packet.TryGenerateHash(DRXFile.ReadJsonKey<string>(DRXFile.ConfigPath, "Key"));
+            var packed = packet.TryGenerateHash(DrxFile.ReadJsonKey<string>(DrxFile.ConfigPath, "Key"));
 
-            return Ok(packet.Pack(DRXFile.ReadJsonKey<string>(DRXFile.ConfigPath, "Key")));
+            return Ok(packet.Pack(DrxFile.ReadJsonKey<string>(DrxFile.ConfigPath, "Key")));
         }
 
         [HttpPost("register")]
@@ -28,7 +28,7 @@ namespace DRX.Framework.Blazor.Common.Services.Controllers
             try
             {
                 // 假设密钥为16位
-                string? key = DRXFile.ReadJsonKey<string?>(DRXFile.ConfigPath, "Key");
+                string? key = DrxFile.ReadJsonKey<string?>(DrxFile.ConfigPath, "Key");
                 var packet = DRXPacket.Unpack(data, key);
 
                 if (packet == null)

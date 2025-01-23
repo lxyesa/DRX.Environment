@@ -95,13 +95,13 @@ public class ClientComponent : IComponent
             _ = Directory.CreateDirectory(directory);
         }
 
-        await DRXFile.SaveToJsonAsync(fullPath, this);
+        await DrxFile.SaveToJsonAsync(fullPath, this);
     }
 
     public async Task LoadFromFileAsync(string path, string fileName)
     {
         string fullPath = Path.Combine(path, fileName);
-        var loadedData = await DRXFile.LoadFromJsonAsync<ClientComponent>(fullPath);
+        var loadedData = await DrxFile.LoadFromJsonAsync<ClientComponent>(fullPath);
         if (loadedData != null)
         {
             Id = loadedData.Id;

@@ -7,29 +7,29 @@ namespace DRX.Framework.Common.Utility;
 /// <summary>
 /// 提供国际化（i18n）支持，通过管理和检索字典中的本地化文本。
 /// </summary>
-public class I18n
+public class I18N
 {
     private static readonly ConcurrentDictionary<string, ConcurrentDictionary<string, ConcurrentDictionary<string, string>>> dictionaries
         = new ConcurrentDictionary<string, ConcurrentDictionary<string, ConcurrentDictionary<string, string>>>();
 
-    private const string DEFAULT_DICT = "default";
-    private static readonly string basePath = DRXFile.I18DictPath;
+    private const string DefaultDict = "default";
+    private static readonly string BasePath = DrxFile.I18DictPath;
 
     /// <summary>
     /// 静态构造函数，用于初始化默认字典。
     /// </summary>
-    static I18n()
+    static I18N()
     {
         // 确保字典路径存在
-        EnsurePath(basePath);
+        EnsurePath(BasePath);
 
         // 加载默认字典
-        var defaultDictPath = Path.Combine(basePath, "default.dict");
+        var defaultDictPath = Path.Combine(BasePath, "default.dict");
         if (System.IO.File.Exists(defaultDictPath))
         {
             try
             {
-                Register("default", DEFAULT_DICT);
+                Register("default", DefaultDict);
             }
             catch (FileNotFoundException)
             {
@@ -46,8 +46,8 @@ public class I18n
     /// <exception cref="FileNotFoundException">当找不到字典文件时抛出。</exception>
     public static void Register(string fileName, string dictionaryName)
     {
-        var filePath = Path.Combine(basePath, $"{fileName}.dict");
-        EnsurePathAndFile(basePath, $"{fileName}.dict");
+        var filePath = Path.Combine(BasePath, $"{fileName}.dict");
+        EnsurePathAndFile(BasePath, $"{fileName}.dict");
 
         if (!System.IO.File.Exists(filePath))
         {
@@ -110,7 +110,7 @@ public class I18n
     /// <param name="variables">可选的变量数组，用于替换文本中的占位符。</param>
     /// <returns>本地化文本。</returns>
     /// <exception cref="KeyNotFoundException">当找不到字典、组或键时抛出。</exception>
-    public static string GetText(string group, string key, string dictionaryName = DEFAULT_DICT, params Variable[] variables)
+    public static string GetText(string group, string key, string dictionaryName = DefaultDict, params Variable[] variables)
     {
         if (!dictionaries.TryGetValue(dictionaryName, out var dict) ||
             !dict.TryGetValue(group, out var groupDict) ||
@@ -140,7 +140,7 @@ public class I18n
     /// <param name="key">组中的键名。</param>
     /// <param name="value">新的本地化文本。</param>
     /// <param name="dictionaryName">字典的名称。默认为 "default"。</param>
-    public static void UpdateText(string group, string key, string value, string dictionaryName = DEFAULT_DICT)
+    public static void UpdateText(string group, string key, string value, string dictionaryName = DefaultDict)
     {
         var dict = dictionaries.GetOrAdd(dictionaryName, _ => new ConcurrentDictionary<string, ConcurrentDictionary<string, string>>());
         var groupDict = dict.GetOrAdd(group, _ => new ConcurrentDictionary<string, string>());
@@ -153,7 +153,7 @@ public class I18n
     /// <param name="group">字典中的组名。</param>
     /// <param name="key">组中的键名。</param>
     /// <param name="dictionaryName">字典的名称。默认为 "default"。</param>
-    public static void RemoveText(string group, string key, string dictionaryName = DEFAULT_DICT)
+    public static void RemoveText(string group, string key, string dictionaryName = DefaultDict)
     {
         if (dictionaries.TryGetValue(dictionaryName, out var dict) &&
             dict.TryGetValue(group, out var groupDict))
@@ -169,7 +169,7 @@ public class I18n
     /// <param name="key">组中的键名。</param>
     /// <param name="dictionaryName">字典的名称。默认为 "default"。</param>
     /// <returns>如果存在则返回 true，否则返回 false。</returns>
-    public static bool ContainsText(string group, string key, string dictionaryName = DEFAULT_DICT)
+    public static bool ContainsText(string group, string key, string dictionaryName = DefaultDict)
     {
         return dictionaries.TryGetValue(dictionaryName, out var dict) &&
                dict.TryGetValue(group, out var groupDict) &&
@@ -190,7 +190,7 @@ public class I18n
     /// </summary>
     /// <param name="dictionaryName">字典的名称。默认为 "default"。</param>
     /// <returns>包含所有组和键的本地化文本的字典。</returns>
-    public static Dictionary<string, Dictionary<string, string>> GetAllTexts(string dictionaryName = DEFAULT_DICT)
+    public static Dictionary<string, Dictionary<string, string>> GetAllTexts(string dictionaryName = DefaultDict)
     {
         if (!dictionaries.TryGetValue(dictionaryName, out var dict))
         {
@@ -266,8 +266,8 @@ public class Variable
 public static class I18Extensions
 {
     public static string GetGroup(this string key, string group, params Variable[] variables)
-        => I18n.GetText(group, key, variables: variables);
+        => I18N.GetText(group, key, variables: variables);
 
     public static string GetKey(this string group, string key, params Variable[] variables)
-        => I18n.GetText(group, key, variables: variables);
+        => I18N.GetText(group, key, variables: variables);
 }

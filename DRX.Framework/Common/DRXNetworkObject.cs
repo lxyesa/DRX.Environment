@@ -2,7 +2,7 @@ using DRX.Framework.Common.Args;
 
 namespace DRX.Framework.Common;
 
-public class DRXNetworkObject : DRXBehaviour
+public class DRXNetworkObject : DrxBehaviour
 {
     protected int GCInterval = 5 * 1000 * 60;
     public DRXNetworkObject()

@@ -5,7 +5,7 @@ using DRX.Framework.Common.Systems;
 
 namespace DRX.Framework.Common;
 
-public abstract class DRXBehaviour : IDisposable
+public abstract class DrxBehaviour : IDisposable
 {
     private readonly IComponentSystem _componentSystem;
     private readonly IEventSystem _eventSystem;
@@ -13,9 +13,9 @@ public abstract class DRXBehaviour : IDisposable
     private readonly CommandSystem _commandSystem;
 
     public string Tag { get; set; } = string.Empty;
-    public string Name { get; set; } = typeof(DRXBehaviour).Name;
+    public string Name { get; set; } = nameof(DrxBehaviour);
 
-    protected DRXBehaviour()
+    protected DrxBehaviour()
     {
         _componentSystem = new ComponentSystem(this);
         _eventSystem = new EventSystem();
