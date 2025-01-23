@@ -1,6 +1,7 @@
-using DRX.Framework;
+Ôªøusing DRX.Framework;
 using DRX.Framework.Common;
 using DRX.Framework.Common.Base;
+using DRX.Framework.Common.Engine;
 using DRX.Framework.Common.Models;
 using DRX.Framework.Common.Utility;
 using NDV_Server.Components;
@@ -14,29 +15,13 @@ namespace NDV_Server
     {
         public static void Main(string[] args)
         {
-            SocketServer.Start();
-
             var builder = WebApplication.CreateBuilder(args);
 
             // Add services to the container.
             builder.Services.AddRazorComponents()
                 .AddInteractiveServerComponents();
-            // ÃÌº”øÿ÷∆∆˜∑˛ŒÒ
-            builder.Services.AddControllers();
-
-            // ≈‰÷√øÁ”Ú£®∏˘æ›–Ë«Û£©
-            builder.Services.AddCors(options =>
-            {
-                options.AddPolicy("AllowAll",
-                    builder => builder.AllowAnyOrigin()
-                                      .AllowAnyMethod()
-                                      .AllowAnyHeader());
-            });
 
             var app = builder.Build();
-
-            //  π”√øÁ”Ú≤ﬂ¬‘
-            app.UseCors("AllowAll");
 
             // Configure the HTTP request pipeline.
             if (!app.Environment.IsDevelopment())
@@ -54,8 +39,7 @@ namespace NDV_Server
             app.MapRazorComponents<App>()
                 .AddInteractiveServerRenderMode();
 
-            // ≈‰÷√øÿ÷∆∆˜¬∑”…
-            app.MapControllers();
+            SocketServer.Start();
 
             app.Run();
         }
@@ -64,7 +48,7 @@ namespace NDV_Server
 
     public static class SocketServer
     {
-        public static NDVServer Server { get; private set; }
+        public static NdvServerEngine Server { get; private set; }
 
         static SocketServer()
         {
@@ -77,29 +61,28 @@ namespace NDV_Server
                 MessageQueueDelay = 2000,
                 Key = "ffffffffffffffff"
             };
-            var savedTask = config.SaveToFileAsync(DRXFile.ConfigPath);
+            var savedTask = config.SaveToFileAsync(DrxFile.ConfigPath);
             savedTask.Wait();
             bool saved = savedTask.Result;
 
             if (!saved)
             {
-                Logger.Log("Server", "±£¥Ê≈‰÷√Œƒº˛ ß∞‹");
-                var loadedTask = config.LoadFromFileAsync(DRXFile.ConfigPath);
+                Logger.Log("Server", "‰øùÂ≠òÈÖçÁΩÆÊñá‰ª∂Â§±Ë¥•");
+                var loadedTask = config.LoadFromFileAsync(DrxFile.ConfigPath);
                 loadedTask.Wait();
                 bool loaded = loadedTask.Result;
                 if (!loaded)
                 {
-                    Logger.Log("Server", "º”‘ÿ≈‰÷√Œƒº˛ ß∞‹");
+                    Logger.Log("Server", "Âä†ËΩΩÈÖçÁΩÆÊñá‰ª∂Â§±Ë¥•");
                 }
             }
 
 
-            Server = new NDVServer(config);
+            Server = new NdvServerEngine(config);
 
             Server.OnDataReceived += (sender, e) =>
             {
                 var packet = DRXPacket.Unpack(e.Packet, config.Key);
-                Logger.Log("Server", $"Received packet: {packet?.Hash}");
             };
         }
 
@@ -107,12 +90,12 @@ namespace NDV_Server
         {
             InitCommanad();
 
-            Server.BeginReceiveCommand();
             Server.OnError += (sender, e) =>
             {
                 Logger.Log("Server", e.Message);
             };
             Server.Start();
+            PluginEngine.LoadPlugins(Server);
         }
 
         public static void InitCommanad()

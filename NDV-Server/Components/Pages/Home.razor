@@ -1,17 +1,18 @@
 ﻿@page "/"
 @rendermode InteractiveServer
 
+@using System.Text.Json
 @using System.Threading
 @using DRX.Framework
-@using DRX.Framework.Blazor.Common.UI
 @using DRX.Framework.Common
 @using DRX.Framework.Common.Components
 @using DRX.Framework.Common.Enums.Packet
 @using DRX.Framework.Common.Models
 @using DRX.Framework.Common.Utility
+@using DRX.Framework.Blazor.Common.UI
 <PageTitle>主页</PageTitle>
 
-@if (showDialog)
+@if (_showDialog)
 {
     <DRXDialog ButtonText="关闭" OnButtonClick="HideDialog" OnClose="HideDialog">
         <Header>
@@ -21,7 +22,7 @@
         <Content>
             <div class="dialog-div">
                 <a>用户名: @(GetSelectSocket() != null ? GetUserName(GetSelectSocket()) : "N/A")</a>
-                <a>唯一UID: @(GetSelectSocket() != null ? GetUserUID(GetSelectSocket()) : "N/A")</a>
+                <a>唯一UID: @(GetSelectSocket() != null ? GetUserUid(GetSelectSocket()) : "N/A")</a>
                 <a>邮箱: @(GetSelectSocket() != null ? GetUserEmail(GetSelectSocket()) : "N/A")</a>
             </div>
             <hr />
@@ -34,22 +35,22 @@
     <thead>
         <tr>
             <DRXTableHeader Width="45px">
-                <DRXCheckBox @bind-IsChecked="selectAll" />
+                <DRXCheckBox @bind-IsChecked="_selectAll" />
             </DRXTableHeader>
             <DRXTableHeader>客户端ID</DRXTableHeader>
             <DRXTableHeader>客户端IP</DRXTableHeader>
         </tr>
     </thead>
     <tbody>
-        @if (clients != null && clients.Any())
+        @if (_clients != null && _clients.Any())
         {
-            @foreach (var client in clients)
+            @foreach (var client in _clients)
             {
                 <tr>
                     <DRXTableData>
                         <DRXCheckBox @bind-IsChecked="client.IsSelected" />
                     </DRXTableData>
-                    <DRXTableData>@GetUserID(client)</DRXTableData>
+                    <DRXTableData>@GetUserId(client)</DRXTableData>
                     <DRXTableData>@(client.SafeHandle?.IsClosed ?? true ? "已断开连接" : client.RemoteEndPoint?.ToString())</DRXTableData>
                 </tr>
             }
@@ -90,14 +91,14 @@
         </tr>
     </thead>
     <tbody>
-        @if (bannedClients != null && bannedClients.Any())
+        @if (_bannedClients.Any())
         {
-            @foreach (var bannedClient in bannedClients)
+            @foreach (var bannedClient in _bannedClients)
             {
                 <tr>
-                    <DRXTableData>@bannedClient.Name</DRXTableData>
-                    <DRXTableData>@bannedClient.BanndedDate.ToString("yyyy-MM-dd HH:mm:ss")</DRXTableData>
-                    <DRXTableData>@bannedClient.UnBandedDate.ToString("yyyy-MM-dd HH:mm:ss")</DRXTableData>
+                    <DRXTableData>@bannedClient?.Name</DRXTableData>
+                    <DRXTableData>@bannedClient?.BanndedDate.ToString("yyyy-MM-dd HH:mm:ss")</DRXTableData>
+                    <DRXTableData>@bannedClient?.UnBandedDate.ToString("yyyy-MM-dd HH:mm:ss")</DRXTableData>
                 </tr>
             }
         }
@@ -111,14 +112,17 @@
 </table>
 
 @code {
-    private HashSet<DRXSocket>? clients;
-    private List<ClientComponent> bannedClients = new();
-    private bool selectAll;
-    private bool showDialog;
+
+
+
+    private HashSet<DRXSocket>? _clients;
+    private List<ClientComponent?> _bannedClients = [];
+    private bool _selectAll;
+    private bool _showDialog;
 
     protected override async Task OnInitializedAsync()
     {
-        clients = SocketServer.GetConnectedSockets();
+        _clients = SocketServer.GetConnectedSockets();
         await LoadBannedClientsAsync();
     }
 
@@ -127,53 +131,63 @@
         try
         {
             // 读取封禁列表中的所有UID
-            var bannedUIDs = new List<string>();
-            if (System.IO.File.Exists(DRXFile.BanPath))
+            var bannedUiDs = new List<string>();
+            if (System.IO.File.Exists(DrxFile.BanPath))
             {
-                var bannedList = await DRXFile.LoadFromJsonAsync<Dictionary<string, DateTime>>(DRXFile.BanPath);
+                var bannedList = await DrxFile.LoadFromJsonAsync<Dictionary<string, DateTime>>(DrxFile.BanPath);
                 if (bannedList != null)
                 {
-                    bannedUIDs = bannedList.Keys.ToList();
+                    bannedUiDs = bannedList.Keys.ToList();
                 }
             }
 
             // 在用户路径中找到对应的UID.json文件
-            var userFiles = Directory.GetFiles(DRXFile.UserPath, "*.json");
+            var userFiles = Directory.GetFiles(DrxFile.UserPath, "*.json");
             var loadTasks = userFiles
-                .Where(file => bannedUIDs.Contains(Path.GetFileNameWithoutExtension(file)))
-                .Select(file => DRXFile.LoadFromJsonAsync<ClientComponent?>(file));
+                .Where(file => bannedUiDs.Contains(Path.GetFileNameWithoutExtension(file)))
+                .Select(DrxFile.LoadFromJsonAsync<ClientComponent?>);
             var clientComponents = await Task.WhenAll(loadTasks);
 
-            bannedClients = clientComponents
-                .Where(cc => cc != null && cc.IsBannded)
+            _bannedClients = clientComponents
+                .Where(cc => cc is { IsBannded: true })
                 .ToList();
         }
         catch (Exception ex)
         {
-            // 处理异常，如日志记录
-            Logger.Log("Error", ex.Message);
+
+            // 如果错误类型为文件未找到，则创建路径。
+            if (ex is DirectoryNotFoundException)
+            {
+                Directory.CreateDirectory(DrxFile.UserPath);
+                await DrxFile.CreateFileAsync(DrxFile.BanPath);
+            }
+
+            if (ex is JsonException)
+            {
+                Logger.Warring($"在读取封禁列表时发生错误: {ex.Message}");
+            }
+
+            Logger.Error($"页面初始化发生意想不到的错误: {ex.Message}");
         }
     }
 
 
     private void ToggleSelectAll()
     {
-        selectAll = !selectAll;
-        if (clients != null)
+        _selectAll = !_selectAll;
+        if (_clients == null) return;
+        foreach (var client in _clients)
         {
-            foreach (var client in clients)
-            {
-                client.IsSelected = selectAll;
-            }
+            client.IsSelected = _selectAll;
         }
     }
 
     private DRXSocket? GetSelectSocket()
     {
-        return clients?.FirstOrDefault(c => c.IsSelected);
+        return _clients?.FirstOrDefault(c => c.IsSelected);
     }
 
-    private int GetUserID(DRXSocket? client)
+    private static int GetUserId(DRXSocket? client)
     {
         if (client == null)
             return 0;
@@ -182,7 +196,7 @@
         return component?.Id ?? 0;
     }
 
-    private string? GetUserName(DRXSocket? client)
+    private static string? GetUserName(DRXSocket? client)
     {
         if (client == null)
             return "N/A";
@@ -191,7 +205,7 @@
         return component?.Name ?? "N/A";
     }
 
-    private string? GetUserEmail(DRXSocket? client)
+    private static string? GetUserEmail(DRXSocket? client)
     {
         if (client == null)
             return "N/A";
@@ -200,7 +214,7 @@
         return component?.Email ?? "N/A";
     }
 
-    private string? GetUserUID(DRXSocket? client)
+    private static string? GetUserUid(DRXSocket? client)
     {
         if (client == null)
             return "N/A";
@@ -211,16 +225,13 @@
 
     private void DisconnectSelectedClients()
     {
-        if (clients == null) return;
+        if (_clients == null) return;
 
-        var selectedClients = clients.Where(c => c.IsSelected).ToList();
+        var selectedClients = _clients.Where(c => c.IsSelected).ToList();
         foreach (var client in selectedClients)
         {
             var component = client.GetComponent<ClientComponent>();
-            if (component != null)
-            {
-                component.SaveToFile(DRXFile.UserPath);
-            }
+            component?.SaveToFile(DrxFile.UserPath);
 
             var packet = new DRXPacket()
             {
@@ -228,13 +239,13 @@
                 {
                     { PacketHeaderKey.Type, PacketTypes.Message}
                 },
-                Data =
+                Data = 
                 {
-                    { PacketBodyKey.Message, "client_disconnected".GetGroup("message")}
+                    { PacketBodyKey.Message, "client_disconnected"}
                 }
             };
             var key = SocketServer.Server.GetKey();
-            SocketServer.Server.Send<DRXPacket>(client, packet, key);
+            if (key != null) SocketServer.Server.Send(client, packet, key);
 
             client.Close();
         }
@@ -242,26 +253,26 @@
 
     private void BanSelectedClients()
     {
-        if (clients == null) return;
+        if (_clients == null) return;
 
-        var selectedClients = clients.Where(c => c.IsSelected).ToList();
+        var selectedClients = _clients.Where(c => c.IsSelected).ToList();
         foreach (var client in selectedClients)
         {
             var component = client.GetComponent<ClientComponent>();
             if (component != null)
             {
-                SocketServer.Server.BanneClient(client, 1);
+                SocketServer.Server.BlockClient(client, 1);
             }
         }
     }
 
     private void ShowInfoDialog()
     {
-        showDialog = true;
+        _showDialog = true;
     }
 
     private void HideDialog()
     {
-        showDialog = false;
+        _showDialog = false;
     }
 }
