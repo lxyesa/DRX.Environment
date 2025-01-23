@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "NDVDemoWinUI (Package)": {
+      "commandName": "MsixPackage"
+    },
+    "NDVDemoWinUI (Unpackaged)": {
+      "commandName": "Project"
+    }
+  }
+}
