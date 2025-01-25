@@ -662,8 +662,11 @@ public abstract class ServerEngine : DrxBehaviour, IEngine
 
             var type = packet.Headers["type"];
 
-            HandleCommandPacket(packet, args.Socket);
-            
+            OnCommandExecuted?.Invoke(this, new NetworkEventArgs(
+                socket: args.Socket,
+                eventType: NetworkEventType.HandlerEvent,
+                packet: args.Packet
+            ));
         };
     }
 
