@@ -663,67 +663,8 @@ public abstract class ServerEngine : DrxBehaviour, IEngine
             var type = packet.Headers["type"];
 
             HandleCommandPacket(packet, args.Socket);
+            
         };
-    }
-
-    /// <summary>
-    /// 处理命令数据包。
-    /// </summary>
-    /// <param name="packet">数据包。</param>
-    /// <param name="socket">客户端Socket。</param>
-    protected virtual void HandleCommandPacket(DRXPacket packet, DRXSocket? socket)
-    {
-        var type = packet.Headers["type"];
-        if (type.ToString() != "command") return;
-
-        var command = packet.Data["command"].ToString();
-        if (command == null) return;
-
-        if (HasCommand(command))
-        {
-            var commandArgs = packet.Data.ToArray("args");
-            ExecuteCommandAndRespond(command, commandArgs, socket, packet);
-        }
-        else
-        {
-            Logger.Log(LogLevel.Warning, "Server", $"未找到命令 {command}");
-        }
-    }
-
-    /// <summary>
-    /// 执行命令并响应。
-    /// </summary>
-    /// <param name="command">命令。</param>
-    /// <param name="commandArgs">命令参数。</param>
-    /// <param name="socket">客户端Socket。</param>
-    /// <param name="orgPacket">原始数据包。</param>
-    protected virtual void ExecuteCommandAndRespond(string command, object[] commandArgs, DRXSocket? socket, DRXPacket orgPacket)
-    {
-        if (socket == null) return;
-
-        var commandResult = ExecuteCommand(command, commandArgs, socket);
-
-        OnCommandExecuted?.Invoke(this, new NetworkEventArgs(
-            socket: socket,
-            eventType: NetworkEventType.HandlerEvent,
-            packet: orgPacket.Pack(Key),
-            data: [command, commandArgs, commandResult]
-        ));
-        {
-            var responsePacket = new DRXPacket()
-            {
-                Headers =
-                {
-                    { PacketHeaderKey.Type, PacketTypes.CommandResponse }
-                },
-                Data =
-                {
-                    { PacketBodyKey.Message, "" },
-                    { PacketBodyKey.CommandResponse, commandResult }
-                }
-            };
-            Send(socket, orgPacket, responsePacket, Key);
-        }
     }
 
     #region 数据处理
