@@ -151,16 +151,16 @@ namespace DRX.Framework.Common.Base
             throw new ArgumentException("Invalid JSON structure for hashing", nameof(originalJson));
         }
 
-        public T TryGenerateHash(string key16char)
+        public T TryGenerateHash(string key16Char)
         {
-            var packet = new T();
+            T packet;
 
             try
             {
-                string jsonString = ToJson();
-                Hash = GenerateSHA256(key16char, jsonString);
+                var jsonString = ToJson();
+                Hash = GenerateSHA256(key16Char, jsonString);
                 jsonString = ToJson(); // 更新后的 JSON 字符串包含哈希值
-                packet = FromJson(jsonString, key16char);
+                packet = FromJson(jsonString, key16Char);
             }
             catch (Exception ex)
             {

@@ -9,15 +9,8 @@ namespace DRX.Framework.Common.Args
 {
     public class CommandResult : BaseArgs<CommandResult>
     { 
-        public object? Result { get; set; }
-        public string? Message { get; set; }
-        public bool IsSuccess { get; set; }
-
-        public CommandResult()
-        {
-            Result = new();
-            Message = string.Empty;
-            IsSuccess = false;
-        }
+        public object? Result { get; set; } = new();
+        public object? Message { get; set; } = string.Empty;
+        public bool IsSuccess { get; set; } = false;
     }
 }

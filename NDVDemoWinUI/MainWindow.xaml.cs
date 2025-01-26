@@ -1,12 +1,13 @@
+using DRX.Framework;
+using DRX.Framework.Common.Models;
 using DRX.Framework.Media.UI;
+using Microsoft.UI;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using NDVDemoWinUI.Models;
 using NDVDemoWinUI.Views;
 using System;
 using System.Threading.Tasks;
-using DRX.Framework;
-using Microsoft.UI;
-using NDVDemoWinUI.Models;
 
 // To learn more about WinUI, the WinUI project structure,
 // and more about our project templates, see: http://aka.ms/winui-project-info.
@@ -18,6 +19,7 @@ namespace NDVDemoWinUI
     /// </summary>
     public sealed partial class MainWindow : Window
     {
+        public static string _key = "ffffffffffffffff";
         public MainWindow()
         {
             this.InitializeComponent();
@@ -117,6 +119,47 @@ namespace NDVDemoWinUI
             if (pageType != null)
             {
                 content.Navigate(pageType);
+            }
+        }
+
+        private async void MenuFlyoutItem_OnClickLogin(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                const string apiUrl = "http://localhost:5096/api/Register/register";
+                var client = NetManager.Instance.GetClient();
+
+                var packet = new DRXPacket()
+                {
+                    Action = "Login",
+                    Data =
+                    {
+                        { "username", "testuser" },
+                        { "password", "testpassword" }
+                    },
+                    Headers =
+                    {
+                        { "h", "1" }
+                    },
+                    State =
+                    {
+                        { "code", "200" }
+                    }
+                };
+
+                var unpacked = await client?.TrySendPostAsync(apiUrl, packet, _key)!;
+                if (unpacked != null)
+                {
+                    // 处理数据包
+                    Logger.Log("HttpResponse", $"response: {unpacked.Data}");
+                    Logger.Log("HttpResponse", $"state: {unpacked.State}");
+                    Logger.Log("HttpResponse", $"hash: {unpacked.Hash}");
+                    Logger.Log("HttpResponse", $"action: {unpacked.Action}");
+                }
+            }
+            catch (Exception ex)
+            {
+                throw new Exception(ex.Message);
             }
         }
     }

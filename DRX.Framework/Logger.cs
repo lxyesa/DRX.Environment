@@ -4,7 +4,6 @@ using System.Text;
 using System.Windows.Controls;
 using System.Windows.Documents;
 using System.Windows.Media;
-using DRX.Framework.Common.Utility;
 
 namespace DRX.Framework;
 
@@ -132,7 +131,7 @@ public static class Logger
                     Console.OutputEncoding = Encoding.UTF8;
                     var originalColor = Console.ForegroundColor;
                     Console.ForegroundColor = GetLogLevelColor(level);
-                    Console.Write(ParseColorTags(logText));
+                    Console.Write(logText);
                     Console.ForegroundColor = originalColor;
                     Console.WriteLine();
                     return;
@@ -143,17 +142,17 @@ public static class Logger
                 {
                     if (_boundTextBox != null)
                     {
-                        _boundTextBox.AppendText(ParseColorTags(logText) + Environment.NewLine);
+                        _boundTextBox.AppendText(logText + Environment.NewLine);
                         _boundTextBox.ScrollToEnd();
                     }
                     else if (_boundTextBlock != null)
                     {
-                        _boundTextBlock.Text += ParseColorTags(logText) + Environment.NewLine;
+                        _boundTextBlock.Text += logText + Environment.NewLine;
                     }
                     else if (_boundRichTextBox != null)
                     {
                         var paragraph = new Paragraph();
-                        var run = new Run(ParseColorTags(logText))
+                        var run = new Run(logText)
                         {
                             Foreground = GetWpfLogLevelBrush(level)
                         };
@@ -168,37 +167,6 @@ public static class Logger
                 Console.WriteLine($"[{DateTime.Now:yyyy/MM/dd HH:mm:ss}] [ERROR] 日志系统异常");
             }
         }
-    }
-
-    private static string ParseColorTags(string input)
-    {
-        var regexParam = new RegexParam
-        {
-            Input = input,
-            Mode = RegexMode.MatchContentBetweenStrings,
-            Param1 = "%color(",
-            Param2 = ")",
-            ReturnMode = ReturnMode.ReturnMatchedStrings,
-            Filter = ReturnFilter.All
-        };
-
-        var matches = DRXRegex.Execute(regexParam) as string[];
-        if (matches == null) return input;
-
-        foreach (var match in matches)
-        {
-            var colorValues = match.Replace("%color(", "").Replace(")", "").Split(',');
-            if (colorValues.Length == 3 &&
-                byte.TryParse(colorValues[0], out var r) &&
-                byte.TryParse(colorValues[1], out var g) &&
-                byte.TryParse(colorValues[2], out var b))
-            {
-                var color = Color.FromRgb(r, g, b);
-                input = input.Replace(match, $"[{color}]");
-            }
-        }
-
-        return input;
     }
 
     private static ConsoleColor GetLogLevelColor(LogLevel level) => level switch

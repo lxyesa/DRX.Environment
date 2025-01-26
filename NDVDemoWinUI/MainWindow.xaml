@@ -51,7 +51,7 @@
                     </MenuBarItem>
 
                     <MenuBarItem Title="未登录">
-                        <MenuFlyoutItem Text="登录"/>
+                        <MenuFlyoutItem Text="登录" Click="MenuFlyoutItem_OnClickLogin"/>
                     </MenuBarItem>
                 </MenuBar>
             </StackPanel>

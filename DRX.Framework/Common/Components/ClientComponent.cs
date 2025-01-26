@@ -3,7 +3,7 @@ using System.IO;
 using System.Net;
 using System.Text.Json.Serialization;
 using DRX.Framework.Common.Interface;
-using DRX.Framework.Common.Utility;
+using DRX.Framework.Common.Systems;
 
 namespace DRX.Framework.Common.Components;
 
@@ -95,13 +95,13 @@ public class ClientComponent : IComponent
             _ = Directory.CreateDirectory(directory);
         }
 
-        await DrxFile.SaveToJsonAsync(fullPath, this);
+        await FileSystem.SaveToJsonAsync(fullPath, this);
     }
 
     public async Task LoadFromFileAsync(string path, string fileName)
     {
         string fullPath = Path.Combine(path, fileName);
-        var loadedData = await DrxFile.LoadFromJsonAsync<ClientComponent>(fullPath);
+        var loadedData = await FileSystem.LoadFromJsonAsync<ClientComponent>(fullPath);
         if (loadedData != null)
         {
             Id = loadedData.Id;

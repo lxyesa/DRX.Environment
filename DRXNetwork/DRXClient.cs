@@ -2,13 +2,8 @@
 using DRX.Framework.Common.Engine;
 using DRX.Framework.Common.Enums.Packet;
 using DRX.Framework.Common.Models;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
-namespace DRXNetwork
+namespace DRX.Library.Kax
 {
     public class DrxClient : ClientEngine
     {

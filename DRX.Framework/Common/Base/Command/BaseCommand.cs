@@ -2,11 +2,6 @@
 using DRX.Framework.Common.Components;
 using DRX.Framework.Common.Enums;
 using DRX.Framework.Common.Interface;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace DRX.Framework.Common.Base.Command
 {

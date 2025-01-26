@@ -5,6 +5,7 @@ using DRX.Framework.Common.Models;
 using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Http;
+using System.Net.Http.Json;
 using System.Net.Sockets;
 
 namespace DRX.Framework.Common.Engine
@@ -330,8 +331,53 @@ namespace DRX.Framework.Common.Engine
                     if (!string.IsNullOrWhiteSpace(responsePacketString))
                     {
                         // 使用 UnpackBase64 方法处理带引号的 Base64 字符串
-                        var unpacket = DRXPacket.UnpackBase64(responsePacketString, key);
-                        return unpacket;
+                        var unpacked = DRXPacket.UnpackBase64(responsePacketString, key);
+                        return unpacked;
+                    }
+                    else
+                    {
+                        Logger.Log("HttpResponse", "响应内容为空。");
+                    }
+                }
+                else
+                {
+                    Logger.Log("HttpResponse", $"错误状态码: {httpResponse.RequestMessage}");
+                }
+            }
+            catch (FormatException ex)
+            {
+                Logger.Log("HttpResponse", $"Base64 格式错误: {ex.Message}");
+            }
+            catch (Exception ex)
+            {
+                Logger.Log("HttpResponse", $"请求失败: {ex.Message}");
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// 异步发送 POST 请求并返回解包后的 DRXPacket。
+        /// </summary>
+        /// <param name="apiUrl">API 的 URL。</param>
+        /// <param name="packet">要发送的 DRXPacket 数据包。</param>
+        /// <param name="key">用于解包的密钥。</param>
+        /// <returns>解包后的 DRXPacket 实例，如果请求失败则返回 null。</returns>
+        public async Task<DRXPacket?> TrySendPostAsync(string apiUrl, DRXPacket packet, string key)
+        {
+            using var httpClient = new HttpClient();
+            try
+            {
+                var jsonContent = JsonContent.Create(packet);
+                var httpResponse = await httpClient.PostAsync(apiUrl, jsonContent);
+                if (httpResponse.IsSuccessStatusCode)
+                {
+                    var responsePacketString = await httpResponse.Content.ReadAsStringAsync();
+                    if (!string.IsNullOrWhiteSpace(responsePacketString))
+                    {
+                        // 使用 UnpackBase64 方法处理带引号的 Base64 字符串
+                        var unpacked = DRXPacket.UnpackBase64(responsePacketString, key);
+                        return unpacked;
                     }
                     else
                     {

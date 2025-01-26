@@ -1,6 +1,5 @@
 ﻿using DRX.Framework;
 using DRX.Framework.Common.Models;
-using DRXNetwork;
 using Microsoft.Graph.Models;
 using System;
 using System.Collections.Generic;
@@ -9,6 +8,7 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading.Tasks;
 using DRX.Framework.Common.Args;
+using DRX.Library.Kax;
 
 namespace NDVDemoWinUI.Models
 {

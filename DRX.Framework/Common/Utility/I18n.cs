@@ -1,4 +1,5 @@
-﻿using System.Collections.Concurrent;
+﻿using DRX.Framework.Common.Systems;
+using System.Collections.Concurrent;
 using System.IO;
 using System.Text;
 
@@ -13,7 +14,7 @@ public class I18N
         = new ConcurrentDictionary<string, ConcurrentDictionary<string, ConcurrentDictionary<string, string>>>();
 
     private const string DefaultDict = "default";
-    private static readonly string BasePath = DrxFile.I18DictPath;
+    private static readonly string BasePath = FileSystem.I18DictPath;
 
     /// <summary>
     /// 静态构造函数，用于初始化默认字典。

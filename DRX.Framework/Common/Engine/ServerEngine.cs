@@ -5,7 +5,6 @@ using DRX.Framework.Common.Enums;
 using DRX.Framework.Common.Enums.Packet;
 using DRX.Framework.Common.Models;
 using DRX.Framework.Common.Pool;
-using DRX.Framework.Common.Utility;
 using DRX.Framework.Extensions;
 using System.Buffers;
 using System.Collections.Concurrent;
@@ -13,6 +12,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Runtime.CompilerServices;
 using DRX.Framework.Common.Interface;
+using DRX.Framework.Common.Systems;
 
 namespace DRX.Framework.Common.Engine;
 
@@ -38,7 +38,7 @@ public abstract class ServerEngine : DrxBehaviour, IEngine
     /// <summary>
     /// 服务器IP地址。
     /// </summary>
-    protected string Ip = string.Empty;
+    protected string? Ip = string.Empty;
 
     /// <summary>
     /// 存储连接的客户端Socket。
@@ -53,7 +53,7 @@ public abstract class ServerEngine : DrxBehaviour, IEngine
     /// <summary>
     /// 消息队列池。
     /// </summary>
-    protected readonly DrxQueuePool MessageQueue;
+    protected DrxQueuePool MessageQueue;
 
     /// <summary>
     /// 缓冲区大小常量。
@@ -93,11 +93,6 @@ public abstract class ServerEngine : DrxBehaviour, IEngine
     public event EventHandler<NetworkEventArgs>? OnDataReceived;
 
     /// <summary>
-    /// 验证客户端时触发的事件。
-    /// </summary>
-    public event EventHandler<NetworkEventArgs>? OnVerifyClient;
-
-    /// <summary>
     /// 数据发送完成时触发的事件。
     /// </summary>
     public event EventHandler<NetworkEventArgs>? OnDataSent;
@@ -106,10 +101,12 @@ public abstract class ServerEngine : DrxBehaviour, IEngine
     /// 命令执行完成时触发的事件。
     /// </summary>
     public event EventHandler<NetworkEventArgs>? OnCommandExecuted;
+
     /// <summary>
     /// 当客户端被封禁时触发的事件。
     /// </summary>
     public EventHandler<NetworkEventArgs>? OnClientBlocked;
+
     /// <summary>
     /// 当客户端被解封时触发的事件。
     /// </summary>
@@ -159,6 +156,9 @@ public abstract class ServerEngine : DrxBehaviour, IEngine
     /// </summary>
     protected void Initialize()
     {
+        //Logger.Debug(GetIp());
+        //Logger.Debug(GetPort().ToString());
+        Socket.Bind(new IPEndPoint(IPAddress.Parse(GetIp()), GetPort()));
         // 订阅队列事件
         MessageQueue.ItemFailed += (_, args) =>
         {
@@ -180,12 +180,10 @@ public abstract class ServerEngine : DrxBehaviour, IEngine
     /// </summary>
     /// <param name="ip">服务器IP地址。</param>
     /// <param name="port">服务器端口。</param>
-    public virtual void Start(string ip, int port)
+    public virtual void Start()
     {
         try
         {
-            InitializeServer(ip, port);
-            // InitializeEvent();
             StartListening();
             NotifyServerStarted();
             BeginReceiveCommand();
@@ -194,18 +192,6 @@ public abstract class ServerEngine : DrxBehaviour, IEngine
         {
             HandleStartupError(ex);
         }
-    }
-
-    /// <summary>
-    /// 初始化服务器配置。
-    /// </summary>
-    /// <param name="ip">服务器IP地址。</param>
-    /// <param name="port">服务器端口。</param>
-    protected virtual void InitializeServer(string ip, int port)
-    {
-        Ip = ip;
-        Port = port;
-        Socket.Bind(new IPEndPoint(IPAddress.Parse(Ip), Port));
     }
 
     /// <summary>
@@ -225,7 +211,7 @@ public abstract class ServerEngine : DrxBehaviour, IEngine
         OnServerStarted?.Invoke(this, new NetworkEventArgs(
             socket: Socket,
             eventType: NetworkEventType.HandlerEvent,
-            message: $"服务器已启动，监听 {Ip}:{Port}"
+            message: $"服务器已启动，监听 {GetIp()}:{GetPort()}"
         ));
     }
 
@@ -316,15 +302,15 @@ public abstract class ServerEngine : DrxBehaviour, IEngine
         var client = clientSocket.GetComponent<ClientComponent>();
         if (client == null) return;
 
-        var path = DrxFile.BanPath;
+        var path = FileSystem.BanPath;
 
         // 设置封禁时间
         client.Ban(DateTime.Now.AddHours(timeH));
 
         // 写入封禁信息到文件
-        _ = DrxFile.WriteJsonKeyAsync(path, client.UID, client.UnBandedDate).ConfigureAwait(false);
+        _ = FileSystem.WriteJsonKeyAsync(path, client.UID, client.UnBandedDate).ConfigureAwait(false);
 
-        client.SaveToFile(DrxFile.UserPath);
+        client.SaveToFile(FileSystem.UserPath);
 
         _ = HandleDisconnectAsync(clientSocket);
         OnClientBlocked?.Invoke(this, new NetworkEventArgs(clientSocket));
@@ -339,10 +325,10 @@ public abstract class ServerEngine : DrxBehaviour, IEngine
         var client = clientSocket.GetComponent<ClientComponent>();
         if (client == null) return;
 
-        var path = DrxFile.BanPath;
+        var path = FileSystem.BanPath;
 
         // 移除封禁信息
-        _ = DrxFile.RemoveJsonKeyAsync(path, client.UID).ConfigureAwait(false);
+        _ = FileSystem.RemoveJsonKeyAsync(path, client.UID).ConfigureAwait(false);
 
         client.UnBan();
         OnUnBlockedClient?.Invoke(this, new NetworkEventArgs(clientSocket));
@@ -445,9 +431,6 @@ public abstract class ServerEngine : DrxBehaviour, IEngine
     /// <param name="clientSocket">客户端Socket对象。</param>
     protected virtual Task InitializeClientSocket(DRXSocket clientSocket)
     {
-        _ = clientSocket.AddComponent<Verify>();
-        _ = clientSocket.AddComponent<PermissionGroup>();
-
         OnClientConnected?.Invoke(this, new NetworkEventArgs(
             socket: clientSocket,
             eventType: NetworkEventType.HandlerEvent
@@ -583,70 +566,6 @@ public abstract class ServerEngine : DrxBehaviour, IEngine
             // ignored
         } // 忽略关闭过程中的异常
     }
-
-    /// <summary>
-    /// 启动客户端验证任务。
-    /// </summary>
-    [Obsolete("这个方法目前已经不应该再使用，因为这是一个臃肿的方法，因此我们将不再对其进行维护。")]
-    public virtual void BeginVerifyClient()
-    {
-        _ = AddTask(VerifyClientTask, 1000 * 60, "verify_client");
-        OnDataReceived += VerifyClientHeartBeat;
-    }
-
-    /// <summary>
-    /// 验证客户端心跳包。
-    /// </summary>
-    /// <param name="sender">事件发送者。</param>
-    /// <param name="args">网络事件参数。</param>
-    [Obsolete("这个方法目前已经不应该再使用，因为这是一个臃肿的方法，因此我们将不再对其进行维护。")]
-    protected virtual async void VerifyClientHeartBeat(object? sender, NetworkEventArgs args)
-    {
-        OnVerifyClient?.Invoke(this, args);  // 通知客户端连接验证事件
-
-        if (args.Socket is not { } socket) return;
-        var client = socket.GetComponent<Verify>();
-        if (client == null) return;
-        client.UpdateLastActiveTime();
-
-        /* 这里回应客户端一个心跳包 */
-        var responsePacket = new DRXPacket()
-        {
-            Headers =
-            {
-                { "type", "heartbeat" }
-            },
-            Data = { { "message", "pong" } }
-        };
-        Send(socket, responsePacket, Key);
-    }
-
-    /// <summary>
-    /// 允许子类重写以实现自定义的客户端验证逻辑。
-    /// </summary>
-    protected virtual void VerifyClientTask()
-    {
-        var sockets = GetConnectedSockets();
-        foreach (var socket in sockets)
-        {
-            var clientVerify = socket.GetComponent<Verify>();
-
-            if (clientVerify == null)
-            {
-                // 断开没有ClientComponent的连接
-                socket.Disconnect(false);
-                continue;
-            }
-
-            /* 检查客户端是否长时间未活动 */
-            var lastActiveTime = clientVerify.GetLastActiveTime();
-
-            /* 超过5分钟未活动则断开连接 */
-            if (!((DateTime.Now - lastActiveTime).TotalMinutes > 5)) continue;
-            Logger.Log(LogLevel.Info, "Server", $"客户端 {socket.RemoteEndPoint} 由于长时间未活动而被断开");
-            _ = DisconnectClient(socket);
-        }
-    }
     #endregion
 
     // --------------------------------------------------------------------------------- 命令接收系统
@@ -658,16 +577,72 @@ public abstract class ServerEngine : DrxBehaviour, IEngine
         OnDataReceived += (sender, args) =>
         {
             if (args.Packet == null) return;
-            var packet = DRXPacket.Unpack(args.Packet, Key);
+            var packet = DRXPacket.Unpack(args.Packet, GetKey());
 
             var type = packet.Headers["type"];
 
-            OnCommandExecuted?.Invoke(this, new NetworkEventArgs(
-                socket: args.Socket,
-                eventType: NetworkEventType.HandlerEvent,
-                packet: args.Packet
-            ));
+            HandleCommandPacket(packet, args.Socket);
         };
+    }
+
+    /// <summary>
+    /// 处理命令数据包。
+    /// </summary>
+    /// <param name="packet">数据包。</param>
+    /// <param name="socket">客户端Socket。</param>
+    protected virtual void HandleCommandPacket(DRXPacket packet, DRXSocket? socket)
+    {
+        var type = packet.Headers["type"];
+        if (type.ToString() != "command") return;
+
+        var command = packet.Data["command"].ToString();
+        if (command == null) return;
+
+        if (HasCommand(command))
+        {
+            var commandArgs = packet.Data.ToArray("args");
+            ExecuteCommandAndRespond(command, commandArgs, socket, packet);
+        }
+        else
+        {
+            Logger.Log(LogLevel.Warning, "Server", $"未找到命令 {command}");
+        }
+    }
+
+    /// <summary>
+    /// 执行命令并响应。
+    /// </summary>
+    /// <param name="command">命令。</param>
+    /// <param name="commandArgs">命令参数。</param>
+    /// <param name="socket">客户端Socket。</param>
+    /// <param name="orgPacket">原始数据包。</param>
+    protected virtual void ExecuteCommandAndRespond(string command, object[] commandArgs, DRXSocket? socket, DRXPacket orgPacket)
+    {
+        if (socket == null) return;
+
+        var commandResult = ExecuteCommand(command, commandArgs, socket);
+
+        OnCommandExecuted?.Invoke(this, new NetworkEventArgs(
+            socket: socket,
+            eventType: NetworkEventType.HandlerEvent,
+            packet: orgPacket.Pack(GetKey()),
+            data: [command, commandArgs, commandResult]
+        ));
+        {
+            var responsePacket = new DRXPacket()
+            {
+                Headers =
+                {
+                    { PacketHeaderKey.Type, PacketTypes.CommandResponse }
+                },
+                Data =
+                {
+                    { PacketBodyKey.Message, "" },
+                    { PacketBodyKey.CommandResponse, commandResult }
+                }
+            };
+            Send(socket, orgPacket, responsePacket, GetKey());
+        }
     }
 
     #region 数据处理
@@ -678,7 +653,7 @@ public abstract class ServerEngine : DrxBehaviour, IEngine
     /// <param name="clientSocket">客户端Socket对象。</param>
     protected virtual void BeginReceive(DRXSocket clientSocket)
     {
-        var buffer = ArrayPool<byte>.Shared.Rent(BufferSize);
+        var buffer = ArrayPool<byte>.Shared.Rent(GetBufferSize());
         try
         {
             _ = clientSocket.BeginReceive(buffer, 0, buffer.Length, SocketFlags.None,
@@ -743,7 +718,7 @@ public abstract class ServerEngine : DrxBehaviour, IEngine
         try
         {
             // 解析收到的数据包
-            var receivedPacket = DRXPacket.Unpack(data, Key);
+            var receivedPacket = DRXPacket.Unpack(data, GetKey());
 
             // 获取请求ID
             var requestId = receivedPacket.Headers.TryGetValue(PacketHeaderKey.RequestID, out var header)
@@ -781,7 +756,7 @@ public abstract class ServerEngine : DrxBehaviour, IEngine
     /// <returns>连接的客户端Socket集合。</returns>
     public virtual HashSet<DRXSocket> GetConnectedSockets()
     {
-        return [.. Clients.Keys];
+        return new HashSet<DRXSocket>(Clients.Keys);
     }
 
     /// <summary>
@@ -797,6 +772,36 @@ public abstract class ServerEngine : DrxBehaviour, IEngine
             return clientComponent != null && clientComponent.UID == uid;
         });
     }
+
+    /// <summary>
+    /// 获取服务器IP地址。
+    /// </summary>
+    /// <returns>服务器IP地址。</returns>
+    protected virtual string? GetIp() => Ip;
+
+    /// <summary>
+    /// 获取服务器端口。
+    /// </summary>
+    /// <returns>服务器端口。</returns>
+    protected virtual int GetPort() => Port;
+
+    /// <summary>
+    /// 获取消息队列池。
+    /// </summary>
+    /// <returns>消息队列池实例。</returns>
+    protected virtual DrxQueuePool GetMessageQueue() => MessageQueue;
+
+    /// <summary>
+    /// 获取缓冲区大小。
+    /// </summary>
+    /// <returns>缓冲区大小。</returns>
+    protected virtual int GetBufferSize() => BufferSize;
+
+    /// <summary>
+    /// 获取加密密钥。
+    /// </summary>
+    /// <returns>加密密钥。</returns>
+    protected virtual string? GetKey() => Key;
     #endregion
 
     /// <summary>
