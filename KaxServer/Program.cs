@@ -5,16 +5,6 @@ using KaxServer.Components;
 // -------------------------------------------------- È«¾Ö
 namespace KaxServer
 {
-    public static class Globals
-    {
-        public static string _key = "ffffffffffffffff";
-        public static readonly DrxServer Server = new DrxServer(new DrxServerConfig()
-        {
-            ServerEndIp = "0.0.0.0",
-            ServerEndPort = "8463",
-        });
-    }
-
     internal class Program
     {
         public static void Main(string[] args)
