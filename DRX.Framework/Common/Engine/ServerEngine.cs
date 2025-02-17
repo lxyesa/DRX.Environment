@@ -774,6 +774,15 @@ public abstract class ServerEngine : DrxBehaviour, IEngine
     }
 
     /// <summary>
+    /// 判断服务器实例是否已经启动。
+    /// </summary>
+    /// <returns>如果服务器已启动，则返回 true，否则返回 false。</returns>
+    public virtual bool IsStarted()
+    {
+        return Socket?.IsBound == true;
+    }
+
+    /// <summary>
     /// 获取服务器IP地址。
     /// </summary>
     /// <returns>服务器IP地址。</returns>
