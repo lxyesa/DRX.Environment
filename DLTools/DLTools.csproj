@@ -10,7 +10,10 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Drx.Framework.Memory\Drx.Framework.Memory.csproj" />
+    <ProjectReference Include="..\Drx.Sdk.Input\Drx.Sdk.Input.csproj" />
     <ProjectReference Include="..\Drx.Sdk.Memory\Drx.Sdk.Memory.csproj" />
+    <ProjectReference Include="..\Drx.Sdk.Ui.Wpf\Drx.Sdk.Ui.Wpf.csproj" />
+    <ProjectReference Include="..\SDK\Drx.Sdk.Network\Drx.Sdk.Network.csproj" />
   </ItemGroup>
 
 </Project>

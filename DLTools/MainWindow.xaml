@@ -5,8 +5,20 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:DLTools"
         mc:Ignorable="d"
-        Title="MainWindow" Height="450" Width="800">
+        xmlns:ikw="http://schemas.inkore.net/lib/ui/wpf"
+        xmlns:ui="http://schemas.inkore.net/lib/ui/wpf/modern"
+        ui:WindowHelper.UseModernWindowStyle="True"
+        ui:WindowHelper.SystemBackdropType="Mica"
+        ui:ThemeManager.RequestedTheme="Dark"
+        ui:TitleBar.Height="50"
+        ui:TitleBar.IsIconVisible="True"
+        Height="1200"
+        Width="1600"
+        Title="Dying Light Tools">
     <Grid>
-
+        <ui:NavigationView
+            IsBackButtonVisible="Collapsed">
+            
+        </ui:NavigationView>
     </Grid>
 </Window>

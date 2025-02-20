@@ -1,19 +1,14 @@
-﻿using System.Text;
+﻿using Drx.Sdk.Input;
+using Drx.Sdk.Ui.Wpf;
+using iNKORE.UI.WPF.Modern.Controls.Primitives;
+using iNKORE.UI.WPF.Modern.Helpers.Styles;
+using System.Threading.Tasks;
 using System.Windows;
-using System.Windows.Controls;
-using System.Windows.Data;
-using System.Windows.Documents;
-using System.Windows.Input;
-using System.Windows.Media;
-using System.Windows.Media.Imaging;
-using System.Windows.Navigation;
-using System.Windows.Shapes;
+using System.Windows.Forms;
+using System.Windows.Interop;
 
 namespace DLTools
 {
-    /// <summary>
-    /// Interaction logic for MainWindow.xaml
-    /// </summary>
     public partial class MainWindow : Window
     {
         public MainWindow()

@@ -9,4 +9,8 @@
     <InvariantGlobalization>true</InvariantGlobalization>
   </PropertyGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\SDK\Drx.Sdk.Network\Drx.Sdk.Network.csproj" />
+  </ItemGroup>
+
 </Project>

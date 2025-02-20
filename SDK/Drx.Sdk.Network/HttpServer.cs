@@ -19,6 +19,7 @@ namespace Drx.Sdk.Network
         private readonly List<IMiddleware> _middlewares;
         private readonly Dictionary<(string Method, string Path), MethodInfo> _routeTable;
         private readonly List<object> _apiInstances; // 改为List存储多个API实例
+        private ApiKeyMiddleware _apiKeyMiddleware;
 
         public HttpServer(string prefix)
         {
@@ -119,19 +120,19 @@ namespace Drx.Sdk.Network
 
         private async Task ProcessRequest(HttpListenerContext context)
         {
-            // 处理中间件
-            foreach (var middleware in _middlewares)
+            try
             {
-                await middleware.Invoke(context);
-            }
+                // 处理中间件
+                foreach (var middleware in _middlewares)
+                {
+                    await middleware.Invoke(context);
+                }
 
-            // 处理API
-            string path = context.Request.Url.AbsolutePath.TrimStart('/');
-            string method = context.Request.HttpMethod.ToUpper();
+                // 处理API
+                string path = context.Request.Url.AbsolutePath.TrimStart('/');
+                string method = context.Request.HttpMethod.ToUpper();
 
-            if (_routeTable.TryGetValue((method, path), out var targetMethod))
-            {
-                try
+                if (_routeTable.TryGetValue((method, path), out var targetMethod))
                 {
                     // 找到对应的API实例
                     var apiInstance = _apiInstances.FirstOrDefault(api =>
@@ -143,20 +144,7 @@ namespace Drx.Sdk.Network
                         return;
                     }
 
-                    object[] parameters = null;
-
-                    if (method == "POST")
-                    {
-                        using (var reader = new System.IO.StreamReader(context.Request.InputStream, context.Request.ContentEncoding))
-                        {
-                            string body = await reader.ReadToEndAsync();
-                            parameters = new object[] { body, context };
-                        }
-                    }
-                    else if (method == "GET")
-                    {
-                        parameters = new object[] { context };
-                    }
+                    object[] parameters = await GetMethodParameters(context, method);
 
                     var result = targetMethod.Invoke(apiInstance, parameters);
                     if (result is Task task)
@@ -164,22 +152,59 @@ namespace Drx.Sdk.Network
                         await task;
                     }
                 }
-                catch (TargetInvocationException tie)
+                else
                 {
-                    Logger($"API执行错误: {tie.InnerException?.Message}");
-                    await ResponseHelper.BadRequest(context, "API执行过程中发生错误");
-                }
-                catch (Exception ex)
-                {
-                    Logger($"处理请求时出错: {ex.Message}");
-                    await ResponseHelper.BadRequest(context, "服务器内部错误");
+                    // 未注册的API路径，返回404
+                    await ResponseHelper.NotFound(context, "API 未找到");
                 }
             }
-            else
+            catch (TargetInvocationException tie)
             {
-                // 未注册的API路径，返回404
-                await ResponseHelper.NotFound(context, "API 未找到");
+                Logger($"API执行错误: {tie.InnerException?.Message}");
+                await ResponseHelper.BadRequest(context, "API执行过程中发生错误");
             }
+            catch (Exception ex)
+            {
+                Logger($"处理请求时出错: {ex.Message}");
+                await ResponseHelper.BadRequest(context, "服务器内部错误");
+            }
+        }
+
+        private async Task<object[]> GetMethodParameters(HttpListenerContext context, string method)
+        {
+            if (method == "POST")
+            {
+                using (var reader = new System.IO.StreamReader(context.Request.InputStream, context.Request.ContentEncoding))
+                {
+                    string body = await reader.ReadToEndAsync();
+                    return new object[] { body, context };
+                }
+            }
+            else if (method == "GET")
+            {
+                return new object[] { context };
+            }
+
+            return Array.Empty<object>();
+        }
+
+        /// <summary>
+        /// 添加API Key中间件
+        /// </summary>
+        /// <param name="validApiKeys">有效的API Key数组</param>
+        public void AddApiKeyMiddleware(IEnumerable<string> validApiKeys)
+        {
+            _apiKeyMiddleware = new ApiKeyMiddleware(validApiKeys);
+            AddComponent(_apiKeyMiddleware);
+        }
+
+        /// <summary>
+        /// 动态添加API Key
+        /// </summary>
+        /// <param name="apiKey">API Key</param>
+        public void AddApiKey(string apiKey)
+        {
+            _apiKeyMiddleware?.AddApiKey(apiKey);
         }
 
         /// <summary>
@@ -189,6 +214,23 @@ namespace Drx.Sdk.Network
         public void AddComponent(IMiddleware middleware)
         {
             _middlewares.Add(middleware);
+        }
+
+        /// <summary>
+        /// 获取全部已注册API的路径
+        /// </summary>
+        /// <returns>已注册API的完整路径列表</returns>
+        public List<string> GetRegisteredApiPaths()
+        {
+            var apiPaths = new List<string>();
+            foreach (var prefix in _listener.Prefixes)
+            {
+                foreach (var route in _routeTable.Keys)
+                {
+                    apiPaths.Add($"{prefix}{route.Path}");
+                }
+            }
+            return apiPaths;
         }
 
         private void Logger(string message)

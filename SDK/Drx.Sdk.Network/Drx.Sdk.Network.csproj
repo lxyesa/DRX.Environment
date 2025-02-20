@@ -10,4 +10,8 @@
     <ProjectReference Include="..\..\Drx.Sdk.Json\Drx.Sdk.Json.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Folder Include="Middlewares\" />
+  </ItemGroup>
+
 </Project>
