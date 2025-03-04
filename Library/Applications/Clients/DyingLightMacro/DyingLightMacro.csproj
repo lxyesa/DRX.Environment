@@ -1,0 +1,30 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net9.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Folder Include="Properties\" />
+    <Folder Include="Resources\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Costura.Fody" Version="6.0.0">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\Environments\SDK\Drx.Sdk.Handle\Drx.Sdk.Handle.csproj" />
+    <ProjectReference Include="..\..\..\Environments\SDK\Drx.Sdk.Input\Drx.Sdk.Input.csproj" />
+    <ProjectReference Include="..\..\..\Environments\SDK\Drx.Sdk.Json\Drx.Sdk.Json.csproj" />
+    <ProjectReference Include="..\..\..\Environments\SDK\Drx.Sdk.Script\Drx.Sdk.Script.csproj" />
+  </ItemGroup>
+
+</Project>

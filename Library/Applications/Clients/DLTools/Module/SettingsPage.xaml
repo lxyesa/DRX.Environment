@@ -1,0 +1,139 @@
+﻿<Page x:Class="DLTools.Module.SettingsPage"
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+      xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+      xmlns:local="clr-namespace:DLTools.Module"
+      xmlns:ikw="http://schemas.inkore.net/lib/ui/wpf"
+      xmlns:ui="http://schemas.inkore.net/lib/ui/wpf/modern" xmlns:controls="clr-namespace:Drx.Sdk.Ui.Wpf.Controls;assembly=Drx.Sdk.Ui.Wpf"
+      mc:Ignorable="d"
+      d:DesignHeight="9999" d:DesignWidth="800"
+      Title="null">
+    <Grid>
+        <ui:ScrollViewerEx AutoHideScrollBars="True">
+            <FrameworkElement.Resources>
+                <Style x:Key="SettingHeaderText"
+                       TargetType="TextBlock">
+                    <Style.Setters>
+                        <Setter Property="Margin" Value="5,30,0,6" />
+                        <Setter Property="FontSize" Value="24" />
+                        <Setter Property="FontWeight" Value="Bold" />
+                    </Style.Setters>
+                </Style>
+                <Style x:Key="CardHeaderText"
+                       TargetType="TextBlock">
+                    <Style.Setters>
+                        <Setter Property="FontSize" Value="16" />
+                        <Setter Property="FontWeight" Value="Medium" />
+                        <Setter Property="Foreground" Value="{ui:ThemeResource TextFillColorPrimaryBrush}" />
+                    </Style.Setters>
+                </Style>
+                <Style x:Key="CardDespText"
+                       TargetType="TextBlock">
+                    <Style.Setters>
+                        <Setter Property="FontSize" Value="16" />
+                        <Setter Property="FontWeight" Value="Medium" />
+                        <Setter Property="Foreground" Value="{ui:ThemeResource TextFillColorSecondaryBrush}" />
+                    </Style.Setters>
+                </Style>
+            </FrameworkElement.Resources>
+
+            <!--通用-->
+            <StackPanel  Margin="60,0,60,60">
+                <TextBlock x:Name="Group1Header"
+                           Text="通用设置"
+                           Style="{StaticResource SettingHeaderText}"/>
+                <ui:SettingsCard x:Name="ColorSettingCard"
+                                 Description="选择你的惯用色"
+                                 Header="主题" IsEnabled="True">
+                    <ui:SettingsCard.HeaderIcon>
+                        <ui:FontIcon Icon="{x:Static ui:SegoeFluentIcons.Color}"/>
+                    </ui:SettingsCard.HeaderIcon>
+                    <ComboBox x:Name="ThemeComboBox" SelectionChanged="ComboBox_Selected">
+                        <ComboBoxItem Tag="Dark">深色</ComboBoxItem>
+                        <ComboBoxItem Tag="Light">浅色</ComboBoxItem>
+                        <ComboBoxItem Tag="System">跟随系统(不可用，将默认替换为白色)</ComboBoxItem>
+                    </ComboBox>
+                </ui:SettingsCard>
+                <ui:SettingsCard x:Name="GamePathSettingCard"
+                                 Description="当前未找到正确的游戏路径。"
+                                 Header="游戏路径" IsEnabled="True">
+                    <ui:SettingsCard.HeaderIcon>
+                        <ui:FontIcon Icon="{x:Static ui:SegoeFluentIcons.Folder}"/>
+                    </ui:SettingsCard.HeaderIcon>
+                    <Button x:Name="GamePathSel"
+                            Click="GamePathSel_Click" Width="100">选择</Button>
+                </ui:SettingsCard>
+                <ui:SettingsCard x:Name="ListenerProcessCard"
+                                 Background="{ui:ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                 ToolTip="重启生效。"
+                                 Header="*启动进程监听" IsEnabled="True">
+                    <ui:SettingsCard.HeaderIcon>
+                        <ui:FontIcon Icon="{x:Static ui:SegoeFluentIcons.UserAPN}"/>
+                    </ui:SettingsCard.HeaderIcon>
+                    <ui:SettingsCard.Description>
+                        <StackPanel>
+                            <TextBlock Text="在游戏进程发生改变时做出响应。"/>
+                        </StackPanel>
+                    </ui:SettingsCard.Description>
+                    <ui:ToggleSwitch x:Name="ListenerProcessToggleSwitch"
+                                     Tag="ListenerProcess"
+                                     OnContent="开启" OffContent="关闭"
+                                     Toggled="SettingToggleSwitch_Toggled"/>
+                </ui:SettingsCard>
+
+
+                <!--热键设置-->
+                <TextBlock Text="热键" Style="{StaticResource SettingHeaderText}"/>
+                <ui:InfoBar Title="警告"
+                            IsClosable="False"
+                            IsOpen="True"
+                            Severity="Warning"
+                            Message="以下设置在你不知道是什么的情况下不要修改。"/>
+                <ui:SettingsCard x:Name="DirverHotKeyCard"
+                                 Background="{ui:ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                 ToolTip="重启生效。"
+                                 Header="*驱动级热键" IsEnabled="True">
+                    <ui:SettingsCard.HeaderIcon>
+                        <ui:FontIcon Icon="{x:Static ui:SegoeFluentIcons.KeyboardFull}"/>
+                    </ui:SettingsCard.HeaderIcon>
+                    <ui:SettingsCard.Description>
+                        <StackPanel>
+                            <TextBlock Text="启用驱动级热键 (除非你知道这是什么，否则不要修改)"/>
+                        </StackPanel>
+                    </ui:SettingsCard.Description>
+                    <ui:ToggleSwitch x:Name="DirverHotKeyToggleSwitch"
+                                     Tag="DirverHotKey"
+                                     OnContent="开启" OffContent="关闭"
+                                     Toggled="SettingToggleSwitch_Toggled"/>
+                </ui:SettingsCard>
+                <ui:SettingsCard x:Name="HotKeyListenerCart"
+                                 Header="热键监听"
+                                 Description="启动功能热键监听，关闭后，将不支持快捷键功能开关">
+                    <ui:SettingsCard.HeaderIcon>
+                        <ui:FontIcon Icon="{x:Static ui:SegoeFluentIcons.KeyboardSettings}"/>
+                    </ui:SettingsCard.HeaderIcon>
+                    <ui:SettingsCard.Content>
+                        <ui:ToggleSwitch x:Name="HotKeyListenerToggleSwitch"
+                                         Tag="HotKeyListener"
+                                         OffContent="关闭" OnContent="开启"
+                                         Toggled="SettingToggleSwitch_Toggled"/>
+                    </ui:SettingsCard.Content>
+                </ui:SettingsCard>
+
+                <!-- 用户 -->
+                <TextBlock Text="用户" Style="{StaticResource SettingHeaderText}"/>
+                <controls:CardGroupItem CardCornerRadius="4"
+                                        Header="你的信息"
+                                        Clickable="True"
+                                        Click="CardGroupItem_Click"
+                                        Description="有关你的 DRX 账号详细信息">
+                    <controls:CardGroupItem.HeaderIcon>
+                        <ui:FontIcon FontSize="20"
+                                     Icon="{x:Static ui:SegoeFluentIcons.ContactInfo}"/>
+                    </controls:CardGroupItem.HeaderIcon>
+                </controls:CardGroupItem>
+            </StackPanel>
+        </ui:ScrollViewerEx>
+    </Grid>
+</Page>

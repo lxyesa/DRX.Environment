@@ -1,0 +1,26 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<!-- 目标支持 Windows 的 API，同时兼容 WPF 和 WinForms -->
+		<TargetFramework>net9.0-windows</TargetFramework>
+		<UseWPF>true</UseWPF>
+		<UseWindowsForms>true</UseWindowsForms>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<Nullable>enable</Nullable>
+	</PropertyGroup>
+
+	<ItemGroup>
+	  <PackageReference Include="Costura.Fody" Version="6.0.0">
+	    <PrivateAssets>all</PrivateAssets>
+	    <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+	  </PackageReference>
+	</ItemGroup>
+
+	<ItemGroup>
+	  <ProjectReference Include="..\Drx.Sdk.Handle\Drx.Sdk.Handle.csproj" />
+	  <ProjectReference Include="..\Drx.Sdk.Script.Functions\Drx.Sdk.Script.Functions.csproj" />
+	  <ProjectReference Include="..\Drx.Sdk.Script.JavaScript\Drx.Sdk.Script.JavaScript.csproj" />
+	  <ProjectReference Include="..\Drx.Sdk.Script.Lua\Drx.Sdk.Script.LuaScript.csproj" />
+	  <ProjectReference Include="..\Drx.Sdk.Script\Drx.Sdk.Script.csproj" />
+	</ItemGroup>
+</Project>

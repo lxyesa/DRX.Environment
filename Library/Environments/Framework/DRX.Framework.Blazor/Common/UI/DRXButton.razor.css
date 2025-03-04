@@ -1,0 +1,26 @@
+.drx-button {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background-color: #0067b8; /* 悬停时的背景颜色 */
+    border: none; /* 无边框 */
+    color: white; /* 白色文字 */
+    padding: 8px 32px; /* 内边距 */
+    text-align: center; /* 文字居中 */
+    text-decoration: none; /* 无下划线 */
+    font-size: 16px; /* 字体大小 */
+    margin: 4px 5px; /* 外边距 */
+    cursor: pointer; /* 鼠标指针 */
+    border-radius: 4px; /* 圆角 */
+    color: white;
+}
+
+.drx-button:hover {
+    background-color: #005ca5; /* 悬停时的背景颜色 */
+    color: white; /* 悬停时的文字颜色 */
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2); /* 悬停时的阴影效果 */
+}
+
+    .drx-button:active {
+        background-color: #003e87; /* 点击时的背景颜色 */
+    }

@@ -1,0 +1,21 @@
+﻿@* DRXButton.razor *@
+<button @onclick="OnClick" class="@CssClass" style="width: @Width; height: @Height;">
+    @ChildContent
+</button>
+
+@code {
+    [Parameter]
+    public EventCallback<MouseEventArgs> OnClick { get; set; }
+
+    [Parameter]
+    public RenderFragment ChildContent { get; set; }
+
+    [Parameter]
+    public string CssClass { get; set; } = "drx-button ";
+
+    [Parameter]
+    public string Width { get; set; } = "auto"; // 新增的 Width 参数，默认值为 auto
+
+    [Parameter]
+    public string Height { get; set; } = "auto"; // 新增的 Height 参数，默认值为 auto
+}
