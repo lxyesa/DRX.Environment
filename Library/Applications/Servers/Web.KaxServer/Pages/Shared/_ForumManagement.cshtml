@@ -1,0 +1,123 @@
+@model Web.KaxServer.Pages.Account.ManagementModel
+@using Web.KaxServer.Models
+
+<div class="forum-management-list">
+    @if (Model.ForumCategories.Any())
+    {
+        var boardsToShow = Model.ForumCategories.Take(15);
+        foreach (var board in boardsToShow)
+        {
+            <div class="forum-item-link" data-url="/Account/EditBoard/@board.Id">
+                <div class="forum-item forum-board-item">
+                    <div class="forum-item-header">
+                        <div class="forum-item-icon"><i class="@(string.IsNullOrEmpty(board.IconClass) ? "fas fa-folder" : board.IconClass)"></i></div>
+                        <div class="forum-item-content">
+                            <div class="forum-item-title">@board.Title</div>
+                            <div class="forum-item-details">
+                                <span>@board.Description</span>
+                            </div>
+                        </div>
+                        <div class="edit-indicator"><i class="fas fa-chevron-right"></i></div>
+                    </div>
+                </div>
+            </div>
+        }
+        @if (Model.ForumCategories.Count > 15)
+        {
+            <button class="btn btn-outline btn-view-more" data-type="board" data-page="2">查看更多板块</button>
+        }
+    }
+    else
+    {
+        <div class="empty-state">
+            <i class="fas fa-comments"></i>
+            <p>暂无论坛板块</p>
+        </div>
+    }
+</div>
+
+<style>
+    .forum-management-list {
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+    }
+    .forum-item {
+        background: #fdfdfd;
+        border-radius: 12px;
+        border: 1px solid #f0f0f0;
+        transition: all 0.3s ease;
+    }
+    .forum-item-link {
+        text-decoration: none;
+        color: inherit;
+        display: block;
+        border-radius: 12px;
+        transition: all 0.3s ease;
+    }
+    .forum-item-link:hover .forum-item {
+        border-color: var(--accent-color);
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+    }
+    .forum-item-link:hover .edit-indicator {
+        opacity: 1;
+        transform: translateX(0);
+    }
+    .forum-item-header {
+        display: flex;
+        align-items: center;
+        padding: 12px 16px;
+        position: relative;
+    }
+    .forum-item-icon {
+        flex-shrink: 0;
+        width: 38px;
+        height: 38px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background-color: #e9ecef;
+        color: #495057;
+        font-size: 1.1rem;
+        margin-right: 16px;
+    }
+    .forum-item-content {
+        flex-grow: 1;
+    }
+    .forum-item-title {
+        font-weight: 500;
+        color: #212529;
+    }
+    .forum-item-details {
+        font-size: 0.8rem;
+        color: #6c757d;
+        margin-top: 2px;
+    }
+    .edit-indicator {
+        position: absolute;
+        right: 16px;
+        color: var(--accent-color);
+        opacity: 0;
+        transform: translateX(-5px);
+        transition: all 0.3s ease;
+    }
+    .empty-state {
+        text-align: center;
+        padding: 2rem;
+        color: var(--muted-color);
+    }
+
+    .empty-state i {
+        font-size: 3rem;
+        margin-bottom: 1rem;
+        opacity: 0.5;
+    }
+    
+    .btn-view-more {
+        margin: 1rem auto 0.5rem;
+        display: block;
+        width: fit-content;
+    }
+</style> 

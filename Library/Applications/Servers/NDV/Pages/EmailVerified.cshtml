@@ -1,0 +1,449 @@
+@page
+@model NDV.Pages.EmailVerifiedModel
+@{
+    ViewData["Title"] = "邮箱验证成功";
+}
+
+<!-- 引入Font Awesome -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap">
+
+<!-- 导航栏 -->
+<nav class="navbar">
+    <div class="navbar-container">
+        <a href="/" class="navbar-logo">
+            <img src="https://placehold.co/32x32" alt="NDV Logo" />
+            NDV
+        </a>
+        <div class="navbar-links">
+            <a href="/#features" class="navbar-link">功能</a>
+            <a href="/#enterprise" class="navbar-link">企业</a>
+            <a href="#" class="navbar-link">博客</a>
+            <a href="#" class="navbar-link">论坛</a>
+        </div>
+        <div class="navbar-buttons">
+            <a href="#" class="navbar-btn navbar-btn-outline">登录</a>
+            <a href="/#signup" class="navbar-btn navbar-btn-primary">下载</a>
+        </div>
+    </div>
+</nav>
+
+<div class="container">
+    <div class="verification-success">
+        <div class="success-card">
+            <div class="icon-container">
+                <i class="fas fa-check-circle"></i>
+            </div>
+            <h1>邮箱验证成功！</h1>
+            <p class="success-message">您的邮箱 <strong>@Model.Email</strong> 已成功验证。</p>
+            <p class="success-info">您现在可以使用 NDV 系统的所有功能。</p>
+            <div class="action-buttons">
+                <a href="/" class="btn btn-primary">返回首页</a>
+                <a href="/#signup" class="btn btn-secondary">下载应用</a>
+            </div>
+        </div>
+        
+        <div class="next-steps">
+            <h2>接下来您可以：</h2>
+            <div class="steps-container">
+                <div class="step-item">
+                    <div class="step-icon">
+                        <i class="fas fa-download"></i>
+                    </div>
+                    <div class="step-content">
+                        <h3>下载 NDV</h3>
+                        <p>获取最新版本的 NDV 应用程序</p>
+                    </div>
+                </div>
+                <div class="step-item">
+                    <div class="step-icon">
+                        <i class="fas fa-book"></i>
+                    </div>
+                    <div class="step-content">
+                        <h3>查看文档</h3>
+                        <p>了解如何使用 NDV 的各项功能</p>
+                    </div>
+                </div>
+                <div class="step-item">
+                    <div class="step-icon">
+                        <i class="fas fa-users"></i>
+                    </div>
+                    <div class="step-content">
+                        <h3>加入社区</h3>
+                        <p>与其他用户交流经验和问题</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 页脚 -->
+<footer class="footer">
+    <div class="footer-wave"></div>
+    <div class="container">
+        <div class="footer-bottom">
+            <div class="footer-copyright">&copy; @DateTime.Now.Year - <a href="/">NDV</a> | 保留所有权利</div>
+            <div class="footer-bottom-links">
+                <a href="#" class="footer-bottom-link">条款</a>
+                <a href="#" class="footer-bottom-link">隐私</a>
+                <a href="#" class="footer-bottom-link">安全</a>
+                <a href="#" class="footer-bottom-link">联系我们</a>
+            </div>
+        </div>
+    </div>
+</footer>
+
+<style>
+    :root {
+        --primary-color: #0078d4;
+        --secondary-color: #4cc2ff;
+        --accent-color: #60cdff;
+        --dark-color: #242424;
+        --light-color: #fafafa;
+        --text-color: #202020;
+        --card-bg: rgba(255, 255, 255, 0.8);
+        --box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
+        --border-radius: 12px;
+        --transition-speed: 0.3s;
+        --cursor-black: #000000;
+        --cursor-white: #ffffff;
+        --cursor-gray: #f5f5f5;
+    }
+    
+    * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+    }
+    
+    body {
+        font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+        line-height: 1.6;
+        color: var(--text-color);
+        background-color: #ffffff;
+        overflow-x: hidden;
+        margin: 0;
+        padding: 0;
+    }
+    
+    .container {
+        width: 100%;
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 0 20px;
+        position: relative;
+    }
+    
+    .navbar {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        background-color: rgba(255, 255, 255, 0.95);
+        backdrop-filter: blur(10px);
+        z-index: 1000;
+        padding: 15px 0;
+        border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+    }
+    
+    .navbar-container {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        width: 100%;
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 0 20px;
+    }
+    
+    .navbar-logo {
+        font-weight: 700;
+        font-size: 1.5rem;
+        color: var(--cursor-black);
+        text-decoration: none;
+        display: flex;
+        align-items: center;
+    }
+    
+    .navbar-logo img {
+        height: 32px;
+        margin-right: 8px;
+    }
+    
+    .navbar-links {
+        display: flex;
+        gap: 30px;
+    }
+    
+    .navbar-link {
+        color: var(--text-color);
+        text-decoration: none;
+        font-weight: 500;
+        font-size: 0.95rem;
+        transition: color 0.2s;
+    }
+    
+    .navbar-link:hover {
+        color: var(--primary-color);
+    }
+    
+    .navbar-buttons {
+        display: flex;
+        gap: 15px;
+    }
+    
+    .navbar-btn {
+        padding: 8px 16px;
+        border-radius: 8px;
+        font-weight: 500;
+        font-size: 0.9rem;
+        text-decoration: none;
+        transition: all 0.2s;
+    }
+    
+    .navbar-btn-outline {
+        border: 1px solid rgba(0, 0, 0, 0.1);
+        color: var(--text-color);
+    }
+    
+    .navbar-btn-primary {
+        background-color: var(--cursor-black);
+        color: white;
+    }
+    
+    .verification-success {
+        padding: 10rem 0 4rem;
+        text-align: center;
+        position: relative;
+        overflow: hidden;
+        max-width: 800px;
+        margin: 0 auto;
+        animation: fadeInUp 0.8s ease-out;
+    }
+    
+    .success-card {
+        background: white;
+        border-radius: 16px;
+        padding: 3rem;
+        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+        margin-bottom: 3rem;
+        border: 1px solid rgba(0, 0, 0, 0.05);
+    }
+    
+    .icon-container {
+        margin-bottom: 30px;
+    }
+    
+    .icon-container i {
+        font-size: 80px;
+        color: #2ecc71;
+    }
+    
+    .verification-success h1 {
+        font-size: 2.5rem;
+        margin-bottom: 1.5rem;
+        font-weight: 800;
+        color: var(--cursor-black);
+        letter-spacing: -0.03em;
+        line-height: 1.2;
+    }
+    
+    .success-message {
+        font-size: 1.3rem;
+        margin-bottom: 0.8rem;
+        color: #333;
+    }
+    
+    .success-info {
+        font-size: 1.1rem;
+        color: #666;
+        margin-bottom: 2rem;
+    }
+    
+    .action-buttons {
+        display: flex;
+        justify-content: center;
+        gap: 15px;
+    }
+    
+    .btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0.9rem 2rem;
+        border: none;
+        border-radius: 8px;
+        font-size: 1rem;
+        font-weight: 600;
+        text-decoration: none;
+        transition: all 0.2s ease;
+        position: relative;
+        overflow: hidden;
+    }
+    
+    .btn:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+    }
+    
+    .btn-primary {
+        background: var(--cursor-black);
+        color: white;
+    }
+    
+    .btn-secondary {
+        background: var(--cursor-gray);
+        color: var(--cursor-black);
+    }
+    
+    .next-steps {
+        text-align: left;
+        padding: 2rem 0;
+    }
+    
+    .next-steps h2 {
+        font-size: 1.8rem;
+        margin-bottom: 2rem;
+        font-weight: 700;
+        color: var(--cursor-black);
+        text-align: center;
+    }
+    
+    .steps-container {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 2rem;
+    }
+    
+    .step-item {
+        background: white;
+        border-radius: 12px;
+        padding: 1.5rem;
+        transition: transform 0.3s ease, box-shadow 0.3s ease;
+        border: 1px solid rgba(0, 0, 0, 0.05);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+    }
+    
+    .step-item:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 15px 30px rgba(0, 0, 0, 0.08);
+    }
+    
+    .step-icon {
+        width: 50px;
+        height: 50px;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        font-size: 1.5rem;
+        color: var(--cursor-black);
+        margin-bottom: 1rem;
+    }
+    
+    .step-content h3 {
+        font-size: 1.2rem;
+        font-weight: 600;
+        margin-bottom: 0.5rem;
+        color: var(--cursor-black);
+    }
+    
+    .step-content p {
+        font-size: 0.9rem;
+        color: #666;
+    }
+    
+    /* 页脚 */
+    .footer {
+        background: #000;
+        color: #fff;
+        padding: 3rem 0;
+        position: relative;
+        overflow: hidden;
+        margin-top: 4rem;
+    }
+    
+    .footer::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 1px;
+        background: linear-gradient(to right, rgba(255,255,255,0), rgba(255,255,255,0.2), rgba(255,255,255,0));
+    }
+    
+    .footer-wave {
+        position: absolute;
+        top: -2px;
+        left: 0;
+        width: 100%;
+        height: 60px;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1200 120' preserveAspectRatio='none'%3E%3Cpath d='M321.39,56.44c58-10.79,114.16-30.13,172-41.86,82.39-16.72,168.19-17.73,250.45-.39C823.78,31,906.67,72,985.66,92.83c70.05,18.48,146.53,26.09,214.34,3V0H0V27.35A600.21,600.21,0,0,0,321.39,56.44Z' fill='%23000000'/%3E%3C/svg%3E");
+        background-size: cover;
+        transform: rotate(180deg);
+    }
+    
+    .footer-bottom {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        color: rgba(255, 255, 255, 0.6);
+        font-size: 0.9rem;
+    }
+    
+    .footer-copyright a {
+        color: rgba(255, 255, 255, 0.8);
+        text-decoration: none;
+    }
+    
+    .footer-copyright a:hover {
+        color: #fff;
+    }
+    
+    .footer-bottom-links {
+        display: flex;
+        gap: 1.5rem;
+    }
+    
+    .footer-bottom-link {
+        color: rgba(255, 255, 255, 0.6);
+        text-decoration: none;
+        transition: all 0.2s;
+    }
+    
+    .footer-bottom-link:hover {
+        color: #fff;
+    }
+    
+    /* 响应式设计 */
+    @@media (max-width: 768px) {
+        .steps-container {
+            grid-template-columns: 1fr;
+        }
+        
+        .footer-bottom {
+            flex-direction: column;
+            gap: 1.5rem;
+            text-align: center;
+        }
+        
+        .footer-bottom-links {
+            justify-content: center;
+        }
+    }
+    
+    @@keyframes fadeInUp {
+        from {
+            opacity: 0;
+            transform: translateY(20px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+</style> 

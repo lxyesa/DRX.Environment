@@ -1,0 +1,212 @@
+@page "/forums/category/{id}"
+@model Web.KaxServer.Pages.Forums.ViewCategoryModel
+@{
+    ViewData["Title"] = Model.CurrentCategory?.Title ?? "查看板块";
+}
+
+@section Styles {
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <style>
+        .category-view-container {
+            padding-top: 2rem;
+            padding-bottom: 4rem;
+            animation: fadeInUp 0.8s ease-out;
+        }
+
+        .category-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2rem;
+        }
+        
+        .category-title {
+            font-size: 2.2rem;
+            font-weight: 800;
+            color: var(--text-color);
+            margin: 0;
+        }
+        
+        .category-description {
+            font-size: 1rem;
+            color: var(--muted-color);
+        }
+
+        .toolbar {
+            display: flex;
+            justify-content: flex-end;
+            align-items: center;
+            margin-bottom: 1.5rem;
+        }
+        
+        .thread-list-container {
+            background-color: var(--bg-color);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            overflow: hidden;
+        }
+
+        .thread-list-header, .thread-item {
+            display: grid;
+            grid-template-columns: 50px 1fr 120px 220px;
+            align-items: center;
+            padding: 1rem 1.5rem;
+            gap: 1.5rem;
+        }
+        
+        .thread-list-header {
+            font-weight: 600;
+            font-size: 0.9rem;
+            color: var(--muted-color);
+            background-color: var(--light-bg);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            border-bottom: 1px solid var(--border-color);
+        }
+        
+        .thread-item {
+            border-bottom: 1px solid var(--border-color);
+            transition: background-color 0.3s ease;
+        }
+        
+        .thread-item:last-child {
+            border-bottom: none;
+        }
+        
+        .thread-item:hover {
+            background-color: var(--light-bg);
+        }
+        
+        .thread-icon {
+            font-size: 1.2rem;
+            color: var(--muted-color);
+            text-align: center;
+        }
+        
+        .thread-title a {
+            font-weight: 600;
+            font-size: 1.1rem;
+            text-decoration: none;
+            color: var(--text-color);
+        }
+        .thread-title a:hover {
+            text-decoration: underline;
+        }
+        
+        .thread-meta {
+            font-size: 0.85rem;
+            color: var(--muted-color);
+        }
+        
+        .thread-stats, .thread-last-post {
+            text-align: right;
+            font-size: 0.9rem;
+            line-height: 1.4;
+        }
+        
+        .thread-last-post {
+            text-align: left;
+        }
+        
+        .thread-last-post-author {
+            font-weight: 500;
+            color: var(--text-color);
+        }
+        
+        .thread-last-post-time {
+            font-size: 0.85rem;
+            color: var(--muted-color);
+        }
+        
+        .no-threads-message {
+            padding: 4rem 2rem;
+            text-align: center;
+            color: var(--muted-color);
+        }
+        .no-threads-message i {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+            display: block;
+        }
+
+        .pagination-container {
+            margin-top: 2rem;
+            text-align: center;
+        }
+
+        .btn-new-thread {
+            text-decoration: none;
+            transition: all 0.2s ease-in-out;
+        }
+        .btn-new-thread:hover {
+            opacity: 0.9;
+        }
+    </style>
+}
+
+<section class="category-view-container container">
+    @if (Model.CurrentCategory != null)
+    {
+        <div class="category-header">
+            <h1 class="category-title">@Model.CurrentCategory.Title</h1>
+            @if (Model.IsLoggedIn)
+            {
+                <a asp-page="/Forums/CreateThread" asp-route-categoryId="@Model.CurrentCategory.Id" class="btn btn-accent btn-sm btn-new-thread">
+                    <i class="fas fa-plus"></i> 发表新主题
+                </a>
+            }
+        </div>
+        
+        <div class="thread-list-container">
+            <div class="thread-list-header">
+                <div class="thread-details">主题</div>
+                <div style="text-align: right;">统计</div>
+                <div>最新活动</div>
+            </div>
+            
+            @if (Model.Threads.Any())
+            {
+                foreach (var thread in Model.Threads)
+                {
+                    <div class="thread-item">
+                        <div class="thread-icon">
+                            <i class="fa-regular fa-comments"></i>
+                        </div>
+                        <div class="thread-details">
+                            <div class="thread-title"><a asp-page="/Forums/ViewThread" asp-route-id="@thread.Id">@thread.Title</a></div>
+                            <div class="thread-meta">由 @thread.AuthorName 发布</div>
+                        </div>
+                        <div class="thread-stats">
+                            <div><strong>@thread.ReplyCount</strong> 回复</div>
+                            <div><strong>@thread.ViewCount</strong> 浏览</div>
+                        </div>
+                        <div class="thread-last-post">
+                            <div class="thread-last-post-author">
+                                <a asp-page="/Forums/ViewThread" asp-route-id="@thread.Id">@thread.LastPostAuthorName</a>
+                            </div>
+                            <div class="thread-last-post-time">
+                                @thread.LastPostTimeAgo
+                            </div>
+                        </div>
+                    </div>
+                }
+            }
+            else
+            {
+                <div class="no-threads-message">
+                    <i class="fa-regular fa-folder-open"></i>
+                    <p>该版块下还没有帖子，快来发布第一篇吧！</p>
+                </div>
+            }
+        </div>
+        
+        <div class="pagination-container">
+            <!-- Pagination component placeholder -->
+            <p>分页控件</p>
+        </div>
+    }
+    else
+    {
+        <p>无法加载该版块。</p>
+    }
+</section> 

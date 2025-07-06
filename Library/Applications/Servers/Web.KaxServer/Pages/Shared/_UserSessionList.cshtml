@@ -1,0 +1,39 @@
+@model Web.KaxServer.Pages.Account.ManagementModel
+@using Web.KaxServer.Models
+
+<div class="user-session-list">
+    @if (Model.ActiveUserSessions.Any())
+    {
+        @foreach (var session in Model.ActiveUserSessions)
+        {
+            <div class="user-session-item selectable-card" data-session-id="@session.ID">
+                <div class="user-session-item-header">
+                    <div class="user-session-item-icon">
+                        <i class="fas fa-user-circle"></i>
+                    </div>
+                    <div class="user-session-item-content">
+                        <div class="user-session-item-title">@session.Username</div>
+                        <div class="user-session-item-details">
+                            <span title="@session.ID"><strong>ID:</strong> @(session.ID.Substring(0, 8))...</span>
+                            <span><strong>金币:</strong> @session.Coins.ToString("F2")</span>
+                            <span><strong>权限:</strong> @session.UserPermission.GetDisplayName()</span>
+                            <span><strong>过期于:</strong> @session.ExpireTime.ToString("yyyy-MM-dd HH:mm")</span>
+                            <span><strong>用户ID:</strong> @session.UserId</span>
+                        </div>
+                    </div>
+                    <div class="expand-arrow"><i class="fas fa-chevron-down"></i></div>
+                </div>
+                <div class="expandable-content">
+                    <partial name="Shared/_EditUserForm" model="session" />
+                </div>
+            </div>
+        }
+    }
+    else
+    {
+        <div class="empty-state">
+            <i class="fas fa-ghost"></i>
+            <p>当前没有活跃的用户会话。</p>
+        </div>
+    }
+</div> 

@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-16"?>
+<ForumThreadModel>
+  <Id>75b8f04df7a954cf09071e9772a2ee96873298b7b62a76394014c5af37b0d6ab</Id>
+  <CategoryId>21de9d9dce8f5e189cd69ae1b87b917d3ab1a85d702780553e13bd8ff5cf83fb</CategoryId>
+  <Title>112</Title>
+  <AuthorName>yx0303026</AuthorName>
+  <AuthorAvatarUrl null="true" />
+  <Content>你好</Content>
+  <PostTime>2025/7/3 4:36:37</PostTime>
+  <Comments />
+  <Views>1</Views>
+  <ViewedByUserIds>
+    <Int32>1</Int32>
+  </ViewedByUserIds>
+  <LastPostInfo>
+    <AuthorName>yx0303026</AuthorName>
+    <PostTime>2025/7/3 4:36:37</PostTime>
+  </LastPostInfo>
+</ForumThreadModel>

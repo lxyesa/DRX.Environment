@@ -1,0 +1,435 @@
+﻿@page
+@model Web.KaxServer.Pages.IndexModel
+@using Web.KaxServer.Models
+@addTagHelper *, Microsoft.AspNetCore.Mvc.TagHelpers
+@{
+    ViewData["Title"] = "KAX | 新一代游戏体验平台";
+    Layout = "/Pages/Shared/_Layout.cshtml";
+}
+
+@section Styles {
+    <style>
+        .hero {
+            background: linear-gradient(135deg, var(--light-bg) 0%, var(--bg-color) 100%);
+            padding: 120px 0 80px 0;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .hero-content {
+            position: relative;
+            z-index: 1;
+            max-width: 850px;
+            margin: 0 auto;
+            opacity: 0;
+            transform: translateY(20px);
+            animation: fadeInUp 1s ease forwards;
+        }
+
+        .hero h1 {
+            font-size: 4.5rem;
+            font-weight: 900;
+            margin-bottom: 1.5rem;
+            line-height: 1.1;
+            letter-spacing: -2px;
+            color: var(--text-color);
+            text-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+
+        .hero h1 .highlight {
+            color: var(--primary-color);
+        }
+
+        .subtitle {
+            font-size: 1.3rem;
+            color: var(--muted-color);
+            margin-bottom: 2.5rem;
+            max-width: 650px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        .cta-buttons {
+            display: flex;
+            gap: 1rem;
+            justify-content: center;
+        }
+        
+        .platform-features {
+            background-color: var(--bg-color);
+        }
+        
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 2rem;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .feature-card {
+            background-color: var(--bg-color);
+            border-radius: 16px;
+            padding: 2.5rem 2rem;
+            text-align: left;
+            transition: all 0.3s ease-in-out;
+            border: 1px solid var(--border-color);
+            position: relative;
+            overflow: hidden;
+            opacity: 0;
+            transform: translateY(30px);
+        }
+
+        .feature-card:nth-child(1) { animation: fadeInUp 0.6s ease forwards 0.2s; }
+        .feature-card:nth-child(2) { animation: fadeInUp 0.6s ease forwards 0.4s; }
+        .feature-card:nth-child(3) { animation: fadeInUp 0.6s ease forwards 0.6s; }
+        .feature-card:nth-child(4) { animation: fadeInUp 0.6s ease forwards 0.8s; }
+
+
+        .feature-card:hover {
+            transform: translateY(-8px);
+            box-shadow: var(--hover-shadow);
+            border-color: var(--primary-color);
+        }
+
+        .feature-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 1.5rem;
+        }
+        
+        .feature-icon {
+            font-size: 1.8rem;
+            color: var(--primary-color);
+            background-color: rgba(var(--primary-color-rgb), 0.1);
+            width: 50px;
+            height: 50px;
+            line-height: 50px;
+            text-align: center;
+            border-radius: 12px;
+            margin-right: 1rem;
+            transition: all 0.3s ease;
+        }
+
+        .feature-card:hover .feature-icon {
+            transform: scale(1.1);
+            background-color: var(--primary-color);
+            color: var(--bg-color);
+        }
+
+        .feature-title {
+            font-size: 1.3rem;
+            font-weight: 700;
+            margin: 0;
+        }
+
+        .feature-desc {
+            color: var(--muted-color);
+            line-height: 1.7;
+            font-size: 0.95rem;
+        }
+
+        #login {
+            background-color: var(--light-bg);
+            text-align: center;
+            position: relative;
+        }
+
+        .login-section {
+            background-color: var(--light-bg);
+            text-align: center;
+            position: relative;
+            background: linear-gradient(120deg, #ffffff, #f8f8f8, #ffffff);
+            background-size: 400% 400%;
+            animation: gradientMove 15s ease infinite;
+        }
+
+        .login-container {
+            max-width: 800px;
+            margin: 0 auto;
+            position: relative;
+            z-index: 1;
+            opacity: 0;
+            animation: fadeIn 1s ease forwards 0.5s;
+        }
+
+        .download-title {
+            font-size: 3rem;
+            font-weight: 800;
+            margin-bottom: 1.5rem;
+            letter-spacing: -0.5px;
+            position: relative;
+            display: inline-block;
+        }
+
+        .download-title::after {
+            content: '';
+            position: absolute;
+            width: 40px;
+            height: 4px;
+            background-color: var(--accent-color);
+            bottom: -10px;
+            left: 50%;
+            transform: translateX(-50%);
+            border-radius: 2px;
+        }
+
+        .download-desc {
+            max-width: 600px;
+            margin: 0 auto 3rem;
+            color: var(--muted-color);
+            font-size: 1.2rem;
+        }
+
+        .login-buttons {
+            display: flex;
+            gap: 1.5rem;
+            justify-content: center;
+            flex-wrap: wrap;
+            opacity: 0;
+            animation: fadeInUp 0.8s ease forwards 0.7s;
+        }
+
+        .login-buttons .btn {
+            min-width: 180px;
+            animation: pulse 2s infinite;
+        }
+        
+        .user-profile {
+            background-color: var(--bg-color);
+            border-radius: 12px;
+            padding: 2.5rem;
+            box-shadow: var(--card-shadow);
+            margin: 2rem auto 3rem;
+            border: 1px solid var(--border-color);
+            transition: all 0.4s ease;
+            max-width: 500px;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+            opacity: 0;
+            animation: fadeInUp 0.8s ease forwards 0.5s;
+        }
+
+        .user-profile::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 5px;
+            background-color: var(--accent-color);
+        }
+
+        .user-profile:hover {
+            transform: translateY(-5px);
+            box-shadow: var(--hover-shadow);
+        }
+
+        .user-avatar {
+            width: 100px;
+            height: 100px;
+            line-height: 100px;
+            font-size: 3.5rem;
+            margin: 0 auto 1.5rem;
+            color: var(--bg-color);
+            background-color: var(--accent-color);
+            border-radius: 50%;
+            animation: float 4s ease-in-out infinite;
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+        }
+
+        .user-info-container {
+            margin-bottom: 2rem;
+        }
+
+        .user-name {
+            font-size: 1.5rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+            opacity: 0;
+            animation: fadeIn 0.8s ease forwards 0.7s;
+        }
+
+        .user-email {
+            color: var(--muted-color);
+            font-size: 1rem;
+            margin-bottom: 1.5rem;
+            opacity: 0;
+            animation: fadeIn 0.8s ease forwards 0.9s;
+        }
+
+        .user-stat {
+            display: flex;
+            justify-content: center;
+            gap: 2rem;
+            margin: 1.5rem 0;
+            padding-bottom: 1.5rem;
+            border-bottom: 1px solid var(--border-color);
+            opacity: 0;
+            animation: fadeIn 0.8s ease forwards 1.1s;
+        }
+
+        .stat-item {
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 1.5rem;
+            font-weight: 700;
+            margin-bottom: 0.25rem;
+        }
+
+        .stat-label {
+            color: var(--muted-color);
+            font-size: 0.9rem;
+        }
+
+        .user-actions {
+            display: flex;
+            gap: 1rem;
+            justify-content: center;
+            margin-top: 1.5rem;
+            opacity: 0;
+            animation: fadeInUp 0.8s ease forwards 1.3s;
+        }
+
+        .user-actions .btn {
+            min-width: 140px;
+        }
+        
+        .logout-form {
+            display: contents;
+        }
+
+        @@media (max-width: 768px) {
+            .hero h1 {
+                font-size: 2.5rem;
+            }
+            
+            .subtitle {
+                font-size: 1.1rem;
+            }
+            
+            .cta-buttons {
+                flex-direction: column;
+                align-items: center;
+            }
+        }
+
+        section {
+            padding: 5rem 5%;
+        }
+    </style>
+}
+
+<section id="hero" class="hero">
+    <div class="hero-content">
+        <h1>重塑你的<span class="highlight">游戏边界</span></h1>
+        <p class="subtitle">KAX 是一个开放、安全的辅助脚本平台，汇聚顶尖开发者智慧，为你的游戏体验注入无限可能。</p>
+        <div class="cta-buttons">
+            <button class="btn btn-primary btn-lg" onclick="document.getElementById('platform-features').scrollIntoView({ behavior: 'smooth' });">
+                <i class="fas fa-rocket"></i> 探索平台特性
+            </button>
+            @if (!Model.IsLoggedIn)
+            {
+                 <button class="btn btn-secondary btn-lg" onclick="document.getElementById('login').scrollIntoView({ behavior: 'smooth' });">
+                    <i class="fas fa-sign-in-alt"></i> 登录/注册
+                </button>
+            }
+        </div>
+    </div>
+</section>
+
+<section id="platform-features" class="platform-features">
+    <div class="container">
+        <h2 class="section-title">平台核心优势</h2>
+        <div class="features-grid">
+            <!-- Feature 1: Community -->
+            <div class="feature-card">
+                <div class="feature-header">
+                    <div class="feature-icon"><i class="fas fa-users"></i></div>
+                    <h3 class="feature-title">开放的创作者社区</h3>
+                </div>
+                <p class="feature-desc">我们提供平台供用户自由上传、分享和发现辅助脚本。无论是资深开发者还是游戏爱好者，都能在这里找到归属，共同构建一个繁荣的生态系统。</p>
+            </div>
+            
+            <!-- Feature 2: Security & Performance -->
+            <div class="feature-card">
+                <div class="feature-header">
+                    <div class="feature-icon"><i class="fas fa-shield-alt"></i></div>
+                    <h3 class="feature-title">顶尖性能与安全</h3>
+                </div>
+                <p class="feature-desc">所有官方发布的脚本都经过严格的性能测试和安全审计，我们致力于提供稳定、高效且可靠的官方脚本，确保您的账号安全和游戏体验。</p>
+            </div>
+
+            <!-- Feature 3: Multi-game support -->
+            <div class="feature-card">
+                 <div class="feature-header">
+                    <div class="feature-icon"><i class="fas fa-cogs"></i></div>
+                    <h3 class="feature-title">强大的兼容性</h3>
+                </div>
+                <p class="feature-desc">我们的平台专为单机游戏爱好者设计，拥有强大的底层兼容性。提供丰富的接口与工具，让创作者能轻松实现各类修改功能，探索游戏的无限可能。</p>
+            </div>
+            
+            <!-- Feature 4: Instant Updates -->
+            <div class="feature-card">
+                 <div class="feature-header">
+                    <div class="feature-icon"><i class="fas fa-bolt"></i></div>
+                    <h3 class="feature-title">即时更新与响应</h3>
+                </div>
+                <p class="feature-desc">我们紧跟游戏版本更新，快速响应社区反馈。确保所有辅助功能始终可用，并持续推出创新功能，满足您不断变化的需求。</p>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section id="@(Model.IsLoggedIn ? "user" : "login")" class="login-section">
+    <div class="login-container">
+        @if (Model.IsLoggedIn)
+        {
+            <h2 class="download-title">欢迎回来，@Model.Username</h2>
+            <p class="download-desc">您已成功登录KAX游戏辅助平台，可以开始使用我们的服务。</p>
+            <div class="user-profile">
+                <div class="user-avatar">
+                    <i class="fas fa-user-circle"></i>
+                </div>
+                <div class="user-info-container">
+                    <div class="user-name">@Model.Username</div>
+                    <div class="user-email">@Model.Email</div>
+                </div>
+                <div class="user-stat">
+                    <div class="stat-item">
+                        <div class="stat-value">@Model.UserPermission.GetDisplayName()</div>
+                        <div class="stat-label">用户权限</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value">@Model.Coins.ToString("F3")</div>
+                        <div class="stat-label">金币</div>
+                    </div>
+                </div>
+            </div>
+            <div class="user-actions">
+                <button class="btn btn-primary" onclick="document.getElementById('platform-features').scrollIntoView({ behavior: 'smooth' });"><i class="fas fa-gamepad"></i> 开始使用</button>
+                <a href="/Account/Profile" class="btn btn-secondary"><i class="fas fa-address-card"></i> 个人详细</a>
+                <form method="post" asp-page-handler="logout" class="logout-form">
+                    <button type="submit" class="btn btn-secondary"><i class="fas fa-sign-out-alt"></i> 退出登录</button>
+                </form>
+            </div>
+        }
+        else
+        {
+            <h2 class="download-title">加入KAX平台</h2>
+            <p class="download-desc">注册账号或登录，立即体验KAX游戏辅助平台的强大功能。</p>
+            <div class="login-buttons">
+                <form method="post" asp-page-handler="login" style="margin-right: 10px;">
+                    <button type="submit" class="btn btn-primary"><i class="fas fa-sign-in-alt"></i> 登录</button>
+                </form>
+                <form method="post" asp-page-handler="register">
+                    <button type="submit" class="btn btn-secondary"><i class="fas fa-user-plus"></i> 注册</button>
+                </form>
+            </div>
+        }
+    </div>
+</section>

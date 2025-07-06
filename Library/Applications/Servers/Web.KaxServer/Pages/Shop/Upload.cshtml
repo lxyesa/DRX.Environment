@@ -1,0 +1,109 @@
+@page
+@model Web.KaxServer.Pages.Shop.UploadModel
+@{
+    ViewData["Title"] = "上传脚本";
+}
+
+@section Styles {
+    <style>
+        .upload-form-container {
+            max-width: 800px;
+            margin: 4rem auto;
+            padding: 2.5rem;
+            background-color: var(--bg-color);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            box-shadow: var(--card-shadow);
+        }
+        
+        .form-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1.5rem;
+        }
+        
+        .form-group.full-width {
+            grid-column: 1 / -1;
+        }
+        
+        .form-group textarea {
+            min-height: 150px;
+            resize: vertical;
+        }
+    </style>
+}
+
+<div class="upload-form-container">
+    <h1 class="text-center mb-4">上传新脚本</h1>
+    <form method="post">
+        @Html.AntiForgeryToken()
+        
+        <div asp-validation-summary="ModelOnly" class="alert alert-danger"></div>
+
+        <div class="form-grid">
+            <div class="form-group">
+                <label asp-for="Item.Title" class="form-label">标题</label>
+                <input asp-for="Item.Title" class="form-control" placeholder="例如：自动瞄准助手" />
+                <span asp-validation-for="Item.Title" class="text-danger"></span>
+            </div>
+
+            <div class="form-group">
+                <label asp-for="Item.MonthlyPrice" class="form-label">月度价格 (金币)</label>
+                <input asp-for="Item.MonthlyPrice" class="form-control" type="number" />
+                <span asp-validation-for="Item.MonthlyPrice" class="text-danger"></span>
+            </div>
+            
+            <div class="form-group">
+                <label asp-for="Item.Game" class="form-label">游戏</label>
+                <input asp-for="Item.Game" class="form-control" placeholder="例如：反恐精英" />
+                <span asp-validation-for="Item.Game" class="text-danger"></span>
+            </div>
+
+            <div class="form-group">
+                <label asp-for="Item.Category" class="form-label">分类</label>
+                <input asp-for="Item.Category" class="form-control" placeholder="例如：实用工具" />
+                <span asp-validation-for="Item.Category" class="text-danger"></span>
+            </div>
+
+            <div class="form-group full-width">
+                <label asp-for="Item.ShortDescription" class="form-label">简短描述</label>
+                <textarea asp-for="Item.ShortDescription" class="form-control"></textarea>
+                <span asp-validation-for="Item.ShortDescription" class="text-danger"></span>
+            </div>
+
+            <div class="form-group full-width">
+                <label asp-for="Item.Description" class="form-label">详细描述 (支持Markdown)</label>
+                <textarea asp-for="Item.Description" class="form-control"></textarea>
+                <span asp-validation-for="Item.Description" class="text-danger"></span>
+            </div>
+            
+            <div class="form-group">
+                <label asp-for="Item.Version" class="form-label">版本</label>
+                <input asp-for="Item.Version" class="form-control" placeholder="例如：1.0.0" />
+                <span asp-validation-for="Item.Version" class="text-danger"></span>
+            </div>
+
+            <div class="form-group">
+                <label asp-for="Item.Tags" class="form-label">标签 (用逗号分隔)</label>
+                <input asp-for="Item.Tags" class="form-control" placeholder="例如：自瞄,透视,实用" />
+                <span asp-validation-for="Item.Tags" class="text-danger"></span>
+            </div>
+
+            <div class="form-group full-width">
+                <label asp-for="Item.DownloadUrl" class="form-label">下载链接</label>
+                <input asp-for="Item.DownloadUrl" class="form-control" placeholder="https://example.com/download/script.zip" />
+                <span asp-validation-for="Item.DownloadUrl" class="text-danger"></span>
+            </div>
+            
+            <div class="form-group full-width">
+                 <label asp-for="Item.ImageUrl" class="form-label">图片链接</label>
+                 <input asp-for="Item.ImageUrl" class="form-control" placeholder="https://example.com/image.png" />
+                 <span asp-validation-for="Item.ImageUrl" class="text-danger"></span>
+            </div>
+        </div>
+
+        <div class="d-grid gap-2 mt-4">
+            <button type="submit" class="btn btn-primary btn-lg">提交审核</button>
+        </div>
+    </form>
+</div> 

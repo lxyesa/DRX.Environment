@@ -1,0 +1,50 @@
+.notification-section {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 7rem 2rem;
+    position: relative;
+    background: linear-gradient(120deg, #ffffff, #f8f8f8, #ffffff);
+    background-size: 400% 400%;
+    animation: gradientMove 15s ease infinite;
+}
+
+.notification-container {
+    max-width: 550px;
+    width: 100%;
+    background-color: var(--bg-color);
+    border-radius: 12px;
+    box-shadow: var(--card-shadow);
+    padding: 3rem;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+    border: 1px solid var(--border-color);
+    opacity: 0;
+    animation: fadeInUp 1s ease forwards;
+    animation-delay: 0.3s;
+}
+
+.notification-icon {
+    font-size: 4rem;
+    margin-bottom: 2rem;
+    animation: pulse 2s infinite;
+}
+
+.notification-title {
+    font-size: 2rem;
+    font-weight: 800;
+    margin-bottom: 1rem;
+}
+
+.notification-message {
+    color: var(--muted-color);
+    font-size: 1rem;
+    margin-bottom: 2.5rem;
+    line-height: 1.7;
+}
+
+.notification-actions .btn {
+    min-width: 180px;
+} 

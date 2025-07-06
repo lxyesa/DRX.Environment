@@ -1,0 +1,106 @@
+@page
+@model Web.KaxServer.Pages.Account.ProfileModel
+@using Web.KaxServer.Models
+@addTagHelper *, Microsoft.AspNetCore.Mvc.TagHelpers
+@{
+    ViewData["Title"] = "个人中心";
+    Layout = "/Pages/Shared/_AccountLayout.cshtml";
+}
+
+@section Styles {
+    <style>
+        .profile-content {
+            display: grid;
+            gap: 2rem;
+        }
+        .card-header-group {
+            display: flex;
+            align-items: center;
+            gap: 1.5rem;
+        }
+        .balance-icon {
+            font-size: 1.5rem;
+            width: 48px;
+            height: 48px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            background-color: var(--light-bg);
+            color: var(--accent-color);
+        }
+        .user-details-card {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 1.5rem 0;
+        }
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+        .user-avatar {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            overflow: hidden;
+        }
+        .user-avatar img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        .user-name-email .user-name {
+            font-size: 1.25rem;
+            font-weight: 600;
+        }
+        .user-name-email .user-email {
+            color: var(--muted-color);
+        }
+    </style>
+}
+
+<main class="profile-content">
+    <div class="card">
+        <div class="card-header">
+            <div class="card-header-group">
+                <div class="balance-icon"><i class="fas fa-user-circle"></i></div>
+                <h2>个人信息</h2>
+            </div>
+        </div>
+        <div class="user-details-card">
+            <div class="user-info">
+                <div class="user-avatar">
+                    @if (!string.IsNullOrEmpty(Model.AvatarUrl))
+                    {
+                        <img src="@Model.AvatarUrl" alt="用户头像">
+                    }
+                    else
+                    {
+                        <i class="fas fa-user" style="font-size: 60px; line-height: 60px;"></i>
+                    }
+                </div>
+                <div class="user-name-email">
+                    <div class="user-name">@Model.Username</div>
+                    <div class="user-email">@Model.Email</div>
+                </div>
+            </div>
+            <form method="post" asp-page-handler="Logout">
+                <button type="submit" class="btn btn-outline btn-icon">
+                    <i class="fas fa-sign-out-alt"></i> 退出登录
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <div class="card-header-group">
+                <div class="balance-icon"><i class="fas fa-shield-alt"></i></div>
+                <h2>账户安全</h2>
+            </div>
+        </div>
+        <p style="padding: 1rem 0;">此功能正在开发中。您将可以在此处修改密码和管理账户安全设置。</p>
+    </div>
+</main>

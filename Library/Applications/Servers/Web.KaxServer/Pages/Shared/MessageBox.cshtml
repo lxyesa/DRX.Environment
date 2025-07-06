@@ -1,0 +1,378 @@
+@model Web.KaxServer.Pages.Shared.MessageBoxModel
+
+@if (Model.IsVisible)
+{
+    <div id="message-box-overlay" class="message-box-overlay @(Model.IsVisible ? "active" : "")">
+        <div class="message-box">
+            <div class="message-box-header">
+                <h3 class="message-box-title">@Model.Title</h3>
+            </div>
+            <div class="message-box-body">
+                @Html.Raw(Model.Message)
+            </div>
+            <div class="message-box-footer">
+                @if (Model.CallbackType == CallbackType.Url)
+                {
+                    <form method="post" action="@Model.CallbackUrl">
+                        <input type="hidden" name="returnUrl" value="@Model.ReturnUrl" />
+                        <button type="submit" class="btn @(Model.IsButtonHighlighted ? "btn-primary" : "btn-secondary")">
+                            @(string.IsNullOrEmpty(Model.ButtonText) ? "确定" : Model.ButtonText)
+                        </button>
+                    </form>
+                }
+                else
+                {
+                    <button type="button" class="btn @(Model.IsButtonHighlighted ? "btn-primary" : "btn-secondary")" 
+                            onclick="triggerMessageBoxCallback('@Model.CallbackId')">
+                        @(string.IsNullOrEmpty(Model.ButtonText) ? "确定" : Model.ButtonText)
+                    </button>
+                }
+            </div>
+        </div>
+    </div>
+
+    <style>
+        /* 关键帧动画 */
+        @@keyframes fadeInUp {
+            from { opacity: 0; transform: translateY(30px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        @@keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        @@keyframes float {
+            0% { transform: translateY(0px); }
+            50% { transform: translateY(-10px); }
+            100% { transform: translateY(0px); }
+        }
+
+        @@keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+
+        /* 消息框基本样式 */
+        .message-box-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(5px);
+            -webkit-backdrop-filter: blur(5px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.3s ease, visibility 0.3s ease;
+        }
+
+        .message-box-overlay.active {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .message-box {
+            background-color: #ffffff;
+            border-radius: 12px;
+            box-shadow: 0 15px 30px rgba(0, 0, 0, 0.15);
+            width: 90%;
+            max-width: 500px;
+            overflow: hidden;
+            transform: translateY(20px);
+            transition: transform 0.4s ease, box-shadow 0.3s ease;
+            border: 1px solid #e5e7eb;
+            animation: fadeInUp 0.5s ease forwards;
+        }
+
+        .message-box:hover {
+            box-shadow: 0 25px 45px rgba(0, 0, 0, 0.18);
+        }
+
+        .message-box-overlay.active .message-box {
+            transform: translateY(0);
+        }
+
+        .message-box-header {
+            padding: 1.5rem;
+            border-bottom: 1px solid #e5e7eb;
+            opacity: 0;
+            animation: fadeIn 0.6s ease forwards 0.2s;
+        }
+
+        .message-box-title {
+            margin: 0;
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: #000000;
+            position: relative;
+            display: inline-block;
+        }
+
+        .message-box-title::after {
+            content: '';
+            position: absolute;
+            width: 30%;
+            height: 2px;
+            background-color: #000000;
+            bottom: -5px;
+            left: 0;
+            border-radius: 2px;
+        }
+
+        .message-box-body {
+            padding: 1.5rem;
+            max-height: 60vh;
+            overflow-y: auto;
+            color: #555555;
+            line-height: 1.6;
+            font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+            opacity: 0;
+            animation: fadeIn 0.6s ease forwards 0.4s;
+        }
+
+        .message-box-footer {
+            padding: 1rem 1.5rem;
+            border-top: 1px solid #e5e7eb;
+            display: flex;
+            justify-content: flex-end;
+            opacity: 0;
+            animation: fadeIn 0.6s ease forwards 0.6s;
+        }
+
+        /* 按钮样式 */
+        .btn {
+            padding: 0.6rem 1.5rem;
+            border-radius: 8px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            border: 1px solid transparent;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            font-size: 0.95rem;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .btn::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: rgba(255, 255, 255, 0.2);
+            transition: all 0.4s ease;
+        }
+
+        .btn:hover::before {
+            left: 100%;
+        }
+
+        .btn-primary {
+            background-color: #000000;
+            color: #ffffff;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .btn-primary:hover {
+            background-color: #000;
+            transform: translateY(-2px);
+            box-shadow: 0 10px 15px rgba(0, 0, 0, 0.1);
+        }
+
+        .btn-secondary {
+            background-color: #ffffff;
+            color: #000000;
+            border: 1px solid #e5e7eb;
+        }
+
+        .btn-secondary:hover {
+            background-color: #f8f8f8;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+        }
+
+        /* 消息框内文本元素样式 */
+        .message-box-body p {
+            margin-bottom: 0.75rem;
+            font-size: 1rem;
+            line-height: 1.6;
+            color: #555555;
+        }
+
+        .message-box-body p:last-child {
+            margin-bottom: 0;
+        }
+
+        .message-box-body strong, 
+        .message-box-body b {
+            font-weight: 600;
+            color: #000000;
+        }
+
+        .message-box-body em, 
+        .message-box-body i {
+            font-style: italic;
+        }
+
+        .message-box-body a {
+            color: #000000;
+            text-decoration: none;
+            transition: color 0.3s ease;
+            font-weight: 500;
+            position: relative;
+        }
+
+        .message-box-body a::after {
+            content: '';
+            position: absolute;
+            width: 0;
+            height: 1px;
+            bottom: -1px;
+            left: 0;
+            background-color: #000000;
+            transition: width 0.3s ease;
+        }
+
+        .message-box-body a:hover {
+            color: #333333;
+        }
+
+        .message-box-body a:hover::after {
+            width: 100%;
+        }
+
+        .message-box-body ul, 
+        .message-box-body ol {
+            margin: 1rem 0;
+            padding-left: 1.5rem;
+        }
+
+        .message-box-body li {
+            margin-bottom: 0.5rem;
+        }
+
+        .message-box-body h1, 
+        .message-box-body h2, 
+        .message-box-body h3, 
+        .message-box-body h4 {
+            margin-top: 1.5rem;
+            margin-bottom: 0.75rem;
+            font-weight: 700;
+            color: #000000;
+            line-height: 1.3;
+        }
+
+        .message-box-body h1 {
+            font-size: 1.5rem;
+        }
+
+        .message-box-body h2 {
+            font-size: 1.3rem;
+        }
+
+        .message-box-body h3 {
+            font-size: 1.1rem;
+        }
+
+        .message-box-body h4 {
+            font-size: 1rem;
+        }
+
+        .message-box-body code {
+            background-color: #f3f4f6;
+            padding: 0.2rem 0.4rem;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 0.9rem;
+        }
+
+        .message-box-body pre {
+            background-color: #f3f4f6;
+            padding: 1rem;
+            border-radius: 8px;
+            overflow-x: auto;
+            margin: 1rem 0;
+        }
+
+        .message-box-body pre code {
+            background-color: transparent;
+            padding: 0;
+        }
+
+        .message-box-body blockquote {
+            border-left: 4px solid #e5e7eb;
+            padding-left: 1rem;
+            margin-left: 0;
+            color: #6b7280;
+            font-style: italic;
+        }
+
+        .message-box-body hr {
+            border: 0;
+            border-top: 1px solid #e5e7eb;
+            margin: 1.5rem 0;
+        }
+
+        .message-box-body .text-danger {
+            color: #ef4444;
+        }
+
+        .message-box-body .text-success {
+            color: #10b981;
+        }
+
+        .message-box-body .text-warning {
+            color: #f59e0b;
+        }
+
+        .message-box-body .text-info {
+            color: #3b82f6;
+        }
+
+        @@media (max-width: 640px) {
+            .message-box {
+                width: 95%;
+            }
+
+            .message-box-header,
+            .message-box-body,
+            .message-box-footer {
+                padding: 1rem;
+            }
+        }
+    </style>
+
+    <script>
+        function triggerMessageBoxCallback(callbackId) {
+            // 隐藏消息框
+            const overlay = document.getElementById('message-box-overlay');
+            if (overlay) {
+                overlay.classList.remove('active');
+                setTimeout(() => {
+                    overlay.style.display = 'none';
+                }, 300);
+            }
+
+            // 发送AJAX请求触发回调
+            fetch('/MessageBoxCallback?handler=TriggerCallback&callbackId=' + encodeURIComponent(callbackId), {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'RequestVerificationToken': document.querySelector('input[name="__RequestVerificationToken"]')?.value || ''
+                }
+            }).catch(error => console.error('Error triggering callback:', error));
+        }
+    </script>
+} 

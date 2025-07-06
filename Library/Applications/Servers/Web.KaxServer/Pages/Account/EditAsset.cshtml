@@ -1,0 +1,306 @@
+@page
+@model Web.KaxServer.Pages.Account.EditAssetModel
+@addTagHelper *, Microsoft.AspNetCore.Mvc.TagHelpers
+
+@{
+    ViewData["Title"] = "编辑资产";
+    Layout = "/Pages/Shared/_AccountLayout.cshtml";
+}
+
+<main class="profile-content">
+    <div class="card account-balance-card">
+        <div class="balance-card-header">
+            <div class="balance-icon"><i class="fas fa-edit"></i></div>
+            <h2>编辑资产</h2>
+        </div>
+        <div class="card-body">
+            @if (Model.Asset != null)
+            {
+                <partial name="_EditAsset" model="Model.Asset" />
+                @if (Model.SuccessMessage != null)
+                {
+                    <div class="cdk-message success">
+                        @Model.SuccessMessage
+                    </div>
+                }
+                @if (Model.ErrorMessage != null)
+                {
+                    <div class="cdk-message error">
+                        @Model.ErrorMessage
+                    </div>
+                }
+            }
+            else
+            {
+                <div class="empty-assets">
+                    <p>未找到资产或您没有权限编辑此资产。</p>
+                    <a href="/Account/PaymentsAndSubscriptions" class="btn btn-accent btn-sm">返回资产管理</a>
+                </div>
+            }
+        </div>
+    </div>
+</main>
+
+<!-- 元素选择器模态框 - 移到页面顶层 -->
+<div class="element-selector-modal" id="elementSelectorModal">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>选择元素类型</h3>
+                <button class="close-modal" data-dismiss="modal">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="element-types-grid">
+                    <div class="element-type-card" data-element-type="text">
+                        <div class="element-type-icon">
+                            <i class="fas fa-font"></i>
+                        </div>
+                        <div class="element-type-title">文本</div>
+                    </div>
+                    <div class="element-type-card" data-element-type="slider">
+                        <div class="element-type-icon">
+                            <i class="fas fa-sliders-h"></i>
+                        </div>
+                        <div class="element-type-title">滚动条</div>
+                    </div>
+                    <div class="element-type-card" data-element-type="image">
+                        <div class="element-type-icon">
+                            <i class="fas fa-image"></i>
+                        </div>
+                        <div class="element-type-title">图片</div>
+                    </div>
+                    <div class="element-type-card" data-element-type="link">
+                        <div class="element-type-icon">
+                            <i class="fas fa-link"></i>
+                        </div>
+                        <div class="element-type-title">链接</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Styles {
+    <style>
+        .profile-content {
+            display: grid;
+            gap: 2rem;
+        }
+        
+        .form-row {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+
+        .form-label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 500;
+            color: var(--text-color);
+        }
+
+        .form-control {
+            width: 100%;
+            padding: 0.75rem 1rem;
+            font-size: 1rem;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            background-color: var(--bg-color);
+            transition: border-color 0.3s, box-shadow 0.3s;
+        }
+
+        .form-control:focus {
+            outline: none;
+            border-color: var(--accent-color);
+            box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.05);
+        }
+
+        textarea.form-control {
+            resize: vertical;
+            min-height: 120px;
+        }
+
+        .btn-icon {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .btn-accent {
+            background-color: var(--accent-color);
+            color: white;
+            border: none;
+            padding: 0.75rem 1.5rem;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: background-color 0.3s;
+        }
+
+        .btn-accent:hover {
+            background-color: var(--accent-hover);
+        }
+
+        .btn-outline {
+            background-color: transparent;
+            border: 1px solid var(--border-color);
+            color: var(--text-color);
+            padding: 0.75rem 1.5rem;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: background-color 0.3s, border-color 0.3s;
+        }
+
+        .btn-outline:hover {
+            background-color: var(--light-bg);
+            border-color: var(--text-color);
+        }
+        
+        /* 元素选择器模态框 - 页面顶层样式 */
+        .element-selector-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100vh;
+            background-color: rgba(0, 0, 0, 0.6);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.3s, visibility 0.3s;
+        }
+        
+        .element-selector-modal.show {
+            opacity: 1;
+            visibility: visible;
+        }
+        
+        .element-selector-modal .modal-dialog {
+            background: #fff;
+            padding: 2rem;
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+            width: 90%;
+            max-width: 600px;
+            transform: scale(0.9);
+            transition: transform 0.3s;
+        }
+        
+        .element-selector-modal.show .modal-dialog {
+            transform: scale(1);
+        }
+        
+        .element-selector-modal .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 1rem;
+            margin-bottom: 1.5rem;
+        }
+        
+        .element-selector-modal .close-modal {
+            background: none;
+            border: none;
+            font-size: 1.5rem;
+            cursor: pointer;
+            color: var(--muted-color);
+        }
+        
+        .element-types-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 1rem;
+        }
+        
+        .element-type-card {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 1rem;
+            padding: 1.5rem;
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .element-type-card:hover {
+            border-color: var(--accent-color);
+            background-color: rgba(0, 0, 0, 0.02);
+            transform: translateY(-2px);
+        }
+        
+        .element-type-icon {
+            font-size: 2rem;
+            color: var(--accent-color);
+        }
+        
+        .element-type-title {
+            font-weight: 500;
+        }
+    </style>
+}
+
+@section Scripts {
+    <script>
+        // 确保页面加载完毕后初始化元素选择器模态框功能
+        document.addEventListener('DOMContentLoaded', function() {
+            // 获取_EditAsset中定义的currentCardId变量
+            let currentCardId = null;
+            
+            // 与_EditAsset脚本通信的方法
+            window.openElementSelectorModal = function(cardId) {
+                currentCardId = cardId;
+                const modal = document.getElementById('elementSelectorModal');
+                modal.classList.add('show');
+            };
+            
+            // 元素选择器模态框功能
+            const elementSelectorModal = document.getElementById('elementSelectorModal');
+            const closeModalBtns = elementSelectorModal.querySelectorAll('[data-dismiss="modal"]');
+            const elementTypeCards = elementSelectorModal.querySelectorAll('.element-type-card');
+            
+            function closeElementSelector() {
+                elementSelectorModal.classList.remove('show');
+            }
+            
+            // 关闭模态框按钮
+            closeModalBtns.forEach(btn => {
+                btn.addEventListener('click', closeElementSelector);
+            });
+            
+            // 点击模态框外部关闭
+            window.addEventListener('click', function(event) {
+                if (event.target === elementSelectorModal) {
+                    closeElementSelector();
+                }
+            });
+            
+            // 元素类型选择
+            elementTypeCards.forEach(card => {
+                card.addEventListener('click', function() {
+                    const elementType = this.getAttribute('data-element-type');
+                    // 调用_EditAsset中的添加元素函数
+                    if (window.addElementToCard) {
+                        window.addElementToCard(currentCardId, elementType);
+                    }
+                    closeElementSelector();
+                });
+            });
+        });
+    </script>
+} 

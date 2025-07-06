@@ -1,0 +1,221 @@
+@page
+@model Web.KaxServer.Pages.Account.RegisterModel
+@{
+    ViewData["Title"] = "KAX | 用户注册";
+    Layout = "/Pages/Shared/_Layout.cshtml";
+}
+
+@section Styles {
+    <style>
+        .register-section {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 7rem 2rem;
+            position: relative;
+            background: linear-gradient(120deg, #ffffff, #f8f8f8, #ffffff);
+            background-size: 400% 400%;
+            animation: gradientMove 15s ease infinite;
+        }
+
+        .register-container {
+            max-width: 500px;
+            width: 100%;
+            background-color: var(--bg-color);
+            border-radius: 12px;
+            box-shadow: var(--card-shadow);
+            padding: 3rem;
+            position: relative;
+            overflow: hidden;
+            border: 1px solid var(--border-color);
+            opacity: 0;
+            animation: fadeInUp 1s ease forwards;
+            animation-delay: 0.3s;
+            transition: transform 0.4s ease, box-shadow 0.4s ease;
+        }
+
+        .register-container:hover {
+            transform: translateY(-5px);
+            box-shadow: var(--hover-shadow);
+        }
+
+        .register-container::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 5px;
+            background-color: var(--accent-color);
+            transition: all 0.4s ease;
+        }
+
+        .register-header {
+            text-align: center;
+            margin-bottom: 2.5rem;
+        }
+
+        .register-title {
+            font-size: 2rem;
+            font-weight: 800;
+            margin-bottom: 0.5rem;
+        }
+
+        .register-subtitle {
+            color: var(--muted-color);
+            font-size: 1rem;
+        }
+
+        .form-group {
+            margin-bottom: 1.5rem;
+            position: relative;
+        }
+
+        .form-label {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            text-align: left;
+        }
+
+        .input-wrapper {
+            position: relative;
+        }
+
+        .form-control {
+            width: 100%;
+            padding: 0.9rem 1rem;
+            padding-left: 3rem; 
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+            transition: border-color 0.3s ease, box-shadow 0.3s ease;
+            font-size: 1rem;
+        }
+
+        .form-control:focus {
+            outline: none;
+            border-color: var(--accent-color);
+            box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.1);
+        }
+
+        .input-icon {
+            position: absolute;
+            left: 1rem;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #adb5bd;
+            transition: color 0.3s ease;
+        }
+
+        .form-control:focus + .input-icon {
+            color: var(--accent-color);
+        }
+
+        .submit-btn {
+            width: 100%;
+            padding: 0.9rem 2rem;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 1rem;
+            transition: all 0.3s ease;
+            border: none;
+            cursor: pointer;
+            background-color: var(--accent-color);
+            color: var(--bg-color);
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .submit-btn:hover {
+            background-color: var(--accent-hover);
+            transform: translateY(-2px);
+            box-shadow: 0 10px 15px rgba(0, 0, 0, 0.1);
+        }
+
+        .login-link {
+            text-align: center;
+            margin-top: 2rem;
+            font-size: 0.9rem;
+        }
+
+        .login-link a {
+            color: var(--accent-color);
+            font-weight: 600;
+            text-decoration: none;
+        }
+
+        .login-link a:hover {
+            text-decoration: underline;
+        }
+
+        .terms-text {
+            font-size: 0.8rem;
+            color: var(--muted-color);
+            text-align: center;
+            margin-top: 2rem;
+        }
+        .terms-text a {
+            color: var(--muted-color);
+            text-decoration: underline;
+        }
+    </style>
+}
+
+<div class="register-section">
+    <div class="register-container">
+        <div class="register-header">
+            <h1 class="register-title">创建您的账户</h1>
+            <p class="register-subtitle">加入KAX，享受更棒的游戏体验</p>
+        </div>
+        
+        <form method="post">
+            <div asp-validation-summary="ModelOnly" class="text-danger"></div>
+            
+            <div class="form-group">
+                <label asp-for="Username" class="form-label">用户名</label>
+                <div class="input-wrapper">
+                    <input asp-for="Username" class="form-control" placeholder="创建您的用户名" required>
+                    <i class="fas fa-user input-icon"></i>
+                </div>
+                <span asp-validation-for="Username" class="text-danger"></span>
+            </div>
+
+            <div class="form-group">
+                <label asp-for="Email" class="form-label">邮箱地址</label>
+                <div class="input-wrapper">
+                    <input asp-for="Email" class="form-control" placeholder="输入您的邮箱" required type="email">
+                    <i class="fas fa-envelope input-icon"></i>
+                </div>
+                <span asp-validation-for="Email" class="text-danger"></span>
+            </div>
+            
+            <div class="form-group">
+                <label asp-for="Password" class="form-label">密码</label>
+                <div class="input-wrapper">
+                    <input asp-for="Password" class="form-control" type="password" placeholder="创建您的密码" required>
+                    <i class="fas fa-lock input-icon"></i>
+                </div>
+                <span asp-validation-for="Password" class="text-danger"></span>
+            </div>
+
+            <div class="form-group">
+                <label asp-for="ConfirmPassword" class="form-label">确认密码</label>
+                <div class="input-wrapper">
+                    <input asp-for="ConfirmPassword" class="form-control" type="password" placeholder="请再次输入密码" required>
+                    <i class="fas fa-check-circle input-icon"></i>
+                </div>
+                <span asp-validation-for="ConfirmPassword" class="text-danger"></span>
+            </div>
+            
+            <button type="submit" class="btn btn-accent btn-block">立即注册</button>
+        </form>
+        
+        <p class="login-link">
+            已有账户？ <a asp-page="/Account/Login">立即登录</a>
+        </p>
+
+        <p class="terms-text">
+            注册即表示您同意我们的<a href="#">服务条款</a>和<a href="#">隐私政策</a>。
+        </p>
+    </div>
+</div> 

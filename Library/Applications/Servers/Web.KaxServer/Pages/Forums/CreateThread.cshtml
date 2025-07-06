@@ -1,0 +1,119 @@
+@page "/forums/createthread"
+@model Web.KaxServer.Pages.Forums.CreateThreadModel
+@{
+    ViewData["Title"] = "发表新主题";
+}
+
+@section Styles {
+<style>
+    .create-thread-container {
+        padding-top: 2rem;
+        padding-bottom: 4rem;
+        animation: fadeInUp 0.8s ease-out;
+    }
+    
+    .breadcrumb-nav {
+        margin-bottom: 1.5rem;
+        font-size: 0.9rem;
+    }
+    .breadcrumb-nav a {
+        color: var(--muted-color);
+        text-decoration: none;
+        transition: color 0.2s ease-in-out;
+    }
+    .breadcrumb-nav a:hover {
+        color: var(--primary-color);
+    }
+    .breadcrumb-nav span {
+        margin: 0 0.5rem;
+        color: var(--border-color);
+    }
+    .breadcrumb-nav .current {
+        color: var(--text-color);
+        font-weight: 500;
+    }
+
+    .form-header {
+        margin-bottom: 2rem;
+        padding-bottom: 1.5rem;
+        border-bottom: 1px solid var(--border-color);
+    }
+    .form-title {
+        font-size: 2.2rem;
+        font-weight: 800;
+    }
+
+    .form-card {
+        background-color: var(--bg-color);
+        border: 1px solid var(--border-color);
+        border-radius: 12px;
+        padding: 2rem;
+    }
+
+    .form-group {
+        margin-bottom: 1.5rem;
+    }
+
+    .form-group label {
+        display: block;
+        font-weight: 600;
+        margin-bottom: 0.5rem;
+    }
+
+    .form-control {
+        background-color: var(--bg-hover-color);
+        border: 1px solid var(--border-color);
+        color: var(--text-color);
+        border-radius: 8px;
+        padding: 0.75rem 1rem;
+        transition: all 0.2s ease-in-out;
+    }
+    .form-control:focus {
+        background-color: var(--bg-color);
+        border-color: var(--primary-color);
+        box-shadow: 0 0 0 3px rgba(var(--primary-color-rgb), 0.2);
+    }
+</style>
+}
+
+<section class="create-thread-container container">
+    @if (Model.ParentCategory != null)
+    {
+        <nav class="breadcrumb-nav">
+            <a asp-page="/Forums/ForumIndex">论坛首页</a>
+            <span>/</span>
+            <a asp-page="/Forums/ViewCategory" asp-route-id="@Model.ParentCategory.Id">@Model.ParentCategory.Title</a>
+            <span>/</span>
+            <span class="current">发表新主题</span>
+        </nav>
+
+        <header class="form-header">
+            <h1 class="form-title">在 "@Model.ParentCategory.Title" 发表新主题</h1>
+        </header>
+
+        <form method="post" class="form-card">
+            <div asp-validation-summary="ModelOnly" class="alert alert-danger"></div>
+            <input type="hidden" asp-for="Input.CategoryId" />
+
+            <div class="form-group">
+                <label asp-for="Input.Title">标题</label>
+                <input asp-for="Input.Title" class="form-control" placeholder="请输入帖子标题" />
+                <span asp-validation-for="Input.Title" class="text-danger"></span>
+            </div>
+
+            <div class="form-group">
+                <label asp-for="Input.Content">内容</label>
+                <textarea asp-for="Input.Content" class="form-control" rows="12" placeholder="请输入帖子内容... 支持 Markdown 语法"></textarea>
+                <span asp-validation-for="Input.Content" class="text-danger"></span>
+            </div>
+
+            <div class="form-group text-end">
+                <button type="submit" class="btn btn-primary btn-lg">发布主题</button>
+            </div>
+        </form>
+    }
+    else
+    {
+        <div class="alert alert-warning">无法找到指定的板块。</div>
+    }
+</section> 

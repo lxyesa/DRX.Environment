@@ -1,0 +1,588 @@
+@page
+@model Web.KaxServer.Pages.Account.PaymentsAndSubscriptionsModel
+@using Web.KaxServer.Models
+@addTagHelper *, Microsoft.AspNetCore.Mvc.TagHelpers
+@{
+    ViewData["Title"] = "付款和订阅";
+    Layout = "/Pages/Shared/_AccountLayout.cshtml";
+}
+
+@Html.AntiForgeryToken()
+
+<main class="profile-content">
+    <!-- User Info Card -->
+    <div class="card account-balance-card">
+        <div class="balance-card-header">
+            <div class="balance-icon"><i class="fas fa-wallet"></i></div>
+            <h2>账户余额</h2>
+        </div>
+        <div class="balance-content">
+            <div class="balance-item">
+                <div class="balance-item-icon">
+                    <i class="fas fa-crown"></i>
+                </div>
+                <div class="balance-item-content">
+                    <div class="balance-item-label">用户权限</div>
+                    <div class="balance-item-value">@Model.UserPermission.GetDisplayName()</div>
+                </div>
+            </div>
+            <div class="balance-item">
+                <div class="balance-item-icon">
+                    <i class="fas fa-coins"></i>
+                </div>
+                <div class="balance-item-content">
+                    <div class="balance-item-label">金币</div>
+                    <div class="balance-item-value">@Model.Coins.ToString("F3")</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- My Assets Card -->
+    <div class="card account-balance-card">
+        <div class="balance-card-header">
+            <div class="balance-icon"><i class="fas fa-box-open"></i></div>
+            <h2>我的资产</h2>
+        </div>
+        @if (Model.OwnedItems.Any())
+        {
+            <div class="assets-content">
+                @foreach (var item in Model.OwnedItems)
+                {
+                    <div class="asset-item" data-asset-id="@item.AssetId">
+                        <div class="asset-item-icon">
+                            <i class="fas fa-code"></i>
+                        </div>
+                        <div class="asset-item-content">
+                            <div class="asset-item-title">@item.Title</div>
+                            <div class="asset-item-mca-code">机械码: @item.McaCode</div>
+                            <div class="asset-item-expiry">
+                                <span class="countdown" data-expiry="@item.ExpiryDate.ToString("o")">@item.TimeRemaining</span> - 将于 @item.ExpiryDate.ToString("yyyy-MM-dd HH:mm") 过期
+                            </div>
+                            <div class="asset-status-bar">
+                                <div class="status-progress @item.ExpiryStatus" data-progress="@item.ExpiryProgress.ToString("F0")" title="@item.TimeRemaining"></div>
+                            </div>
+                        </div>
+                        <button class="btn btn-outline btn-icon-only unsubscribe-btn" data-asset-id="@item.AssetId" data-toggle="modal" data-target="#unsubscribeModal" data-title="@item.Title">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                }
+            </div>
+        }
+        else
+        {
+            <div class="empty-assets">
+                <p>您当前没有任何已购买的资产。</p>
+                <a href="/Shop/Store" class="btn btn-accent btn-sm shop-link">前往商城</a>
+            </div>
+        }
+    </div>
+
+    @if (Model.UserPermission >= UserPermissionType.Admin)
+    {
+        <div class="card account-balance-card">
+            <div class="balance-card-header">
+                <div class="balance-icon"><i class="fas fa-tasks"></i></div>
+                <h2>管理资产</h2>
+            </div>
+            @if (Model.ManageableItems.Any())
+            {
+                <div class="assets-content">
+                    @foreach (var item in Model.ManageableItems)
+                    {
+                        <div class="asset-item" data-manage-asset-id="@item.Id">
+                            <div class="asset-item-icon">
+                                <i class="fas fa-gamepad"></i>
+                            </div>
+                            <div class="asset-item-content">
+                                <div class="asset-item-title">@item.Title</div>
+                                <div class="asset-item-mca-code">版本: @(string.IsNullOrEmpty(item.Version) ? "未设置" : item.Version)</div>
+                                <div class="asset-item-expiry">
+                                    @item.ShortDescription
+                                </div>
+                            </div>
+                            <a href="/Account/EditAsset?id=@item.Id" class="btn btn-badge edit-version-btn" data-asset-id="@item.Id" data-current-version="@item.Version" data-asset-title="@item.Title">
+                                <i class="fas fa-edit"></i>
+                            </a>
+                        </div>
+                    }
+                </div>
+            }
+            else
+            {
+                <div class="empty-assets">
+                    <p>无任何已发布资产。</p>
+                </div>
+            }
+        </div>
+    }
+
+    <!-- CDK Redemption Card -->
+    <div class="card account-balance-card">
+        <div class="balance-card-header">
+            <div class="balance-icon"><i class="fas fa-gift"></i></div>
+            <h2>兑换中心</h2>
+        </div>
+        <div class="cdk-content">
+            <p>在此处输入您的兑换码 (CDK) 以获取您的资产。</p>
+            <form id="cdkForm" method="post" asp-page-handler="RedeemCdk">
+                <div class="cdk-input-group">
+                    <input type="text" id="cdkInput" name="cdk" placeholder="请输入兑换码" required>
+                    <button type="submit" class="btn btn-accent">兑换</button>
+                </div>
+            </form>
+            @if (TempData["CdkMessage"] != null)
+            {
+                var messageClass = TempData["CdkMessageClass"] as string ?? "info";
+                <div class="cdk-message @messageClass">
+                    @TempData["CdkMessage"]
+                </div>
+            }
+        </div>
+    </div>
+</main>
+    
+<!-- Unsubscribe Confirmation Modal -->
+<div class="modal-overlay" id="unsubscribeModal">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>确认退订</h3>
+                <button class="close-modal" data-dismiss="modal">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="warning-icon">
+                    <i class="fas fa-exclamation-triangle"></i>
+                </div>
+                <p>您确定要退订 <span id="assetName"></span> 吗？</p>
+                <p class="warning-text">退订后，您将无法继续享受该资产的服务，且已支付的金币将不会退还到您的账户。</p>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" data-dismiss="modal">取消</button>
+                <button class="btn btn-accent" id="confirmUnsubscribe">确认退订</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            // Animate progress bars on load
+            const progressBars = document.querySelectorAll('.status-progress');
+            setTimeout(() => {
+                progressBars.forEach(bar => {
+                    const progress = bar.getAttribute('data-progress');
+                    bar.style.width = progress + '%';
+                });
+            }, 200);
+
+            // Countdown timer
+            const countdownElements = document.querySelectorAll('.countdown[data-expiry]');
+
+            function updateCountdowns() {
+                countdownElements.forEach(el => {
+                    const expiryDate = new Date(el.getAttribute('data-expiry'));
+                    const now = new Date();
+                    const remaining = expiryDate - now;
+
+                    if (remaining <= 0) {
+                        el.textContent = '已过期';
+                        el.closest('.asset-item')?.classList.add('expired');
+                        return;
+                    }
+
+                    const days = Math.floor(remaining / (1000 * 60 * 60 * 24));
+                    const hours = Math.floor((remaining % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+                    const minutes = Math.floor((remaining % (1000 * 60 * 60)) / (1000 * 60));
+                    const seconds = Math.floor((remaining % (1000 * 60)) / 1000);
+
+                    el.textContent = `剩余 ${days}天 ${hours}小时 ${minutes}分钟 ${seconds}秒`;
+                });
+            }
+
+            if (countdownElements.length > 0) {
+                updateCountdowns(); // Initial call
+                setInterval(updateCountdowns, 1000); // Update every second
+            }
+            
+            // Modal functionality
+            const modal = document.getElementById('unsubscribeModal');
+            const assetNameSpan = document.getElementById('assetName');
+            let currentAssetId = '';
+            
+            // Open modal when unsubscribe button is clicked
+            document.querySelectorAll('.unsubscribe-btn').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    currentAssetId = this.getAttribute('data-asset-id');
+                    assetNameSpan.textContent = this.getAttribute('data-title');
+                    modal.classList.add('show');
+                });
+            });
+            
+            // Close modal
+            document.querySelectorAll('[data-dismiss="modal"]').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    modal.classList.remove('show');
+                });
+            });
+            
+            // Close modal when clicking outside
+            window.addEventListener('click', function(event) {
+                if (event.target === modal) {
+                    modal.classList.remove('show');
+                }
+            });
+            
+            // Handle unsubscribe confirmation
+            document.getElementById('confirmUnsubscribe').addEventListener('click', function() {
+                // Get the asset ID from the current button
+                const assetId = currentAssetId;
+                const assetTitle = document.getElementById('assetName').textContent;
+                
+                // Create form data for the request
+                const formData = new FormData();
+                formData.append('assetId', assetId);
+                
+                // Create an anti-forgery token if needed (ASP.NET Core requires this)
+                const antiForgeryToken = document.querySelector('input[name="__RequestVerificationToken"]')?.value;
+                if (antiForgeryToken) {
+                    formData.append('__RequestVerificationToken', antiForgeryToken);
+                }
+                
+                // Send the AJAX request
+                fetch('?handler=Unsubscribe', {
+                    method: 'POST',
+                    body: formData,
+                    headers: {
+                        'RequestVerificationToken': antiForgeryToken || ''
+                    }
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        // Show success message
+                        alert(data.message || '退订成功');
+                        
+                        // Remove the asset item from the UI
+                        const itemToRemove = document.querySelector(`.asset-item[data-asset-id="${assetId}"]`);
+                        if (itemToRemove) {
+                            itemToRemove.remove();
+                        }
+                        
+                        // Check if there are no more assets
+                        const remainingAssets = document.querySelectorAll('.asset-item');
+                        if (remainingAssets.length === 0) {
+                            // Show empty state
+                            const assetsContent = document.querySelector('.assets-content');
+                            if (assetsContent) {
+                                assetsContent.innerHTML = `
+                                    <div class="empty-assets">
+                                        <p>您当前没有任何已购买的资产。</p>
+                                        <a href="/Shop/Store" class="btn btn-accent btn-sm shop-link">前往商城</a>
+                                    </div>
+                                `;
+                            }
+                        }
+                    } else {
+                        // Show error message
+                        alert(data.message || '退订失败，请稍后重试');
+                    }
+                })
+                .catch(error => {
+                    console.error('Unsubscribe error:', error);
+                    alert('退订过程中发生错误');
+                })
+                .finally(() => {
+                    // Close the modal
+                    modal.classList.remove('show');
+                });
+            });
+        });
+    </script>
+}
+@section Styles {
+    <style>
+        .profile-content {
+            display: grid;
+            gap: 2rem;
+        }
+
+        .account-balance-card {
+            padding: 2rem;
+        }
+
+        .balance-card-header {
+            display: flex;
+            align-items: center;
+            gap: 1.5rem;
+            padding-bottom: 1.5rem;
+            margin-bottom: 1.5rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .balance-icon {
+            font-size: 1.5rem;
+            width: 48px;
+            height: 48px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            background-color: var(--light-bg);
+            color: var(--accent-color);
+        }
+
+        .balance-card-header h2 {
+            font-size: 1.5rem;
+            font-weight: 600;
+        }
+
+        .balance-content {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 2rem;
+        }
+
+        .balance-item {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .balance-item-icon {
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--muted-color);
+            font-size: 1.2rem;
+        }
+
+        .balance-item-label {
+            color: var(--muted-color);
+            font-size: 0.9rem;
+            margin-bottom: 0.25rem;
+        }
+
+        .balance-item-value {
+            font-size: 1.25rem;
+            font-weight: 600;
+        }
+
+        .assets-content, .cdk-content {
+            padding: 0.5rem;
+        }
+
+        .asset-item {
+            display: flex;
+            align-items: center;
+            gap: 1.5rem;
+            padding: 1.25rem;
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            transition: background-color 0.3s;
+        }
+
+        .asset-item:not(:last-child) {
+            margin-bottom: 1rem;
+        }
+
+        .asset-item:hover {
+            background-color: var(--light-bg);
+        }
+
+        .asset-item-icon {
+            flex-shrink: 0;
+            width: 48px;
+            height: 48px;
+            background: var(--light-bg);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.75rem;
+        }
+
+        .asset-item-content {
+            flex-grow: 1;
+        }
+
+        .asset-item-title {
+            font-weight: 600;
+            font-size: 1.05rem;
+        }
+
+        .asset-item-mca-code {
+            font-size: 0.9rem;
+            color: #888;
+            margin-top: 0.25rem;
+        }
+
+        .asset-item-expiry {
+            font-size: 0.9rem;
+            color: var(--muted-color);
+        }
+
+        .asset-status-bar {
+            width: 100%;
+            background-color: #e9ecef;
+            border-radius: 10px;
+            height: 8px;
+            margin-top: 0.5rem;
+            overflow: hidden;
+        }
+
+        .status-progress {
+            width: 0;
+            height: 100%;
+            border-radius: 10px;
+            transition: width 1s cubic-bezier(0.23, 1, 0.32, 1);
+        }
+
+        .status-progress.healthy {
+            background: linear-gradient(90deg, #28a745, #218838);
+        }
+
+        .status-progress.notice {
+            background: linear-gradient(90deg, #ffc107, #e0a800);
+        }
+
+        .status-progress.expiring-soon {
+            background: linear-gradient(90deg, #dc3545, #c82333);
+        }
+
+        .asset-item.expired {
+            opacity: 0.6;
+        }
+
+        .asset-item.expired .asset-item-title {
+            text-decoration: line-through;
+        }
+        
+        .unsubscribe-btn {
+            margin-left: auto;
+        }
+
+        .empty-assets {
+            text-align: center;
+            padding: 2rem;
+            color: var(--muted-color);
+        }
+
+        .shop-link {
+            display: inline-block;
+            margin-top: 1rem;
+        }
+
+        .cdk-input-group {
+            display: flex;
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+
+        #cdkInput {
+            flex-grow: 1;
+            padding: 0.75rem 1rem;
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+        }
+        
+        .cdk-message {
+            margin-top: 1rem;
+            padding: 1rem;
+            border-radius: 8px;
+        }
+        .cdk-message.success {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        .cdk-message.error {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+        
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.6);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 2000;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.3s, visibility 0.3s;
+        }
+        
+        .modal-overlay.show {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .modal-dialog {
+            background: #fff;
+            padding: 2rem;
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+            width: 90%;
+            max-width: 500px;
+            transform: scale(0.9);
+            transition: transform 0.3s;
+        }
+        
+        .modal-overlay.show .modal-dialog {
+             transform: scale(1);
+        }
+        
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 1rem;
+            margin-bottom: 1.5rem;
+        }
+        
+        .close-modal {
+            background: none;
+            border: none;
+            font-size: 1.5rem;
+            cursor: pointer;
+            color: var(--muted-color);
+        }
+        
+        .modal-body {
+            text-align: center;
+        }
+        
+        .warning-icon {
+            font-size: 3rem;
+            color: #ffc107;
+            margin-bottom: 1rem;
+        }
+
+        .warning-text {
+            color: var(--muted-color);
+            font-size: 0.9rem;
+            margin-top: 0.5rem;
+        }
+        
+        .modal-footer {
+            display: flex;
+            justify-content: flex-end;
+            gap: 1rem;
+            margin-top: 2rem;
+            padding-top: 1.5rem;
+            border-top: 1px solid var(--border-color);
+        }
+
+    </style>
+} 

@@ -1,0 +1,1311 @@
+﻿@page
+@using System
+@using System.Collections.Generic
+@using NDV.Models
+@addTagHelper *, NDV
+@model NDV.Pages.IndexModel
+@{
+    ViewData["Title"] = "欢迎访问";
+    
+    // C#代码部分
+    var currentTime = DateTime.Now;
+    var greeting = "";
+    
+    if (currentTime.Hour >= 5 && currentTime.Hour < 12)
+    {
+        greeting = "早上好";
+    }
+    else if (currentTime.Hour >= 12 && currentTime.Hour < 18)
+    {
+        greeting = "下午好";
+    }
+    else
+    {
+        greeting = "晚上好";
+    }
+    
+    // 特色列表
+    var features = new List<(string Title, string Description, string Icon)>
+    {
+        ("简单易用", "我们的产品设计简洁明了，容易上手使用", "fas fa-hand-pointer"),
+        ("高效稳定", "保证在你的游戏过程中不会因为我们的产品造成卡顿", "fas fa-bolt"),
+        ("安全可靠", "我们不会对除游戏外的其他进程做任何修改，杜绝被其他游戏反作弊检测等问题（但请最好在辅助运行时，不要启动其他带有反作弊的游戏）", "fas fa-shield-alt"),
+        ("无限服务", "在账号有效期内，你可以随时联系我们的售后服务", "fas fa-clock"),
+        ("责任追踪", "我们会对每个非官方开发者进行产品监控，若发现拥有侵犯用户权益的行为，我们会立即采取行动", "fas fa-gift")
+    };
+    
+    // 创建消息框组件实例
+    var successBox = new NDV.Models.MessageBox
+    {
+        Id = "successMessageBox",
+        Type = "Success",
+        Title = "验证邮件已发送",
+        Content = "<p>验证邮件已成功发送到您的邮箱。</p><p>请查收邮件并点击验证链接完成注册。</p>",
+        ShowCancel = false,
+        OnConfirm = "successConfirmCallback"
+    };
+    
+    var errorBox = new NDV.Models.MessageBox
+    {
+        Id = "errorMessageBox",
+        Type = "Error",
+        Title = "验证失败",
+        Content = "<p>邮箱验证发送失败，请检查以下可能的问题：</p>" +
+                 "<ul>" +
+                 "<li>邮箱地址是否正确</li>" +
+                 "<li>邮箱服务器是否可用</li>" +
+                 "<li>网络连接是否正常</li>" +
+                 "</ul>" +
+                 "<p id=\"errorDetail\"></p>",
+        ConfirmText = "我知道了"
+    };
+    
+    var formMessageBox = new NDV.Models.MessageBox
+    {
+        Id = "formMessageBox",
+        Type = "Info",
+        Title = "处理中",
+        Content = "您的请求正在处理中，请稍候...",
+        ConfirmText = "确定",
+        OnConfirm = "formConfirmCallback"
+    };
+}
+
+<style>
+    :root {
+        --primary-color: #0078d4;
+        --secondary-color: #4cc2ff;
+        --accent-color: #60cdff;
+        --dark-color: #242424;
+        --light-color: #fafafa;
+        --text-color: #202020;
+        --card-bg: rgba(255, 255, 255, 0.8);
+        --box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
+        --border-radius: 12px;
+        --transition-speed: 0.3s;
+        --cursor-black: #000000;
+        --cursor-white: #ffffff;
+        --cursor-gray: #f5f5f5;
+    }
+    
+    * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+    }
+    
+    body {
+        font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+        line-height: 1.6;
+        color: var(--text-color);
+        background-color: #ffffff;
+        overflow-x: hidden;
+        margin: 0;
+        padding: 0;
+    }
+    
+    .container {
+        width: 100%;
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 0 20px;
+        position: relative;
+    }
+    
+    .navbar {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        background-color: rgba(255, 255, 255, 0.95);
+        backdrop-filter: blur(10px);
+        z-index: 1000;
+        padding: 15px 0;
+        border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+    }
+    
+    .navbar-container {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        width: 100%;
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 0 20px;
+    }
+    
+    .navbar-logo {
+        font-weight: 700;
+        font-size: 1.5rem;
+        color: var(--cursor-black);
+        text-decoration: none;
+        display: flex;
+        align-items: center;
+    }
+    
+    .navbar-logo img {
+        height: 32px;
+        margin-right: 8px;
+    }
+    
+    .navbar-links {
+        display: flex;
+        gap: 30px;
+    }
+    
+    .navbar-link {
+        color: var(--text-color);
+        text-decoration: none;
+        font-weight: 500;
+        font-size: 0.95rem;
+        transition: color 0.2s;
+    }
+    
+    .navbar-link:hover {
+        color: var(--primary-color);
+    }
+    
+    .navbar-buttons {
+        display: flex;
+        gap: 15px;
+    }
+    
+    .navbar-btn {
+        padding: 8px 16px;
+        border-radius: 8px;
+        font-weight: 500;
+        font-size: 0.9rem;
+        text-decoration: none;
+        transition: all 0.2s;
+    }
+    
+    .navbar-btn-outline {
+        border: 1px solid rgba(0, 0, 0, 0.1);
+        color: var(--text-color);
+    }
+    
+    .navbar-btn-primary {
+        background-color: var(--cursor-black);
+        color: white;
+    }
+    
+    /* 头部区域 */
+    .hero {
+        padding: 10rem 0 4rem;
+        text-align: center;
+        position: relative;
+        overflow: hidden;
+        max-width: 800px;
+        margin: 0 auto;
+    }
+    
+    .hero h1 {
+        font-size: 4rem;
+        margin-bottom: 1.5rem;
+        font-weight: 800;
+        color: var(--cursor-black);
+        letter-spacing: -0.03em;
+        line-height: 1.2;
+        opacity: 1;
+        transform: translateY(0);
+        animation: fadeInUp 0.8s ease-out;
+    }
+    
+    .hero p {
+        font-size: 1.5rem;
+        max-width: 600px;
+        margin: 0 auto 3rem;
+        color: #555;
+        opacity: 1;
+        transform: translateY(0);
+        animation: fadeInUp 0.8s ease-out 0.3s;
+    }
+    
+    /* 品牌信任区域 */
+    .brands-trust {
+        margin: 5rem 0 0;
+        opacity: 1;
+        transform: translateY(0);
+        animation: fadeInUp 0.8s ease-out 0.9s;
+    }
+    
+    .brands-trust p {
+        font-size: 0.9rem;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        margin-bottom: 1.5rem;
+        color: #888;
+    }
+    
+    .brand-logos {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        gap: 3rem;
+        flex-wrap: wrap;
+    }
+    
+    .brand-logos img {
+        height: 30px;
+        opacity: 0.7;
+        transition: opacity 0.3s;
+    }
+    
+    .brand-logos img:hover {
+        opacity: 1;
+    }
+    
+    /* 按钮样式 */
+    .btn-container {
+        display: flex;
+        justify-content: center;
+        gap: 15px;
+        margin-bottom: 3rem;
+        opacity: 1;
+        transform: translateY(0);
+        animation: fadeInUp 0.8s ease-out 0.6s;
+    }
+    
+    .btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--cursor-black);
+        color: white;
+        padding: 0.9rem 2rem;
+        border: none;
+        border-radius: 8px;
+        font-size: 1rem;
+        font-weight: 600;
+        text-decoration: none;
+        transition: all 0.2s ease;
+        position: relative;
+        overflow: hidden;
+    }
+    
+    .btn:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+    }
+    
+    .btn-primary {
+        background: var(--cursor-black);
+        color: white;
+    }
+    
+    .btn-secondary {
+        background: var(--cursor-gray);
+        color: var(--cursor-black);
+    }
+    
+    /* 时间展示 */
+    .time-display {
+        background: var(--card-bg);
+        backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
+        border-radius: var(--border-radius);
+        padding: 1rem;
+        width: fit-content;
+        margin: 0 auto 4rem;
+        box-shadow: var(--box-shadow);
+        border: 1px solid rgba(255, 255, 255, 0.3);
+        opacity: 1;
+        transform: translateY(0);
+        animation: fadeInUp 0.8s ease-out 1.2s;
+    }
+    
+    .time-display p {
+        margin: 0;
+        font-size: 1.1rem;
+        color: var(--primary-color);
+    }
+    
+    /* 特色区域 */
+    .features-title {
+        text-align: center;
+        font-size: 2.5rem;
+        margin-bottom: 1.5rem;
+        color: var(--cursor-black);
+        position: relative;
+        opacity: 1;
+        font-weight: 700;
+        letter-spacing: -0.02em;
+        transform: translateY(0);
+        animation: fadeInUp 0.8s ease-out 1.5s;
+    }
+    
+    .features-subtitle {
+        text-align: center;
+        font-size: 1.2rem;
+        color: #555;
+        max-width: 600px;
+        margin: 0 auto 4rem;
+    }
+    
+    .features {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        gap: 3rem;
+        margin: 0 0 8rem;
+    }
+    
+    .feature-card {
+        background: white;
+        border-radius: 12px;
+        padding: 1.5rem;
+        transition: transform 0.3s ease, box-shadow 0.3s ease;
+        border: 1px solid rgba(0, 0, 0, 0.05);
+        position: relative;
+        overflow: hidden;
+        opacity: 1;
+        transform: translateY(0);
+    }
+    
+    .feature-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 15px 30px rgba(0, 0, 0, 0.08);
+    }
+    
+    .feature-icon {
+        width: 50px;
+        height: 50px;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        font-size: 1.5rem;
+        color: var(--cursor-black);
+        margin-bottom: 1.5rem;
+        position: relative;
+    }
+    
+    .feature-icon i {
+        position: relative;
+    }
+    
+    .feature-card h3 {
+        margin-bottom: 0.8rem;
+        color: var(--cursor-black);
+        font-size: 1.25rem;
+        font-weight: 600;
+        position: relative;
+    }
+    
+    .feature-card p {
+        color: #555;
+        position: relative;
+        font-size: 0.95rem;
+        line-height: 1.6;
+    }
+    
+    .feature-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 5rem;
+        align-items: center;
+        margin-bottom: 8rem;
+    }
+    
+    .feature-grid-image {
+        border-radius: 12px;
+        overflow: hidden;
+        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+    }
+    
+    .feature-grid-image img {
+        width: 100%;
+        display: block;
+    }
+    
+    .feature-grid-content h2 {
+        font-size: 2.2rem;
+        margin-bottom: 1.5rem;
+        font-weight: 700;
+        color: var(--cursor-black);
+        letter-spacing: -0.02em;
+        line-height: 1.2;
+    }
+    
+    .feature-grid-content p {
+        font-size: 1.1rem;
+        color: #555;
+        margin-bottom: 2rem;
+        line-height: 1.6;
+    }
+    
+    /* 注册表单 */
+    .signup-section {
+        background: white;
+        border-radius: 16px;
+        padding: 4rem 0;
+        box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.1);
+        margin: 8rem 0;
+        position: relative;
+        overflow: hidden;
+        border: 1px solid rgba(0, 0, 0, 0.05);
+        opacity: 1;
+        transform: translateY(0);
+    }
+    
+    .signup-section h2 {
+        text-align: center;
+        margin-bottom: 3rem;
+        color: var(--cursor-black);
+        font-size: 2.5rem;
+        font-weight: 700;
+        letter-spacing: -0.02em;
+        position: relative;
+    }
+    
+    .signup-section h2::after {
+        content: "";
+        position: absolute;
+        bottom: -15px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 80px;
+        height: 4px;
+        background: linear-gradient(to right, var(--primary-color), var(--accent-color));
+        border-radius: 2px;
+    }
+    
+    /* 分割布局 */
+    .signup-container {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 0;
+        align-items: stretch;
+        max-width: 1000px;
+        margin: 0 auto;
+        box-shadow: 0 15px 40px rgba(0, 0, 0, 0.1);
+        border-radius: 12px;
+        overflow: hidden;
+    }
+    
+    .signup-info {
+        background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+        padding: 3rem;
+        position: relative;
+        overflow: hidden;
+    }
+    
+    .signup-info::before {
+        content: '';
+        position: absolute;
+        width: 300px;
+        height: 300px;
+        background: linear-gradient(135deg, rgba(0, 120, 212, 0.1), rgba(96, 205, 255, 0.1));
+        border-radius: 50%;
+        top: -100px;
+        left: -100px;
+        z-index: 0;
+    }
+    
+    .signup-info::after {
+        content: '';
+        position: absolute;
+        width: 200px;
+        height: 200px;
+        background: linear-gradient(135deg, rgba(0, 120, 212, 0.05), rgba(96, 205, 255, 0.05));
+        border-radius: 50%;
+        bottom: -50px;
+        right: -50px;
+        z-index: 0;
+    }
+    
+    .signup-info h3 {
+        font-size: 1.8rem;
+        color: var(--cursor-black);
+        margin-bottom: 1.5rem;
+        font-weight: 600;
+        letter-spacing: -0.02em;
+        position: relative;
+        z-index: 1;
+    }
+    
+    .signup-info p {
+        color: #555;
+        margin-bottom: 2rem;
+        line-height: 1.8;
+        font-size: 1.05rem;
+        position: relative;
+        z-index: 1;
+    }
+    
+    .signup-benefits {
+        margin-top: 2.5rem;
+        position: relative;
+        z-index: 1;
+    }
+    
+    .benefit-item {
+        display: flex;
+        align-items: center;
+        margin-bottom: 1.5rem;
+        opacity: 1;
+        transition: transform 0.3s ease;
+    }
+    
+    .benefit-item:hover {
+        transform: translateX(5px);
+    }
+    
+    .benefit-icon {
+        width: 40px;
+        height: 40px;
+        background: white;
+        color: var(--primary-color);
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-right: 1rem;
+        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+        transition: all 0.3s ease;
+    }
+    
+    .benefit-item:hover .benefit-icon {
+        background: var(--primary-color);
+        color: white;
+        transform: scale(1.1);
+    }
+    
+    .benefit-text {
+        font-weight: 500;
+        color: #333;
+        font-size: 1.05rem;
+    }
+    
+    /* 表单样式增强 */
+    form {
+        background: white;
+        padding: 3rem;
+        position: relative;
+    }
+    
+    .form-header {
+        margin-bottom: 2rem;
+    }
+    
+    .form-title {
+        font-size: 1.5rem;
+        font-weight: 600;
+        color: var(--cursor-black);
+        margin-bottom: 0.5rem;
+    }
+    
+    .form-subtitle {
+        color: #666;
+        font-size: 0.95rem;
+    }
+    
+    .form-group {
+        margin-bottom: 1.8rem;
+        position: relative;
+    }
+    
+    .form-group label {
+        display: block;
+        margin-bottom: 0.8rem;
+        font-weight: 500;
+        color: var(--cursor-black);
+        font-size: 0.9rem;
+        transition: all 0.2s ease;
+    }
+    
+    .form-control {
+        width: 100%;
+        padding: 1rem 1rem 1rem 3rem;
+        border: 1px solid rgba(0, 0, 0, 0.1);
+        border-radius: 8px;
+        font-size: 1rem;
+        transition: all 0.3s ease;
+        background-color: #f8f9fa;
+    }
+    
+    .form-control:focus {
+        outline: none;
+        border-color: var(--primary-color);
+        box-shadow: 0 0 0 3px rgba(0, 120, 212, 0.1);
+        background-color: white;
+    }
+    
+    .form-group i.field-icon {
+        position: absolute;
+        left: 15px;
+        top: 65%;
+        transform: translateY(-50%);
+        color: #777;
+        font-size: 1.1rem;
+        transition: all 0.3s ease;
+    }
+    
+    .form-group:focus-within i.field-icon {
+        color: var(--primary-color);
+    }
+    
+    .form-group:focus-within label {
+        color: var(--primary-color);
+    }
+    
+    .form-submit {
+        margin-top: 2.5rem;
+    }
+    
+    .btn-submit {
+        padding: 1rem 0;
+        font-size: 1.1rem;
+        background-color: var(--cursor-black);
+        color: white;
+        border: none;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        font-weight: 600;
+        width: 100%;
+        position: relative;
+        overflow: hidden;
+    }
+    
+    .btn-submit::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: -100%;
+        width: 100%;
+        height: 100%;
+        background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+        transition: all 0.6s ease;
+    }
+    
+    .btn-submit:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 10px 20px rgba(0, 0, 0, 0.15);
+        background-color: #000;
+    }
+    
+    .btn-submit:hover::before {
+        left: 100%;
+    }
+    
+    .form-footer {
+        text-align: center;
+        margin-top: 1.5rem;
+        font-size: 0.9rem;
+        color: #777;
+    }
+    
+    .form-footer a {
+        color: var(--primary-color);
+        text-decoration: none;
+        font-weight: 500;
+    }
+    
+    .form-footer a:hover {
+        text-decoration: underline;
+    }
+    
+    /* 社交登录选项 */
+    .social-login {
+        margin-top: 2rem;
+        text-align: center;
+    }
+    
+    .social-login-text {
+        display: flex;
+        align-items: center;
+        margin-bottom: 1.5rem;
+    }
+    
+    .social-login-text::before,
+    .social-login-text::after {
+        content: "";
+        flex: 1;
+        height: 1px;
+        background: rgba(0, 0, 0, 0.1);
+    }
+    
+    .social-login-text span {
+        padding: 0 1rem;
+        color: #777;
+        font-size: 0.9rem;
+    }
+    
+    .social-buttons {
+        display: flex;
+        justify-content: center;
+        gap: 1rem;
+    }
+    
+    .social-btn {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid rgba(0, 0, 0, 0.1);
+        background: white;
+        color: #555;
+        font-size: 1.2rem;
+        cursor: pointer;
+        transition: all 0.3s ease;
+    }
+    
+    .social-btn:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 5px 10px rgba(0, 0, 0, 0.1);
+    }
+    
+    .social-btn.google:hover {
+        color: #DB4437;
+        border-color: #DB4437;
+    }
+    
+    .social-btn.facebook:hover {
+        color: #4267B2;
+        border-color: #4267B2;
+    }
+    
+    .social-btn.twitter:hover {
+        color: #1DA1F2;
+        border-color: #1DA1F2;
+    }
+    
+    .social-btn.github:hover {
+        color: #333;
+        border-color: #333;
+    }
+    
+    /* 响应式设计 */
+    @@media (max-width: 768px) {
+        .signup-container {
+            grid-template-columns: 1fr;
+        }
+        
+        .signup-info {
+            padding: 2rem;
+            order: 2;
+        }
+        
+        form {
+            padding: 2rem;
+        }
+        
+        .signup-section {
+            padding: 3rem 1.5rem;
+        }
+    }
+    
+    /* 页脚 */
+    .footer {
+        background: #000;
+        color: #fff;
+        padding: 6rem 0 3rem;
+        position: relative;
+        overflow: hidden;
+        opacity: 1;
+    }
+    
+    .footer::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 1px;
+        background: linear-gradient(to right, rgba(255,255,255,0), rgba(255,255,255,0.2), rgba(255,255,255,0));
+    }
+    
+    .footer-wave {
+        position: absolute;
+        top: -2px;
+        left: 0;
+        width: 100%;
+        height: 60px;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1200 120' preserveAspectRatio='none'%3E%3Cpath d='M321.39,56.44c58-10.79,114.16-30.13,172-41.86,82.39-16.72,168.19-17.73,250.45-.39C823.78,31,906.67,72,985.66,92.83c70.05,18.48,146.53,26.09,214.34,3V0H0V27.35A600.21,600.21,0,0,0,321.39,56.44Z' fill='%23000000'/%3E%3C/svg%3E");
+        background-size: cover;
+        transform: rotate(180deg);
+    }
+    
+    .footer-container {
+        display: grid;
+        grid-template-columns: 1.5fr repeat(3, 1fr);
+        gap: 4rem;
+        margin-bottom: 4rem;
+    }
+    
+    .footer-brand {
+        margin-bottom: 1.5rem;
+    }
+    
+    .footer-logo {
+        font-weight: 700;
+        font-size: 1.5rem;
+        color: #fff;
+        text-decoration: none;
+        display: flex;
+        align-items: center;
+        margin-bottom: 1.5rem;
+    }
+    
+    .footer-logo img {
+        height: 32px;
+        margin-right: 10px;
+    }
+    
+    .footer-about {
+        color: rgba(255, 255, 255, 0.7);
+        font-size: 0.95rem;
+        line-height: 1.6;
+        margin-bottom: 2rem;
+        max-width: 90%;
+    }
+    
+    .footer-social {
+        display: flex;
+        gap: 1rem;
+        margin-top: 1.5rem;
+    }
+    
+    .footer-social-link {
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: rgba(255, 255, 255, 0.1);
+        color: #fff;
+        font-size: 1rem;
+        transition: all 0.3s ease;
+    }
+    
+    .footer-social-link:hover {
+        background: var(--primary-color);
+        transform: translateY(-3px);
+    }
+    
+    .footer-col h4 {
+        font-size: 1.1rem;
+        font-weight: 600;
+        margin-bottom: 1.8rem;
+        color: #fff;
+        position: relative;
+        padding-bottom: 0.8rem;
+    }
+    
+    .footer-col h4::after {
+        content: '';
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        width: 30px;
+        height: 2px;
+        background: var(--primary-color);
+    }
+    
+    .footer-links {
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+    }
+    
+    .footer-link {
+        font-size: 0.95rem;
+        color: rgba(255, 255, 255, 0.7);
+        text-decoration: none;
+        transition: all 0.2s;
+        display: flex;
+        align-items: center;
+    }
+    
+    .footer-link:hover {
+        color: #fff;
+        transform: translateX(5px);
+    }
+    
+    .footer-link i {
+        font-size: 0.7rem;
+        margin-right: 8px;
+        opacity: 0;
+        transition: all 0.2s;
+    }
+    
+    .footer-link:hover i {
+        opacity: 1;
+    }
+    
+    .footer-newsletter p {
+        color: rgba(255, 255, 255, 0.7);
+        font-size: 0.95rem;
+        margin-bottom: 1.5rem;
+        line-height: 1.6;
+    }
+    
+    .footer-newsletter-form {
+        display: flex;
+        margin-bottom: 1.5rem;
+    }
+    
+    .footer-newsletter-input {
+        flex: 1;
+        padding: 0.8rem 1rem;
+        border: none;
+        background: rgba(255, 255, 255, 0.1);
+        color: #fff;
+        border-radius: 4px 0 0 4px;
+    }
+    
+    .footer-newsletter-input::placeholder {
+        color: rgba(255, 255, 255, 0.5);
+    }
+    
+    .footer-newsletter-input:focus {
+        outline: none;
+        background: rgba(255, 255, 255, 0.15);
+    }
+    
+    .footer-newsletter-button {
+        padding: 0 1.2rem;
+        background: var(--primary-color);
+        color: #fff;
+        border: none;
+        border-radius: 0 4px 4px 0;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+    
+    .footer-newsletter-button:hover {
+        background: var(--accent-color);
+    }
+    
+    .footer-bottom {
+        border-top: 1px solid rgba(255, 255, 255, 0.1);
+        padding-top: 2rem;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        color: rgba(255, 255, 255, 0.6);
+        font-size: 0.9rem;
+    }
+    
+    .footer-copyright a {
+        color: rgba(255, 255, 255, 0.8);
+        text-decoration: none;
+    }
+    
+    .footer-copyright a:hover {
+        color: #fff;
+    }
+    
+    .footer-bottom-links {
+        display: flex;
+        gap: 1.5rem;
+    }
+    
+    .footer-bottom-link {
+        color: rgba(255, 255, 255, 0.6);
+        text-decoration: none;
+        transition: all 0.2s;
+    }
+    
+    .footer-bottom-link:hover {
+        color: #fff;
+    }
+    
+    /* 响应式设计 - 页脚 */
+    @@media (max-width: 992px) {
+        .footer-container {
+            grid-template-columns: repeat(2, 1fr);
+            gap: 3rem;
+        }
+    }
+    
+    @@media (max-width: 768px) {
+        .footer {
+            padding: 5rem 0 3rem;
+        }
+        
+        .footer-bottom {
+            flex-direction: column;
+            gap: 1.5rem;
+            text-align: center;
+        }
+        
+        .footer-bottom-links {
+            justify-content: center;
+        }
+    }
+    
+    @@media (max-width: 576px) {
+        .footer-container {
+            grid-template-columns: 1fr;
+            gap: 2.5rem;
+        }
+        
+        .footer-col h4 {
+            margin-bottom: 1.2rem;
+        }
+    }
+</style>
+
+<!-- 引入Font Awesome -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap">
+
+<!-- 使用Razor组件渲染消息框 -->
+@await Html.PartialAsync("~/Pages/Shared/Components/MessageBox.cshtml", formMessageBox)
+@await Html.PartialAsync("~/Pages/Shared/Components/MessageBox.cshtml", successBox)
+@await Html.PartialAsync("~/Pages/Shared/Components/MessageBox.cshtml", errorBox)
+
+<!-- 导航栏 -->
+<nav class="navbar">
+    <div class="navbar-container">
+        <a href="/" class="navbar-logo">
+            <img src="https://placehold.co/32x32" alt="KAX Logo" />
+            KAX
+        </a>
+        <div class="navbar-links">
+            <a href="#features" class="navbar-link">功能</a>
+            <a href="#enterprise" class="navbar-link">企业</a>
+            <a href="#" class="navbar-link">博客</a>
+            <a href="#" class="navbar-link">论坛</a>
+        </div>
+        <div class="navbar-buttons">
+            <a href="#" class="navbar-btn navbar-btn-outline">登录</a>
+            <a href="#signup" class="navbar-btn navbar-btn-primary">下载</a>
+        </div>
+    </div>
+</nav>
+
+<div class="container">
+    <!-- 头部区域 -->
+    <section class="hero">
+        <h1>@greeting，Kax用户</h1>
+        <p>Kax 这是我们最新的辅助平台。</p>
+        <div class="btn-container">
+            <a href="#features" class="btn btn-primary">探索功能</a>
+            <a href="#signup" class="btn">立即加入</a>
+        </div>
+        
+        <!-- 品牌信任展示 -->
+        <div class="brands-trust">
+            <p>支持绑定账号</p>
+            <div class="brand-logos">
+                <img src="https://placehold.co/120x40/e0e0e0/909090" alt="Brand 1">
+                <img src="https://placehold.co/120x40/e0e0e0/909090" alt="Brand 2">
+                <img src="https://placehold.co/120x40/e0e0e0/909090" alt="Brand 3">
+                <img src="https://placehold.co/120x40/e0e0e0/909090" alt="Brand 4">
+            </div>
+        </div>
+    </section>
+    
+    <!-- 特色区域 -->
+    <section id="features">
+        <h2 class="features-title">核心特色</h2>
+        <p class="features-subtitle">我们支持任何游戏的辅助上传到平台，并提供给用户使用。</p>
+        
+        <!-- 功能卡片 -->
+        <div class="features">
+            @foreach (var feature in features)
+            {
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <i class="@feature.Icon"></i>
+                    </div>
+                    <h3>@feature.Title</h3>
+                    <p>@feature.Description</p>
+                </div>
+            }
+        </div>
+        
+        <!-- 功能展示区1 -->
+        <div class="feature-grid">
+            <div class="feature-grid-image">
+                <img src="https://placehold.co/600x400/e0e0e0/909090" alt="功能展示">
+            </div>
+            <div class="feature-grid-content">
+                <h2>集合所有辅助</h2>
+                <p>加入到我们平台，为你的游戏辅助提供安身之所。</p>
+                <a href="#" class="btn">了解更多</a>
+            </div>
+        </div>
+        
+        <!-- 功能展示区2 -->
+        <div class="feature-grid">
+            <div class="feature-grid-content">
+                <h2>熟知你的需求</h2>
+                <p>从你的需求出发，Kax的功能将变得更加贴合你的需求。</p>
+                <a href="#" class="btn">查看演示</a>
+            </div>
+            <div class="feature-grid-image">
+                <img src="https://placehold.co/600x400/e0e0e0/909090" alt="功能展示">
+            </div>
+        </div>
+    </section>
+    
+    <!-- 注册表单 -->
+    <section id="signup" class="signup-section">
+        <h2>立即注册体验</h2>
+        <div class="signup-container">
+            <div class="signup-info">
+                <h3>加入我们，立刻体验</h3>
+                <p>完成注册后，你将有权下载并试用Kax平台下的所有免费辅助。</p>
+                
+                <div class="signup-benefits">
+                    <div class="benefit-item">
+                        <div class="benefit-icon">
+                            <i class="fas fa-lock"></i>
+                        </div>
+                        <div class="benefit-text">账号安全防护</div>
+                    </div>
+                    <div class="benefit-item">
+                        <div class="benefit-icon">
+                            <i class="fas fa-headset"></i>
+                        </div>
+                        <div class="benefit-text">账号无条件售后</div>
+                    </div>
+                    <div class="benefit-item">
+                        <div class="benefit-icon">
+                            <i class="fas fa-gift"></i>
+                        </div>
+                        <div class="benefit-text">免费的辅助程序</div>
+                    </div>
+                </div>
+                
+                <!-- API响应显示区域 -->
+                <div id="apiResponse" style="margin-top: 1.5rem; padding: 1rem; border-radius: 8px; background: rgba(255,255,255,0.7); display: none;"></div>
+            </div>
+            
+            <form method="post" id="signupForm" action="/api/test">
+                <div class="form-header">
+                    <div class="form-title">创建您的账号</div>
+                    <div class="form-subtitle">填写以下信息开始您的体验之旅</div>
+                </div>
+                
+                <div class="form-group">
+                    <label for="name">昵称</label>
+                    <i class="fas fa-user field-icon"></i>
+                    <input type="text" id="name" name="name" class="form-control" placeholder="请输入您的昵称" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="email">电子邮箱</label>
+                    <i class="fas fa-envelope field-icon"></i>
+                    <input type="email" id="email" name="email" class="form-control" placeholder="example@domain.com" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="password">密码</label>
+                    <i class="fas fa-lock field-icon"></i>
+                    <input type="password" id="password" name="password" class="form-control" placeholder="请设置您的密码" required>
+                </div>
+                
+                <div class="form-submit">
+                    <button type="submit" class="btn-submit" id="submitBtn">创建账号</button>
+                </div>
+                
+                <div class="form-footer">
+                    已有账号？<a href="#">立即登录</a>
+                </div>
+                
+                <div class="social-login">
+                    <div class="social-login-text">
+                        <span>或使用以下方式登录</span>
+                    </div>
+                    <div class="social-buttons">
+                        <button type="button" class="social-btn google">
+                            <i class="fab fa-google"></i>
+                        </button>
+                        <button type="button" class="social-btn github">
+                            <i class="fab fa-github"></i>
+                        </button>
+                        <button type="button" class="social-btn facebook">
+                            <i class="fab fa-facebook-f"></i>
+                        </button>
+                        <button type="button" class="social-btn twitter">
+                            <i class="fab fa-twitter"></i>
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </section>
+    
+    <!-- 页脚 -->
+    <footer class="footer">
+        <div class="footer-wave"></div>
+        <div class="container">
+            <div class="footer-container">
+                <div class="footer-col footer-brand">
+                    <a href="/" class="footer-logo">
+                        <img src="https://placehold.co/32x32" alt="KAX Logo" />
+                        KAX
+                    </a>
+                    <div class="footer-about">
+                        Kax是一款专注于技术分享的平台，Kax团队不对任何使用Kax平台内的第三方开发者上传的辅助造成的任何损失负责。
+                    </div>
+                    <div class="footer-social">
+                        <a href="#" class="footer-social-link">
+                            <i class="fab fa-weibo"></i>
+                        </a>
+                        <a href="#" class="footer-social-link">
+                            <i class="fab fa-weixin"></i>
+                        </a>
+                        <a href="#" class="footer-social-link">
+                            <i class="fab fa-qq"></i>
+                        </a>
+                        <a href="#" class="footer-social-link">
+                            <i class="fab fa-github"></i>
+                        </a>
+                    </div>
+                </div>
+                
+                <div class="footer-col">
+                    <h4>产品</h4>
+                    <div class="footer-links">
+                        <a href="#" class="footer-link"><i class="fas fa-chevron-right"></i> 商店</a>
+                        <a href="#" class="footer-link"><i class="fas fa-chevron-right"></i> 更新日志</a>
+                    </div>
+                </div>
+                
+                <div class="footer-col">
+                    <h4>资源</h4>
+                    <div class="footer-links">
+                        <a href="#" class="footer-link"><i class="fas fa-chevron-right"></i> 文档</a>
+                        <a href="#" class="footer-link"><i class="fas fa-chevron-right"></i> 帮助中心</a>
+                    </div>
+                </div>
+                
+                <div class="footer-col footer-newsletter">
+                    <h4>订阅我们</h4>
+                    <p>订阅我们的频道，获取最新的产品更新。</p>
+                    <div class="footer-newsletter-form">
+                        <input type="email" class="footer-newsletter-input" placeholder="您的邮箱地址">
+                        <button class="footer-newsletter-button">
+                            <i class="fas fa-paper-plane"></i>
+                        </button>
+                    </div>
+                    <p>我们不会向您发送垃圾邮件，您可以随时取消订阅。</p>
+                </div>
+            </div>
+            
+            <div class="footer-bottom">
+                <div class="footer-copyright">&copy; @DateTime.Now.Year - <a href="/">DRX团队</a> | 保留所有权利</div>
+                <div class="footer-bottom-links">
+                    <a href="#" class="footer-bottom-link">条款</a>
+                    <a href="#" class="footer-bottom-link">隐私</a>
+                    <a href="#" class="footer-bottom-link">安全</a>
+                    <a href="#" class="footer-bottom-link">联系我们</a>
+                </div>
+            </div>
+        </div>
+    </footer>
+</div>
+
+<script>
+    // 所有JavaScript代码已移至site.js文件
+</script>
+
+<!-- 确保在页面底部引入site.js -->
+<script src="~/js/index.js" asp-append-version="true"></script>

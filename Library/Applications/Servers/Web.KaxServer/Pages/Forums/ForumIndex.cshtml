@@ -1,0 +1,264 @@
+﻿@*
+    For more information on enabling MVC for empty projects, visit https://go.microsoft.com/fwlink/?LinkID=397860
+*@
+@page "/forums/home"
+@using Web.KaxServer.Models
+@using Microsoft.AspNetCore.Mvc.RazorPages
+@model Web.KaxServer.Pages.Forums.ForumIndexModel
+@{
+    ViewData["Title"] = "论坛中心";
+}
+
+@section Styles {
+<style>
+    .forum-container {
+        padding-top: 2rem;
+        padding-bottom: 4rem;
+        animation: fadeInUp 0.8s ease-out;
+    }
+
+    .forum-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 2rem;
+        flex-wrap: wrap;
+        gap: 1.5rem;
+    }
+    
+    .forum-title {
+        font-size: 2.5rem;
+        font-weight: 800;
+        color: var(--text-color);
+        margin: 0;
+    }
+    
+    /* Forum Stats */
+    .forum-stats-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: 1.5rem;
+        margin-bottom: 3rem;
+    }
+    
+    .stat-card {
+        background: var(--light-bg);
+        border-radius: 12px;
+        padding: 1.5rem;
+        text-align: center;
+        border: 1px solid var(--border-color);
+    }
+    
+    .stat-card .stat-value {
+        font-size: 2rem;
+        font-weight: 700;
+        color: var(--text-color);
+        line-height: 1.2;
+    }
+    
+    .stat-card .stat-label {
+        font-size: 0.9rem;
+        color: var(--muted-color);
+    }
+
+    /* Category List */
+    .forum-category-list h2 {
+        font-size: 1.5rem;
+        font-weight: 700;
+        margin-bottom: 1.5rem;
+        padding-bottom: 0.75rem;
+        border-bottom: 1px solid var(--border-color);
+    }
+
+    .forum-category-card {
+        background-color: var(--bg-color);
+        border: 1px solid var(--border-color);
+        border-radius: 12px;
+        padding: 1.5rem;
+        display: flex;
+        align-items: center;
+        gap: 1.5rem;
+        transition: background-color 0.3s ease, box-shadow 0.3s ease, transform 0.3s ease;
+        margin-bottom: 1rem;
+    }
+
+    .forum-category-card:hover {
+        background-color: var(--light-bg);
+        transform: translateY(-4px);
+        box-shadow: 0 8px 25px rgba(0,0,0,0.07);
+    }
+
+    .category-icon {
+        font-size: 1.5rem;
+        color: var(--text-color);
+        width: 50px;
+        height: 50px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background-color: var(--light-bg);
+        border-radius: 10px;
+        flex-shrink: 0;
+    }
+    
+    .category-info {
+        flex-grow: 1;
+    }
+
+    .category-info .title {
+        font-size: 1.15rem;
+        font-weight: 600;
+        margin-bottom: 0.25rem;
+    }
+    
+    .category-info .title a {
+        text-decoration: none;
+        color: var(--text-color);
+    }
+    
+    .category-info .title a:hover {
+        text-decoration: underline;
+    }
+
+    .category-info .description {
+        color: var(--muted-color);
+        font-size: 0.9rem;
+    }
+
+    .category-stats {
+        flex-shrink: 0;
+        text-align: right;
+        font-size: 0.9rem;
+        color: var(--muted-color);
+        width: 100px;
+    }
+
+    .last-thread-info {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        width: 320px;
+        flex-shrink: 0;
+        justify-content: flex-end;
+    }
+    
+    .last-thread-info img {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+    }
+
+    .last-thread-details .thread-title {
+        font-weight: 500;
+        font-size: 0.9rem;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 280px;
+        text-align: left;
+    }
+
+    .last-thread-details .thread-title a {
+        text-decoration: none;
+        color: var(--text-color);
+    }
+     .last-thread-details .thread-title a:hover {
+        text-decoration: underline;
+    }
+
+    .last-thread-details .thread-meta {
+        color: var(--muted-color);
+        font-size: 0.85rem;
+        text-align: left;
+    }
+
+    .no-thread-message {
+        color: var(--muted-color);
+        font-size: 0.9rem;
+        text-align: center;
+        width: 100%;
+    }
+    
+    @@media (max-width: 992px) {
+        .last-thread-info { display: none; }
+        .category-stats { width: auto; text-align: left; }
+    }
+    
+    @@media (max-width: 768px) {
+        .forum-header {
+            justify-content: center;
+            text-align: center;
+        }
+        .forum-title { font-size: 2rem; }
+        .forum-category-card { flex-direction: column; align-items: flex-start; }
+        .category-stats { text-align: left; margin-top: 1rem; }
+    }
+
+</style>
+}
+
+<section class="forum-container container">
+    <div class="forum-header">
+        <h1 class="forum-title">论坛中心</h1>
+        <a href="#" class="btn btn-primary btn-icon btn-glow">
+            <i class="fas fa-plus"></i> 发布新帖
+        </a>
+    </div>
+    
+    <div class="forum-stats-grid">
+        <div class="stat-card">
+            <div class="stat-value">@Model.Stats.TotalThreads.ToString("N0")</div>
+            <div class="stat-label">总主题</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value">@Model.Stats.TotalPosts.ToString("N0")</div>
+            <div class="stat-label">总帖子</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value">@Model.Stats.MembersOnline.ToString("N0")</div>
+            <div class="stat-label">在线用户</div>
+        </div>
+    </div>
+
+    <div class="forum-category-list">
+        <h2>所有版块</h2>
+        @foreach (var category in Model.Categories)
+        {
+            <div class="forum-category-card">
+                <div class="category-icon">
+                    <i class="@category.IconClass"></i>
+                </div>
+                <div class="category-info">
+                    <h3 class="title"><a asp-page="/Forums/ViewCategory" asp-route-id="@category.Id">@category.Title</a></h3>
+                    <p class="description">@category.Description</p>
+                </div>
+                <div class="category-stats">
+                    <div><strong>@category.ThreadCount</strong> 主题</div>
+                    <div><strong>@category.PostCount</strong> 帖子</div>
+                </div>
+                <div class="last-thread-info">
+                    @if (category.LastThread != null)
+                    {
+                        var lastThreadAuthorAvatar = !string.IsNullOrEmpty(category.LastThread.AuthorAvatarUrl)
+                            ? category.LastThread.AuthorAvatarUrl
+                            : $"https://i.pravatar.cc/40?u={category.LastThread.AuthorName}";
+                        
+                        <img src="@lastThreadAuthorAvatar" alt="@category.LastThread.AuthorName 的头像">
+                        <div class="last-thread-details">
+                            <div class="thread-title"><a asp-page="/Forums/ViewThread" asp-route-id="@category.LastThread.Id">@category.LastThread.Title</a></div>
+                            <div class="thread-meta">
+                                By @category.LastThread.AuthorName
+                            </div>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="no-thread-message">
+                            尚无主题
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+    </div>
+</section>

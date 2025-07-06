@@ -1,0 +1,35 @@
+@page
+@model Web.KaxServer.Pages.Account.RegisterErrorModel
+@{
+    ViewData["Title"] = "KAX | 注册失败";
+    Layout = "/Pages/Shared/_Layout.cshtml";
+}
+
+@section Styles {
+    <link rel="stylesheet" href="~/css/notification.css" />
+    <style>
+        .notification-container {
+            border-top: 5px solid var(--error-color, #dc3545);
+        }
+
+        .notification-icon {
+            color: var(--error-color, #dc3545);
+        }
+    </style>
+}
+
+<div class="notification-section">
+    <div class="notification-container">
+        <div class="notification-icon">
+            <i class="fas fa-times-circle"></i>
+        </div>
+        <h1 class="notification-title">注册失败</h1>
+        <p class="notification-message">
+            抱歉，注册过程中似乎发生了错误。<br>
+            <strong>@Model.ErrorMessage</strong>
+        </p>
+        <div class="notification-actions">
+            <a asp-page="/Account/Register" class="btn btn-accent">返回重试</a>
+        </div>
+    </div>
+</div> 

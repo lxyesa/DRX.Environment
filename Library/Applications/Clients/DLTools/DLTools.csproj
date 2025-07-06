@@ -1,0 +1,37 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net9.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Costura.Fody" Version="6.0.0">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\Environments\SDK\Drx.Sdk.Common\Drx.Sdk.Common.csproj" />
+    <ProjectReference Include="..\..\..\Environments\SDK\Drx.Sdk.Events\Drx.Sdk.Events.csproj" />
+    <ProjectReference Include="..\..\..\Environments\SDK\Drx.Sdk.Input\Drx.Sdk.Input.csproj" />
+    <ProjectReference Include="..\..\..\Environments\SDK\Drx.Sdk.Text\Drx.Sdk.Text.csproj" />
+    <ProjectReference Include="..\..\..\Environments\SDK\Drx.Sdk.Memory\Drx.Sdk.Memory.csproj" />
+    <ProjectReference Include="..\..\..\Environments\SDK\Drx.Sdk.Resource\Drx.Sdk.Resource.csproj" />
+    <ProjectReference Include="..\..\..\Environments\SDK\Drx.Sdk.Ui.Wpf\Drx.Sdk.Ui.Wpf.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Remove="Libs.zip" />
+    <EmbeddedResource Include="Libs.zip" />
+  </ItemGroup>
+  
+  <ItemGroup>
+    <Resource Include="Resources\*.png" />
+  </ItemGroup>
+
+</Project>

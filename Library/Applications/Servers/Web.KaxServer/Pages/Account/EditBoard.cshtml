@@ -1,0 +1,87 @@
+@page "{id}"
+@model Web.KaxServer.Pages.Account.EditBoardModel
+@{
+    ViewData["Title"] = "编辑板块";
+    Layout = "/Pages/Shared/_AccountLayout.cshtml";
+}
+
+<form method="post" class="board-edit-form">
+    <div asp-validation-summary="All" class="alert alert-danger" role="alert"></div>
+    <input type="hidden" asp-for="Board.Id" />
+    
+    <div class="form-section">
+        <div class="section-title">基本信息</div>
+        <div class="form-group">
+            <label class="form-label" asp-for="Board.Title">标题</label>
+            <input type="text" class="form-control" asp-for="Board.Title" />
+            <span asp-validation-for="Board.Title" class="text-danger"></span>
+        </div>
+
+        <div class="form-group">
+            <label class="form-label" asp-for="Board.Description">描述</label>
+            <textarea class="form-control" asp-for="Board.Description" rows="4" placeholder="简短地描述该板块的用途"></textarea>
+            <span asp-validation-for="Board.Description" class="text-danger"></span>
+        </div>
+
+        <div class="form-group">
+            <label class="form-label" asp-for="Board.IconClass">图标类 (Font Awesome)</label>
+            <input type="text" class="form-control" asp-for="Board.IconClass" placeholder="例如: fas fa-comments" />
+            <span asp-validation-for="Board.IconClass" class="text-danger"></span>
+        </div>
+    </div>
+    
+    <div class="form-actions">
+        <button type="submit" class="btn btn-accent btn-icon">
+            <i class="fas fa-save"></i> 保存更改
+        </button>
+        <a href="/Account/Management" class="btn btn-outline btn-icon cancel-edit-btn">
+            <i class="fas fa-times"></i> 取消
+        </a>
+    </div>
+</form>
+
+@section Styles {
+    <style>
+        .board-edit-form {
+            padding: 1rem 0;
+        }
+        
+        .form-section {
+            margin-bottom: 2rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+        
+        .form-section:last-of-type {
+            border-bottom: none;
+        }
+        
+        .section-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin-bottom: 1.5rem;
+            color: var(--accent-color);
+        }
+        
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+
+        .form-label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 500;
+        }
+        
+        .form-actions {
+            display: flex;
+            gap: 1rem;
+            margin-top: 2rem;
+            justify-content: flex-end;
+        }
+        .text-danger {
+            color: #dc3545;
+            font-size: 0.875em;
+        }
+    </style>
+} 

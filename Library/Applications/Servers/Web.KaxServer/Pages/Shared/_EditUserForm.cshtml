@@ -1,0 +1,62 @@
+@using Web.KaxServer.Models
+@using Web.KaxServer.Services
+@inject StoreService StoreService
+@model Web.KaxServer.Models.UserSession
+
+@if (Model != null)
+{
+    <form method="post" asp-page="/Account/Management" asp-page-handler="UpdateUser" class="edit-user-form">
+        <input type="hidden" name="SelectedUserSession.ID" value="@Model.ID" />
+        <input type="hidden" name="SelectedUserSession.Username" value="@Model.Username" />
+        <input type="hidden" name="SelectedUserSession.UserId" value="@Model.UserId" />
+        
+        <div class="form-row">
+            <div class="form-col">
+                <div class="form-group">
+                    <input type="number" step="0.01" class="form-control" name="SelectedUserSession.Coins" value="@Model.Coins.ToString("F2", System.Globalization.CultureInfo.InvariantCulture)" placeholder=" " />
+                    <label class="form-label">金币</label>
+                </div>
+            </div>
+            <div class="form-col">
+                <div class="form-group form-group-select">
+                    <div class="custom-select-wrapper">
+                        <select class="form-select" name="SelectedUserSession.UserPermission" asp-for="@Model.UserPermission" asp-items="Html.GetEnumSelectList<UserPermissionType>()"></select>
+                        <label class="form-label">权限</label>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="form-group form-group-static-label" style="margin-top: 1.5rem;">
+            <label class="form-label">购买的资产</label>
+            @if (Model.OwnedAssets != null && Model.OwnedAssets.Any())
+            {
+                <div class="asset-list-container">
+                    @foreach (var asset in Model.OwnedAssets)
+                    {
+                        var item = StoreService.GetItemById(asset.Key);
+                        <div class="asset-item">
+                            <span class="asset-item-name">@(item?.Title ?? $"未知资产 (ID: {asset.Key})")</span>
+                            <span class="asset-item-expiry">@asset.Value.ToString("yyyy-MM-dd HH:mm")</span>
+                        </div>
+                    }
+                </div>
+            }
+            else
+            {
+                <div class="empty-state-compact" style="padding: 1rem; text-align: center; background-color: var(--light-bg); border-radius: 8px;">
+                    <p style="margin: 0; font-size: 0.9rem; color: var(--muted-color);">该用户没有购买任何资产。</p>
+                </div>
+            }
+        </div>
+
+        <div class="form-group" style="display: flex; gap: 1rem; margin-top: 1.5rem; margin-bottom: 0;">
+            <button type="submit" class="btn btn-accent btn-icon">
+                <i class="fas fa-save"></i> 保存更改
+            </button>
+            <a href="#" class="btn btn-outline btn-icon" id="cancel-edit-btn">
+                <i class="fas fa-times"></i> 取消
+            </a>
+        </div>
+    </form>
+} 

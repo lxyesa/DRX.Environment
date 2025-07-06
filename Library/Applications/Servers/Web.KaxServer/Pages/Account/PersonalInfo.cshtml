@@ -1,0 +1,199 @@
+@page
+@model Web.KaxServer.Pages.Account.PersonalInfoModel
+@{
+    ViewData["Title"] = "个人信息";
+    Layout = "/Pages/Shared/_AccountLayout.cshtml";
+}
+
+@section Styles {
+<style>
+    .profile-content {
+        display: grid;
+        gap: 2rem;
+    }
+    .card-header-group {
+        display: flex;
+        align-items: center;
+        gap: 1.5rem;
+    }
+    .balance-icon {
+        font-size: 1.5rem;
+        width: 48px;
+        height: 48px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 50%;
+        background-color: var(--light-bg);
+        color: var(--accent-color);
+    }
+    .avatar-upload-section {
+        display: flex;
+        align-items: center;
+        gap: 2rem;
+        padding: 1.5rem 0;
+    }
+    
+    .avatar-preview {
+        flex-shrink: 0;
+        width: 120px;
+        height: 120px;
+        border-radius: 50%;
+        border: 4px solid var(--border-color);
+        background-color: var(--light-bg);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+    }
+    
+    .avatar-preview img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+    
+    .avatar-preview .default-icon {
+        font-size: 4rem;
+        color: var(--muted-color);
+    }
+    
+    .upload-form-container {
+        flex-grow: 1;
+    }
+    
+    .upload-instructions {
+        margin-bottom: 1rem;
+        color: var(--muted-color);
+        font-size: 0.9rem;
+    }
+
+    .form-actions {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+    }
+
+    /* Style Reset for Button and Label */
+    .form-actions .btn, .form-actions .file-label {
+        padding: 0.6rem 1.2rem;
+        font-size: 0.9rem;
+        font-weight: 500;
+        line-height: 1.5;
+        vertical-align: middle;
+        height: auto; /* Or a specific height like 40px */
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .form-actions .btn {
+        font-family: inherit; /* Ensure button inherits font */
+    }
+    
+    #avatarFile {
+        display: none;
+    }
+    
+    .file-label {
+        display: inline-block;
+        padding: 0.6rem 1.2rem;
+        border: 1px solid var(--border-color);
+        border-radius: 8px;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+    
+    .file-label:hover {
+        background-color: var(--light-bg);
+        border-color: var(--accent-color);
+    }
+    
+    #fileName {
+        color: var(--text-color);
+        font-size: 0.9rem;
+    }
+    
+    .message-container {
+        margin-top: 1.5rem;
+    }
+    
+</style>
+}
+
+<main class="profile-content">
+    <div class="card">
+        <div class="card-header">
+            <div class="card-header-group">
+                <div class="balance-icon"><i class="fas fa-user-edit"></i></div>
+                <h2>编辑个人资料</h2>
+            </div>
+        </div>
+        
+        <div class="avatar-upload-section">
+            <div class="avatar-preview" id="avatarPreview">
+                @if (!string.IsNullOrEmpty(Model.CurrentUser.AvatarUrl))
+                {
+                    <img src="@Model.CurrentUser.AvatarUrl" alt="用户头像">
+                }
+                else
+                {
+                    <i class="fas fa-user default-icon"></i>
+                }
+            </div>
+            
+            <div class="upload-form-container">
+                <form method="post" enctype="multipart/form-data" asp-page-handler="UploadAvatar">
+                    <p class="upload-instructions">选择一张新头像。推荐使用方形图片，文件大小不超过 2MB。</p>
+                    <div class="form-actions">
+                        <label for="avatarFile" class="btn btn-outline file-label">
+                            <i class="fas fa-upload"></i> 选择图片
+                        </label>
+                        <span id="fileName">未选择文件</span>
+                        <button type="submit" class="btn btn-accent">上传头像</button>
+                    </div>
+                    <input type="file" name="avatarFile" id="avatarFile" accept="image/png, image/jpeg, image/gif">
+                </form>
+            </div>
+        </div>
+        
+        @if (!string.IsNullOrEmpty(Model.SuccessMessage) || !string.IsNullOrEmpty(Model.ErrorMessage))
+        {
+            <div class="message-container">
+                @if (!string.IsNullOrEmpty(Model.SuccessMessage))
+                {
+                    <div class="cdk-message success">@Model.SuccessMessage</div>
+                }
+                @if (!string.IsNullOrEmpty(Model.ErrorMessage))
+                {
+                    <div class="cdk-message error">@Model.ErrorMessage</div>
+                }
+            </div>
+        }
+    </div>
+</main>
+
+@section Scripts {
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const avatarFileInput = document.getElementById('avatarFile');
+        const fileNameSpan = document.getElementById('fileName');
+        const avatarPreview = document.getElementById('avatarPreview');
+
+        avatarFileInput.addEventListener('change', function() {
+            if (this.files && this.files[0]) {
+                const file = this.files[0];
+                fileNameSpan.textContent = file.name;
+
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    avatarPreview.innerHTML = `<img src="${e.target.result}" alt="头像预览">`;
+                };
+                reader.readAsDataURL(file);
+            } else {
+                fileNameSpan.textContent = '未选择文件';
+            }
+        });
+    });
+</script>
+} 

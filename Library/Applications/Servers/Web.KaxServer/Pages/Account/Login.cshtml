@@ -1,0 +1,263 @@
+@page
+@model Web.KaxServer.Pages.Account.LoginModel
+@{
+    ViewData["Title"] = "KAX | 用户登录";
+    Layout = "/Pages/Shared/_Layout.cshtml";
+}
+
+@section Styles {
+    <style>
+        .login-section {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 7rem 2rem;
+            position: relative;
+            background: linear-gradient(120deg, #ffffff, #f8f8f8, #ffffff);
+            background-size: 400% 400%;
+            animation: gradientMove 15s ease infinite;
+        }
+
+        .login-container {
+            max-width: 450px;
+            width: 100%;
+            background-color: var(--bg-color);
+            border-radius: 12px;
+            box-shadow: var(--card-shadow);
+            padding: 3rem;
+            position: relative;
+            overflow: hidden;
+            border: 1px solid var(--border-color);
+            opacity: 0;
+            animation: fadeInUp 1s ease forwards;
+            animation-delay: 0.3s;
+            transition: transform 0.4s ease, box-shadow 0.4s ease;
+        }
+
+        .login-container:hover {
+            transform: translateY(-5px);
+            box-shadow: var(--hover-shadow);
+        }
+
+        .login-container::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 5px;
+            background-color: var(--accent-color);
+            transition: all 0.4s ease;
+        }
+
+        .login-header {
+            text-align: center;
+            margin-bottom: 2.5rem;
+        }
+
+        .login-title {
+            font-size: 2rem;
+            font-weight: 800;
+            margin-bottom: 0.5rem;
+        }
+
+        .login-subtitle {
+            color: var(--muted-color);
+            font-size: 1rem;
+        }
+
+        .form-group {
+            margin-bottom: 1.5rem;
+            position: relative;
+        }
+
+        .form-label {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            text-align: left;
+        }
+
+        .input-wrapper {
+            position: relative;
+        }
+
+        .form-control {
+            width: 100%;
+            padding: 0.9rem 1rem;
+            padding-left: 3rem; /* 为图标留出空间 */
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+            transition: border-color 0.3s ease, box-shadow 0.3s ease;
+            font-size: 1rem;
+        }
+
+        .form-control:focus {
+            outline: none;
+            border-color: var(--accent-color);
+            box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.1);
+        }
+
+        .input-icon {
+            position: absolute;
+            left: 1rem;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #adb5bd;
+            transition: color 0.3s ease;
+        }
+
+        .form-control:focus + .input-icon {
+            color: var(--accent-color);
+        }
+
+        .form-options {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+            font-size: 0.9rem;
+        }
+
+        .form-check-label {
+            color: var(--muted-color);
+            cursor: pointer;
+        }
+
+        .forgot-password-link {
+            color: var(--accent-color);
+            text-decoration: none;
+            transition: color 0.3s ease;
+        }
+
+        .forgot-password-link:hover {
+            text-decoration: underline;
+        }
+
+        .submit-btn {
+            width: 100%;
+        }
+
+        .divider {
+            text-align: center;
+            margin: 2rem 0;
+            color: var(--muted-color);
+            font-size: 0.9rem;
+            position: relative;
+        }
+
+        .divider::before, .divider::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            width: 40%;
+            height: 1px;
+            background-color: var(--border-color);
+        }
+
+        .divider::before {
+            left: 0;
+        }
+
+        .divider::after {
+            right: 0;
+        }
+
+        .social-login {
+            display: flex;
+            gap: 1rem;
+            justify-content: center;
+        }
+
+        .social-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            border: 1px solid var(--border-color);
+            background-color: transparent;
+            font-size: 1.2rem;
+            color: var(--muted-color);
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .social-btn:hover {
+            background-color: var(--light-bg);
+            color: var(--accent-color);
+            border-color: var(--accent-color);
+        }
+
+        .register-link {
+            text-align: center;
+            margin-top: 2rem;
+            font-size: 0.9rem;
+        }
+
+        .register-link a {
+            color: var(--accent-color);
+            font-weight: 600;
+            text-decoration: none;
+        }
+
+        .register-link a:hover {
+            text-decoration: underline;
+        }
+    </style>
+}
+
+<div class="login-section">
+    <div class="login-container">
+        <div class="login-header">
+            <h1 class="login-title">欢迎回来</h1>
+            <p class="login-subtitle">登录KAX，开启全新游戏体验</p>
+        </div>
+        
+        <form id="loginForm" method="post">
+            <div asp-validation-summary="ModelOnly" class="text-danger"></div>
+            
+            <div class="form-group">
+                <label asp-for="Username" class="form-label">邮箱或用户名</label>
+                <div class="input-wrapper">
+                    <input asp-for="Username" class="form-control" placeholder="输入您的邮箱或用户名" required>
+                    <i class="fas fa-user input-icon"></i>
+                </div>
+                <span asp-validation-for="Username" class="text-danger"></span>
+            </div>
+            
+            <div class="form-group">
+                <label asp-for="Password" class="form-label">密码</label>
+                <div class="input-wrapper">
+                    <input asp-for="Password" class="form-control" type="password" placeholder="输入您的密码" required>
+                    <i class="fas fa-lock input-icon"></i>
+                </div>
+                <span asp-validation-for="Password" class="text-danger"></span>
+            </div>
+            
+            <div class="form-options">
+                <div class="form-check">
+                    <input type="checkbox" asp-for="RememberMe" id="rememberMe">
+                    <label class="form-check-label" for="rememberMe">记住我</label>
+                </div>
+                <a href="#" class="forgot-password-link">忘记密码？</a>
+            </div>
+            
+            <button type="submit" class="btn btn-accent btn-block">登录</button>
+        </form>
+        
+        <div class="divider">或</div>
+        
+        <div class="social-login">
+            <button class="btn btn-icon-only btn-outline" title="使用Google登录"><i class="fab fa-google"></i></button>
+            <button class="btn btn-icon-only btn-outline" title="使用GitHub登录"><i class="fab fa-github"></i></button>
+            <button class="btn btn-icon-only btn-outline" title="使用WeChat登录"><i class="fab fa-weixin"></i></button>
+        </div>
+        
+        <p class="register-link">
+            还没有账户？ <a asp-page="/Account/Register">立即注册</a>
+        </p>
+    </div>
+</div> 

@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-16"?>
+<ForumCategoryModel>
+  <Id>21de9d9dce8f5e189cd69ae1b87b917d3ab1a85d702780553e13bd8ff5cf83fb</Id>
+  <Title>默认板块23</Title>
+  <Description>这是一个自动生成的默认板块。</Description>
+  <IconClass>fa-solid fa-folder-open</IconClass>
+  <ThreadCount>4</ThreadCount>
+  <PostCount>6</PostCount>
+  <ThreadIds>
+    <String>6e2c1ea38aea10aadff36177cb997e205be6551cb9204cd69793136f45dfd8a0</String>
+    <String>75b8f04df7a954cf09071e9772a2ee96873298b7b62a76394014c5af37b0d6ab</String>
+    <String>9a4597a90d48531ba33a55fd6f2c85f8d2190a4b795130c411dc2fa67383205f</String>
+    <String>87443df0d6adcc40a6aaec86abffacbe993a416801dc15f61c5d6a2085be4943</String>
+  </ThreadIds>
+  <Threads />
+  <LastThreadId>6e2c1ea38aea10aadff36177cb997e205be6551cb9204cd69793136f45dfd8a0</LastThreadId>
+  <LastThread null="true" />
+  <Moderators>
+    <Int32>1</Int32>
+    <Int32>1</Int32>
+    <Int32>1</Int32>
+  </Moderators>
+</ForumCategoryModel>

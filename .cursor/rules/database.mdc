@@ -1,0 +1,6 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+数据库规则： [database.md](mdc:Library/Environments/SDK/Drx.Sdk.Network/DataBase/database.md)

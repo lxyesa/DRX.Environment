@@ -1,0 +1,1831 @@
+@page "{id:int}"
+@model Web.KaxServer.Pages.Shop.ItemModel
+@using Web.KaxServer.Models
+@using System.Net
+@using Markdig
+@using Markdig.Extensions
+@addTagHelper *, Microsoft.AspNetCore.Mvc.TagHelpers
+@{
+    ViewData["Title"] = Model.Item?.Title ?? "商品详情";
+    var returnUrl = Url.Page("/Shop/Item", new { id = Model.Item?.Id });
+}
+
+@section Styles {
+    <style>
+        body {
+            background-color: var(--light-bg);
+            overflow-x: hidden;
+        }
+
+        /* Page specific styles */
+        .item-page-main {
+            padding-top: 100px; /* Space for navbar */
+            padding-bottom: 5rem;
+        }
+
+        .breadcrumb {
+            margin-bottom: 2rem;
+            font-size: 0.9rem;
+            opacity: 0;
+            animation: fadeInDown 0.6s ease forwards 0.2s;
+        }
+
+        .breadcrumb a {
+            color: var(--muted-color);
+            text-decoration: none;
+        }
+
+        .breadcrumb a:hover {
+            color: var(--text-color);
+        }
+
+        .breadcrumb span {
+            margin: 0 0.5rem;
+            color: var(--muted-color);
+        }
+
+        .item-header {
+            display: flex;
+            gap: 2rem;
+            align-items: flex-start;
+            margin-bottom: 3rem;
+        }
+        
+        .item-image-gallery {
+            flex: 0 0 120px;
+            background-color: transparent;
+            border-radius: 12px;
+            border: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 120px;
+            font-size: 4rem;
+            opacity: 0;
+            animation: fadeInUp 0.6s ease forwards 0.4s;
+            transition: all 0.4s ease;
+        }
+
+        .item-image-gallery:hover {
+            transform: translateY(-5px) scale(1.02);
+            background-color: var(--light-bg);
+            color: var(--text-color);
+        }
+
+        .item-title-section {
+            flex: 1;
+        }
+
+        .item-title-section h1 {
+            font-size: 2.5rem;
+            font-weight: 800;
+            margin-bottom: 0.5rem;
+            opacity: 0;
+            animation: fadeInUp 0.6s ease forwards 0.6s;
+        }
+        
+        .item-meta {
+            display: flex;
+            align-items: center;
+            gap: 1.5rem;
+            color: var(--muted-color);
+            font-size: 0.9rem;
+            opacity: 0;
+            animation: fadeInUp 0.6s ease forwards 0.8s;
+        }
+        
+        .item-meta a {
+            color: var(--muted-color);
+            text-decoration: none;
+        }
+        
+        .item-meta a:hover {
+            color: var(--text-color);
+            text-decoration: underline;
+        }
+
+        .item-rating {
+            color: #f59e0b;
+        }
+        
+        .item-layout {
+            display: flex;
+            gap: 2rem;
+            align-items: flex-start;
+        }
+        
+        .item-content {
+            flex: 1;
+            min-width: 0;
+            opacity: 0;
+            animation: fadeInUp 0.6s ease forwards 1.0s;
+        }
+        
+        .purchase-card {
+            background-color: whitesmoke;
+            border-radius: 12px;
+            padding: 2.5rem;
+            position: relative;
+            overflow: hidden;
+            border: 1px solid var(--border-color);
+            transition: transform 0.4s ease, box-shadow 0.4s ease;
+        }
+        
+        .purchase-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 5px;
+            background-color: var(--text-color);
+        }
+
+        .purchase-card:hover {
+            transform: translateY(-5px);
+        }
+        
+        .price-container {
+            display: flex;
+            align-items: baseline;
+            gap: 0.5rem;
+            color: var(--text-color);
+        }
+
+        .price-amount {
+            font-size: 2.5rem;
+            font-weight: 800;
+        }
+
+        .price-unit {
+            font-size: 1rem;
+            font-weight: 500;
+        }
+        
+        .user-balance {
+            font-size: 0.95rem;
+            color: var(--muted-color);
+            text-align: center;
+            margin-bottom: 0.5rem;
+        }
+        .user-balance strong {
+            color: var(--text-color);
+            font-weight: 600;
+        }
+
+        .item-tabs {
+            margin-bottom: 1.5rem;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+        }
+
+        .tab-link {
+            padding: 1rem 1.5rem;
+            cursor: pointer;
+            border: none;
+            background: none;
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--muted-color);
+            position: relative;
+            border-bottom: 3px solid transparent;
+            transform: translateY(1px);
+        }
+        
+        .tab-link.active {
+            color: var(--text-color);
+            border-bottom-color: var(--accent-color);
+        }
+        
+        .tab-content {
+            display: none;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+        
+        .tab-content-card {
+            background: white;
+            padding: 2rem;
+            border-radius: 12px;
+            border: 1px solid var(--border-color);
+            margin-bottom: 2rem;
+        }
+
+        .tab-content h2 {
+            font-size: 1.5rem;
+            font-weight: 700;
+            margin-bottom: 1rem;
+        }
+        
+        .review-list .review {
+            border-bottom: 1px solid var(--border-color);
+            padding: 1.5rem 0;
+        }
+
+        .review-list .review:last-child {
+            border-bottom: none;
+        }
+
+        .review-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 0.5rem;
+        }
+        
+        .review-header .avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background-color: var(--light-bg);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 1rem;
+            font-weight: 600;
+        }
+
+        .item-sidebar {
+            flex: 0 0 280px;
+            position: sticky;
+            top: 100px; /* Space for navbar */
+        }
+
+        .tags-card {
+            background-color: transparent;
+            border-radius: 12px;
+            padding: 1.5rem;
+            border: 1px solid var(--border-color);
+        }
+
+        .tags-card h3 {
+            font-size: 1.25rem;
+            font-weight: 700;
+            margin-bottom: 1.5rem;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 1rem;
+            color: var(--text-color);
+        }
+
+        .tags-card h3 i {
+            margin-right: 0.75rem;
+            color: var(--muted-color);
+        }
+
+        .tags-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.75rem;
+        }
+        
+        .tag-badge {
+            background-color: var(--light-bg);
+            color: var(--muted-color);
+            padding: 5px 12px;
+            border-radius: 4px;
+            font-size: 0.85rem;
+            font-weight: 400;
+            text-decoration: none;
+            transition: background-color 0.2s ease, border-color 0.2s ease;
+            border: 1px solid var(--border-color);
+        }
+
+        .tag-badge:hover {
+            background-color: #e9ecef;
+            border-color: #ced4da;
+            color: var(--text-color);
+        }
+
+        .details-card {
+            background-color: transparent;
+            border-radius: 12px;
+            padding: 1.5rem;
+            border: 1px solid var(--border-color);
+            margin-top: 2rem;
+        }
+
+        .details-card h3 {
+            font-size: 1.25rem;
+            font-weight: 700;
+            margin-bottom: 1.5rem;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 1rem;
+            color: var(--text-color);
+        }
+
+        .details-card h3 i {
+            margin-right: 0.75rem;
+            color: var(--muted-color);
+        }
+
+        .details-card ul {
+            list-style: none;
+            padding: 0;
+            margin: 0 0 1.5rem 0;
+        }
+
+        .details-card ul:last-child {
+            margin-bottom: 0;
+        }
+
+        .details-card li {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.6rem 0;
+            font-size: 0.9rem;
+            border-bottom: 1px solid #f8f8f8;
+        }
+        
+        .details-card li:first-child {
+            padding-top: 0;
+        }
+
+        .details-card li:last-child {
+            border-bottom: none;
+            padding-bottom: 0;
+        }
+
+        .details-card li strong {
+            color: var(--text-color);
+            font-weight: 600;
+        }
+
+        .details-card li span, .details-card li a {
+            color: var(--muted-color);
+            text-decoration: none;
+            transition: color 0.2s;
+        }
+
+        .details-card li a:hover {
+            color: var(--accent-color);
+            text-decoration: underline;
+        }
+
+        /* Responsive Styles */
+        @@media (max-width: 992px) {
+            .item-layout {
+                flex-direction: column;
+            }
+            .item-purchase-sidebar, .item-sidebar {
+                position: static;
+                width: 100%;
+                margin-bottom: 2rem;
+            }
+        }
+        
+        @@media (max-width: 768px) {
+            .item-header {
+            flex-direction: column;
+            }
+            .item-image-gallery {
+                width: 100%;
+                height: 200px;
+            }
+        }
+
+        .review-form h3 {
+            font-size: 1.25rem;
+            margin-bottom: 1rem;
+            font-weight: 700;
+        }
+
+        .rating-input {
+            display: inline-block;
+            border: none;
+            direction: rtl; /* Right to left to make hover effect work correctly */
+        }
+        
+        .rating-input > input { display: none; }
+        
+        .rating-input > label {
+            color: #ddd;
+            cursor: pointer;
+            font-size: 2rem;
+            transition: color 0.2s;
+        }
+
+        .rating-input > label:before {
+            content: '★';
+        }
+
+        .rating-input > input:checked ~ label,
+        .rating-input:not(:checked) > label:hover,
+        .rating-input:not(:checked) > label:hover ~ label {
+            color: #f59e0b;
+        }
+
+        .review-form textarea {
+            width: 100%;
+            padding: 0.8rem 1rem;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            font-size: 1rem;
+            margin: 1rem 0;
+            resize: vertical;
+            min-height: 100px;
+        }
+        
+        .dev-badge {
+            display: inline-flex;
+            align-items: center;
+            font-family: 'SF Mono', 'Fira Code', 'Consolas', 'monospace';
+            background-color: #2d3748; /* Dark Gray-Blue */
+            color: #e2e8f0; /* Light Gray-Blue Text */
+            padding: 4px 10px;
+            border-radius: 16px; /* Pill shape */
+            font-size: 0.75rem;
+            font-weight: 600;
+            line-height: 1;
+            margin-left: 8px;
+            vertical-align: middle;
+            border: 1px solid #4a5568;
+            transition: all 0.3s ease-out;
+            cursor: help;
+        }
+
+        .dev-badge:hover {
+            background-color: #1a202c;
+            color: #fff;
+            border-color: #718096;
+            box-shadow: 0 0 12px rgba(56, 189, 248, 0.4); /* Light Blue Glow */
+            transform: translateY(-2px);
+        }
+
+        .dev-badge i {
+            color: #38bdf8; /* Sky Blue Icon */
+            margin-right: 5px;
+            font-size: 0.7rem;
+            transition: color 0.3s ease-out;
+        }
+        .dev-badge:hover i {
+            color: #7dd3fc; /* Lighter Sky Blue on hover */
+        }
+
+        .markdown-content h1, .markdown-content h2, .markdown-content h3 {
+            margin-top: 24px;
+            margin-bottom: 16px;
+            font-weight: 600;
+        }
+        .markdown-content p {
+            margin-bottom: 16px;
+        }
+        .markdown-content ul, .markdown-content ol {
+            padding-left: 20px;
+            margin-bottom: 16px;
+        }
+        .markdown-content li {
+            margin-bottom: 8px;
+        }
+        .markdown-content pre {
+            background-color: #f6f8fa;
+            padding: 16px;
+            border-radius: 6px;
+            overflow: auto;
+            margin-bottom: 16px;
+            border: 1px solid var(--border-color);
+        }
+        .markdown-content code {
+            font-family: 'SF Mono', 'Fira Code', 'Consolas', 'monospace';
+            background-color: rgba(0,0,0,0.05);
+            padding: .2em .4em;
+            margin: 0;
+            font-size: 85%;
+            border-radius: 3px;
+        }
+        .markdown-content pre > code {
+            background: none;
+            padding: 0;
+            margin: 0;
+            font-size: 100%;
+            border-radius: 0;
+        }
+        .markdown-content blockquote {
+            border-left: .25em solid #dfe2e5;
+            padding: 0 1em;
+            color: #6a737d;
+            margin-bottom: 16px;
+        }
+        .markdown-content a {
+            color: #0366d6;
+            text-decoration: none;
+        }
+        .markdown-content a:hover {
+            text-decoration: underline;
+        }
+
+        .purchase-options-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+            gap: 1.5rem;
+        }
+
+        .purchase-option {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: space-between;
+            padding: 1.5rem 1rem;
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            transition: all 0.3s ease;
+            text-align: center;
+            position: relative;
+            gap: 0.5rem;
+        }
+
+        .purchase-option:hover {
+            border-color: var(--accent-color);
+            transform: scale(1.03);
+            box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+        }
+
+        .purchase-option.recommended {
+            border-color: var(--accent-color);
+            border-width: 2px;
+            background-color: #fafafa;
+        }
+
+        .option-badge {
+            position: absolute;
+            top: -1px;
+            right: -1px;
+            background: linear-gradient(135deg, var(--accent-color), var(--accent-hover));
+            color: white;
+            padding: 0.4rem 0.8rem;
+            border-top-right-radius: 12px;
+            border-bottom-left-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: 700;
+        }
+
+        .option-info {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+
+        .option-duration {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--text-color);
+        }
+
+        .option-price {
+            font-size: 0.9rem;
+            color: var(--muted-color);
+        }
+
+        .purchase-option .btn {
+            width: 100%;
+            margin-top: auto;
+        }
+
+        #purchase.tab-content {
+            position: relative;
+            overflow: hidden;
+        }
+        
+        #purchase .purchase-options-list,
+        #reviews .review-list,
+        #reviews .review-form {
+            background: white;
+            padding: 2rem;
+            border-radius: 12px;
+            border: 1px solid var(--border-color);
+            margin-bottom: 2rem;
+        }
+
+        #custom-purchase {
+            margin-top: 1.5rem;
+        }
+        #custom-purchase h3 {
+            font-size: 1.2rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+        }
+        .custom-purchase-controls {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+        }
+        .custom-purchase-controls input, .custom-purchase-controls select {
+            padding: 0.5rem;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            font-size: 1rem;
+        }
+        .custom-purchase-controls input {
+            width: 100px;
+        }
+        .custom-purchase-controls select {
+            flex-grow: 1;
+        }
+        #custom-price-preview {
+            font-weight: 600;
+            margin-bottom: 1rem;
+        }
+
+        .custom-purchase-body {
+            animation: fadeInUp 0.6s ease forwards 0.2s;
+            opacity: 0;
+        }
+        .custom-purchase-card h3 {
+            font-size: 1.3rem;
+            font-weight: 700;
+            margin-bottom: 1.5rem;
+            text-align: center;
+        }
+        .custom-purchase-body {
+            display: flex;
+            gap: 2rem;
+            align-items: center;
+        }
+        .custom-purchase-form {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+        .purchase-result {
+            flex-basis: 200px;
+            text-align: center;
+        }
+        .price-display {
+            font-size: 2rem;
+            font-weight: 800;
+            margin-bottom: 0.5rem;
+            transition: color 0.3s ease;
+        }
+        .price-display.insufficient {
+            color: #dc3545;
+            animation: shake 0.5s;
+        }
+        .price-display small {
+            font-size: 1rem;
+            font-weight: 500;
+            color: var(--muted-color);
+        }
+
+        @@keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            10%, 30%, 50%, 70%, 90% { transform: translateX(-5px); }
+            20%, 40%, 60%, 80% { transform: translateX(5px); }
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+        .form-group label {
+            font-weight: 600;
+            font-size: 0.9rem;
+            color: var(--muted-color);
+        }
+        .input-wrapper, .select-wrapper {
+            position: relative;
+        }
+        .input-wrapper .icon, .select-wrapper .icon {
+            position: absolute;
+            top: 50%;
+            left: 1rem;
+            transform: translateY(-50%);
+            color: #adb5bd;
+            transition: color 0.3s ease;
+        }
+        .input-wrapper input, .select-wrapper select {
+            width: 100%;
+            padding: 0.8rem 1rem 0.8rem 2.5rem;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            background-color: #f8f9fa;
+            font-size: 1rem;
+            transition: all 0.3s ease;
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            appearance: none;
+        }
+        .input-wrapper input:focus, .select-wrapper select:focus {
+            outline: none;
+            border-color: var(--accent-color);
+            background-color: var(--bg-color);
+            box-shadow: 0 0 0 3px rgba(0,0,0,0.1);
+        }
+        .input-wrapper input:focus + .icon, .select-wrapper select:focus + .icon {
+            color: var(--accent-color);
+        }
+        .select-wrapper::after {
+            content: '\f078';
+            font-family: 'Font Awesome 6 Free';
+            font-weight: 900;
+            position: absolute;
+            top: 50%;
+            right: 1rem;
+            transform: translateY(-50%);
+            pointer-events: none;
+            color: #adb5bd;
+            transition: color 0.3s ease;
+        }
+        .select-wrapper select:focus ~ ::after {
+             color: var(--accent-color);
+        }
+        /* Hide number input spinners */
+        input[type=number]::-webkit-inner-spin-button, 
+        input[type=number]::-webkit-outer-spin-button { 
+          -webkit-appearance: none; 
+          margin: 0; 
+        }
+        input[type=number] {
+          -moz-appearance: textfield;
+        }
+
+        /* 自定义卡片样式 */
+        .custom-cards {
+            margin-top: 2rem;
+            margin-bottom: 2rem;
+        }
+        
+        .custom-card {
+            background-color: #fff;
+            border-radius: 12px;
+            border: 1px solid var(--border-color);
+            margin-bottom: 1.5rem;
+            overflow: hidden;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+        
+        .custom-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
+        }
+        
+        .custom-card .card-header {
+            background-color: var(--light-bg);
+            padding: 1rem 1.5rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+        
+        .custom-card .card-title {
+            font-size: 1.2rem;
+            font-weight: 600;
+            margin: 0;
+            color: var(--text-color);
+        }
+        
+        .custom-card .card-body {
+            padding: 1.5rem;
+        }
+        
+        .card-element {
+            margin-bottom: 1.5rem;
+        }
+        
+        .card-element:last-child {
+            margin-bottom: 0;
+        }
+        
+        /* 文本元素样式 */
+        .element-text {
+            line-height: 1.6;
+            color: var(--text-color);
+            white-space: pre-wrap;
+        }
+        
+        /* 修复Markdown内容的空白问题 */
+        .element-text.markdown-content {
+            white-space: normal;
+        }
+        
+        .element-text.markdown-content p:last-child {
+            margin-bottom: 0;
+        }
+        
+        .element-text.markdown-content ul,
+        .element-text.markdown-content ol {
+            margin-top: 0.5rem;
+            margin-bottom: 0.75rem;
+            padding-left: 1.5rem;
+        }
+        
+        .element-text.markdown-content li {
+            margin-bottom: 0.25rem;
+        }
+        
+        .element-text.markdown-content li:last-child {
+            margin-bottom: 0;
+        }
+        
+        /* 滑块元素样式 */
+        .element-slider {
+            margin-bottom: 1rem;
+        }
+        
+        .element-slider .slider-label {
+            display: flex;
+            justify-content: space-between;
+            font-weight: 500;
+            margin-bottom: 0.5rem;
+        }
+        
+        .element-slider .slider-container {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+        
+        .element-slider .slider-track {
+            flex-grow: 1;
+            height: 8px;
+            background-color: #e9ecef;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+        
+        .element-slider .slider-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--accent-color), var(--accent-hover));
+            border-radius: 4px;
+        }
+        
+        .element-slider .slider-value {
+            font-weight: 600;
+            min-width: 45px;
+            text-align: right;
+        }
+        
+        /* 图片元素样式 */
+        .element-image {
+            text-align: center;
+        }
+        
+        .element-image img {
+            max-width: 100%;
+            height: auto;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+        
+        /* 链接元素样式 */
+        .element-link {
+            margin: 0.5rem 0;
+        }
+        
+        .custom-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.6rem 1rem;
+            background-color: var(--light-bg);
+            color: var(--accent-color);
+            border-radius: 6px;
+            text-decoration: none;
+            font-weight: 500;
+            transition: all 0.3s ease;
+        }
+        
+        .custom-link:hover {
+            background-color: var(--accent-color);
+            color: white;
+            transform: translateY(-2px);
+            text-decoration: none;
+        }
+        
+        /* 提示样式 */
+        .hints-list {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+        
+        .hint-box {
+            display: flex;
+            padding: 1rem;
+            border-radius: 8px;
+            gap: 1rem;
+            align-items: flex-start;
+        }
+        
+        .info-hint {
+            background-color: #e6f7ff;
+            border-left: 4px solid #1890ff;
+        }
+        
+        .info-hint .hint-icon {
+            color: #1890ff;
+        }
+        
+        .message-hint {
+            background-color: #ffffff;
+            border-left: 4px solid #d9d9d9;
+        }
+        
+        .message-hint .hint-icon {
+            color: #8c8c8c;
+        }
+        
+        .warning-hint {
+            background-color: #fffbe6;
+            border-left: 4px solid #faad14;
+        }
+        
+        .warning-hint .hint-icon {
+            color: #faad14;
+        }
+        
+        .hint-icon {
+            font-size: 1.5rem;
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding-top: 0.25rem;
+        }
+        
+        .hint-content {
+            flex-grow: 1;
+        }
+        
+        .hint-content p {
+            margin: 0;
+            line-height: 1.5;
+            vertical-align: middle;
+        }
+        
+        .hint-content p:last-child {
+            margin-bottom: 0;
+        }
+        
+        .hint-content * {
+            margin-top: 0;
+            margin-bottom: 0.5rem;
+        }
+        
+        .hint-content *:last-child {
+            margin-bottom: 0;
+        }
+
+        /* New review form styles */
+        .review-form-container {
+            background-color: #fff;
+            border-radius: 12px;
+            border: 1px solid var(--border-color);
+            padding: 2rem;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+        }
+
+        .review-form-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 1.5rem;
+            gap: 1rem;
+        }
+
+        .review-form-header .avatar {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            background-color: var(--light-bg);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: var(--accent-color);
+        }
+
+        .review-form-header h3 {
+            font-size: 1.5rem;
+            font-weight: 700;
+            margin: 0;
+        }
+
+        .review-form-content {
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+        }
+
+        .rating-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .rating-group > label {
+            font-weight: 600;
+            font-size: 1rem;
+            color: var(--text-color);
+        }
+
+        .rating-input {
+            display: inline-block;
+            border: none;
+            direction: rtl;
+        }
+        
+        .rating-input > input { display: none; }
+        
+        .rating-input > label {
+            color: #e0e0e0;
+            cursor: pointer;
+            font-size: 2.5rem;
+            transition: color 0.2s ease-in-out, transform 0.15s ease-in-out;
+            display: inline-block;
+        }
+
+        .rating-input > label:before {
+            content: '★';
+        }
+
+        .rating-input > label:hover {
+            transform: scale(1.1);
+        }
+
+        .rating-input > input:checked ~ label,
+        .rating-input:not(:checked) > label:hover,
+        .rating-input:not(:checked) > label:hover ~ label {
+            color: #f59e0b;
+        }
+        
+        .comment-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .comment-group > label {
+            font-weight: 600;
+            font-size: 1rem;
+            color: var(--text-color);
+        }
+
+        .review-form-content textarea {
+            width: 100%;
+            padding: 1rem;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            font-size: 1rem;
+            resize: vertical;
+            min-height: 120px;
+            transition: border-color 0.3s, box-shadow 0.3s;
+            background-color: #f8f9fa;
+        }
+        
+        .review-form-content textarea:focus {
+            outline: none;
+            border-color: var(--accent-color);
+            box-shadow: 0 0 0 3px rgba(0,0,0,0.1);
+            background-color: #fff;
+        }
+
+        .review-form-actions {
+            display: flex;
+            justify-content: flex-end;
+            margin-top: 0.5rem;
+        }
+
+        .purchase-options-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+
+        .purchase-option {
+            display: flex;
+            flex-direction: column;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 1rem;
+            background-color: var(--light-bg);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .purchase-option:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .purchase-option.recommended {
+            border-color: var(--accent-color);
+            background-color: var(--accent-bg);
+            color: var(--accent-color);
+        }
+
+        .purchase-option.recommended .option-badge {
+            background-color: var(--accent-color);
+            color: white;
+        }
+
+        .purchase-option .option-badge {
+            position: absolute;
+            top: -10px;
+            right: -10px;
+            background-color: var(--muted-color);
+            color: white;
+            padding: 4px 8px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            border-radius: 4px;
+        }
+
+        .purchase-option .option-info {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.5rem;
+        }
+
+        .purchase-option .option-duration {
+            font-size: 1.2rem;
+            font-weight: 600;
+        }
+
+        .purchase-option .option-price {
+            font-size: 1.1rem;
+            font-weight: 500;
+            color: var(--muted-color);
+        }
+
+        .purchase-option .btn {
+            width: 100%;
+            margin-top: auto;
+        }
+
+        .owned-item-view {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 1.25rem;
+            padding: 2rem 0;
+        }
+        .owned-item-view .status-text {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: var(--text-color);
+        }
+        .owned-item-view .btn {
+            padding: 0.8rem 2rem;
+            font-size: 1.1rem;
+            text-decoration: none;
+            min-width: 250px;
+            text-align: center;
+            justify-content: center;
+        }
+
+        #purchase.tab-content {
+            position: relative;
+            overflow: hidden;
+        }
+    </style>
+}
+
+@if (Model.Item != null)
+{
+    <main class="item-page-main container">
+        <div class="breadcrumb">
+            <a asp-page="/Shop/Store">商城</a>
+            <span>/</span>
+            <a asp-page="/Shop/Store" asp-route-GameFilter="@Model.Item.Game">@Model.Item.Game</a>
+            <span>/</span>
+            <span>@Model.Item.Title</span>
+        </div>
+
+        <header class="item-header">
+            <div class="item-image-gallery">
+                <i class="fas fa-code"></i>
+            </div>
+            <div class="item-title-section">
+                <h1>@Model.Item.Title</h1>
+                <div class="item-meta">
+                    <p><strong>价格: </strong>@Model.Item.MonthlyPrice.ToString("F0") 金币/月</p>
+                    <p><strong>作者: </strong>@Model.Item.AuthorName</p>
+                    <p><strong>分类: </strong>@Model.Item.Category</p>
+                    <p><strong>游戏: </strong>@Model.Item.Game</p>
+                    <p><strong><i class="fas fa-shopping-cart"></i> 购买数: </strong>@Model.Item.PurchaseCount.ToString("N0")</p>
+                    </div>
+                    </div>
+        </header>
+
+        <div class="item-layout">
+            <div class="item-content">
+                <div class="item-tabs">
+                    <button class="tab-link active" data-tab="overview">概述</button>
+                    <button class="tab-link" data-tab="reviews">评价</button>
+                    <button class="tab-link" data-tab="purchase">购买</button>
+                </div>
+
+                <div id="overview" class="tab-content active">
+                    <div class="tab-content-card">
+                        <h2>描述</h2>
+                        <div class="markdown-content">@Html.Raw(Model.DescriptionAsHtml)</div>
+                        <p>这是一款由社区开发者 @Model.Item.AuthorName 制作的脚本，专为 [@Model.Item.Game] 设计。它可以帮助您在游戏中获得更好的表现，但请注意，任何辅助工具的使用都可能违反游戏的用户协议，请谨慎使用。</p>
+                    </div>
+                    
+                    @if (Model.Item.CustomCards != null && Model.Item.CustomCards.Any())
+                    {
+                        foreach (var card in Model.Item.CustomCards)
+                        {
+                            <div class="tab-content-card">
+                                <h2>@card.Title</h2>
+                                <div class="card-body">
+                                    @foreach (var element in card.Elements)
+                                    {
+                                        <div class="card-element @element.Type-element">
+                                            @switch (element.Type)
+                                            {
+                                                case "text":
+                                                    <div class="element-text markdown-content">
+                                                        @{
+                                                            var pipeline = new MarkdownPipelineBuilder().UseAdvancedExtensions().Build();
+                                                            // 移除多余的空行：将连续的两个或更多换行符替换为单个换行符
+                                                            var processedText = string.IsNullOrEmpty(element.Value) ? string.Empty : 
+                                                                System.Text.RegularExpressions.Regex.Replace(
+                                                                    Model.DedentText(element.Value), 
+                                                                    @"(\r?\n){2,}", 
+                                                                    "\n\n"
+                                                                );
+                                                            var htmlContent = Markdown.ToHtml(processedText, pipeline);
+                                                        }
+                                                        @Html.Raw(htmlContent)
+                                                    </div>
+                                                    break;
+                                                case "slider":
+                                                    <div class="element-slider">
+                                                        <div class="slider-label">@element.Label</div>
+                                                        <div class="slider-container">
+                                                            <div class="slider-track">
+                                                                <div class="slider-fill" style="width: @element.Value%;"></div>
+                                                            </div>
+                                                            <div class="slider-value">@element.Value%</div>
+                                                        </div>
+                                                    </div>
+                                                    break;
+                                                case "image":
+                                                    <div class="element-image">
+                                                        <img src="@element.Value" alt="图片" />
+                                                    </div>
+                                                    break;
+                                                case "link":
+                                                    <div class="element-link">
+                                                        <a href="@element.Value" target="_blank" class="custom-link">
+                                                            <i class="fas fa-external-link-alt"></i> @(string.IsNullOrEmpty(element.Label) ? "链接" : element.Label)
+                                                        </a>
+                                                    </div>
+                                                    break;
+                                            }
+                                        </div>
+                                    }
+                                </div>
+                            </div>
+                        }
+                    }
+                    
+                    @if (Model.Item.Hints != null && Model.Item.Hints.Any())
+                    {
+                                <div class="hints-list">
+                                    @foreach (var hint in Model.Item.Hints)
+                                    {
+                                        <div class="hint-box @hint.Type.ToLower()-hint">
+                                            <div class="hint-icon">
+                                                @switch (hint.Type)
+                                                {
+                                                    case "Info":
+                                                        <i class="fas fa-info-circle"></i>
+                                                        break;
+                                                    case "Message":
+                                                        <i class="fas fa-comment"></i>
+                                                        break;
+                                                    case "Warning":
+                                                        <i class="fas fa-exclamation-triangle"></i>
+                                                        break;
+                                                }
+                                            </div>
+                                    <div class="hint-content markdown-content">
+                                                @{
+                                                    var pipeline = new MarkdownPipelineBuilder().UseAdvancedExtensions().Build();
+                                                    // 移除多余的空行：将连续的两个或更多换行符替换为单个换行符
+                                                    var processedText = string.IsNullOrEmpty(hint.Content) ? string.Empty : 
+                                                        System.Text.RegularExpressions.Regex.Replace(
+                                                            Model.DedentText(hint.Content), 
+                                                            @"(\r?\n){2,}", 
+                                                            "\n\n"
+                                                        );
+                                                    var htmlContent = Markdown.ToHtml(processedText, pipeline);
+                                                }
+                                                @Html.Raw(htmlContent)
+                                            </div>
+                                        </div>
+                                    }
+                        </div>
+                    }
+                </div>
+
+                <div id="reviews" class="tab-content">
+                    <div class="tab-content-card">
+                        <h2>用户评价 (@Model.Reviews.Count)</h2>
+                        <div class="review-list">
+                            @if (!Model.Reviews.Any())
+                            {
+                                <p>该商品暂无评价。</p>
+                            }
+                            else
+                            {
+                                @foreach (var review in Model.Reviews)
+                                {
+                                <div class="review">
+                                        <div class="review-header">
+                                                <div class="avatar"><i class="fas fa-user"></i></div>
+                                                <div>
+                                                    <strong>
+                                                        @review.ReviewerName
+                                                        @if (review.ReviewerPermission == UserPermissionType.Developer)
+                                                        {
+                                                            <span class="dev-badge" title="开发者"><i class="fas fa-terminal"></i>DEV</span>
+                                                        }
+                                                    </strong>
+                                            <div class="item-rating">
+                                                        @for (int i = 0; i < 5; i++)
+                                                        {
+                                                    <i class="fa-star @(i < review.Rating ? "fas" : "far")"></i>
+                                                        }
+                                                    </div>
+                                                </div>
+                                        <span style="margin-left: auto; font-size: 0.9rem; color: var(--muted-color);">@review.Date.ToString("yyyy-MM-dd")</span>
+                                        </div>
+                                        <p>@review.Comment</p>
+                                    </div>
+                                }
+                            }
+                        </div>
+                    </div>
+                    
+                    @if (Model.IsLoggedIn)
+                    {
+                        if (Model.OwnsItem)
+                        {
+                            <div class="review-form-container">
+                                <div class="review-form-header">
+                                    <div class="avatar"><i class="fas fa-user-edit"></i></div>
+                                    <h3>发表您的评价</h3>
+                                </div>
+                                <form method="post" id="reviewForm" asp-page-handler="AddReview" class="review-form-content">
+                                    <input type="hidden" name="itemId" value="@Model.Item.Id" />
+                                    <div class="rating-group">
+                                        <label>您的评分</label>
+                                        <div class="rating-input">
+                                            <input type="radio" id="star5" name="rating" value="5" required/><label for="star5" title="5 stars"></label>
+                                            <input type="radio" id="star4" name="rating" value="4" /><label for="star4" title="4 stars"></label>
+                                            <input type="radio" id="star3" name="rating" value="3" /><label for="star3" title="3 stars"></label>
+                                            <input type="radio" id="star2" name="rating" value="2" /><label for="star2" title="2 stars"></label>
+                                            <input type="radio" id="star1" name="rating" value="1" /><label for="star1" title="1 star"></label>
+                                        </div>
+                                    </div>
+                                    <div class="comment-group">
+                                        <label for="comment-textarea">您的评论</label>
+                                        <textarea id="comment-textarea" name="comment" placeholder="分享您对这个商品的使用体验、优点、缺点等..." required></textarea>
+                                    </div>
+                                    <div class="review-form-actions">
+                                        <button type="submit" class="btn btn-primary">提交评价</button>
+                                    </div>
+                                </form>
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="tab-content-card">
+                                <p>您需要购买此商品后才能发表评论。</p>
+                            </div>
+                        }
+                    }
+                    else
+                    {
+                        <div class="tab-content-card">
+                            <p>您需要<a href="/Account/Login?returnUrl=@WebUtility.UrlEncode(returnUrl)">登录</a>后才能发表评论。</p>
+                        </div>
+                    }
+                </div>
+                
+                <div id="purchase" class="tab-content">
+                    <div class="tab-content-card">
+                        @Html.AntiForgeryToken()
+                        
+                        @if (Model.IsLoggedIn)
+                        {
+                            if (Model.OwnsItem)
+                            {
+                                <div class="owned-item-view">
+                                    <div class="status-text">您已拥有此商品</div>
+                                    @if (!string.IsNullOrEmpty(Model.Item.DownloadUrl))
+                                    {
+                                        <a href="@Model.Item.DownloadUrl" class="btn btn-primary" download>
+                                            <i class="fas fa-download"></i> 下载
+                                        </a>
+                                    }
+                                    else
+                                    {
+                                        <button class="btn btn-primary" disabled>已拥有</button>
+                                    }
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="user-balance">您的余额: <strong>@Model.UserCoins.ToString("F3") 金币</strong></div>
+                            <div class="purchase-options-list">
+                                    @{
+                                        var durations = new[] { 1, 7, 15, 30, 60, 180, 360 };
+                                        foreach (var days in durations)
+                                        {
+                                            var cost = (int)Math.Ceiling(Model.Item.MonthlyPrice / 30m * days);
+                                            var isRecommended = days == 30;
+                                            <div class="purchase-option @(isRecommended ? "recommended" : "")">
+                                                @if (isRecommended)
+                                                {
+                                                <div class="option-badge">推荐</div>
+                                            }
+                                            <div class="option-info">
+                                                    <span class="option-duration">@days 天</span>
+                                                    <span class="option-price">@cost.ToString("F3") 金币</span>
+                                                </div>
+                                                @if (Model.UserCoins < cost)
+                                                {
+                                                    <button class="btn btn-primary btn-sm" disabled>金币不足</button>
+                                                }
+                                                else
+                                                {
+                                                    <button class="btn btn-primary btn-sm buy-button" data-days="@days">选择</button>
+                                                }
+                                            </div>
+                                        }
+                                    }
+                                </div>
+                            }
+                        }
+                        else
+                        {
+                         <div class="price-container" style="justify-content: center; margin-bottom: 1rem;">
+                            <span class="price-amount">@Model.Item.MonthlyPrice.ToString("F0")</span>
+                            <span class="price-unit">金币/月</span>
+                            </div>
+                             <a href="/Account/Login?returnUrl=@WebUtility.UrlEncode(returnUrl)" class="btn btn-primary btn-block">登录以购买</a>
+                        }
+
+                    </div>
+
+                    @if(Model.IsLoggedIn && !Model.OwnsItem)
+                    {
+                        <div class="tab-content-card">
+                            <h3>自定义购买时长</h3>
+                            <div class="custom-purchase-body">
+                                <div class="custom-purchase-form">
+                                    <div class="form-group">
+                                        <label for="custom-duration">购买时长</label>
+                                        <div class="input-wrapper">
+                                            <i class="fas fa-hashtag icon"></i>
+                                            <input type="number" id="custom-duration" min="1" placeholder="例如: 30" />
+                                        </div>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="custom-unit">时间单位</label>
+                                        <div class="select-wrapper">
+                                            <i class="far fa-clock icon"></i>
+                                            <select id="custom-unit">
+                                                <option value="minutes">分钟</option>
+                                                <option value="hours">小时</option>
+                                                <option value="days" selected>天</option>
+                                                <option value="weeks">周</option>
+                                                <option value="months">月</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="purchase-result">
+                                    <div id="custom-price-preview" class="price-display">0.000 <small>金币</small></div>
+                                        <button id="custom-buy-button" class="btn btn-primary btn-block" disabled>输入时长</button>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+
+            <div class="item-sidebar">
+                <div class="tags-card">
+                    <h3><i class="fas fa-tags"></i> 标签</h3>
+                        @if (Model.Item.Tags != null && Model.Item.Tags.Any())
+                        {
+                            <div class="tags-list">
+                                @foreach (var tag in Model.Item.Tags)
+                                {
+                                    <a href="/Shop/Store?TagFilter=@tag" class="tag-badge">@tag</a>
+                                }
+                            </div>
+                        }
+                        else
+                        {
+                            <p>暂无标签</p>
+                        }
+                </div>
+
+                @if (!string.IsNullOrEmpty(Model.Item.Version) || !string.IsNullOrEmpty(Model.Item.LastUpdated) || !string.IsNullOrEmpty(Model.Item.ReleaseDate))
+                {
+                    <div class="details-card">
+                        <h3><i class="fas fa-info-circle"></i> 详细信息</h3>
+                        <ul>
+                                @if (!string.IsNullOrEmpty(Model.Item.Version))
+                                {
+                                <li><strong>版本</strong> <span>@Model.Item.Version</span></li>
+                                }
+                                @if (!string.IsNullOrEmpty(Model.Item.ReleaseDate))
+                                {
+                                <li><strong>发布于</strong> <span>@Model.Item.ReleaseDate</span></li>
+                                }
+                                @if (!string.IsNullOrEmpty(Model.Item.LastUpdated))
+                                {
+                                <li><strong>上次更新</strong> <span>@Model.Item.LastUpdated</span></li>
+                            }
+                            <li><strong>作者: </strong><span>@Model.Item.AuthorName</span></li>
+                            <li><strong>分类: </strong><span>@Model.Item.Category</span></li>
+                            <li><strong>游戏: </strong><span>@Model.Item.Game</span></li>
+                        </ul>
+                    </div>
+                }
+
+                @if (!string.IsNullOrEmpty(Model.Item.RepositoryUrl) || !string.IsNullOrEmpty(Model.Item.SupportUrl))
+                {
+                    <div class="details-card">
+                        <h3><i class="fas fa-link"></i> 资源</h3>
+                        <ul>
+                                @if (!string.IsNullOrEmpty(Model.Item.RepositoryUrl))
+                                {
+                                <li><a href="@Model.Item.RepositoryUrl" target="_blank">代码仓库</a><i class="fas fa-external-link-alt" style="font-size: 0.8em; color: var(--muted-color);"></i></li>
+                                }
+                                @if (!string.IsNullOrEmpty(Model.Item.SupportUrl))
+                                {
+                                <li><a href="@Model.Item.SupportUrl" target="_blank">技术支持</a><i class="fas fa-external-link-alt" style="font-size: 0.8em; color: var(--muted-color);"></i></li>
+                            }
+                        </ul>
+                    </div>
+                }
+            </div>
+        </div>
+    </main>
+}
+else
+{
+    <div class="container" style="padding-top: 100px; text-align: center;">
+        <h2>未找到商品</h2>
+        <p>您要查找的商品不存在或已被移除。</p>
+        <a asp-page="/Shop/Store">返回商城</a>
+    </div>
+}
+
+@section Scripts {
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            // Script for tab switching
+            const tabs = document.querySelectorAll('.tab-link');
+            const tabContents = document.querySelectorAll('.tab-content');
+
+            tabs.forEach(tab => {
+                tab.addEventListener('click', () => {
+                    tabs.forEach(item => item.classList.remove('active'));
+                    tab.classList.add('active');
+
+                    const target = document.querySelector('#' + tab.dataset.tab);
+                    tabContents.forEach(content => content.classList.remove('active'));
+                    target.classList.add('active');
+                });
+            });
+
+            // Script for review form submission
+            const reviewForm = document.getElementById('reviewForm');
+            if(reviewForm) {
+                reviewForm.addEventListener('submit', function(e) {
+                    e.preventDefault();
+
+                    const formData = new FormData(this);
+                    
+                    fetch(this.action, {
+                        method: 'POST',
+                        body: new URLSearchParams(formData),
+                        headers: {
+                            'Content-Type': 'application/x-www-form-urlencoded',
+                            'RequestVerificationToken': document.querySelector('input[name="__RequestVerificationToken"]').value
+                        }
+                    })
+                    .then(response => {
+                        if (response.status === 403) {
+                            throw new Error('您需要拥有此商品才能发表评论。');
+                        }
+                        if (!response.ok) {
+                           return response.json().then(err => { throw new Error(err.message || '提交评价时出错。'); });
+                        }
+                        return response.json();
+                    })
+                    .then(data => {
+                        alert('评价已提交: 感谢您的反馈，您的评价已成功发布。');
+                        
+                        // Dynamically add review to the list
+                        const reviewList = document.querySelector('.review-list');
+                        const noReviewsMsg = reviewList.querySelector('p');
+
+                        if (noReviewsMsg && noReviewsMsg.textContent.includes('该商品暂无评价')) {
+                            noReviewsMsg.remove();
+                        }
+
+                        const newReview = document.createElement('div');
+                        newReview.className = 'review';
+
+                        let starsHtml = '';
+                        for (let i = 0; i < 5; i++) {
+                            starsHtml += `<i class="fa-star ${i < data.rating ? "fas" : "far"}"></i>`;
+                        }
+
+                        const devBadgeHtml = data.reviewerPermission === 'Developer' 
+                            ? `<span class="dev-badge" title="开发者"><i class="fas fa-terminal"></i>DEV</span>` 
+                            : '';
+                        
+                        const commentParagraph = document.createElement('p');
+                        commentParagraph.textContent = data.comment;
+
+                        newReview.innerHTML = `
+                            <div class="review-header">
+                                <div class="avatar"><i class="fas fa-user"></i></div>
+                                <div>
+                                    <strong>
+                                        ${data.reviewerName}
+                                        ${devBadgeHtml}
+                                    </strong>
+                                    <div class="item-rating">
+                                        ${starsHtml}
+                                    </div>
+                                </div>
+                                <span style="margin-left: auto; font-size: 0.9rem; color: var(--muted-color);">${data.date}</span>
+                            </div>
+                        `;
+                        newReview.appendChild(commentParagraph);
+                        
+                        reviewList.appendChild(newReview);
+
+                        const reviewCountEl = document.querySelector('#reviews h2');
+                        const currentCountMatch = reviewCountEl.textContent.match(/\((\d+)\)/);
+                        if (currentCountMatch) {
+                            const newCount = parseInt(currentCountMatch[1], 10) + 1;
+                            reviewCountEl.textContent = `用户评价 (${newCount})`;
+                        } else {
+                            // Fallback if regex fails, e.g., for the first review
+                             reviewCountEl.textContent = `用户评价 (1)`;
+                        }
+
+                        // Reset the form
+                        reviewForm.reset();
+                    })
+                    .catch(error => {
+                        console.error('Error submitting review:', error);
+                        alert(`提交失败: ${error.message}`);
+                    });
+                });
+            }
+
+            const purchaseTab = document.getElementById('purchase');
+            if (purchaseTab) {
+                purchaseTab.addEventListener('click', function (e) {
+                    if (e.target.classList.contains('buy-button')) {
+                        const button = e.target;
+                        const days = button.dataset.days;
+                        const itemId = @Model.Item.Id;
+                        const token = document.querySelector('input[name="__RequestVerificationToken"]').value;
+
+                        button.disabled = true;
+                        button.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+
+                        fetch(`/api/shop/buy/${itemId}/${days}`, {
+                            method: 'POST',
+                            headers: {
+                                'RequestVerificationToken': token,
+                                'Content-Type': 'application/json'
+                            }
+                        })
+                        .then(response => {
+                            if (!response.ok) {
+                                return response.json().then(err => { throw new Error(err.message); });
+                            }
+                            // No JSON body on success, just reload
+                            window.location.reload();
+                        })
+                        .catch(error => {
+                            button.disabled = false;
+                            button.textContent = '选择';
+                            console.error('Error:', error);
+                            alert(error.message || '购买过程中发生错误。');
+                        });
+                    }
+                });
+            }
+
+            // Logic for custom purchase
+            const customDurationInput = document.getElementById('custom-duration');
+            const customUnitSelect = document.getElementById('custom-unit');
+            const pricePreview = document.getElementById('custom-price-preview');
+            const customBuyButton = document.getElementById('custom-buy-button');
+
+            function animateValue(obj, start, end, duration) {
+                let startTimestamp = null;
+                const step = (timestamp) => {
+                    if (!startTimestamp) startTimestamp = timestamp;
+                    const progress = Math.min((timestamp - startTimestamp) / duration, 1);
+                    const currentValue = progress * (end - start) + start;
+                    obj.innerHTML = `${currentValue.toFixed(3)} <small>金币</small>`;
+                    if (progress < 1) {
+                        window.requestAnimationFrame(step);
+                    }
+                };
+                window.requestAnimationFrame(step);
+            }
+
+            function calculateCustomPrice() {
+                if (!customDurationInput || !customUnitSelect || !pricePreview || !customBuyButton) return;
+
+                const duration = parseInt(customDurationInput.value, 10);
+                const currentPrice = parseFloat(pricePreview.textContent) || 0;
+
+                if (isNaN(duration) || duration <= 0) {
+                    animateValue(pricePreview, currentPrice, 0, 300);
+                    customBuyButton.textContent = '输入时长';
+                    customBuyButton.disabled = true;
+                    pricePreview.classList.remove('insufficient');
+                    return;
+                }
+
+                const unit = customUnitSelect.value;
+                const monthlyPrice = @Model.Item.MonthlyPrice.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                
+                let days = 0;
+                switch(unit) {
+                    case 'minutes': days = duration / (60 * 24); break;
+                    case 'hours': days = duration / 24; break;
+                    case 'days': days = duration; break;
+                    case 'weeks': days = duration * 7; break;
+                    case 'months': days = duration * 30; break;
+                }
+
+                const cost = (monthlyPrice / 30) * days;
+                animateValue(pricePreview, currentPrice, cost, 300);
+
+                const userCoins = @(Model.IsLoggedIn ? Model.UserCoins.ToString(System.Globalization.CultureInfo.InvariantCulture) : "0");
+                if (cost > userCoins) {
+                    customBuyButton.textContent = '金币不足';
+                    customBuyButton.disabled = true;
+                    pricePreview.classList.add('insufficient');
+                } else {
+                    customBuyButton.textContent = '确认购买';
+                    customBuyButton.disabled = false;
+                    pricePreview.classList.remove('insufficient');
+                }
+            }
+            
+            if (customDurationInput) {
+                customDurationInput.addEventListener('input', calculateCustomPrice);
+                customUnitSelect.addEventListener('change', calculateCustomPrice);
+
+                customBuyButton.addEventListener('click', function() {
+                    const button = this;
+                    const itemId = @Model.Item.Id;
+                    const duration = parseInt(customDurationInput.value, 10);
+                    const unit = customUnitSelect.value;
+                    const token = document.querySelector('input[name="__RequestVerificationToken"]').value;
+
+                    button.disabled = true;
+                    button.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+
+                    fetch('/api/shop/buy/custom', {
+                        method: 'POST',
+                        headers: {
+                            'RequestVerificationToken': token,
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ itemId, duration, unit })
+                    })
+                    .then(response => {
+                        if (!response.ok) {
+                            return response.json().then(err => { throw new Error(err.message); });
+                        }
+                        window.location.reload();
+                    })
+                    .catch(error => {
+                        button.disabled = false;
+                        calculateCustomPrice(); // Recalculate to set button text and state correctly
+                        console.error('Error:', error);
+                        alert(error.message || '购买过程中发生错误。');
+                    });
+                });
+            }
+        });
+    </script>
+}

@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-16"?>
+<ForumThreadModel>
+  <Id>87443df0d6adcc40a6aaec86abffacbe993a416801dc15f61c5d6a2085be4943</Id>
+  <CategoryId>21de9d9dce8f5e189cd69ae1b87b917d3ab1a85d702780553e13bd8ff5cf83fb</CategoryId>
+  <Title>欢迎来到我们的论坛！</Title>
+  <AuthorName>Admin</AuthorName>
+  <AuthorAvatarUrl null="true" />
+  <Content>欢迎大家！这是一个测试帖子。
+
+你可以在这里发帖、回复、讨论任何事情。</Content>
+  <PostTime>2025/7/3 2:00:06</PostTime>
+  <Comments>
+    <ForumThreadCommentModel>
+      <Id>71b500b23770a67c0f8bfb79d4c1cd063c931e77e36b813644541a20e9a944c7</Id>
+      <AuthorName>User1</AuthorName>
+      <Content>很高兴来到这里！</Content>
+      <PostTime>2025/7/3 3:55:06</PostTime>
+    </ForumThreadCommentModel>
+    <ForumThreadCommentModel>
+      <Id>ee87919bb645d18d3db91a45a188bd601149f89ef9b2e4b1c40988d213aa3274</Id>
+      <AuthorName>yx0303026</AuthorName>
+      <Content>我也是
+</Content>
+      <PostTime>2025/7/3 18:14:38</PostTime>
+    </ForumThreadCommentModel>
+    <ForumThreadCommentModel>
+      <Id>c9a99834c65c00d754105827990d2d22c1c575df1d69f4544cce6daaf8b8f818</Id>
+      <AuthorName>yx0303026</AuthorName>
+      <Content>```C#
+public void Init(){}
+```</Content>
+      <PostTime>2025/7/3 18:15:13</PostTime>
+    </ForumThreadCommentModel>
+  </Comments>
+  <Views>281</Views>
+  <LastPostInfo>
+    <AuthorName>yx0303026</AuthorName>
+    <PostTime>2025/7/3 18:15:13</PostTime>
+  </LastPostInfo>
+</ForumThreadModel>

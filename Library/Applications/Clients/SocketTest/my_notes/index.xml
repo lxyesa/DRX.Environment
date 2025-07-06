@@ -1,0 +1,8 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<Root>
+  <index>
+    <note-001 path="note-001.xml" type="reference" />
+    <note-002 path="note-002.xml" type="reference" />
+    <note-003 path="note-003.xml" type="reference" />
+  </index>
+</Root>

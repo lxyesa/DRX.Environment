@@ -1,0 +1,1010 @@
+@page
+@model Web.KaxServer.Pages.Account.ManagementModel
+@addTagHelper *, Microsoft.AspNetCore.Mvc.TagHelpers
+@{
+    ViewData["Title"] = "管理";
+    Layout = "/Pages/Shared/_AccountLayout.cshtml";
+}
+
+@section Styles {
+    <style>
+    .card-header-group {
+        display: flex;
+        align-items: center;
+        gap: 1.5rem;
+    }
+
+    .balance-icon {
+        font-size: 1.5rem;
+        width: 48px;
+        height: 48px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 50%;
+        background-color: var(--light-bg);
+        color: var(--accent-color);
+    }
+
+    .form-group {
+        margin-bottom: 1.5rem;
+    }
+
+    .form-label {
+        display: block;
+        margin-bottom: 0.5rem;
+        font-weight: 500;
+    }
+
+    .form-row {
+        display: flex;
+        flex-wrap: wrap;
+        margin: 0 -0.5rem;
+    }
+
+    .form-col {
+        flex: 1;
+        padding: 0 0.5rem;
+        min-width: 200px;
+    }
+
+    .cdk-list {
+        margin-top: 2rem;
+        max-height: 450px;
+        overflow-y: auto;
+        padding-right: 10px;
+    }
+
+    .cdk-item {
+        display: flex;
+        align-items: center;
+        background: #f9fafb;
+        border-radius: 12px;
+        padding: 16px;
+        margin-bottom: 12px;
+        border: 1px solid #f3f4f6;
+        transition: border-color 0.2s ease-in-out;
+    }
+
+    .cdk-item:hover {
+        border-color: var(--accent-color);
+    }
+
+    .cdk-item-icon {
+        flex-shrink: 0;
+        width: 44px;
+        height: 44px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background-color: #e5e7eb;
+        color: #4b5563;
+        font-size: 1.25rem;
+        margin-right: 16px;
+    }
+
+    .cdk-item-content {
+        flex-grow: 1;
+    }
+
+    .cdk-item-code {
+        font-family: 'Courier New', Courier, monospace;
+        font-size: 1.1rem;
+        font-weight: 500;
+        color: #111827;
+        letter-spacing: 0.5px;
+        display: flex;
+        align-items: center;
+    }
+
+    .cdk-item-details {
+        font-size: 0.8rem;
+        color: #6b7280;
+        margin-top: 4px;
+    }
+
+    .cdk-item-details span:not(:last-child) {
+        margin-right: 12px;
+    }
+
+    .cdk-item-status-section {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-left: 1rem;
+    }
+
+    .status-badge {
+        display: inline-flex;
+        align-items: center;
+        padding: 4px 10px;
+        border-radius: 20px;
+        font-size: 0.75rem;
+        font-weight: 500;
+    }
+
+    .status-badge.status-active {
+        background-color: #e0f2f1;
+        color: #00796b;
+    }
+
+    .status-badge.status-used {
+        background-color: #ffebee;
+        color: #c62828;
+    }
+
+    .cdk-user-info {
+        font-size: 0.8rem;
+        color: #6b7280;
+        text-align: right;
+    }
+
+    .cdk-user-info .username {
+        font-weight: 500;
+        color: #374151;
+    }
+
+    .empty-state {
+        text-align: center;
+        padding: 2rem;
+        color: var(--muted-color);
+    }
+
+    .empty-state i {
+        font-size: 3rem;
+        margin-bottom: 1rem;
+        opacity: 0.5;
+    }
+
+    .cdk-list-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 1.5rem;
+        flex-wrap: wrap;
+        gap: 1rem;
+    }
+
+    .cdk-list-header h3 {
+        margin: 0;
+        white-space: nowrap;
+    }
+
+    .cdk-list-actions {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        flex-wrap: wrap;
+    }
+
+    .input-group {
+        display: flex;
+    }
+
+    .input-group .form-control {
+        border-top-right-radius: 0;
+        border-bottom-right-radius: 0;
+        border-right: 0;
+    }
+
+    .input-group .btn {
+        border-top-left-radius: 0;
+        border-bottom-left-radius: 0;
+    }
+
+    .search-form .form-control {
+        min-width: 250px;
+    }
+
+    .form-select-sm {
+        padding-top: 0.5rem;
+        padding-bottom: 0.5rem;
+        font-size: 0.875rem;
+    }
+
+    .pagination-nav {
+        margin-top: 2rem;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        gap: 1.5rem;
+    }
+
+    .pagination {
+        display: inline-flex;
+        list-style: none;
+        padding: 0;
+        margin: 0;
+        border-radius: 8px;
+        overflow: hidden;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+    }
+
+    .page-item .page-link {
+        padding: 0.75rem 1rem;
+        display: block;
+        text-decoration: none;
+        color: var(--text-color);
+        background: #fff;
+        border-left: 1px solid var(--border-color);
+        transition: all 0.2s;
+    }
+
+    .page-item:first-child .page-link {
+        border-left: 0;
+    }
+
+    .page-item.active .page-link {
+        background-color: var(--accent-color);
+        color: var(--bg-color);
+        font-weight: 600;
+    }
+
+    .page-item:not(.active) .page-link:hover {
+        background-color: var(--light-bg);
+    }
+
+    .page-item.disabled .page-link {
+        color: #adb5bd;
+        pointer-events: none;
+    }
+
+    .page-item .page-link span {
+        padding: 0.75rem 1rem;
+        display: block;
+    }
+
+    .page-jump-form {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .page-jump-form .form-control {
+        width: 70px;
+        text-align: center;
+    }
+
+    .profile-content {
+        display: grid;
+        gap: 2rem;
+    }
+
+    .table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-bottom: 1rem;
+        font-size: 0.9rem;
+    }
+
+    .table th, .table td {
+        padding: 0.85rem;
+        vertical-align: middle;
+        border-top: 1px solid var(--border-color);
+        text-align: left;
+        white-space: nowrap;
+    }
+
+    .table thead th {
+        vertical-align: bottom;
+        border-bottom: 2px solid var(--border-color);
+        font-weight: 500;
+        color: var(--muted-color);
+        text-transform: uppercase;
+        font-size: 0.75rem;
+        letter-spacing: 0.5px;
+    }
+
+    .table tbody tr:hover {
+        background-color: var(--light-bg);
+    }
+
+    .table td[title] {
+        cursor: help;
+    }
+
+    .user-session-list {
+        margin-top: 2rem;
+    }
+
+    .user-session-item {
+        background: var(--bg-color);
+        border-radius: 12px;
+        margin-bottom: 16px;
+        border: 1px solid var(--border-color);
+        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        cursor: pointer;
+        overflow: hidden;
+        display: grid;
+        grid-template-rows: auto 0fr;
+    }
+
+    .user-session-item:hover {
+        border-color: rgba(0,0,0,0.15);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        transform: translateY(-2px);
+    }
+
+    .user-session-item-header {
+        display: flex;
+        align-items: center;
+        padding: 16px;
+    }
+    
+    .expand-arrow {
+        margin-left: auto;
+        padding: 0 10px;
+        color: var(--muted-color);
+        transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .user-session-item.expanded {
+        grid-template-rows: auto 1fr;
+        border-color: transparent;
+        background-color: var(--bg-color);
+        box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+    }
+
+    .user-session-item.expanded .expand-arrow {
+        transform: rotate(180deg);
+    }
+    
+    .expandable-content {
+        overflow: hidden;
+    }
+    
+    .user-session-item.expanded .expandable-content {
+        padding: 0;
+    }
+
+    .edit-user-form {
+         margin-top: 0;
+         padding: 24px 16px;
+    }
+
+    /* --- Material Design Form Styles --- */
+    .edit-user-form .form-group {
+        position: relative;
+        margin-bottom: 1.5rem;
+    }
+
+    .edit-user-form .form-control,
+    .edit-user-form .select-selected {
+        background-color: #f5f5f5;
+        border: none;
+        border-bottom: 1px solid rgba(0,0,0,0.42);
+        border-radius: 4px 4px 0 0;
+        padding: 1.5rem 1rem 0.5rem;
+        width: 100%;
+        transition: all 0.2s ease-in-out;
+        appearance: none;
+    }
+    
+    .edit-user-form .form-control:focus,
+    .edit-user-form .select-selected.select-arrow-active {
+        background-color: #ececec;
+        outline: none;
+        border-bottom: 2px solid var(--accent-color);
+    }
+    
+    .edit-user-form .form-label {
+        position: absolute;
+        left: 1rem;
+        top: 1rem;
+        color: rgba(0,0,0,0.6);
+        pointer-events: none;
+        transition: all 0.2s ease-in-out;
+        transform-origin: left top;
+    }
+    
+    .edit-user-form .form-control:focus ~ .form-label,
+    .edit-user-form .form-control:not(:placeholder-shown) ~ .form-label,
+    .edit-user-form .select-selected.select-arrow-active ~ .form-label,
+    .edit-user-form .select-selected:not(.placeholder) ~ .form-label {
+        transform: translateY(-0.75rem) scale(0.75);
+    }
+    
+    /* Force float label for custom select */
+    .edit-user-form .form-group-select .form-label {
+        transform: translateY(-0.75rem) scale(0.75);
+    }
+
+    /* Reset label style for static sections */
+    .edit-user-form .form-group-static-label .form-label {
+        position: static;
+        transform: none;
+        font-size: 0.9rem;
+        font-weight: 500;
+        color: var(--muted-color);
+        margin-bottom: 0.75rem;
+    }
+
+    /* Adjust select arrow for new layout */
+    .edit-user-form .select-selected::after {
+        top: 1.25rem;
+        transform: translateY(-50%) rotate(-45deg);
+    }
+    
+    .edit-user-form .select-selected.select-arrow-active::after {
+         top: 1.25rem;
+        transform: translateY(-50%) rotate(135deg);
+    }
+
+    .edit-user-form .btn {
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        font-weight: 500;
+    }
+
+    .edit-user-form .btn-accent {
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1), 0 1px 2px rgba(0,0,0,0.06);
+    }
+    
+    .edit-user-form .btn-accent:hover {
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1), 0 1px 3px rgba(0,0,0,0.08);
+    }
+
+    .edit-user-form .asset-list-container {
+        max-height: 180px;
+        overflow-y: auto;
+        border: none;
+        padding: 0;
+        background-color: transparent;
+    }
+
+    .edit-user-form .asset-item {
+        padding: 12px 16px;
+        border-bottom: 1px solid var(--border-color);
+        background-color: transparent;
+        border-radius: 0;
+    }
+    
+    .edit-user-form .asset-item:last-child {
+        border-bottom: none;
+    }
+
+    .edit-user-form .asset-item:hover {
+        background-color: #f5f5f5;
+    }
+
+    .edit-user-form .asset-item-name {
+        font-weight: 400;
+    }
+
+    .form-section-header {
+        margin-top: 1.5rem;
+        margin-bottom: 0.75rem;
+        padding-bottom: 0.5rem;
+        border-bottom: 1px solid var(--border-color);
+    }
+
+    .form-section-title {
+        font-size: 0.9rem;
+        font-weight: 500;
+        color: var(--muted-color);
+        margin: 0;
+    }
+    /* --- End Material Design Form Styles --- */
+
+    .user-session-item-icon {
+        flex-shrink: 0;
+        width: 44px;
+        height: 44px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background-color: #e5e7eb;
+        color: #4b5563;
+        font-size: 1.5rem;
+        margin-right: 16px;
+    }
+
+    .user-session-item-title {
+        font-size: 1.1rem;
+        font-weight: 500;
+        color: #111827;
+        margin-bottom: 4px;
+    }
+
+    .user-session-item-details {
+        font-size: 0.8rem;
+        color: #6b7280;
+        display: flex;
+        gap: 12px;
+        flex-wrap: wrap;
+    }
+
+    .user-session-item-details span strong {
+        color: #374151;
+        font-weight: 500;
+    }
+
+    .user-session-item-actions {
+        margin-left: 1rem;
+    }
+
+    .user-session-item.selected {
+        border-color: var(--accent-color);
+        box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-color) 25%, transparent);
+        transform: translateY(-2px);
+    }
+
+    .edit-user-form-container {
+        background: #f9fafb;
+        border-radius: 12px;
+        padding: 24px;
+        border: 1px solid #f3f4f6;
+    }
+
+    .asset-list-container {
+        max-height: 200px;
+        overflow-y: auto;
+        border: 1px solid var(--border-color);
+        border-radius: 8px;
+        padding: 8px;
+        background-color: #fdfdfd;
+    }
+
+    .asset-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 12px;
+        border-radius: 6px;
+    }
+
+    .asset-item:not(:last-child) {
+        border-bottom: 1px solid var(--border-color);
+    }
+
+    .asset-item-name {
+        font-weight: 500;
+        color: var(--text-color);
+    }
+
+    .asset-item-expiry {
+        font-size: 0.9rem;
+        color: var(--muted-color);
+        font-family: 'Courier New', Courier, monospace;
+    }
+    </style> 
+} 
+
+<div class="profile-content">
+    <div class="card">
+        <div class="card-header">
+            <div class="card-header-group">
+                <div class="balance-icon"><i class="fas fa-shield-alt"></i></div>
+                <h2>管理面板</h2>
+            </div>
+        </div>
+        <p>这里是开发者管理区域。您可以在此处管理系统设置、用户和内容。</p>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <div class="card-header-group">
+                <div class="balance-icon"><i class="fas fa-ticket-alt"></i></div>
+                <h2>CDK 管理</h2>
+            </div>
+        </div>
+        
+        <form method="post" asp-page-handler="CreateCdk" id="createCdkForm">
+            <div class="form-row">
+                <div class="form-col">
+                    <div class="form-group">
+                        <label class="form-label" for="cdkType">CDK 类型</label>
+                        <div class="custom-select-wrapper">
+                            <select class="form-select" id="cdkType" name="CdkType" required>
+                                <option value="0">资产</option>
+                                <option value="1">金币</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="form-col">
+                    <div class="form-group">
+                        <label class="form-label" for="quantity">数量</label>
+                        <input type="number" class="form-control" id="quantity" name="Quantity" min="1" max="100" value="1" required>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="form-row asset-fields">
+                <div class="form-col">
+                    <div class="form-group">
+                        <label class="form-label" for="assetId">资产 ID</label>
+                        <div class="custom-select-wrapper">
+                            <select class="form-select" id="assetId" name="AssetId">
+                                @if (Model.StoreItems != null && Model.StoreItems.Any())
+                                {
+                                    @foreach (var item in Model.StoreItems)
+                                    {
+                                        <option value="@item.Id">@item.Title</option>
+                                    }
+                                }
+                                else
+                                {
+                                    <option value="" disabled selected>无可用资产</option>
+                                }
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <div class="form-col">
+                    <div class="form-group">
+                        <label class="form-label" for="durationValue">时效数值</label>
+                        <input type="number" class="form-control" id="durationValue" name="DurationValue" min="1" value="30">
+                    </div>
+                </div>
+                <div class="form-col">
+                    <div class="form-group">
+                        <label class="form-label" for="durationUnit">时效单位</label>
+                        <div class="custom-select-wrapper">
+                            <select class="form-select" id="durationUnit" name="DurationUnit">
+                                <option value="0">分钟</option>
+                                <option value="1">小时</option>
+                                <option value="2" selected>天</option>
+                                <option value="3">周</option>
+                                <option value="4">月</option>
+                                <option value="5">年</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="form-row coin-fields" style="display: none;">
+                <div class="form-col">
+                    <div class="form-group">
+                        <label class="form-label" for="coinAmount">金币数量</label>
+                        <input type="number" class="form-control" id="coinAmount" name="CoinAmount" min="1" value="100">
+                    </div>
+                </div>
+            </div>
+            
+            <div class="form-group">
+                <button type="submit" class="btn btn-accent">生成 CDK</button>
+            </div>
+        </form>
+        
+        <div id="cdk-list-container">
+            @await Html.PartialAsync("Shared/_CdkList", Model)
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <div class="card-header-group">
+                <div class="balance-icon"><i class="fas fa-users-cog"></i></div>
+                <h2>用户会话管理</h2>
+            </div>
+        </div>
+        <div id="user-session-list-container">
+            @await Html.PartialAsync("Shared/_UserSessionList", Model)
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <div class="card-header-group">
+                <div class="balance-icon"><i class="fas fa-cubes"></i></div>
+                <h2>AppId管理</h2>
+            </div>
+        </div>
+        <div>
+            @* Content will be added later *@
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <div class="card-header-group">
+                <div class="balance-icon"><i class="fas fa-comments"></i></div>
+                <h2>论坛管理(Demo)</h2>
+            </div>
+        </div>
+        <div id="forum-management-container">
+            @await Html.PartialAsync("Shared/_ForumManagement", Model)
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const cdkTypeSelect = document.getElementById('cdkType');
+            const assetFields = document.querySelector('.asset-fields');
+            const coinFields = document.querySelector('.coin-fields');
+            const cdkListContainer = document.getElementById('cdk-list-container');
+
+            function initializeCdkForm() {
+                if (cdkTypeSelect) {
+                    cdkTypeSelect.addEventListener('change', function() {
+                        if (this.value === '0') { // 资产
+                            assetFields.style.display = 'flex';
+                            coinFields.style.display = 'none';
+                        } else { // 金币
+                            assetFields.style.display = 'none';
+                            coinFields.style.display = 'flex';
+                        }
+                    });
+                }
+            }
+
+            function initializeCopyButtons() {
+                cdkListContainer.querySelectorAll('.copy-btn').forEach(btn => {
+                    btn.addEventListener('click', function() {
+                        const code = this.getAttribute('data-code');
+                        navigator.clipboard.writeText(code).then(() => {
+                            this.innerHTML = '<i class="fas fa-check"></i> 已复制';
+                            this.classList.add('btn-bounce');
+                            
+                            setTimeout(() => {
+                                this.innerHTML = '<i class="fas fa-copy"></i> 复制';
+                                this.classList.remove('btn-bounce');
+                            }, 2000);
+                        });
+                    });
+                });
+            }
+            
+            async function fetchCdkList(url, updateHash = true) {
+                try {
+                    const response = await fetch(url, {
+                        headers: {
+                            'X-Requested-With': 'XMLHttpRequest'
+                        }
+                    });
+                    if (!response.ok) {
+                        throw new Error('Network response was not ok.');
+                    }
+                    const html = await response.text();
+                    cdkListContainer.innerHTML = html;
+                    
+                    if (updateHash) {
+                        const fetchUrl = new URL(url, window.location.origin);
+                        const params = fetchUrl.searchParams;
+                        params.delete('handler');
+                        const newHash = params.toString();
+                        window.location.hash = newHash;
+                    }
+                    
+                        initializeCopyButtons();
+                    initializeListInteractions();
+                    // 重新初始化新加载内容中的自定义下拉框
+                    if (window.initializeCustomSelects) {
+                        initializeCustomSelects(cdkListContainer);
+                    }
+                } catch (error) {
+                    console.error('Failed to fetch CDK list:', error);
+                }
+            }
+
+            function initializeListInteractions() {
+                // Pagination links
+                cdkListContainer.querySelectorAll('.pagination a.page-link').forEach(link => {
+                    link.addEventListener('click', function(e) {
+                        e.preventDefault();
+                        const url = this.getAttribute('href');
+                        fetchCdkList(url);
+                    });
+                });
+
+                // Sort and Search forms
+                cdkListContainer.querySelectorAll('#searchForm, #sortForm, .page-jump-form').forEach(form => {
+                    form.addEventListener('submit', function(e) {
+                        e.preventDefault();
+                        const formData = new FormData(this);
+                        const params = new URLSearchParams(formData);
+                        const url = `${this.getAttribute('action')}&${params.toString()}`;
+                        fetchCdkList(url);
+                    });
+                });
+            }
+
+            function initializeUserSessionListInteractions() {
+                const userSessionListContainer = document.getElementById('user-session-list-container');
+                if (!userSessionListContainer) return;
+
+                userSessionListContainer.addEventListener('click', function(e) {
+                    const header = e.target.closest('.user-session-item-header');
+                    if (!header) return;
+                    
+                    const card = header.closest('.selectable-card');
+                    if (!card) return;
+
+                    const isExpanded = card.classList.contains('expanded');
+
+                    userSessionListContainer.querySelectorAll('.selectable-card.expanded').forEach(expandedCard => {
+                        if (expandedCard !== card) {
+                            expandedCard.classList.remove('expanded');
+                        }
+                    });
+
+                    if (isExpanded) {
+                        card.classList.remove('expanded');
+                    } else {
+                        card.classList.add('expanded');
+                        if (window.initializeCustomSelects) {
+                            initializeCustomSelects(card);
+                        }
+                    }
+                });
+
+                userSessionListContainer.addEventListener('click', function(e) {
+                    const cancelButton = e.target.closest('#cancel-edit-btn');
+                    if (cancelButton) {
+                        e.preventDefault();
+                        const card = cancelButton.closest('.selectable-card');
+                        if (card) {
+                            card.classList.remove('expanded');
+                        }
+                    }
+                });
+            }
+
+            function initializeForumNavigation() {
+                const container = document.getElementById('forum-management-container');
+                if (!container) return;
+
+                container.addEventListener('click', function(e) {
+                    const link = e.target.closest('.forum-item-link');
+                    if (link && link.dataset.url) {
+                        window.location.href = link.dataset.url;
+                    }
+                });
+            }
+
+            // Initial setup
+            initializeCdkForm();
+            initializeCopyButtons();
+            initializeListInteractions();
+            initializeUserSessionListInteractions();
+            initializeForumNavigation();
+            
+            const createCdkForm = document.getElementById('createCdkForm');
+            if (createCdkForm) {
+                createCdkForm.addEventListener('submit', async function(e) {
+                    e.preventDefault();
+
+                    const formData = new FormData(this);
+                    const url = this.action;
+                    const token = document.querySelector('input[name="__RequestVerificationToken"]').value;
+
+                    try {
+                        const response = await fetch(url, {
+                            method: 'POST',
+                            body: formData,
+                            headers: {
+                                'RequestVerificationToken': token
+                            }
+                        });
+
+                        const result = await response.json();
+
+                        if (result.success) {
+                            showCustomMessage('操作成功', result.message);
+                            
+                            // Manually add event listener to close the modal, as it seems to be missing
+                            const modalConfirmButton = document.querySelector('.custom-message-box .btn-accent');
+                            if(modalConfirmButton) {
+                                modalConfirmButton.addEventListener('click', () => {
+                                    const modal = document.querySelector('.custom-message-box');
+                                    if(modal) {
+                                        modal.classList.remove('show');
+                                    }
+                                    const backdrop = document.querySelector('.modal-backdrop');
+                                    if(backdrop) {
+                                        backdrop.remove();
+                                    }
+                                });
+                            }
+                            
+                            this.reset();
+                            
+                            // 触发自定义下拉框的UI重置
+                            const cdkTypeSelect = document.getElementById('cdkType');
+                            const assetIdSelect = document.getElementById('assetId');
+                            cdkTypeSelect.dispatchEvent(new Event('change'));
+                            
+                            // 找到与select关联的自定义div并更新其文本
+                            const cdkTypeSelectedDiv = cdkTypeSelect.parentNode.querySelector('.select-selected');
+                            if (cdkTypeSelectedDiv) cdkTypeSelectedDiv.innerHTML = cdkTypeSelect.options[0].innerHTML;
+                            const assetIdSelectedDiv = assetIdSelect.parentNode.querySelector('.select-selected');
+                            if (assetIdSelectedDiv) assetIdSelectedDiv.innerHTML = assetIdSelect.options[0].innerHTML;
+
+                            // Also reset duration fields to default
+                            const durationValueInput = document.getElementById('durationValue');
+                            if (durationValueInput) durationValueInput.value = '30';
+                            
+                            const durationUnitSelect = document.getElementById('durationUnit');
+                            if (durationUnitSelect) {
+                                durationUnitSelect.value = '2'; // Default to 'Day'
+                                const durationUnitSelectedDiv = durationUnitSelect.parentNode.querySelector('.select-selected');
+                                if(durationUnitSelectedDiv) durationUnitSelectedDiv.innerHTML = durationUnitSelect.options[2].innerHTML;
+                            }
+
+                            // 列表创建成功后，不带hash地刷新，回到第一页
+                            const listUrl = '@Url.Page("/Account/Management", "CdkList")';
+                            fetchCdkList(listUrl, false); 
+                            // 清除hash，这样刷新页面时不会停留在旧的筛选状态
+                            history.replaceState(null, '', window.location.pathname);
+                        } else {
+                            showCustomMessage('操作失败', result.message || '未知错误', true);
+                        }
+
+                    } catch (error) {
+                        console.error('Failed to create CDK:', error);
+                        showCustomMessage('操作失败', '发生网络错误，请稍后重试。', true);
+                    }
+                });
+            }
+
+            function loadListFromHash() {
+                const hash = window.location.hash.substring(1);
+                if (hash) {
+                    const url = `@Url.Page("/Account/Management", "CdkList")&${hash}`;
+                    fetchCdkList(url, false);
+                }
+            }
+
+            // Initial load from hash
+            loadListFromHash();
+
+            // Listen for hash changes (e.g., from browser back/forward buttons)
+            window.addEventListener('hashchange', loadListFromHash, false);
+
+            cdkListContainer.addEventListener('submit', async function(e) {
+                const form = e.target.closest('form');
+
+                // Check if the submitted form is for deleting a batch
+                if (!form || !form.action.includes('handler=DeleteCdkBatch')) {
+                    return;
+                }
+                
+                e.preventDefault(); // Prevent default form submission to handle it with fetch
+
+                // The confirm dialog is handled by the 'onsubmit' attribute on the form itself.
+                
+                const url = form.action;
+                const token = document.querySelector('input[name="__RequestVerificationToken"]').value;
+
+                try {
+                    const response = await fetch(url, {
+                        method: 'POST',
+                        headers: {
+                            'RequestVerificationToken': token,
+                            'X-Requested-With': 'XMLHttpRequest' // Important for the backend to recognize it as an AJAX request
+                        }
+                    });
+
+                    if (response.ok) {
+                        const html = await response.text();
+                        cdkListContainer.innerHTML = html;
+                        
+                        // The success/error message will be handled by the re-rendered partial view via TempData
+                        // Find a message container in the new HTML and show it.
+                        // For now, let's assume a simple success alert.
+
+                        // Re-initialize interactions for the new content inside the updated container
+                        initializeCopyButtons();
+                        initializeListInteractions();
+                        if (window.initializeCustomSelects) {
+                            initializeCustomSelects(cdkListContainer);
+                        }
+                    } else {
+                        showCustomMessage('操作失败', '删除批次时发生未知错误。', true);
+                    }
+                } catch (error) {
+                    console.error('Failed to delete CDK batch:', error);
+                    showCustomMessage('操作失败', '发生网络错误，请稍后重试。', true);
+                }
+            });
+        });
+    </script>
+}

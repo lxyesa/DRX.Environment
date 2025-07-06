@@ -1,0 +1,1022 @@
+@using Web.KaxServer.Models
+@model Web.KaxServer.Models.StoreItem
+
+@if (Model != null)
+{
+    <form method="post" class="asset-edit-form">
+        <input type="hidden" asp-for="Id" />
+        <input type="hidden" asp-for="AuthorId" />
+        
+        <div class="form-section">
+            <div class="section-title">基本信息</div>
+            <div class="form-row">
+                <div class="form-col">
+                    <div class="form-group">
+                        <label class="form-label" asp-for="Title">标题</label>
+                        <input type="text" class="form-control" asp-for="Title" />
+                    </div>
+                </div>
+                <div class="form-col">
+                    <div class="form-group">
+                        <label class="form-label" asp-for="Version">版本</label>
+                        <input type="text" class="form-control" asp-for="Version" />
+                    </div>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" asp-for="ShortDescription">简短描述</label>
+                <input type="text" class="form-control" asp-for="ShortDescription" placeholder="简短地描述您的资产特点" />
+            </div>
+        </div>
+        
+        <div class="form-section">
+            <div class="section-title">详细内容</div>
+            <div class="form-group">
+                <label class="form-label" asp-for="Description">详细描述 (支持Markdown)</label>
+                <textarea class="form-control" asp-for="Description" rows="8" placeholder="您可以使用Markdown格式来编写详细的资产描述"></textarea>
+            </div>
+        </div>
+        
+        <!-- 自定义折叠面板 -->
+        <div class="form-section collapsible-section @(Model.CustomCards.Any() ? "active" : "")">
+            <div class="section-title collapsible-trigger">
+                <span>自定义</span>
+                <i class="fas fa-chevron-down toggle-icon"></i>
+            </div>
+            <div class="collapsible-content">
+                <div class="custom-cards-container">
+                    @if (Model.CustomCards.Any())
+                    {
+                        @foreach (var card in Model.CustomCards)
+                        {
+                            <div class="custom-card" id="@card.Id">
+                                <div class="card-header">
+                                    <input type="text" class="card-title-input" name="customCards[@card.Id].Title" 
+                                           placeholder="卡片标题" value="@card.Title">
+                                    <div class="card-actions">
+                                        <button type="button" class="btn-icon btn-sm card-delete-btn" title="删除卡片">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="card-content">
+                                    <div class="card-elements-container">
+                                        @foreach (var element in card.Elements)
+                                        {
+                                            <div class="card-element @element.Type-element" id="@element.Id">
+                                                <div class="element-header">
+                                                    <div class="element-title">@(element.Type switch {
+                                                        "text" => "文本",
+                                                        "slider" => "滚动条",
+                                                        "image" => "图片",
+                                                        "link" => "链接",
+                                                        _ => "未知元素"
+                                                    })</div>
+                                                    <div class="element-actions">
+                                                        <button type="button" class="btn-icon btn-sm element-delete-btn" title="删除元素">
+                                                            <i class="fas fa-trash"></i>
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                                <div class="element-content">
+                                                    @switch (element.Type)
+                                                    {
+                                                        case "text":
+                                                            <textarea class="form-control" name="customCards[@card.Id].elements[@element.Id].value" 
+                                                                     placeholder="输入文本内容">@element.Value</textarea>
+                                                            <input type="hidden" name="customCards[@card.Id].elements[@element.Id].id" value="@element.Id">
+                                                            <input type="hidden" name="customCards[@card.Id].elements[@element.Id].type" value="text">
+                                                            break;
+                                                        case "slider":
+                                                            <div class="slider-container">
+                                                                <div class="slider-header">
+                                                                    <input type="text" class="form-control form-control-sm" 
+                                                                           name="customCards[@card.Id].elements[@element.Id].label" 
+                                                                           placeholder="滚动条标签" value="@element.Label">
+                                                                    <input type="number" class="form-control form-control-sm" style="width: 70px;" 
+                                                                           name="customCards[@card.Id].elements[@element.Id].value" 
+                                                                           value="@element.Value" min="0" max="100">
+                                                                </div>
+                                                                <div class="slider-labels">
+                                                                    <span>0</span>
+                                                                    <span>100</span>
+                                                                </div>
+                                                                <input type="range" class="slider-input" min="0" max="100" 
+                                                                       value="@element.Value" oninput="var numInput = this.previousElementSibling.previousElementSibling.querySelector('input[type=number]'); numInput.value = this.value; numInput.dispatchEvent(new Event('change'));">
+                                                                <script>
+                                                                    document.addEventListener('DOMContentLoaded', function() {
+                                                                        var numInput = document.querySelector('input[name="customCards[@card.Id].elements[@element.Id].value"]');
+                                                                        if(numInput) {
+                                                                            numInput.addEventListener('change', function() {
+                                                                                this.value = this.value;
+                                                                            });
+                                                                        }
+                                                                    });
+                                                                </script>
+                                                                <input type="hidden" name="customCards[@card.Id].elements[@element.Id].id" value="@element.Id">
+                                                                <input type="hidden" name="customCards[@card.Id].elements[@element.Id].type" value="slider">
+                                                            </div>
+                                                            break;
+                                                        case "image":
+                                                            <input type="text" class="form-control" 
+                                                                   name="customCards[@card.Id].elements[@element.Id].value" 
+                                                                   placeholder="输入图片URL" value="@element.Value">
+                                                            <input type="hidden" name="customCards[@card.Id].elements[@element.Id].id" value="@element.Id">
+                                                            <input type="hidden" name="customCards[@card.Id].elements[@element.Id].type" value="image">
+                                                            break;
+                                                        case "link":
+                                                            <div class="form-row">
+                                                                <div class="form-col">
+                                                                    <input type="text" class="form-control" 
+                                                                           name="customCards[@card.Id].elements[@element.Id].label" 
+                                                                           placeholder="链接文本" value="@element.Label">
+                                                                </div>
+                                                                <div class="form-col">
+                                                                    <input type="url" class="form-control" 
+                                                                           name="customCards[@card.Id].elements[@element.Id].value" 
+                                                                           placeholder="链接URL" value="@element.Value">
+                                                                </div>
+                                                            </div>
+                                                            <input type="hidden" name="customCards[@card.Id].elements[@element.Id].id" value="@element.Id">
+                                                            <input type="hidden" name="customCards[@card.Id].elements[@element.Id].type" value="link">
+                                                            break;
+                                                    }
+                                                </div>
+                                            </div>
+                                        }
+                                    </div>
+                                    <button type="button" class="btn btn-outline btn-icon add-element-btn">
+                                        <i class="fas fa-plus"></i> 添加元素
+                                    </button>
+                                </div>
+                                <input type="hidden" name="customCards[@card.Id].Id" value="@card.Id">
+                            </div>
+                        }
+                    }
+                    else
+                    {
+                        <div class="empty-custom-cards">
+                            <p>您尚未添加任何自定义卡片</p>
+                        </div>
+                    }
+                </div>
+                <button type="button" class="btn btn-outline btn-icon add-custom-card-btn">
+                    <i class="fas fa-plus"></i> 添加自定义卡片
+                </button>
+            </div>
+        </div>
+
+        <!-- 提示信息折叠面板 -->
+        <div class="form-section collapsible-section @(Model.Hints?.Any() == true ? "active" : "")">
+            <div class="section-title collapsible-trigger">
+                <span>添加提示</span>
+                <i class="fas fa-chevron-down toggle-icon"></i>
+            </div>
+            <div class="collapsible-content">
+                <div class="hints-container">
+                    @if (Model.Hints?.Any() == true)
+                    {
+                        @foreach (var hint in Model.Hints)
+                        {
+                            <div class="hint-item @hint.Type.ToLower()-hint" id="@hint.Id">
+                                <div class="hint-header">
+                                    <div class="hint-type-selector">
+                                        <select class="form-control form-control-sm" name="hints[@hint.Id].Type">
+                                            @if (hint.Type == "Info")
+                                            {
+                                                <option value="Info" selected>Info（蓝色）</option>
+                                            }
+                                            else
+                                            {
+                                                <option value="Info">Info（蓝色）</option>
+                                            }
+                                            
+                                            @if (hint.Type == "Message")
+                                            {
+                                                <option value="Message" selected>Message（白色）</option>
+                                            }
+                                            else
+                                            {
+                                                <option value="Message">Message（白色）</option>
+                                            }
+                                            
+                                            @if (hint.Type == "Warning")
+                                            {
+                                                <option value="Warning" selected>Warning（黄色）</option>
+                                            }
+                                            else
+                                            {
+                                                <option value="Warning">Warning（黄色）</option>
+                                            }
+                                        </select>
+                                    </div>
+                                    <div class="hint-actions">
+                                        <button type="button" class="btn-icon btn-sm hint-delete-btn" title="删除提示">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="hint-content">
+                                    <textarea class="form-control" name="hints[@hint.Id].Content" 
+                                              placeholder="输入提示内容（支持Markdown）">@hint.Content</textarea>
+                                </div>
+                                <input type="hidden" name="hints[@hint.Id].Id" value="@hint.Id">
+                            </div>
+                        }
+                    }
+                    else
+                    {
+                        <div class="empty-hints">
+                            <p>您尚未添加任何提示信息</p>
+                        </div>
+                    }
+                </div>
+                <button type="button" class="btn btn-outline btn-icon add-hint-btn">
+                    <i class="fas fa-plus"></i> 添加提示信息
+                </button>
+            </div>
+        </div>
+
+        <div class="form-section">
+            <div class="section-title">分类与定价</div>
+            <div class="form-row">
+                <div class="form-col">
+                    <div class="form-group">
+                        <label class="form-label" asp-for="Game">游戏</label>
+                        <input type="text" class="form-control" asp-for="Game" placeholder="例如：消逝的光芒" />
+                    </div>
+                </div>
+                <div class="form-col">
+                    <div class="form-group">
+                        <label class="form-label" asp-for="Category">分类</label>
+                        <input type="text" class="form-control" asp-for="Category" placeholder="例如：修改器" />
+                    </div>
+                </div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-col">
+                    <div class="form-group">
+                        <label class="form-label" asp-for="MonthlyPrice">月费 (金币)</label>
+                        <input type="number" step="1" class="form-control" asp-for="MonthlyPrice" placeholder="设置为0表示免费" />
+                    </div>
+                </div>
+                <div class="form-col">
+                    <div class="form-group">
+                        <label class="form-label" asp-for="ImageUrl">图片URL</label>
+                        <input type="text" class="form-control" asp-for="ImageUrl" placeholder="图片的URL地址" />
+                    </div>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" asp-for="DownloadUrl">下载链接</label>
+                <input type="url" class="form-control" asp-for="DownloadUrl" placeholder="提供资产的下载链接 (可选)" />
+            </div>
+        </div>
+        
+        <div class="form-section">
+            <div class="section-title">其他信息</div>
+            <div class="form-group">
+                <label class="form-label" asp-for="Tags">标签 (逗号分隔)</label>
+                <input type="text" class="form-control" name="Tags" value="@(Model.Tags != null ? string.Join(", ", Model.Tags) : "")" placeholder="例如：修改器, 消光, 免费" />
+            </div>
+
+            <div class="form-row">
+                <div class="form-col">
+                    <div class="form-group">
+                        <label class="form-label" asp-for="RepositoryUrl">代码仓库 URL</label>
+                        <input type="url" class="form-control" asp-for="RepositoryUrl" placeholder="例如：https://github.com/username/repo" />
+                    </div>
+                </div>
+                <div class="form-col">
+                    <div class="form-group">
+                        <label class="form-label" asp-for="SupportUrl">技术支持 URL</label>
+                        <input type="url" class="form-control" asp-for="SupportUrl" placeholder="例如：https://support.example.com" />
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="form-actions">
+            <button type="submit" class="btn btn-accent btn-icon">
+                <i class="fas fa-save"></i> 保存更改
+            </button>
+            <a href="/Account/PaymentsAndSubscriptions" class="btn btn-outline btn-icon cancel-edit-btn">
+                <i class="fas fa-times"></i> 取消
+            </a>
+        </div>
+    </form>
+    
+    <style>
+        .asset-edit-form {
+            padding: 1rem 0;
+        }
+        
+        .form-section {
+            margin-bottom: 2rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+        
+        .form-section:last-of-type {
+            border-bottom: none;
+        }
+        
+        .section-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin-bottom: 1.5rem;
+            color: var(--accent-color);
+        }
+        
+        .form-actions {
+            display: flex;
+            gap: 1rem;
+            margin-top: 2rem;
+            justify-content: flex-end;
+        }
+        
+        /* 折叠面板样式 */
+        .collapsible-section .section-title {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            padding: 0.5rem 0;
+            margin-bottom: 0;
+            transition: color 0.3s;
+            position: relative;
+        }
+        
+        .collapsible-section .section-title:hover {
+            color: var(--accent-color);
+        }
+        
+        .collapsible-trigger {
+            cursor: pointer;
+        }
+        
+        .toggle-icon {
+            position: absolute;
+            right: 0;
+            transition: transform 0.3s ease;
+            margin-right: 5px;
+        }
+        
+        .collapsible-section.active .toggle-icon {
+            transform: rotate(180deg);
+        }
+        
+        .collapsible-content {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease, padding 0.3s ease;
+            padding: 0;
+        }
+        
+        .collapsible-section.active .collapsible-content {
+            max-height: 1000px; /* 足够大的值，以便展开内容 */
+            padding-top: 1.5rem;
+        }
+        
+        .custom-cards-container, .hints-container {
+            margin-bottom: 1rem;
+        }
+        
+        .empty-custom-cards, .empty-hints {
+            text-align: center;
+            padding: 2rem;
+            background-color: var(--light-bg);
+            border-radius: 8px;
+            color: var(--muted-color);
+            margin-bottom: 1rem;
+        }
+        
+        .add-custom-card-btn, .add-hint-btn {
+            width: 100%;
+            padding: 1rem;
+            justify-content: center;
+            background-color: var(--light-bg);
+            border: 1px dashed var(--border-color);
+            transition: all 0.3s;
+        }
+        
+        .add-custom-card-btn:hover, .add-hint-btn:hover {
+            background-color: rgba(0, 0, 0, 0.03);
+            border-color: var(--accent-color);
+            color: var(--accent-color);
+        }
+        
+        /* 提示样式 */
+        .hint-item {
+            margin-bottom: 1rem;
+            padding: 1rem;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            transition: box-shadow 0.3s, transform 0.2s;
+        }
+        
+        .hint-item:hover {
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+        }
+        
+        .info-hint {
+            background-color: #e6f7ff;
+            border-left: 4px solid #1890ff;
+        }
+        
+        .message-hint {
+            background-color: #ffffff;
+            border-left: 4px solid #d9d9d9;
+        }
+        
+        .warning-hint {
+            background-color: #fffbe6;
+            border-left: 4px solid #faad14;
+        }
+        
+        .hint-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.75rem;
+        }
+        
+        .hint-type-selector {
+            width: 180px;
+        }
+        
+        .hint-actions {
+            display: flex;
+            gap: 0.5rem;
+        }
+        
+        .hint-actions .btn-icon.btn-sm {
+            padding: 0.35rem;
+            font-size: 0.8rem;
+            background: none;
+            border: none;
+            color: var(--muted-color);
+            cursor: pointer;
+            border-radius: 4px;
+            transition: color 0.3s, background-color 0.3s;
+        }
+        
+        .hint-actions .btn-icon.btn-sm:hover {
+            color: #dc3545;
+            background-color: rgba(220, 53, 69, 0.1);
+        }
+        
+        .hint-content {
+            width: 100%;
+        }
+        
+        .hint-content textarea {
+            width: 100%;
+            min-height: 80px;
+            resize: vertical;
+        }
+        
+        /* 自定义卡片样式 */
+        .custom-card {
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            margin-bottom: 1.5rem;
+            background-color: #fff;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+            transition: box-shadow 0.3s, transform 0.2s;
+        }
+        
+        .custom-card:hover {
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+        }
+        
+        .custom-card .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+        
+        .custom-card .card-title-input {
+            border: none;
+            padding: 0.5rem;
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--text-color);
+            width: 70%;
+            background-color: transparent;
+            transition: background-color 0.3s, border 0.3s;
+            border-radius: 4px;
+        }
+        
+        .custom-card .card-title-input:focus {
+            outline: none;
+            background-color: #f8f9fa;
+            border: 1px solid #e9ecef;
+        }
+        
+        .custom-card .card-actions {
+            display: flex;
+            gap: 0.5rem;
+        }
+        
+        .custom-card .btn-icon.btn-sm {
+            padding: 0.35rem;
+            font-size: 0.8rem;
+            background: none;
+            border: none;
+            color: var(--muted-color);
+            cursor: pointer;
+            border-radius: 4px;
+            transition: color 0.3s, background-color 0.3s;
+        }
+        
+        .custom-card .btn-icon.btn-sm:hover {
+            color: #dc3545;
+            background-color: rgba(220, 53, 69, 0.1);
+        }
+        
+        .custom-card .card-content {
+            padding: 1rem;
+        }
+        
+        .custom-card .card-elements-container {
+            min-height: 20px;
+            margin-bottom: 1rem;
+        }
+        
+        .custom-card .add-element-btn {
+            width: 100%;
+            justify-content: center;
+            padding: 0.75rem;
+            font-size: 0.9rem;
+            background-color: var(--light-bg);
+            border-style: dashed;
+            border-color: var(--border-color);
+            color: var(--muted-color);
+            transition: all 0.3s;
+        }
+        
+        .custom-card .add-element-btn:hover {
+            background-color: rgba(0, 0, 0, 0.03);
+            border-color: var(--accent-color);
+            color: var(--accent-color);
+        }
+        
+        /* 元素样式 */
+        .card-element {
+            margin-bottom: 1rem;
+            padding: 1rem;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            background-color: #f9f9f9;
+        }
+        
+        .element-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.75rem;
+        }
+        
+        .element-title {
+            font-weight: 500;
+            font-size: 0.9rem;
+            color: var(--muted-color);
+        }
+        
+        .element-actions {
+            display: flex;
+            gap: 0.5rem;
+        }
+        
+        .element-content {
+            width: 100%;
+        }
+        
+        /* 滚动条元素 */
+        .slider-element .slider-container {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+        
+        .slider-element .slider-header {
+            display: flex;
+            justify-content: space-between;
+        }
+        
+        .slider-element .slider-labels {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.8rem;
+            color: var(--muted-color);
+        }
+        
+        .slider-element .slider-input {
+            width: 100%;
+        }
+    </style>
+    
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // 折叠面板功能
+            const collapsibleSections = document.querySelectorAll('.collapsible-section');
+            
+            collapsibleSections.forEach(section => {
+                const trigger = section.querySelector('.collapsible-trigger');
+                const content = section.querySelector('.collapsible-content');
+                
+                // 设置初始状态
+                if (section.classList.contains('active')) {
+                    content.style.maxHeight = '1000px'; // 足够大的值，以便展开内容
+                    content.style.paddingTop = '1.5rem';
+                }
+                
+                trigger.addEventListener('click', () => {
+                    section.classList.toggle('active');
+                    
+                    if (section.classList.contains('active')) {
+                        content.style.maxHeight = '1000px';
+                        content.style.paddingTop = '1.5rem';
+                    } else {
+                        content.style.maxHeight = '0';
+                        content.style.paddingTop = '0';
+                    }
+                });
+            });
+            
+            // 添加自定义卡片按钮功能
+            const addCustomCardBtn = document.querySelector('.add-custom-card-btn');
+            let cardCounter = @(Model.CustomCards.Any() ? Model.CustomCards.Count : 0);
+            let elementCounter = @(Model.CustomCards.SelectMany(c => c.Elements).Count());
+            let hintCounter = @(Model.Hints?.Any() == true ? Model.Hints.Count : 0);
+            
+            if (addCustomCardBtn) {
+                addCustomCardBtn.addEventListener('click', function() {
+                    // 先移除空状态提示
+                    const emptyState = document.querySelector('.empty-custom-cards');
+                    if (emptyState) {
+                        emptyState.style.display = 'none';
+                    }
+                    
+                    // 创建一个新的卡片
+                    cardCounter++;
+                    const cardId = 'custom-card-' + cardCounter;
+                    
+                    const customCardsContainer = document.querySelector('.custom-cards-container');
+                    
+                    const newCard = document.createElement('div');
+                    newCard.className = 'custom-card';
+                    newCard.id = cardId;
+                    newCard.innerHTML = `
+                        <div class="card-header">
+                            <input type="text" class="card-title-input" name="customCards[${cardCounter}].Title" placeholder="卡片标题" value="新卡片 ${cardCounter}">
+                            <div class="card-actions">
+                                <button type="button" class="btn-icon btn-sm card-delete-btn" title="删除卡片">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="card-content">
+                            <div class="card-elements-container">
+                                <!-- 这里将显示添加的元素 -->
+                            </div>
+                            <button type="button" class="btn btn-outline btn-icon add-element-btn">
+                                <i class="fas fa-plus"></i> 添加元素
+                            </button>
+                        </div>
+                        <input type="hidden" name="customCards[${cardCounter}].Id" value="${cardId}">
+                    `;
+                    
+                    customCardsContainer.appendChild(newCard);
+                    
+                    // 添加删除卡片的事件监听
+                    const deleteBtn = newCard.querySelector('.card-delete-btn');
+                    deleteBtn.addEventListener('click', function() {
+                        newCard.remove();
+                        
+                        // 如果没有卡片了，显示空状态
+                        const remainingCards = customCardsContainer.querySelectorAll('.custom-card');
+                        if (remainingCards.length === 0 && emptyState) {
+                            emptyState.style.display = 'block';
+                        }
+                    });
+                    
+                    // 添加"添加元素"按钮的事件监听
+                    const addElementBtn = newCard.querySelector('.add-element-btn');
+                    addElementBtn.addEventListener('click', function() {
+                        // 调用页面级模态框
+                        if (window.openElementSelectorModal) {
+                            window.openElementSelectorModal(cardId);
+                        }
+                    });
+                    
+                    // 自动聚焦到标题输入框
+                    const titleInput = newCard.querySelector('.card-title-input');
+                    titleInput.focus();
+                    titleInput.select();
+                });
+            }
+            
+            // 为现有卡片添加事件监听
+            document.querySelectorAll('.custom-card').forEach(card => {
+                // 添加删除卡片的事件监听
+                const deleteBtn = card.querySelector('.card-delete-btn');
+                if (deleteBtn) {
+                    deleteBtn.addEventListener('click', function() {
+                        card.remove();
+                        
+                        // 如果没有卡片了，显示空状态
+                        const customCardsContainer = document.querySelector('.custom-cards-container');
+                        const remainingCards = customCardsContainer.querySelectorAll('.custom-card');
+                        if (remainingCards.length === 0) {
+                            const emptyState = document.createElement('div');
+                            emptyState.className = 'empty-custom-cards';
+                            emptyState.innerHTML = '<p>您尚未添加任何自定义卡片</p>';
+                            customCardsContainer.appendChild(emptyState);
+                        }
+                    });
+                }
+                
+                // 添加"添加元素"按钮的事件监听
+                const addElementBtn = card.querySelector('.add-element-btn');
+                if (addElementBtn) {
+                    addElementBtn.addEventListener('click', function() {
+                        if (window.openElementSelectorModal) {
+                            window.openElementSelectorModal(card.id);
+                        }
+                    });
+                }
+                
+                // 为已有元素添加删除事件监听
+                card.querySelectorAll('.element-delete-btn').forEach(btn => {
+                    btn.addEventListener('click', function() {
+                        const element = this.closest('.card-element');
+                        if (element) {
+                            element.remove();
+                        }
+                    });
+                });
+            });
+            
+            // 添加提示按钮功能
+            const addHintBtn = document.querySelector('.add-hint-btn');
+            
+            if (addHintBtn) {
+                addHintBtn.addEventListener('click', function() {
+                    // 先移除空状态提示
+                    const emptyState = document.querySelector('.empty-hints');
+                    if (emptyState) {
+                        emptyState.style.display = 'none';
+                    }
+                    
+                    // 创建一个新的提示
+                    hintCounter++;
+                    const hintId = 'hint-' + hintCounter;
+                    
+                    const hintsContainer = document.querySelector('.hints-container');
+                    
+                    const newHint = document.createElement('div');
+                    newHint.className = 'hint-item info-hint';
+                    newHint.id = hintId;
+                    newHint.innerHTML = `
+                        <div class="hint-header">
+                            <div class="hint-type-selector">
+                                <select class="form-control form-control-sm" name="hints[${hintId}].Type" onchange="updateHintType(this)">
+                                    <option value="Info" selected>Info（蓝色）</option>
+                                    <option value="Message">Message（白色）</option>
+                                    <option value="Warning">Warning（黄色）</option>
+                                </select>
+                            </div>
+                            <div class="hint-actions">
+                                <button type="button" class="btn-icon btn-sm hint-delete-btn" title="删除提示">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="hint-content">
+                            <textarea class="form-control" name="hints[${hintId}].Content" placeholder="输入提示内容（支持Markdown）"></textarea>
+                        </div>
+                        <input type="hidden" name="hints[${hintId}].Id" value="${hintId}">
+                    `;
+                    
+                    hintsContainer.appendChild(newHint);
+                    
+                    // 添加删除提示的事件监听
+                    const deleteBtn = newHint.querySelector('.hint-delete-btn');
+                    deleteBtn.addEventListener('click', function() {
+                        newHint.remove();
+                        
+                        // 如果没有提示了，显示空状态
+                        const remainingHints = hintsContainer.querySelectorAll('.hint-item');
+                        if (remainingHints.length === 0) {
+                            const emptyState = document.createElement('div');
+                            emptyState.className = 'empty-hints';
+                            emptyState.innerHTML = '<p>您尚未添加任何提示信息</p>';
+                            hintsContainer.appendChild(emptyState);
+                        }
+                    });
+                    
+                    // 自动聚焦到内容输入框
+                    const contentInput = newHint.querySelector('textarea');
+                    contentInput.focus();
+                });
+            }
+            
+            // 为现有提示添加事件监听
+            document.querySelectorAll('.hint-item').forEach(hint => {
+                // 添加删除提示的事件监听
+                const deleteBtn = hint.querySelector('.hint-delete-btn');
+                if (deleteBtn) {
+                    deleteBtn.addEventListener('click', function() {
+                        hint.remove();
+                        
+                        // 如果没有提示了，显示空状态
+                        const hintsContainer = document.querySelector('.hints-container');
+                        const remainingHints = hintsContainer.querySelectorAll('.hint-item');
+                        if (remainingHints.length === 0) {
+                            const emptyState = document.createElement('div');
+                            emptyState.className = 'empty-hints';
+                            emptyState.innerHTML = '<p>您尚未添加任何提示信息</p>';
+                            hintsContainer.appendChild(emptyState);
+                        }
+                    });
+                }
+                
+                // 添加类型选择器的事件监听
+                const typeSelector = hint.querySelector('select[name^="hints["]');
+                if (typeSelector) {
+                    typeSelector.addEventListener('change', function() {
+                        updateHintType(this);
+                    });
+                }
+            });
+            
+            // 更新提示类型
+            window.updateHintType = function(selectElement) {
+                const hintItem = selectElement.closest('.hint-item');
+                if (!hintItem) return;
+                
+                // 移除所有类型相关的类
+                hintItem.classList.remove('info-hint', 'message-hint', 'warning-hint');
+                
+                // 添加新的类型相关的类
+                const selectedType = selectElement.value.toLowerCase();
+                hintItem.classList.add(selectedType + '-hint');
+            };
+            
+            // 为页面级模态框提供添加元素的方法
+            window.addElementToCard = function(cardId, elementType) {
+                if (!cardId) return;
+                
+                const card = document.getElementById(cardId);
+                if (!card) return;
+                
+                const elementsContainer = card.querySelector('.card-elements-container');
+                
+                elementCounter++;
+                const elementId = 'element-' + elementCounter;
+                
+                let elementHtml = '';
+                
+                switch (elementType) {
+                    case 'text':
+                        elementHtml = createTextElement(cardId, elementId);
+                        break;
+                    case 'slider':
+                        elementHtml = createSliderElement(cardId, elementId);
+                        break;
+                    case 'image':
+                        elementHtml = createImageElement(cardId, elementId);
+                        break;
+                    case 'link':
+                        elementHtml = createLinkElement(cardId, elementId);
+                        break;
+                }
+                
+                const elementWrapper = document.createElement('div');
+                elementWrapper.className = `card-element ${elementType}-element`;
+                elementWrapper.id = elementId;
+                elementWrapper.innerHTML = elementHtml;
+                
+                elementsContainer.appendChild(elementWrapper);
+                
+                // 添加删除元素的事件监听
+                const deleteElementBtn = elementWrapper.querySelector('.element-delete-btn');
+                deleteElementBtn.addEventListener('click', function() {
+                    elementWrapper.remove();
+                });
+            };
+            
+            // 创建文本元素
+            function createTextElement(cardId, elementId) {
+                const cardMatch = cardId.match(/custom-card-(\d+)/);
+                const cardNumber = cardMatch ? cardMatch[1] : cardId;
+                
+                return `
+                    <div class="element-header">
+                        <div class="element-title">文本</div>
+                        <div class="element-actions">
+                            <button type="button" class="btn-icon btn-sm element-delete-btn" title="删除元素">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="element-content">
+                        <textarea class="form-control" name="customCards[${cardNumber}].elements[${elementId}].value" placeholder="输入文本内容"></textarea>
+                        <input type="hidden" name="customCards[${cardNumber}].elements[${elementId}].id" value="${elementId}">
+                        <input type="hidden" name="customCards[${cardNumber}].elements[${elementId}].type" value="text">
+                    </div>
+                `;
+            }
+            
+            // 创建滚动条元素
+            function createSliderElement(cardId, elementId) {
+                const cardMatch = cardId.match(/custom-card-(\d+)/);
+                const cardNumber = cardMatch ? cardMatch[1] : cardId;
+                
+                return `
+                    <div class="element-header">
+                        <div class="element-title">滚动条</div>
+                        <div class="element-actions">
+                            <button type="button" class="btn-icon btn-sm element-delete-btn" title="删除元素">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="element-content">
+                        <div class="slider-container">
+                            <div class="slider-header">
+                                <input type="text" class="form-control form-control-sm" name="customCards[${cardNumber}].elements[${elementId}].label" placeholder="滚动条标签" value="参数">
+                                <input type="number" class="form-control form-control-sm" style="width: 70px;" name="customCards[${cardNumber}].elements[${elementId}].value" value="50" min="0" max="100">
+                            </div>
+                            <div class="slider-labels">
+                                <span>0</span>
+                                <span>100</span>
+                            </div>
+                            <input type="range" class="slider-input" min="0" max="100" value="50" oninput="var numInput = this.previousElementSibling.previousElementSibling.querySelector('input[type=number]'); numInput.value = this.value; numInput.dispatchEvent(new Event('change'));">
+                            <input type="hidden" name="customCards[${cardNumber}].elements[${elementId}].id" value="${elementId}">
+                            <input type="hidden" name="customCards[${cardNumber}].elements[${elementId}].type" value="slider">
+                        </div>
+                    </div>
+                `;
+            }
+            
+            // 创建图片元素
+            function createImageElement(cardId, elementId) {
+                const cardMatch = cardId.match(/custom-card-(\d+)/);
+                const cardNumber = cardMatch ? cardMatch[1] : cardId;
+                
+                return `
+                    <div class="element-header">
+                        <div class="element-title">图片</div>
+                        <div class="element-actions">
+                            <button type="button" class="btn-icon btn-sm element-delete-btn" title="删除元素">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="element-content">
+                        <input type="text" class="form-control" name="customCards[${cardNumber}].elements[${elementId}].value" placeholder="输入图片URL">
+                        <input type="hidden" name="customCards[${cardNumber}].elements[${elementId}].id" value="${elementId}">
+                        <input type="hidden" name="customCards[${cardNumber}].elements[${elementId}].type" value="image">
+                    </div>
+                `;
+            }
+            
+            // 创建链接元素
+            function createLinkElement(cardId, elementId) {
+                const cardMatch = cardId.match(/custom-card-(\d+)/);
+                const cardNumber = cardMatch ? cardMatch[1] : cardId;
+                
+                return `
+                    <div class="element-header">
+                        <div class="element-title">链接</div>
+                        <div class="element-actions">
+                            <button type="button" class="btn-icon btn-sm element-delete-btn" title="删除元素">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="element-content">
+                        <div class="form-row">
+                            <div class="form-col">
+                                <input type="text" class="form-control" name="customCards[${cardNumber}].elements[${elementId}].label" placeholder="链接文本" value="点击这里">
+                            </div>
+                            <div class="form-col">
+                                <input type="url" class="form-control" name="customCards[${cardNumber}].elements[${elementId}].value" placeholder="链接URL">
+                            </div>
+                        </div>
+                        <input type="hidden" name="customCards[${cardNumber}].elements[${elementId}].id" value="${elementId}">
+                        <input type="hidden" name="customCards[${cardNumber}].elements[${elementId}].type" value="link">
+                    </div>
+                `;
+            }
+        });
+    </script>
+} 

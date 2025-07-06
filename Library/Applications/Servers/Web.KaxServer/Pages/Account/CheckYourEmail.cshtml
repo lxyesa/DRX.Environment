@@ -1,0 +1,47 @@
+@page
+@model Web.KaxServer.Pages.Account.CheckYourEmailModel
+@addTagHelper *, Microsoft.AspNetCore.Mvc.TagHelpers
+@{
+    ViewData["Title"] = "KAX | 请检查您的邮箱";
+    Layout = "/Pages/Shared/_Layout.cshtml";
+}
+
+@section Styles {
+    <link rel="stylesheet" href="~/css/notification.css" />
+    <style>
+        .notification-container {
+            border-top: 5px solid var(--info-color, #17a2b8);
+        }
+
+        .notification-icon {
+            color: var(--info-color, #17a2b8);
+        }
+
+        .resend-link {
+            font-size: 0.9rem;
+        }
+
+        .resend-link button {
+            font-size: inherit;
+        }
+    </style>
+}
+
+<div class="notification-section">
+    <div class="notification-container">
+        <div class="notification-icon">
+            <i class="fas fa-envelope-open-text"></i>
+        </div>
+        <h1 class="notification-title">请检查您的邮箱</h1>
+        <p class="notification-message">
+            我们已向 <strong>@Model.UserEmail</strong> 发送了一封包含验证链接的邮件。<br>
+            请点击邮件中的链接以完成您的账户注册。链接将在10分钟内失效。
+        </p>
+        <div class="resend-link">
+            没有收到邮件？
+            <form method="post" asp-page-handler="ResendEmail" style="display: inline;">
+                <button type="submit" class="btn btn-link">重新发送</button>
+            </form>
+        </div>
+    </div>
+</div> 

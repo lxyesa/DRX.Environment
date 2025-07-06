@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-16"?>
+<ForumThreadModel>
+  <Id>9a4597a90d48531ba33a55fd6f2c85f8d2190a4b795130c411dc2fa67383205f</Id>
+  <CategoryId>21de9d9dce8f5e189cd69ae1b87b917d3ab1a85d702780553e13bd8ff5cf83fb</CategoryId>
+  <Title>论坛使用指南</Title>
+  <AuthorName>Admin</AuthorName>
+  <AuthorAvatarUrl null="true" />
+  <Content>这是论坛的 **使用指南**。请遵守社区规则，友好交流。
+
+这里支持 `Markdown` 语法！</Content>
+  <PostTime>2025/7/2 2:00:06</PostTime>
+  <Comments />
+  <Views>151</Views>
+  <ViewedByUserIds>
+    <Int32>1</Int32>
+  </ViewedByUserIds>
+  <LastPostInfo>
+    <AuthorName>Admin</AuthorName>
+    <PostTime>2025/7/3 2:00:06</PostTime>
+  </LastPostInfo>
+</ForumThreadModel>

@@ -1,0 +1,1175 @@
+@using System.Text.Json
+@using Web.KaxServer.Models
+@using Microsoft.AspNetCore.Mvc.RazorPages
+@using Microsoft.AspNetCore.Mvc.TagHelpers
+@using Drx.Sdk.Network.Session
+@inject SessionManager _sessionManager
+@inherits Microsoft.AspNetCore.Mvc.Razor.RazorPage<PageModel>
+@{
+    var messageBoxJson = TempData["MessageBox"] as string;
+    MessageBoxModel? messageBox = null;
+    
+    if (!string.IsNullOrEmpty(messageBoxJson))
+    {
+        try
+        {
+            messageBox = JsonSerializer.Deserialize<MessageBoxModel>(messageBoxJson);
+        }
+        catch { /* 忽略反序列化错误 */ }
+    }
+
+    var userSession = _sessionManager.GetSessionFromCookie<UserSession>("UserAuth");
+    var isLoggedIn = userSession != null;
+    var username = userSession?.Username;
+    var avatarUrl = userSession?.AvatarUrl;
+}
+
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>@ViewData["Title"]</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --bg-color: #fafafa;
+            --text-color: #1a1a1a;
+            --text-color-light: #ffffff;
+            --muted-color: #6b7280;
+            --border-color: #e2e8f0;
+            --accent-color: #111827;
+            --accent-hover: #374151;
+            --primary-color: #3b82f6;
+            --primary-color-rgb: 59, 130, 246;
+            --light-bg: #f3f4f6;
+            --card-shadow: 0 10px 25px rgba(0, 0, 0, 0.05);
+            --hover-shadow: 0 15px 30px rgba(0, 0, 0, 0.08);
+            --navbar-bg: rgba(250, 250, 250, 0.95);
+            --navbar-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+            --navbar-height: 80px;
+            --navbar-height-scrolled: 64px;
+            --transition-standard: all 0.3s ease;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+            line-height: 1.6;
+            overflow-x: hidden;
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+            padding-top: var(--navbar-height); /* 为固定导航栏预留空间 */
+        }
+
+        /* Keyframe animations */
+        @@keyframes fadeInUp {
+            from { opacity: 0; transform: translateY(30px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        @@keyframes fadeInDown {
+            from { opacity: 0; transform: translateY(-30px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        @@keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        @@keyframes float {
+            0% { transform: translateY(0px); }
+            50% { transform: translateY(-10px); }
+            100% { transform: translateY(0px); }
+        }
+
+        @@keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+        
+        @@keyframes gradientMove {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+
+        /* 按钮动画 */
+        @@keyframes buttonPulse {
+            0% { box-shadow: 0 0 0 0 rgba(0, 0, 0, 0.2); }
+            70% { box-shadow: 0 0 0 10px rgba(0, 0, 0, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(0, 0, 0, 0); }
+        }
+        
+        @@keyframes buttonGlow {
+            0% { box-shadow: 0 0 5px rgba(0, 0, 0, 0.2); }
+            50% { box-shadow: 0 0 20px rgba(0, 0, 0, 0.4); }
+            100% { box-shadow: 0 0 5px rgba(0, 0, 0, 0.2); }
+        }
+        
+        @@keyframes ripple {
+            0% { transform: scale(0); opacity: 1; }
+            100% { transform: scale(4); opacity: 0; }
+        }
+        
+        @@keyframes gradientButton {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+        
+        @@keyframes shakeButton {
+            0%, 100% { transform: translateX(0); }
+            10%, 30%, 50%, 70%, 90% { transform: translateX(-2px); }
+            20%, 40%, 60%, 80% { transform: translateX(2px); }
+        }
+        
+        @@keyframes bounceButton {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-5px); }
+        }
+
+        nav.navbar {
+            position: fixed;
+            top: 0;
+            width: 100%;
+            background-color: var(--navbar-bg);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 5%;
+            z-index: 1000;
+            transition: var(--transition-standard);
+            height: var(--navbar-height);
+        }
+
+        nav.navbar.scrolled {
+            height: var(--navbar-height-scrolled);
+            box-shadow: var(--navbar-shadow);
+            background-color: var(--navbar-bg);
+        }
+
+        .logo {
+            font-size: 1.75rem;
+            font-weight: 800;
+            color: var(--text-color);
+            text-decoration: none;
+            letter-spacing: -0.5px;
+            position: relative;
+            animation: fadeInDown 0.8s ease forwards;
+            display: flex;
+            align-items: center;
+        }
+
+        .logo::after {
+            content: '';
+            position: absolute;
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background-color: var(--accent-color);
+            bottom: 5px;
+            right: -8px;
+        }
+
+        .nav-links {
+            display: flex;
+            list-style: none;
+            gap: 2.5rem;
+            align-items: center;
+            margin: 0;
+            padding: 0;
+        }
+
+        .nav-links li {
+            opacity: 0;
+            animation: fadeInDown 0.5s ease forwards;
+        }
+
+        .nav-links li:nth-child(1) { animation-delay: 0.1s; }
+        .nav-links li:nth-child(2) { animation-delay: 0.2s; }
+        .nav-links li:nth-child(3) { animation-delay: 0.3s; }
+        .nav-links li:nth-child(4) { animation-delay: 0.4s; }
+        .nav-links li:nth-child(5) { animation-delay: 0.5s; }
+        .nav-links li:nth-child(6) { animation-delay: 0.6s; }
+
+        .nav-links a {
+            color: var(--text-color);
+            text-decoration: none;
+            font-weight: 500;
+            font-size: 1rem;
+            transition: var(--transition-standard);
+            position: relative;
+            padding: 0.5rem 0;
+        }
+
+        .nav-links a::after {
+            content: '';
+            position: absolute;
+            width: 0;
+            height: 2px;
+            bottom: 0;
+            left: 0;
+            background-color: var(--accent-color);
+            transition: width 0.3s ease;
+        }
+
+        .nav-links a:hover {
+            color: var(--accent-color);
+        }
+
+        .nav-links a:hover::after {
+            width: 100%;
+        }
+
+        .hamburger {
+            display: none;
+            cursor: pointer;
+            background: none;
+            border: none;
+            padding: 10px;
+            transition: var(--transition-standard);
+        }
+
+        .hamburger:focus {
+            outline: 2px solid var(--accent-color);
+            border-radius: 4px;
+        }
+
+        .hamburger-inner {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .hamburger-line {
+            width: 24px;
+            height: 2px;
+            background-color: var(--text-color);
+            transition: var(--transition-standard);
+            border-radius: 5px;
+        }
+
+        .hamburger.active .hamburger-line:nth-child(1) {
+            transform: rotate(-45deg) translate(-5px, 6px);
+        }
+
+        .hamburger.active .hamburger-line:nth-child(2) {
+            opacity: 0;
+        }
+
+        .hamburger.active .hamburger-line:nth-child(3) {
+            transform: rotate(45deg) translate(-5px, -6px);
+        }
+
+        section {
+            padding: 7rem 5%;
+            position: relative;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            width: 100%;
+            position: relative;
+            z-index: 1;
+        }
+        
+        .btn {
+            padding: 0.75rem 1.5rem;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 0.95rem;
+            font-family: inherit;
+            line-height: 1.6;
+            transition: var(--transition-standard);
+            border: 1px solid transparent;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            overflow: hidden;
+            cursor: pointer;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+        }
+
+        .btn::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: rgba(255, 255, 255, 0.2);
+            transition: all 0.4s ease;
+        }
+
+        .btn:hover::before {
+            left: 100%;
+        }
+
+        .btn:hover {
+            box-shadow: 0 10px 15px rgba(0, 0, 0, 0.08);
+        }
+        
+        /* 按钮动画类 */
+        .btn-pulse:hover {
+            animation: buttonPulse 1.5s infinite;
+        }
+        
+        .btn-glow:hover {
+            animation: buttonGlow 1.5s infinite;
+        }
+        
+        .btn-ripple {
+            position: relative;
+        }
+        
+        .btn-ripple:after {
+            content: "";
+            display: block;
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(255, 255, 255, 0.3);
+            border-radius: 8px;
+            opacity: 0;
+            pointer-events: none;
+        }
+        
+        .btn-ripple:active:after {
+            animation: ripple 0.8s ease-out;
+        }
+        
+        .btn-gradient {
+            background: linear-gradient(90deg, var(--accent-color), var(--accent-hover), var(--accent-color));
+            background-size: 200% auto;
+            color: white;
+            transition: 0.5s;
+        }
+        
+        .btn-gradient:hover {
+            background-position: right center;
+            animation: gradientButton 3s ease infinite;
+        }
+        
+        .btn-shake:hover {
+            animation: shakeButton 0.5s ease;
+        }
+        
+        .btn-bounce:hover {
+            animation: bounceButton 1.5s infinite;
+        }
+        
+        .btn-3d {
+            transform-style: preserve-3d;
+            transition: box-shadow 0.3s;
+        }
+        
+        .btn-3d:hover {
+            box-shadow: 0 15px 25px rgba(0, 0, 0, 0.15);
+        }
+
+        .btn-primary {
+            background-color: var(--accent-color);
+            color: var(--text-color-light);
+        }
+
+        .btn-primary:hover {
+            background-color: var(--accent-hover);
+        }
+
+        .btn-secondary {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            border: 1px solid var(--border-color);
+        }
+
+        .btn-secondary:hover {
+            background-color: var(--light-bg);
+            border-color: var(--accent-color);
+        }
+        
+        /* Unified Form Controls */
+        .form-control,
+        .select-selected {
+            display: block;
+            width: 100%;
+            padding: 0.75rem 1rem;
+            font-size: 1rem;
+            font-weight: 400;
+            line-height: 1.6;
+            color: var(--text-color);
+            background-color: var(--bg-color);
+            background-clip: padding-box;
+            border: 1px solid var(--border-color);
+            appearance: none;
+            border-radius: 8px;
+            transition: var(--transition-standard);
+        }
+        
+        .form-control:focus,
+        .custom-select-wrapper .select-selected.select-arrow-active {
+            outline: none;
+            border-color: var(--accent-color);
+            box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.05);
+        }
+
+        /* Custom Select Wrapper */
+        .custom-select-wrapper {
+            position: relative;
+            width: 100%;
+        }
+        
+        .custom-select-wrapper .form-select {
+            display: none; /* Hide original select */
+        }
+        
+        .select-selected {
+            padding-right: 2.5rem; /* Make space for the arrow */
+            cursor: pointer;
+            position: relative;
+            user-select: none;
+        }
+        
+        .select-selected:hover {
+            border-color: var(--accent-color);
+        }
+        
+        .select-selected::after {
+            position: absolute;
+            content: "";
+            top: 50%;
+            right: 1rem;
+            width: 0.5em;
+            height: 0.5em;
+            border-left: 2px solid var(--muted-color);
+            border-bottom: 2px solid var(--muted-color);
+            transform: translateY(-75%) rotate(-45deg);
+            transition: var(--transition-standard);
+        }
+        
+        .select-selected.select-arrow-active::after {
+            transform: translateY(-25%) rotate(135deg);
+        }
+        
+        .select-items {
+            position: absolute;
+            background-color: var(--bg-color);
+            top: calc(100% + 4px);
+            left: 0;
+            right: 0;
+            z-index: 99;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            box-shadow: var(--card-shadow);
+            max-height: 200px;
+            overflow-y: auto;
+            opacity: 0;
+            visibility: hidden;
+            transform: translateY(10px);
+            transition: opacity 0.3s ease, transform 0.3s ease;
+        }
+
+        .select-items.select-hide {
+            opacity: 1;
+            visibility: visible;
+            transform: translateY(0);
+        }
+        
+        .select-items div {
+            color: var(--text-color);
+            padding: 0.75rem 1rem;
+            cursor: pointer;
+            transition: background-color 0.2s ease, color 0.2s ease;
+        }
+        
+        .select-items div:hover {
+            background-color: var(--light-bg);
+        }
+
+        .same-as-selected {
+            background-color: var(--accent-color) !important;
+            color: var(--bg-color) !important;
+            font-weight: 500;
+        }
+        
+        /* Custom Message Box */
+        .custom-message-box-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.4);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 2000;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.3s ease, visibility 0.3s ease;
+        }
+
+        .custom-message-box-overlay.active {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .custom-message-box {
+            background-color: var(--bg-color);
+            padding: 2rem;
+            border-radius: 12px;
+            box-shadow: var(--card-shadow);
+            width: 90%;
+            max-width: 400px;
+            text-align: center;
+            transform: scale(0.9);
+            transition: transform 0.3s ease;
+        }
+        
+        .custom-message-box-overlay.active .custom-message-box {
+            transform: scale(1);
+        }
+
+        .custom-message-box h2 {
+            font-size: 1.5rem;
+            margin-bottom: 1rem;
+            color: var(--text-color);
+        }
+
+        .custom-message-box p {
+            color: var(--muted-color);
+            margin-bottom: 2rem;
+        }
+
+        .custom-message-box.error h2 {
+            color: #dc2626;
+        }
+
+        .custom-message-box .btn {
+             min-width: 140px;
+        }
+        
+        /* 按钮样式 */
+        .btn-accent {
+            background-color: var(--accent-color);
+            color: var(--text-color-light);
+        }
+        
+        .btn-accent:hover {
+            background-color: var(--accent-hover);
+        }
+        
+        .btn-outline {
+            background-color: transparent;
+            border: 1px solid var(--border-color);
+            color: var(--text-color);
+        }
+
+        .btn-badge{
+            background-color: transparent;
+            border-radius: 50%;
+            color: var(--text-color);
+            height: 50px;
+            width: 50px;
+            min-width: unset;
+            padding: 0;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border: 1px solid var(--border-color);
+            font-family: inherit;
+            font-size: inherit;
+            line-height: inherit;
+        }
+
+        .btn-badge-dark{
+            background-color: var(--text-color);
+            color: var(--text-color-light);
+            border-radius: 50%;
+            height: 50px;
+            width: 50px;
+            min-width: unset;
+            padding: 0;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border: 1px solid var(--border-color);
+            font-family: inherit;
+            font-size: inherit;
+            line-height: inherit;
+        }
+        
+        .btn-sm {
+            padding: 0.5rem 1.5rem;
+            font-size: 0.9rem;
+            min-width: 120px;
+        }
+        
+        .btn-lg {
+            padding: 1.2rem 2.5rem;
+            font-size: 1.1rem;
+            min-width: 200px;
+        }
+        
+        .btn-block {
+            display: block;
+            width: 100%;
+        }
+        
+        .btn-icon {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+        }
+        
+        .btn-icon-only {
+            width: 50px;
+            height: 50px;
+            min-width: unset;
+            border-radius: 50%;
+            padding: 0;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .btn-link {
+            background: none;
+            border: none;
+            color: var(--accent-color);
+            text-decoration: underline;
+            padding: 0;
+            min-width: unset;
+            box-shadow: none;
+            font-weight: inherit;
+            font-size: inherit;
+        }
+        
+        .btn-link:hover {
+            color: var(--accent-hover);
+            text-decoration: underline;
+            box-shadow: none;
+        }
+        
+        .section-title {
+            text-align: center;
+            font-size: 2.5rem;
+            font-weight: 800;
+            margin-bottom: 3.5rem;
+            letter-spacing: -0.5px;
+            position: relative;
+            display: flex;
+            transform: translateX(-50%);
+            opacity: 0;
+            animation: fadeInDown 0.8s ease forwards;
+            flex-direction: row;
+            flex-wrap: nowrap;
+            align-content: center;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .section-title::after {
+            content: '';
+            position: absolute;
+            width: 60px;
+            height: 4px;
+            background-color: var(--accent-color);
+            bottom: -10px;
+            left: 50%;
+            transform: translateX(-50%);
+            border-radius: 2px;
+        }
+        
+        .footer {
+            background-color: var(--bg-color);
+            border-top: 1px solid var(--border-color);
+            padding: 4rem 5% 2rem;
+            text-align: center;
+            position: relative;
+        }
+
+        .footer::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(180deg, rgba(248,248,248,0) 0%, rgba(248,248,248,0.03) 100%);
+            pointer-events: none;
+        }
+
+        .footer-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            position: relative;
+            z-index: 1;
+        }
+
+        .footer-logo {
+            font-size: 1.5rem;
+            font-weight: 800;
+            color: var(--text-color);
+            margin-bottom: 2rem;
+            position: relative;
+        }
+
+        .footer-logo::after {
+            content: '';
+            position: absolute;
+            width: 4px;
+            height: 4px;
+            border-radius: 50%;
+            background-color: var(--accent-color);
+            bottom: 5px;
+            right: -6px;
+        }
+
+        .footer-links {
+            display: flex;
+            gap: 2rem;
+            margin-bottom: 2rem;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .footer-links a {
+            color: var(--muted-color);
+            text-decoration: none;
+            transition: color 0.3s ease;
+            position: relative;
+        }
+
+        .footer-links a::after {
+            content: '';
+            position: absolute;
+            width: 0;
+            height: 1px;
+            bottom: -2px;
+            left: 0;
+            background-color: var(--accent-color);
+            transition: width 0.3s ease;
+        }
+
+        .footer-links a:hover {
+            color: var(--text-color);
+        }
+
+        .footer-links a:hover::after {
+            width: 100%;
+        }
+
+        .copyright {
+            font-size: 0.9rem;
+            color: var(--muted-color);
+        }
+        
+        @@media(max-width: 768px) {
+            .hamburger {
+                display: block;
+            }
+            .nav-links {
+                display: none;
+            }
+            .nav-links.active {
+                display: flex;
+                position: absolute;
+                top: var(--navbar-height-scrolled);
+                right: 0;
+                background: var(--bg-color);
+                flex-direction: column;
+                width: 250px;
+                padding: 2rem;
+                box-shadow: -5px 10px 20px rgba(0, 0, 0, 0.1);
+                border-radius: 0 0 0 10px;
+                gap: 1.5rem;
+                border-left: 1px solid var(--border-color);
+                border-bottom: 1px solid var(--border-color);
+            }
+            .section-title {
+                font-size: 2rem;
+            }
+            section {
+                padding: 5rem 5%;
+            }
+        }
+
+        .nav-user-link {
+            display: flex;
+            align-items: center;
+        }
+        .nav-avatar {
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            margin-right: 8px;
+            object-fit: cover;
+            border: 1px solid var(--border-color);
+        }
+        .nav-avatar-icon {
+            font-size: 22px;
+            margin-right: 8px;
+            color: var(--muted-color);
+            width: 24px;
+            text-align: center;
+        }
+
+        /* --- Custom Scrollbar Styles --- */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background-color: rgba(0, 0, 0, 0.15);
+            border-radius: 10px;
+            transition: background-color 0.3s ease;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background-color: rgba(0, 0, 0, 0.3);
+        }
+        /* --- End Custom Scrollbar Styles --- */
+    </style>
+    @await RenderSectionAsync("Styles", required: false)
+</head>
+<body>
+    <nav class="navbar">
+        <a href="#" class="logo">KAX</a>
+        <ul class="nav-links">
+            <li><a href="/#hero">首页</a></li>
+            <li><a href="/Shop/Store">商城</a></li>
+            <li><a href="/Forums/Home">论坛(Demo)</a></li>
+            @if (isLoggedIn)
+            {
+                <li>
+                    <a href="/Account/Profile" class="nav-user-link">
+                        @if (!string.IsNullOrEmpty(avatarUrl))
+                        {
+                            <img src="@avatarUrl" alt="头像" class="nav-avatar">
+                        }
+                        else
+                        {
+                            <i class="fas fa-user-circle nav-avatar-icon"></i>
+                        }
+                        @username
+                    </a>
+                </li>
+            }
+            else
+            {
+                <li><a href="/#login">登录/注册</a></li>
+            }
+        </ul>
+        <button type="button" class="hamburger" aria-label="菜单" aria-expanded="false">
+            <div class="hamburger-inner">
+                <span class="hamburger-line"></span>
+                <span class="hamburger-line"></span>
+                <span class="hamburger-line"></span>
+            </div>
+        </button>
+    </nav>
+    
+    <main style="flex: 1 0 auto;">
+        @RenderBody()
+    </main>
+
+    <footer class="footer">
+        <div class="footer-container">
+            <div class="footer-logo">KAX</div>
+            <div class="footer-links">
+                <a href="#">使用条款</a>
+                <a href="#">隐私政策</a>
+                <a href="#">帮助中心</a>
+                <a href="#">联系我们</a>
+            </div>
+            <div class="copyright">© 2023 KAX 游戏辅助平台 版权所有</div>
+        </div>
+    </footer>
+
+    @if (messageBox != null && messageBox.IsVisible)
+    {
+        <partial name="MessageBox" model="messageBox" />
+    }
+    
+    <div id="custom-message-box-overlay" class="custom-message-box-overlay">
+        <div class="custom-message-box">
+            <h2 id="custom-message-box-title"></h2>
+            <p id="custom-message-box-message"></p>
+            <button id="custom-message-box-close" class="btn btn-accent">确定</button>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const navbar = document.querySelector('.navbar');
+            const hamburger = document.querySelector('.hamburger');
+            const navLinks = document.querySelector('.nav-links');
+            
+            // 初始检查滚动位置
+            checkScroll();
+            
+            // 监听滚动事件
+            window.addEventListener('scroll', checkScroll);
+            
+            function checkScroll() {
+                if (window.scrollY > 20) {
+                    navbar.classList.add('scrolled');
+                } else {
+                    navbar.classList.remove('scrolled');
+                }
+            }
+            
+            // 汉堡菜单点击事件
+            hamburger.addEventListener('click', function() {
+                const isExpanded = this.getAttribute('aria-expanded') === 'true';
+                this.setAttribute('aria-expanded', !isExpanded);
+                navLinks.classList.toggle('active');
+                this.classList.toggle('active');
+            });
+
+            // 平滑滚动到锚点
+            document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+                anchor.addEventListener('click', function (e) {
+                    e.preventDefault();
+                    
+                    const targetId = this.getAttribute('href');
+                    if (targetId === '#') return;
+                    
+                    const targetElement = document.querySelector(targetId);
+                    if (targetElement) {
+                        const navbarHeight = navbar.classList.contains('scrolled') 
+                            ? parseInt(getComputedStyle(document.documentElement).getPropertyValue('--navbar-height-scrolled')) 
+                            : parseInt(getComputedStyle(document.documentElement).getPropertyValue('--navbar-height'));
+                        
+                        window.scrollTo({
+                            top: targetElement.offsetTop - navbarHeight,
+                            behavior: 'smooth'
+                        });
+                        
+                        // 关闭移动端菜单
+                        if (navLinks.classList.contains('active')) {
+                            navLinks.classList.remove('active');
+                            hamburger.classList.remove('active');
+                            hamburger.setAttribute('aria-expanded', 'false');
+                        }
+                    }
+                });
+            });
+        });
+    </script>
+    
+    <script>
+        function initializeCustomSelects(context = document) {
+            const wrappers = context.querySelectorAll('.custom-select-wrapper');
+            
+            wrappers.forEach(wrapper => {
+                const select = wrapper.querySelector('select');
+                if (!select || wrapper.querySelector('.select-selected')) {
+                    return; // Already initialized
+                }
+
+                const selectedDiv = document.createElement('DIV');
+                selectedDiv.setAttribute('class', 'select-selected');
+                selectedDiv.setAttribute('role', 'combobox');
+                selectedDiv.setAttribute('aria-expanded', 'false');
+                selectedDiv.setAttribute('aria-haspopup', 'listbox');
+                selectedDiv.setAttribute('aria-labelledby', select.id || '');
+                selectedDiv.innerHTML = select.options[select.selectedIndex].innerHTML;
+                wrapper.appendChild(selectedDiv);
+
+                const itemsDiv = document.createElement('DIV');
+                itemsDiv.setAttribute('class', 'select-items');
+                itemsDiv.setAttribute('role', 'listbox');
+
+                for (let j = 0; j < select.length; j++) {
+                    const optionDiv = document.createElement('DIV');
+                    optionDiv.innerHTML = select.options[j].innerHTML;
+                    optionDiv.setAttribute('role', 'option');
+                    
+                    if (j === select.selectedIndex) {
+                        optionDiv.setAttribute("class", "same-as-selected");
+                        optionDiv.setAttribute('aria-selected', 'true');
+                    } else {
+                        optionDiv.setAttribute('aria-selected', 'false');
+                    }
+
+                    optionDiv.addEventListener('click', function () {
+                        // Update the underlying select and the main display
+                        for (let i = 0; i < select.length; i++) {
+                            if (select.options[i].innerHTML == this.innerHTML) {
+                                select.selectedIndex = i;
+                                selectedDiv.innerHTML = this.innerHTML;
+                                const changeEvent = new Event('change', { bubbles: true });
+                                select.dispatchEvent(changeEvent);
+                                break;
+                            }
+                        }
+
+                        // Update the visual state of the item list immediately
+                        const parent = this.parentNode;
+                        const prevSelected = parent.querySelector('.same-as-selected');
+                        if (prevSelected) {
+                            prevSelected.classList.remove('same-as-selected');
+                            prevSelected.setAttribute('aria-selected', 'false');
+                        }
+                        this.classList.add('same-as-selected');
+                        this.setAttribute('aria-selected', 'true');
+
+                        // Wait a moment so the user can see the selection, then close.
+                        setTimeout(() => {
+                            closeAllSelect();
+                        }, 300);
+                    });
+                    itemsDiv.appendChild(optionDiv);
+                }
+
+                selectedDiv.addEventListener('click', function (e) {
+                    e.stopPropagation();
+                    const wasActive = this.classList.contains('select-arrow-active');
+                    
+                    // Close all other select boxes
+                    closeAllSelect();
+
+                    if (!wasActive) {
+                        this.classList.add('select-arrow-active');
+                        this.setAttribute('aria-expanded', 'true');
+                        
+                        // Append to body to escape container overflow
+                        document.body.appendChild(itemsDiv); 
+                        
+                        const rect = this.getBoundingClientRect();
+                        itemsDiv.style.position = 'absolute';
+                        itemsDiv.style.top = `${rect.bottom + window.scrollY}px`;
+                        itemsDiv.style.left = `${rect.left + window.scrollX}px`;
+                        itemsDiv.style.width = `${rect.width}px`;
+                        itemsDiv.style.zIndex = '2001'; // Ensure it's on top of everything
+                        
+                        // Update "same-as-selected" class before showing
+                        const currentSelectedValue = select.options[select.selectedIndex].innerHTML;
+                        const prevSelected = itemsDiv.querySelector('.same-as-selected');
+                        if(prevSelected) {
+                            prevSelected.classList.remove('same-as-selected');
+                            prevSelected.setAttribute('aria-selected', 'false');
+                        }
+                        
+                        const newSelected = Array.from(itemsDiv.children).find(child => child.innerHTML === currentSelectedValue);
+                        if (newSelected) {
+                            newSelected.classList.add('same-as-selected');
+                            newSelected.setAttribute('aria-selected', 'true');
+                        }
+
+                        // Use requestAnimationFrame to ensure the element is rendered before adding the class,
+                        // which allows the CSS transition to play properly.
+                        requestAnimationFrame(() => {
+                            itemsDiv.classList.add('select-hide');
+                        });
+                    }
+                });
+                
+                // 键盘导航支持
+                selectedDiv.addEventListener('keydown', function(e) {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        this.click();
+                    }
+                });
+            });
+        }
+
+        function closeAllSelect() {
+            // Animate out and then remove any select-items that are direct children of the body
+            const openSelects = document.querySelectorAll('body > .select-items.select-hide');
+            openSelects.forEach(select => {
+                select.classList.remove('select-hide');
+                // Wait for the animation to finish before removing the element from the DOM
+                setTimeout(() => {
+                    select.remove();
+                }, 300); // This duration must match the transition duration in CSS
+            });
+
+            // Remove the active class from all select-selected divs
+            const activeArrows = document.querySelectorAll('.select-selected.select-arrow-active');
+            activeArrows.forEach(arrow => {
+                arrow.classList.remove('select-arrow-active');
+                arrow.setAttribute('aria-expanded', 'false');
+            });
+        }
+
+        function showCustomMessage(title, message, isError = false) {
+            const overlay = document.getElementById('custom-message-box-overlay');
+            const titleEl = document.getElementById('custom-message-box-title');
+            const messageEl = document.getElementById('custom-message-box-message');
+            const box = overlay.querySelector('.custom-message-box');
+
+            if (overlay && titleEl && messageEl && box) {
+                titleEl.textContent = title;
+                messageEl.textContent = message;
+
+                if (isError) {
+                    box.classList.add('error');
+                } else {
+                    box.classList.remove('error');
+                }
+
+                overlay.classList.add('active');
+            }
+        }
+
+        document.addEventListener("click", closeAllSelect);
+
+        // Also initialize on initial load
+        document.addEventListener('DOMContentLoaded', function () {
+            initializeCustomSelects();
+
+            const msgBoxOverlay = document.getElementById('custom-message-box-overlay');
+            const msgBoxCloseBtn = document.getElementById('custom-message-box-close');
+
+            if (msgBoxOverlay && msgBoxCloseBtn) {
+                const closeMsgBox = () => msgBoxOverlay.classList.remove('active');
+                msgBoxCloseBtn.addEventListener('click', closeMsgBox);
+                msgBoxOverlay.addEventListener('click', function(e) {
+                    if (e.target === this) {
+                        closeMsgBox();
+                    }
+                });
+                
+                // 键盘支持
+                document.addEventListener('keydown', function(e) {
+                    if (e.key === 'Escape' && msgBoxOverlay.classList.contains('active')) {
+                        closeMsgBox();
+                    }
+                });
+            }
+        });
+    </script>
+
+    @await RenderSectionAsync("Scripts", required: false)
+</body>
+</html> 

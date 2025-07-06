@@ -1,0 +1,44 @@
+@using Web.KaxServer.Models
+@using Microsoft.AspNetCore.Mvc.RazorPages
+@using Microsoft.AspNetCore.Mvc.Razor
+@inherits RazorPage<PageModel>
+@{
+    var currentPage = ViewContext.RouteData.Values["page"] as string;
+    
+    // 检查模型是否有IsLoggedIn属性，并获取其值
+    bool isLoggedIn = false;
+    UserPermissionType? userPermission = null;
+    
+    var isLoggedInProp = Model.GetType().GetProperty("IsLoggedIn");
+    if (isLoggedInProp != null)
+    {
+        isLoggedIn = (bool)isLoggedInProp.GetValue(Model);
+    }
+    
+    // 如果已登录，尝试获取UserPermission属性
+    if (isLoggedIn)
+    {
+        var userPermissionProp = Model.GetType().GetProperty("UserPermission");
+        if (userPermissionProp != null)
+        {
+            userPermission = (UserPermissionType?)userPermissionProp.GetValue(Model);
+        }
+    }
+
+    string? GetActiveClass(string pageName)
+    {
+        return currentPage?.Equals(pageName, StringComparison.OrdinalIgnoreCase) == true ? "active" : null;
+    }
+}
+
+<aside class="sidebar-nav">
+    <ul>
+        <li><a href="/Account/Profile" class="@GetActiveClass("/Account/Profile")"><i class="icon fas fa-home"></i> 首页</a></li>
+        <li><a href="/Account/PersonalInfo" class="@GetActiveClass("/Account/PersonalInfo")"><i class="icon fas fa-user-circle"></i> 个人信息</a></li>
+        <li><a href="/Account/PaymentsAndSubscriptions" class="@GetActiveClass("/Account/PaymentsAndSubscriptions")"><i class="icon fas fa-credit-card"></i> 资产管理</a></li>
+        @if (userPermission >= UserPermissionType.Developer)
+        {
+            <li><a href="/Account/Management" class="@GetActiveClass("/Account/Management")"><i class="icon fas fa-cogs"></i> 管理</a></li>
+        }
+    </ul>
+</aside> 

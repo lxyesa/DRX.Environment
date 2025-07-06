@@ -1,0 +1,250 @@
+@page
+@model Web.KaxServer.Pages.Shop.StoreModel
+@using Web.KaxServer.Models
+@addTagHelper *, Microsoft.AspNetCore.Mvc.TagHelpers
+@{
+    ViewData["Title"] = "KAX | 商城";
+    Layout = "/Pages/Shared/_Layout.cshtml";
+}
+
+@section Styles {
+    <style>
+        .store-hero {
+            background: linear-gradient(135deg, var(--light-bg) 0%, var(--bg-color) 100%);
+            padding: 80px 0 60px 0;
+            text-align: center;
+        }
+
+        .hero-content {
+            max-width: 800px;
+            margin: 0 auto;
+            animation: fadeInUp 1s ease forwards;
+        }
+
+        .store-hero h1 {
+            font-size: 3.5rem;
+            font-weight: 800;
+            margin-bottom: 1.5rem;
+            color: var(--text-color);
+        }
+
+        .store-hero p {
+            font-size: 1.25rem;
+            color: var(--muted-color);
+            max-width: 650px;
+            margin: 0 auto 2.5rem;
+        }
+
+        .store-controls-section {
+            background-color: var(--light-bg);
+            padding: 2.5rem 5%;
+            border-bottom: 1px solid var(--border-color);
+        }
+        
+        .controls-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: flex;
+            gap: 1.5rem;
+            flex-wrap: wrap;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .filter-controls, .search-bar {
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+        }
+        
+        .search-bar {
+            flex-grow: 1;
+            max-width: 450px;
+        }
+
+        .search-bar input {
+            flex-grow: 1;
+        }
+        
+        .store-main {
+            padding: 4rem 5% 5rem;
+        }
+
+        .store-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 2rem;
+        }
+
+        .store-item-card {
+            background-color: var(--bg-color);
+            border-radius: 16px;
+            border: 1px solid var(--border-color);
+            transition: all 0.3s ease-in-out;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            box-shadow: var(--card-shadow);
+        }
+
+        .store-item-card:hover {
+            transform: translateY(-8px);
+            box-shadow: var(--hover-shadow);
+            border-color: var(--primary-color);
+        }
+
+        .item-image {
+            width: 100%;
+            height: 160px;
+            background-color: var(--light-bg);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 4rem;
+            color: var(--primary-color);
+            transition: all 0.3s ease;
+        }
+        
+        .store-item-card:hover .item-image {
+             background-color: var(--primary-color);
+             color: var(--bg-color);
+        }
+
+        .item-info {
+            padding: 1.5rem;
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .item-title {
+            font-size: 1.25rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+        }
+
+        .item-author {
+            font-size: 0.9rem;
+            color: var(--muted-color);
+            margin-bottom: 1rem;
+        }
+
+        .item-stats {
+            margin-top: auto;
+            padding-top: 1rem;
+            border-top: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 1.5rem;
+        }
+
+        .item-price {
+            font-size: 1.3rem;
+            font-weight: 700;
+            color: var(--accent-color);
+        }
+        
+        .empty-state {
+            text-align: center;
+            grid-column: 1 / -1;
+            color: var(--muted-color);
+            padding: 4rem 0;
+            background-color: var(--light-bg);
+            border-radius: 12px;
+            border: 1px solid var(--border-color);
+        }
+
+        .empty-state i {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+            opacity: 0.5;
+        }
+
+        @@media (max-width: 992px) {
+            .controls-container {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            .search-bar {
+                max-width: none;
+            }
+        }
+        
+    </style>
+}
+
+<section class="store-hero">
+    <div class="hero-content">
+        <h1>KAX 辅助商城</h1>
+        <p>发现、获取并管理来自社区的优秀游戏辅助和工具。</p>
+    </div>
+</section>
+
+<section class="store-controls-section">
+    <form method="get" asp-page="/Shop/Store" class="controls-container">
+        <div class="filter-controls">
+            <div class="custom-select-wrapper">
+                <select name="GameFilter" asp-for="GameFilter" onchange="this.form.submit()" class="form-select">
+                    <option value="">所有游戏</option>
+                    @foreach (var game in Model.UniqueGames)
+                    {
+                        <option value="@game">@game</option>
+                    }
+                </select>
+            </div>
+             <div class="custom-select-wrapper">
+                <select name="CategoryFilter" asp-for="CategoryFilter" onchange="this.form.submit()" class="form-select">
+                    <option value="">所有分类</option>
+                    @foreach (var category in Model.UniqueCategories)
+                    {
+                        <option value="@category">@category</option>
+                    }
+                </select>
+            </div>
+        </div>
+        <div class="search-bar">
+            <input type="text" asp-for="SearchTerm" class="form-control" placeholder="搜索辅助、作者或游戏...">
+            <button type="submit" class="btn btn-primary btn-icon"><i class="fas fa-search"></i></button>
+            @if (Model.IsDeveloper)
+            {
+                <a asp-page="/Shop/Upload" class="btn btn-secondary btn-icon" title="上传新脚本"><i class="fas fa-upload"></i></a>
+            }
+        </div>
+    </form>
+</section>
+
+<main class="store-main">
+    <div class="container">
+        <div class="store-grid">
+            @if (!Model.StoreItems.Any())
+            {
+                <div class="empty-state">
+                    <i class="fas fa-box-open"></i>
+                    <h4>没有找到匹配的项目</h4>
+                    <p>请尝试调整您的搜索或筛选条件。</p>
+                </div>
+            }
+            else
+            {
+                @foreach (var item in Model.StoreItems)
+                {
+                    <div class="store-item-card">
+                        <div class="item-image">
+                            <i class="fas fa-gamepad"></i>
+                        </div>
+                        <div class="item-info">
+                            <h3 class="item-title">@item.Title</h3>
+                            <p class="item-author">作者: @item.AuthorName</p>
+                            
+                            <div class="item-stats">
+                                <div class="item-price">@item.MonthlyPrice.ToString("F0") 金币/月</div>
+                                <a asp-page="/Shop/Item" asp-route-id="@item.Id" class="btn btn-secondary btn-sm">查看详情</a>
+                            </div>
+                        </div>
+                    </div>
+                }
+            }
+        </div>
+    </div>
+</main> 

@@ -1,0 +1,16 @@
+<th class="th" style="width:@Width;height:@Height;">
+    <div class="checkbox-column-div">
+        @ChildContent
+    </div>
+</th>
+
+@code {
+    [Parameter]
+    public RenderFragment? ChildContent { get; set; }
+
+    [Parameter]
+    public string Width { get; set; } = "auto";
+
+    [Parameter]
+    public string Height { get; set; } = "auto";
+}

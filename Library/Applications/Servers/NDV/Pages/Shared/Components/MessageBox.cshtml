@@ -1,0 +1,528 @@
+﻿@model NDV.Models.MessageBox
+
+<div class="ndv-messagebox @(Model.IsActive ? "active" : "")" id="@Model.Id">
+    <div class="ndv-messagebox-overlay"></div>
+    <div class="ndv-messagebox-container">
+        <div class="ndv-messagebox-header @Model.Type.ToLower()">
+            <div class="ndv-messagebox-title">
+                <div class="ndv-messagebox-title-icon @Model.Type.ToLower()">
+                    <i class="fas @Model.GetIconClass()"></i>
+                </div>
+                <span id="@(Model.Id)Title">@Model.Title</span>
+            </div>
+            <button class="ndv-messagebox-close" id="@(Model.Id)Close">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <div class="ndv-messagebox-body">
+            <div class="ndv-messagebox-content" id="@(Model.Id)Content">
+                @Html.Raw(Model.Content)
+            </div>
+            @if (!string.IsNullOrEmpty(Model.Details))
+            {
+                <div class="ndv-messagebox-details" id="@(Model.Id)Details">
+                    @Html.Raw(Model.Details)
+                </div>
+            }
+            @if (Model.ShowTimestamp)
+            {
+                <div class="ndv-messagebox-timestamp" id="@(Model.Id)Timestamp">
+                    <i class="far fa-clock"></i> @DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")
+                </div>
+            }
+        </div>
+        <div class="ndv-messagebox-footer">
+            @if (Model.ShowCancel)
+            {
+                <button class="ndv-messagebox-btn ndv-messagebox-btn-secondary" id="@(Model.Id)Cancel">
+                    <i class="fas fa-times-circle"></i> @Model.CancelText
+                </button>
+            }
+            <button class="ndv-messagebox-btn ndv-messagebox-btn-primary" id="@(Model.Id)Confirm">
+                <i class="fas fa-check-circle"></i> @Model.ConfirmText
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const messageBox = {
+            element: document.getElementById('@Model.Id'),
+            titleElement: document.getElementById('@(Model.Id)Title'),
+            contentElement: document.getElementById('@(Model.Id)Content'),
+            detailsElement: document.getElementById('@(Model.Id)Details'),
+            timestampElement: document.getElementById('@(Model.Id)Timestamp'),
+            closeButton: document.getElementById('@(Model.Id)Close'),
+            confirmButton: document.getElementById('@(Model.Id)Confirm'),
+            cancelButton: document.getElementById('@(Model.Id)Cancel'),
+            
+            init: function() {
+                if (!this.element) return;
+                
+                // 关闭按钮事件
+                this.closeButton.addEventListener('click', () => this.hide());
+                
+                if (this.cancelButton) {
+                    this.cancelButton.addEventListener('click', () => {
+                        @if (!string.IsNullOrEmpty(Model.OnCancel))
+                        {
+                            @:if (typeof @(Model.OnCancel) === 'function') @(Model.OnCancel)();
+                        }
+                        this.hide();
+                    });
+                }
+                
+                // 确认按钮事件
+                this.confirmButton.addEventListener('click', () => {
+                    @if (!string.IsNullOrEmpty(Model.OnConfirm))
+                    {
+                        @:if (typeof @(Model.OnConfirm) === 'function') @(Model.OnConfirm)();
+                    }
+                    this.hide();
+                });
+                
+                // 点击遮罩层关闭
+                this.element.querySelector('.ndv-messagebox-overlay').addEventListener('click', (e) => {
+                    if (e.target === e.currentTarget) this.hide();
+                });
+                
+                @if (Model.AutoShow)
+                {
+                    @:this.show();
+                }
+                
+                @if (Model.AutoClose > 0)
+                {
+                    @:setTimeout(() => this.hide(), @Model.AutoClose);
+                }
+            },
+            
+            show: function() {
+                if (!this.element) return;
+                
+                this.element.classList.add('active');
+                
+                // 简单重置所有可能的动画状态
+                const elements = this.element.querySelectorAll('*');
+                elements.forEach(el => {
+                    el.style.animation = '';
+                    el.style.opacity = '';
+                    el.style.transform = '';
+                });
+            },
+            
+            hide: function() {
+                if (!this.element) return;
+                
+                    this.element.classList.remove('active');
+            }
+        };
+        
+        // 初始化并暴露API
+        messageBox.init();
+        window.@(Model.Id)API = messageBox;
+    });
+</script>
+
+<style>
+    /* MessageBox样式 - 与Index.cshtml风格统一 */
+    :root {
+        --primary-color: #0078d4;
+        --secondary-color: #4cc2ff;
+        --accent-color: #60cdff;
+        --dark-color: #242424;
+        --light-color: #fafafa;
+        --text-color: #202020;
+        --card-bg: rgba(255, 255, 255, 0.95);
+        --box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+        --border-radius: 16px;
+        --transition-speed: 0.3s;
+        --cursor-black: #000000;
+        --cursor-white: #ffffff;
+        --cursor-gray: #f5f5f5;
+        
+        /* 消息框类型颜色 */
+        --success-color: #2ecc71;
+        --success-dark: #27ae60;
+        --error-color: #e74c3c;
+        --error-dark: #c0392b;
+        --warning-color: #f39c12;
+        --warning-dark: #e67e22;
+        --info-color: var(--primary-color);
+        --info-dark: var(--secondary-color);
+    }
+    
+    .ndv-messagebox {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 9999;
+        opacity: 0;
+        visibility: hidden;
+        transition: opacity 0.3s, visibility 0.3s;
+        font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    }
+    
+    .ndv-messagebox.active {
+        opacity: 1;
+        visibility: visible;
+    }
+    
+    .ndv-messagebox-overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0, 0, 0, 0.6);
+        backdrop-filter: blur(5px);
+        -webkit-backdrop-filter: blur(5px);
+        opacity: 0;
+        transition: opacity 0.3s;
+    }
+    
+    .ndv-messagebox.active .ndv-messagebox-overlay {
+        opacity: 1;
+    }
+    
+    .ndv-messagebox-container {
+        position: relative;
+        width: 90%;
+        max-width: 500px;
+        background: var(--card-bg);
+        border-radius: var(--border-radius);
+        box-shadow: var(--box-shadow);
+        overflow: hidden;
+        transform: translateY(20px);
+        opacity: 0;
+        transition: transform 0.3s, opacity 0.3s;
+    }
+    
+    .ndv-messagebox.active .ndv-messagebox-container {
+        transform: translateY(0);
+        opacity: 1;
+    }
+    
+    .ndv-messagebox-header {
+        padding: 20px 24px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+        position: relative;
+    }
+    
+    .ndv-messagebox-header.success {
+        background: linear-gradient(135deg, rgba(46, 204, 113, 0.1), rgba(39, 174, 96, 0.05));
+    }
+    
+    .ndv-messagebox-header.error {
+        background: linear-gradient(135deg, rgba(231, 76, 60, 0.1), rgba(192, 57, 43, 0.05));
+    }
+    
+    .ndv-messagebox-header.warning {
+        background: linear-gradient(135deg, rgba(243, 156, 18, 0.1), rgba(230, 126, 34, 0.05));
+    }
+    
+    .ndv-messagebox-header.info {
+        background: linear-gradient(135deg, rgba(0, 120, 212, 0.1), rgba(76, 194, 255, 0.05));
+    }
+    
+    .ndv-messagebox-header::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 4px;
+        height: 100%;
+    }
+    
+    .ndv-messagebox-header.success::before {
+        background: linear-gradient(to bottom, var(--success-color), var(--success-dark));
+    }
+    
+    .ndv-messagebox-header.error::before {
+        background: linear-gradient(to bottom, var(--error-color), var(--error-dark));
+    }
+    
+    .ndv-messagebox-header.warning::before {
+        background: linear-gradient(to bottom, var(--warning-color), var(--warning-dark));
+    }
+    
+    .ndv-messagebox-header.info::before {
+        background: linear-gradient(to bottom, var(--info-color), var(--info-dark));
+    }
+    
+    .ndv-messagebox-title {
+        font-size: 1.25rem;
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        color: var(--dark-color);
+        letter-spacing: -0.01em;
+    }
+    
+    .ndv-messagebox-title-icon {
+        width: 36px;
+        height: 36px;
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-right: 14px;
+        color: white;
+        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+        font-size: 1.1rem;
+    }
+    
+    .ndv-messagebox-title-icon.success {
+        background: linear-gradient(135deg, var(--success-color), var(--success-dark));
+    }
+    
+    .ndv-messagebox-title-icon.error {
+        background: linear-gradient(135deg, var(--error-color), var(--error-dark));
+    }
+    
+    .ndv-messagebox-title-icon.warning {
+        background: linear-gradient(135deg, var(--warning-color), var(--warning-dark));
+    }
+    
+    .ndv-messagebox-title-icon.info {
+        background: linear-gradient(135deg, var(--info-color), var(--info-dark));
+    }
+    
+    .ndv-messagebox-close {
+        background: none;
+        border: none;
+        font-size: 1rem;
+        cursor: pointer;
+        color: #777;
+        width: 36px;
+        height: 36px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 8px;
+        transition: all 0.2s;
+        background: rgba(0, 0, 0, 0.03);
+    }
+    
+    .ndv-messagebox-close:hover {
+        background-color: rgba(0, 0, 0, 0.08);
+        color: var(--cursor-black);
+    }
+    
+    .ndv-messagebox-body {
+        padding: 24px;
+        max-height: 60vh;
+        overflow-y: auto;
+    }
+    
+    .ndv-messagebox-content {
+        margin-bottom: 16px;
+    }
+    
+    /* 消息框内文本样式 */
+    .ndv-messagebox-content p {
+        margin: 0 0 14px 0;
+        line-height: 1.6;
+        color: var(--text-color);
+        font-size: 1rem;
+    }
+    
+    .ndv-messagebox-content p:last-child {
+        margin-bottom: 0;
+    }
+    
+    .ndv-messagebox-content ul, 
+    .ndv-messagebox-content ol {
+        margin: 14px 0;
+        padding-left: 20px;
+    }
+    
+    .ndv-messagebox-content li {
+        margin-bottom: 10px;
+        line-height: 1.5;
+        position: relative;
+    }
+    
+    .ndv-messagebox-content ul li {
+        list-style-type: none;
+        padding-left: 10px;
+    }
+    
+    .ndv-messagebox-content ul li::before {
+        content: '';
+        position: absolute;
+        left: -12px;
+        top: 10px;
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: var(--cursor-black);
+    }
+    
+    .ndv-messagebox-content h1, 
+    .ndv-messagebox-content h2, 
+    .ndv-messagebox-content h3, 
+    .ndv-messagebox-content h4 {
+        margin: 16px 0 12px 0;
+        font-weight: 600;
+        line-height: 1.3;
+        color: var(--cursor-black);
+    }
+    
+    .ndv-messagebox-content h1 {
+        font-size: 1.5rem;
+    }
+    
+    .ndv-messagebox-content h2 {
+        font-size: 1.3rem;
+    }
+    
+    .ndv-messagebox-content h3 {
+        font-size: 1.2rem;
+    }
+    
+    .ndv-messagebox-content h4 {
+        font-size: 1.1rem;
+    }
+    
+    .ndv-messagebox-content strong {
+        font-weight: 600;
+        color: var(--cursor-black);
+    }
+    
+    .ndv-messagebox-content a {
+        color: var(--primary-color);
+        text-decoration: none;
+        border-bottom: 1px solid rgba(0, 120, 212, 0.3);
+        transition: all 0.2s;
+        padding-bottom: 1px;
+    }
+    
+    .ndv-messagebox-content a:hover {
+        color: var(--accent-color);
+        border-bottom-color: var(--accent-color);
+    }
+    
+    .ndv-messagebox-content code {
+        background-color: rgba(0, 0, 0, 0.03);
+        padding: 3px 6px;
+        border-radius: 4px;
+        font-family: monospace;
+        font-size: 0.9em;
+    }
+    
+    .ndv-messagebox-content blockquote {
+        margin: 14px 0;
+        padding: 12px 16px;
+        border-left: 4px solid var(--cursor-black);
+        background-color: rgba(0, 0, 0, 0.02);
+        font-style: italic;
+        border-radius: 0 8px 8px 0;
+    }
+    
+    .ndv-messagebox-details {
+        background-color: rgba(0, 0, 0, 0.03);
+        border-radius: 12px;
+        padding: 16px;
+        font-family: monospace;
+        font-size: 0.9rem;
+        overflow: auto;
+        max-height: 200px;
+        border: 1px solid rgba(0, 0, 0, 0.05);
+        margin-top: 16px;
+    }
+    
+    .ndv-messagebox-footer {
+        padding: 20px 24px;
+        display: flex;
+        justify-content: flex-end;
+        border-top: 1px solid rgba(0, 0, 0, 0.05);
+        gap: 12px;
+        background-color: rgba(0, 0, 0, 0.01);
+    }
+    
+    /* 按钮样式与Index.cshtml一致 */
+    .ndv-messagebox-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0.8rem 1.8rem;
+        border: none;
+        border-radius: 8px;
+        font-size: 0.95rem;
+        font-weight: 600;
+        text-decoration: none;
+        transition: all 0.2s;
+        position: relative;
+        cursor: pointer;
+        gap: 8px;
+    }
+    
+    .ndv-messagebox-btn:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+    }
+    
+    .ndv-messagebox-btn-primary {
+        background: var(--cursor-black);
+        color: white;
+    }
+    
+    .ndv-messagebox-btn-primary:hover {
+        background: #222;
+    }
+    
+    .ndv-messagebox-btn-secondary {
+        background: var(--cursor-gray);
+        color: var(--cursor-black);
+    }
+    
+    .ndv-messagebox-btn-secondary:hover {
+        background: #eaeaea;
+    }
+    
+    .ndv-messagebox-timestamp {
+        font-size: 0.85rem;
+        color: #777;
+        margin-top: 16px;
+        background: rgba(0, 0, 0, 0.02);
+        padding: 8px 12px;
+        border-radius: 8px;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+    }
+    
+    /* 响应式调整 */
+    @@media (max-width: 576px) {
+        .ndv-messagebox-container {
+            width: 95%;
+            max-width: none;
+        }
+        
+        .ndv-messagebox-header {
+            padding: 16px 20px;
+        }
+        
+        .ndv-messagebox-body {
+            padding: 20px;
+        }
+        
+        .ndv-messagebox-footer {
+            padding: 16px 20px;
+        }
+        
+        .ndv-messagebox-btn {
+            padding: 0.7rem 1.5rem;
+        }
+    }
+</style>
