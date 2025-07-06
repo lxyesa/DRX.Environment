@@ -12,7 +12,7 @@ namespace Drx.Sdk.Network.Socket.Services
     public class SocketMapService : SocketServiceBase
     {
         private readonly ConcurrentDictionary<string, MapType> _typeMap = new ConcurrentDictionary<string, MapType>();
-        
+
         /// <summary>
         /// 创建或获取指定类型的数据映射
         /// </summary>
@@ -22,7 +22,7 @@ namespace Drx.Sdk.Network.Socket.Services
         {
             if (string.IsNullOrEmpty(typeName))
                 throw new ArgumentNullException(nameof(typeName), "类型名称不能为空");
-                
+
             return _typeMap.GetOrAdd(typeName, name => new MapType(name));
         }
 
@@ -30,7 +30,7 @@ namespace Drx.Sdk.Network.Socket.Services
         {
             return CreateMapType(typeName);
         }
-        
+
         /// <summary>
         /// 获取所有已创建的类型名称
         /// </summary>
@@ -39,7 +39,7 @@ namespace Drx.Sdk.Network.Socket.Services
         {
             return _typeMap.Keys;
         }
-        
+
         /// <summary>
         /// 删除指定类型的数据映射
         /// </summary>
@@ -49,7 +49,7 @@ namespace Drx.Sdk.Network.Socket.Services
         {
             return _typeMap.TryRemove(typeName, out _);
         }
-        
+
         /// <summary>
         /// 清空所有类型的数据映射
         /// </summary>
@@ -57,7 +57,7 @@ namespace Drx.Sdk.Network.Socket.Services
         {
             _typeMap.Clear();
         }
-        
+
         /// <summary>
         /// 数据映射类型，用于存储同一类型的键值对数据
         /// </summary>
@@ -65,17 +65,17 @@ namespace Drx.Sdk.Network.Socket.Services
         {
             private readonly string _typeName;
             private readonly ConcurrentDictionary<string, object> _dataMap = new ConcurrentDictionary<string, object>();
-            
+
             internal MapType(string typeName)
             {
                 _typeName = typeName;
             }
-            
+
             /// <summary>
             /// 获取类型名称
             /// </summary>
             public string TypeName => _typeName;
-            
+
             /// <summary>
             /// 存储指定类型的值
             /// </summary>
@@ -86,10 +86,10 @@ namespace Drx.Sdk.Network.Socket.Services
             {
                 if (string.IsNullOrEmpty(key))
                     throw new ArgumentNullException(nameof(key), "键不能为空");
-                    
+
                 _dataMap[key] = value;
             }
-            
+
             /// <summary>
             /// 获取指定类型的值
             /// </summary>
@@ -101,13 +101,13 @@ namespace Drx.Sdk.Network.Socket.Services
             {
                 if (string.IsNullOrEmpty(key))
                     return defaultValue;
-                    
+
                 if (_dataMap.TryGetValue(key, out var value) && value is T typedValue)
                     return typedValue;
-                    
+
                 return defaultValue;
             }
-            
+
             /// <summary>
             /// 移除指定键的值
             /// </summary>
@@ -117,10 +117,10 @@ namespace Drx.Sdk.Network.Socket.Services
             {
                 if (string.IsNullOrEmpty(key))
                     return false;
-                    
+
                 return _dataMap.TryRemove(key, out _);
             }
-            
+
             /// <summary>
             /// 检查是否包含指定键
             /// </summary>
@@ -130,10 +130,10 @@ namespace Drx.Sdk.Network.Socket.Services
             {
                 if (string.IsNullOrEmpty(key))
                     return false;
-                    
+
                 return _dataMap.ContainsKey(key);
             }
-            
+
             /// <summary>
             /// 获取所有键
             /// </summary>
@@ -142,7 +142,7 @@ namespace Drx.Sdk.Network.Socket.Services
             {
                 return _dataMap.Keys;
             }
-            
+
             /// <summary>
             /// 获取所有值
             /// </summary>
@@ -151,12 +151,12 @@ namespace Drx.Sdk.Network.Socket.Services
             {
                 return _dataMap.Values;
             }
-            
+
             /// <summary>
             /// 获取键值对数量
             /// </summary>
             public int Count => _dataMap.Count;
-            
+
             /// <summary>
             /// 清空所有键值对
             /// </summary>
@@ -164,7 +164,7 @@ namespace Drx.Sdk.Network.Socket.Services
             {
                 _dataMap.Clear();
             }
-            
+
             /// <summary>
             /// 获取所有键值对
             /// </summary>
@@ -173,7 +173,7 @@ namespace Drx.Sdk.Network.Socket.Services
             {
                 return _dataMap;
             }
-            
+
             /// <summary>
             /// 尝试获取指定键的值
             /// </summary>
