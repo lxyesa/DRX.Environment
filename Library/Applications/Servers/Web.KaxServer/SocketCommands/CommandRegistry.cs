@@ -66,7 +66,7 @@ namespace Web.KaxServer.SocketCommands
                 try
                 {
                     // 使用新的数据库系统查找用户
-                    var userData = userService?.GetAllUsers().FirstOrDefault(u => 
+                    var userData = userService?.GetAllUsers().FirstOrDefault(u =>
                         u.Username.Equals(validMcUsername, StringComparison.OrdinalIgnoreCase));
 
                     if (userData == null)
@@ -117,4 +117,4 @@ namespace Web.KaxServer.SocketCommands
             });
         }
     }
-} 
+}
