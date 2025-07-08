@@ -1,0 +1,77 @@
+@page
+@model IndexModel
+@{
+    ViewData["Title"] = "首页";
+}
+
+@section Styles {
+    <style>
+        .hero {
+            padding: 6rem 0;
+            text-align: center;
+            /* background-color: #f8fafc; */
+            /* 移除浅色背景 */
+        }
+
+        .hero-title {
+            font-size: 2.8rem;
+            font-weight: 600;
+            color: var(--primary-color);
+            margin-bottom: 1rem;
+        }
+
+        .hero-subtitle {
+            font-size: 1.2rem;
+            color: var(--secondary-color);
+            margin-bottom: 2.5rem;
+            max-width: 650px;
+            margin-left: auto;
+            margin-right: auto;
+            line-height: 1.6;
+        }
+    </style>
+}
+
+<div class="hero">
+    <div class="container">
+        @if (Model.CurrentUser != null)
+        {
+            <h1 class="hero-title">欢迎回来，<span style="color: var(--accent-color);">@Model.CurrentUser.UserName</span></h1>
+            <p class="hero-subtitle">这是一个基于DRX框架的单机游戏修改器平台，旨在提供无缝的用户体验与强大的功能支持。</p>
+        }
+        else
+        {
+            <h1 class="hero-title">欢迎来到 Kax</h1>
+            <p class="hero-subtitle">现阶段，Kax平台已经开启免费注册服务，您可以注册一个账号，开始使用Kax平台。</p>
+        }
+        <div>
+            @if (Model.CurrentUser != null)
+            {
+                <a href="/" class="btn-primary btn-lg">
+                    <span class="btn-text">个人主页</span>
+                    <div class="btn-background"></div>
+                </a>
+            }
+            else
+            {
+                <a href="#" class="btn-primary">
+                    <span class="btn-text">开始探索</span>
+                    <div class="btn-background"></div>
+                </a>
+                <a href="/Account/Register" class="btn-secondary">
+                    <span class="btn-text">立即注册</span>
+                    <div class="btn-background"></div>
+                </a>
+            }
+        </div>
+    </div>
+</div>
+
+<div class="container" style="padding-top: 4rem; padding-bottom: 4rem;">
+    <h2 style="text-align: center; font-size: 2rem; margin-bottom: 2rem;">主要功能</h2>
+    <p style="text-align: center; color: var(--secondary-color);">更多内容正在建设中...</p>
+</div>
+
+@section Scripts {
+    <!-- 这里可以添加页面特定的脚本 -->
+}

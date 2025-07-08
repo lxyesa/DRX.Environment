@@ -1,0 +1,33 @@
+<nav class="navbar">
+    <div class="container">
+        <a class="navbar-brand" asp-area="" asp-page="/Index">Kax Platform</a>
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target=".navbar-collapse">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+        <div class="navbar-collapse collapse">
+            <ul class="navbar-nav">
+                <li class="nav-item">
+                    <a class="nav-link nav-link--streamer" asp-area="" asp-page="/Index">首页</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link nav-link--streamer" asp-area="" asp-page="/About">关于</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link nav-link--streamer" asp-area="" asp-page="/Contact">联系我们</a>
+                </li>
+                @if (Model.CurrentUser != null)
+                {
+                    <li class="nav-item">
+                        <a class="nav-link nav-link--streamer" asp-area="" asp-page="/Account/Logout">@Model.CurrentUser.UserName</a>
+                    </li>
+                }
+                else
+                {
+                    <li class="nav-item">
+                        <a class="nav-link nav-link--streamer" asp-area="" asp-page="/Account/Login">登录</a>
+                    </li>
+                }
+            </ul>
+        </div>
+    </div>
+</nav> 

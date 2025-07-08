@@ -1,0 +1,84 @@
+﻿@*
+    For more information on enabling MVC for empty projects, visit https://go.microsoft.com/fwlink/?LinkID=397860
+*@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@ViewData["Title"] - KaxServer</title>
+    <link rel="stylesheet" href="~/css/global.css" asp-append-version="true" />
+    @await RenderSectionAsync("Styles", required: false)
+</head>
+<body>
+    <header>
+        <partial name="_NavBar" />
+    </header>
+
+    <main role="main">
+        @RenderBody()
+    </main>
+
+    <footer class="footer">
+        @await Html.PartialAsync("_Footer")
+    </footer>
+
+    @await RenderSectionAsync("Scripts", required: false)
+
+    <svg style="position:absolute; width:0; height:0;">
+            <feTurbulence type="fractalNoise" baseFrequency="0.7" numOctaves="1" result="map"/>
+            <feGaussianBlur in="SourceGraphic" stdDeviation="1" result="blur"/>
+            <feDisplacementMap in="blur" in2="map" scale="0" xChannelSelector="R" yChannelSelector="G" />
+        </filter>
+    </svg>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const glassButtons = document.querySelectorAll('.btn-glass');
+            const filterElement = document.getElementById('frosted-glass-distort');
+            
+            if (filterElement) {
+                const dispMap = filterElement.querySelector('feDisplacementMap');
+                let animationFrameId;
+
+                glassButtons.forEach(button => {
+                    button.addEventListener('mouseover', () => {
+                        cancelAnimationFrame(animationFrameId);
+                        let start = null;
+                        const endScale = 12; // 扭曲强度
+                        const startScale = parseFloat(dispMap.getAttribute('scale')) || 0;
+
+                        function animate(timestamp) {
+                            if (!start) start = timestamp;
+                            const progress = timestamp - start;
+                            const currentScale = startScale + (endScale - startScale) * Math.min(progress / 300, 1);
+                            dispMap.setAttribute('scale', currentScale);
+                            if (progress < 300) {
+                                animationFrameId = requestAnimationFrame(animate);
+                            }
+                        }
+                        animationFrameId = requestAnimationFrame(animate);
+                    });
+
+                    button.addEventListener('mouseout', () => {
+                        cancelAnimationFrame(animationFrameId);
+                        let start = null;
+                        const startScale = parseFloat(dispMap.getAttribute('scale')) || 0;
+
+                        function animate(timestamp) {
+                            if (!start) start = timestamp;
+                            const progress = timestamp - start;
+                            const currentScale = startScale - (startScale * Math.min(progress / 300, 1));
+                            dispMap.setAttribute('scale', currentScale);
+                            if (progress < 300) {
+                                animationFrameId = requestAnimationFrame(animate);
+                            }
+                        }
+                        animationFrameId = requestAnimationFrame(animate);
+                    });
+                });
+            }
+        });
+    </script>
+</body>
+</html>

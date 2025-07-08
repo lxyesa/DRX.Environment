@@ -9,7 +9,6 @@
 
   <ItemGroup>
     <Folder Include="Extensions\" />
-    <Folder Include="shop\" />
   </ItemGroup>
 
   <ItemGroup>
@@ -18,12 +17,6 @@
 
   <ItemGroup>
     <Content Update="Pages\**\*.cshtml">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-  </ItemGroup>
-
-  <ItemGroup>
-    <Content Include="shop\**">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
   </ItemGroup>

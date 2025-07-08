@@ -1,0 +1,144 @@
+@page
+@model KaxServer.Pages.Account.LoginSuccessModel
+@{
+    ViewData["Title"] = "登录成功";
+}
+
+<div class="container" style="min-height: calc(100vh - var(--nav-height)); display: flex; align-items: center; justify-content: center;">
+    <div class="form-card">
+        <div class="success-icon">
+            <svg width="80" height="80" viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="40" cy="40" r="38" stroke="var(--accent-color)" stroke-width="4"/>
+                <path d="M25 40L35 50L55 30" stroke="var(--accent-color)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+        </div>
+        <h1 class="form-title">欢迎回来！</h1>
+        <p class="form-subtitle">现在，我们将在<span id="countdown" class="countdown">3</span>秒后将您返回</p>
+        <p class="small-text">若三秒后您还在这个页面，请点击下面的按钮</p>
+        <a href="@Model.ReturnUrl" class="btn-primary return-btn">立即返回</a>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        let countdown = 3;
+        const countdownElement = document.getElementById('countdown');
+        const returnUrl = '@Html.Raw(Model.ReturnUrl)';
+        
+        const timer = setInterval(() => {
+            countdown--;
+            countdownElement.textContent = countdown;
+            
+            if (countdown <= 0) {
+                clearInterval(timer);
+                window.location.href = returnUrl;
+            }
+        }, 1000);
+    </script>
+}
+
+@section Styles {
+    <style>
+        .form-card {
+            background: var(--background-color);
+            padding: 2rem;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            width: 100%;
+            max-width: 400px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .success-icon {
+            margin-bottom: 2rem;
+            text-align: center;
+            animation: scaleIn 0.5s ease-out;
+        }
+
+        .countdown {
+            font-weight: 600;
+            color: var(--accent-color);
+            font-size: 1.2rem;
+            animation: pulse 1s infinite;
+        }
+
+        .small-text {
+            color: var(--secondary-color);
+            font-size: 0.9rem;
+            margin-bottom: 2rem;
+            text-align: center;
+        }
+
+        .form-title {
+            margin-bottom: 1rem;
+            text-align: center;
+            animation: fadeInUp 0.5s ease-out;
+        }
+
+        .form-subtitle {
+            color: var(--primary-color);
+            margin-bottom: 1rem;
+            text-align: center;
+            font-size: 1.1rem;
+            animation: fadeInUp 0.5s ease-out 0.1s;
+        }
+
+        .return-btn {
+            display: block;
+            width: 100%;
+            padding: 0.75rem 1.5rem;
+            font-size: 1rem;
+            font-weight: 500;
+            text-align: center;
+            text-decoration: none;
+            background-color: var(--accent-color);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background-color 0.2s ease;
+        }
+
+        .return-btn:hover {
+            background-color: var(--accent-hover-color);
+            text-decoration: none;
+            color: white;
+        }
+
+        @@keyframes scaleIn {
+            from {
+                transform: scale(0.8);
+                opacity: 0;
+            }
+            to {
+                transform: scale(1);
+                opacity: 1;
+            }
+        }
+
+        @@keyframes fadeInUp {
+            from {
+                transform: translateY(20px);
+                opacity: 0;
+            }
+            to {
+                transform: translateY(0);
+                opacity: 1;
+            }
+        }
+
+        @@keyframes pulse {
+            0% {
+                opacity: 1;
+            }
+            50% {
+                opacity: 0.7;
+            }
+            100% {
+                opacity: 1;
+            }
+        }
+    </style>
+} 

@@ -1,0 +1,33 @@
+@page
+@model KaxServer.Pages.Account.RegisterSuccessModel
+
+<div class="container" style="min-height: calc(100vh - var(--nav-height));">
+    <div style="display: flex; justify-content: center; align-items: center; min-height: calc(100vh - var(--nav-height));">
+        <div class="form-card" style="text-align: center;">
+            <div class="form-header">
+                <div class="form-title">注册成功！</div>
+                <div class="form-subtitle">
+                    您的账号已经成功创建。现在您可以使用新账号登录了。
+                </div>
+            </div>
+
+            <!-- 成功图标 -->
+            <div style="margin: 2rem 0;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: #4CAF50;">
+                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                    <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                </svg>
+            </div>
+
+            <!-- 登录按钮 -->
+            <a href="/Account/Login" class="btn-primary btn-full" style="margin-top: 2rem;">
+                前往登录
+            </a>
+
+            <!-- 返回首页链接 -->
+            <a href="/" class="btn-link">
+                返回首页
+            </a>
+        </div>
+    </div>
+</div> 

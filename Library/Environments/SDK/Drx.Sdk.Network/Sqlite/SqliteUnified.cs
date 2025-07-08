@@ -6,6 +6,8 @@ using System.Linq;
 using Microsoft.Data.Sqlite;
 using System.Text.Json;
 using System.Collections;
+using System.Threading.Tasks;
+using System.Threading;
 
 namespace Drx.Sdk.Network.Sqlite
 {
@@ -965,6 +967,531 @@ namespace Drx.Sdk.Network.Sqlite
                 return "TEXT";
 
             return "TEXT";
+        }
+
+        #endregion
+
+        #region 异步数据库操作
+
+        /// <summary>
+        /// 异步保存对象到数据库
+        /// </summary>
+        /// <param name="item">要保存的对象</param>
+        /// <param name="cancellationToken">取消令牌</param>
+        public async Task SaveAsync(T item, CancellationToken cancellationToken = default)
+        {
+            using (var connection = new SqliteConnection(_connectionString))
+            {
+                await connection.OpenAsync(cancellationToken);
+                using (var transaction = connection.BeginTransaction())
+                {
+                    try
+                    {
+                        var command = connection.CreateCommand();
+                        command.Transaction = transaction;
+
+                        var validProperties = _properties.Where(p => 
+                            p.GetCustomAttribute<SqliteIgnoreAttribute>() == null && 
+                            !_relationProperties.ContainsKey(p)).ToArray();
+                        
+                        var columns = validProperties.Select(p => p.Name);
+                        var parameters = validProperties.Select(p => $"${p.Name}");
+
+                        command.CommandText = $@"
+                            INSERT OR REPLACE INTO {_tableName} 
+                            ({string.Join(", ", columns)})
+                            VALUES ({string.Join(", ", parameters)})";
+
+                        foreach (var prop in validProperties)
+                        {
+                            var value = prop.GetValue(item);
+                            if (value != null && GetSqliteType(prop.PropertyType) == "TEXT" && (prop.PropertyType.IsGenericType || prop.PropertyType.IsArray))
+                            {
+                                command.Parameters.AddWithValue($"${prop.Name}", JsonSerializer.Serialize(value));
+                            }
+                            else
+                            {
+                                command.Parameters.AddWithValue($"${prop.Name}", value ?? DBNull.Value);
+                            }
+                        }
+
+                        await command.ExecuteNonQueryAsync(cancellationToken);
+                        
+                        if (_relationProperties.Count > 0 && item != null)
+                        {
+                            var id = _primaryKeyProperty.GetValue(item);
+                            if (id != null)
+                            {
+                                int itemId = Convert.ToInt32(id);
+                                
+                                foreach (var relationProp in _relationProperties)
+                                {
+                                    var prop = relationProp.Key;
+                                    var attr = relationProp.Value;
+                                    var value = prop.GetValue(item);
+                                    
+                                    if (value != null && typeof(IEnumerable).IsAssignableFrom(prop.PropertyType) && 
+                                        prop.PropertyType != typeof(string))
+                                    {
+                                        Type elementType;
+                                        if (prop.PropertyType.IsGenericType)
+                                        {
+                                            elementType = prop.PropertyType.GetGenericArguments()[0];
+                                        }
+                                        else if (prop.PropertyType.IsArray)
+                                        {
+                                            elementType = prop.PropertyType.GetElementType();
+                                        }
+                                        else
+                                        {
+                                            continue;
+                                        }
+                                        
+                                        if (!typeof(IDataBase).IsAssignableFrom(elementType))
+                                        {
+                                            continue;
+                                        }
+                                        
+                                        var items = ((IEnumerable)value).Cast<IDataBase>();
+                                        await SaveRelationshipAsync(itemId, items, attr.TableName, attr.ForeignKeyProperty, elementType, cancellationToken);
+                                    }
+                                }
+                            }
+                        }
+                        
+                        transaction.Commit();
+                    }
+                    catch
+                    {
+                        transaction.Rollback();
+                        throw;
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// 异步批量保存对象到数据库
+        /// </summary>
+        /// <param name="items">要保存的对象集合</param>
+        /// <param name="cancellationToken">取消令牌</param>
+        public async Task SaveAllAsync(IEnumerable<T> items, CancellationToken cancellationToken = default)
+        {
+            using (var connection = new SqliteConnection(_connectionString))
+            {
+                await connection.OpenAsync(cancellationToken);
+                using (var transaction = connection.BeginTransaction())
+                {
+                    try
+                    {
+                        foreach (var item in items)
+                        {
+                            var command = connection.CreateCommand();
+                            command.Transaction = transaction;
+
+                            var validProperties = _properties.Where(p => 
+                                p.GetCustomAttribute<SqliteIgnoreAttribute>() == null && 
+                                !_relationProperties.ContainsKey(p)).ToArray();
+                            
+                            var columns = validProperties.Select(p => p.Name);
+                            var parameters = validProperties.Select(p => $"${p.Name}");
+
+                            command.CommandText = $@"
+                                INSERT OR REPLACE INTO {_tableName} 
+                                ({string.Join(", ", columns)})
+                                VALUES ({string.Join(", ", parameters)})";
+
+                            foreach (var prop in validProperties)
+                            {
+                                var value = prop.GetValue(item);
+                                if (value != null && GetSqliteType(prop.PropertyType) == "TEXT" && (prop.PropertyType.IsGenericType || prop.PropertyType.IsArray))
+                                {
+                                    command.Parameters.AddWithValue($"${prop.Name}", JsonSerializer.Serialize(value));
+                                }
+                                else
+                                {
+                                    command.Parameters.AddWithValue($"${prop.Name}", value ?? DBNull.Value);
+                                }
+                            }
+
+                            await command.ExecuteNonQueryAsync(cancellationToken);
+                        }
+
+                        transaction.Commit();
+                        
+                        if (_relationProperties.Count > 0)
+                        {
+                            foreach (var item in items)
+                            {
+                                var id = _primaryKeyProperty.GetValue(item);
+                                if (id != null)
+                                {
+                                    int itemId = Convert.ToInt32(id);
+                                    
+                                    foreach (var relationProp in _relationProperties)
+                                    {
+                                        var prop = relationProp.Key;
+                                        var attr = relationProp.Value;
+                                        var value = prop.GetValue(item);
+                                        
+                                        if (value != null && typeof(IEnumerable).IsAssignableFrom(prop.PropertyType) && 
+                                            prop.PropertyType != typeof(string))
+                                        {
+                                            Type elementType;
+                                            if (prop.PropertyType.IsGenericType)
+                                            {
+                                                elementType = prop.PropertyType.GetGenericArguments()[0];
+                                            }
+                                            else if (prop.PropertyType.IsArray)
+                                            {
+                                                elementType = prop.PropertyType.GetElementType();
+                                            }
+                                            else
+                                            {
+                                                continue;
+                                            }
+                                            
+                                            if (!typeof(IDataBase).IsAssignableFrom(elementType))
+                                            {
+                                                continue;
+                                            }
+                                            
+                                            var items1 = ((IEnumerable)value).Cast<IDataBase>();
+                                            await SaveRelationshipAsync(itemId, items1, attr.TableName, attr.ForeignKeyProperty, elementType, cancellationToken);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    catch
+                    {
+                        transaction.Rollback();
+                        throw;
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// 异步根据条件查询对象
+        /// </summary>
+        /// <param name="whereConditions">查询条件字典，键为属性名，值为匹配值</param>
+        /// <param name="cancellationToken">取消令牌</param>
+        /// <returns>符合条件的对象集合</returns>
+        public async Task<List<T>> ReadAsync(Dictionary<string, object>? whereConditions = null, CancellationToken cancellationToken = default)
+        {
+            var results = new List<T>();
+            using (var connection = new SqliteConnection(_connectionString))
+            {
+                await connection.OpenAsync(cancellationToken);
+                var command = connection.CreateCommand();
+
+                string whereClause = "";
+                if (whereConditions != null && whereConditions.Count > 0)
+                {
+                    var conditions = whereConditions.Select(kvp => $"{kvp.Key} = ${kvp.Key}");
+                    whereClause = $"WHERE {string.Join(" AND ", conditions)}";
+                }
+
+                command.CommandText = $"SELECT * FROM {_tableName} {whereClause}";
+
+                if (whereConditions != null)
+                {
+                    foreach (var condition in whereConditions)
+                    {
+                        command.Parameters.AddWithValue($"${condition.Key}", condition.Value ?? DBNull.Value);
+                    }
+                }
+
+                using (var reader = await command.ExecuteReaderAsync(cancellationToken))
+                {
+                    while (await reader.ReadAsync(cancellationToken))
+                    {
+                        T item = new T();
+                        for (int i = 0; i < reader.FieldCount; i++)
+                        {
+                            string columnName = reader.GetName(i);
+                            var property = _properties.FirstOrDefault(p => 
+                                p.Name.Equals(columnName, StringComparison.OrdinalIgnoreCase));
+                            
+                            if (property != null && !reader.IsDBNull(i))
+                            {
+                                var dbValue = reader.GetValue(i);
+                                
+                                if (dbValue is string stringValue && (property.PropertyType.IsGenericType || property.PropertyType.IsArray))
+                                {
+                                    try
+                                    {
+                                        var deserializedValue = JsonSerializer.Deserialize(stringValue, property.PropertyType);
+                                        property.SetValue(item, deserializedValue);
+                                    }
+                                    catch (JsonException)
+                                    {
+                                        property.SetValue(item, Convert.ChangeType(dbValue, property.PropertyType));
+                                    }
+                                }
+                                else
+                                {
+                                    var targetType = Nullable.GetUnderlyingType(property.PropertyType) ?? property.PropertyType;
+                                    object value;
+                                    if (targetType.IsEnum)
+                                    {
+                                        if (dbValue is string s)
+                                            value = Enum.Parse(targetType, s, true);
+                                        else
+                                            value = Enum.ToObject(targetType, dbValue);
+                                    }
+                                    else
+                                    {
+                                        value = Convert.ChangeType(dbValue, targetType);
+                                    }
+                                    property.SetValue(item, value);
+                                }
+                            }
+                        }
+                        
+                        if (_relationProperties.Count > 0)
+                        {
+                            var id = _primaryKeyProperty.GetValue(item);
+                            if (id != null)
+                            {
+                                int itemId = Convert.ToInt32(id);
+                                
+                                foreach (var relationProp in _relationProperties)
+                                {
+                                    var prop = relationProp.Key;
+                                    var attr = relationProp.Value;
+                                    
+                                    Type elementType;
+                                    if (prop.PropertyType.IsGenericType)
+                                    {
+                                        elementType = prop.PropertyType.GetGenericArguments()[0];
+                                    }
+                                    else if (prop.PropertyType.IsArray)
+                                    {
+                                        elementType = prop.PropertyType.GetElementType();
+                                    }
+                                    else
+                                    {
+                                        continue;
+                                    }
+                                    
+                                    if (!typeof(IDataBase).IsAssignableFrom(elementType))
+                                    {
+                                        continue;
+                                    }
+                                    
+                                    var relationItems = await LoadRelationshipAsync(itemId, attr.TableName, attr.ForeignKeyProperty, elementType, cancellationToken);
+                                    
+                                    if (prop.PropertyType.IsArray)
+                                    {
+                                        var array = Array.CreateInstance(elementType, relationItems.Count);
+                                        for (int i = 0; i < relationItems.Count; i++)
+                                        {
+                                            array.SetValue(relationItems[i], i);
+                                        }
+                                        prop.SetValue(item, array);
+                                    }
+                                    else
+                                    {
+                                        var listType = typeof(List<>).MakeGenericType(elementType);
+                                        var list = Activator.CreateInstance(listType);
+                                        
+                                        var addRangeMethod = listType.GetMethod("AddRange");
+                                        addRangeMethod?.Invoke(list, new object[] { relationItems });
+                                        
+                                        prop.SetValue(item, list);
+                                    }
+                                }
+                            }
+                        }
+                        
+                        results.Add(item);
+                    }
+                }
+            }
+            return results;
+        }
+
+        /// <summary>
+        /// 异步根据单个条件查询对象
+        /// </summary>
+        public async Task<T> ReadSingleAsync(string where, object value, CancellationToken cancellationToken = default)
+        {
+            var conditions = new Dictionary<string, object>
+            {
+                { where, value }
+            };
+
+            var results = await ReadAsync(conditions, cancellationToken);
+            return results.FirstOrDefault();
+        }
+
+        /// <summary>
+        /// 异步根据主键ID查询单个对象
+        /// </summary>
+        public async Task<T> FindByIdAsync(int id, CancellationToken cancellationToken = default)
+        {
+            if (_primaryKeyProperty == null)
+                throw new InvalidOperationException("无法找到主键属性");
+
+            var conditions = new Dictionary<string, object>
+            {
+                { _primaryKeyProperty.Name, id }
+            };
+
+            var results = await ReadAsync(conditions, cancellationToken);
+            return results.FirstOrDefault();
+        }
+
+        /// <summary>
+        /// 异步删除对象
+        /// </summary>
+        public async Task DeleteAsync(T item, CancellationToken cancellationToken = default)
+        {
+            if (_primaryKeyProperty == null)
+                throw new InvalidOperationException("无法找到主键属性");
+
+            var id = _primaryKeyProperty.GetValue(item);
+            if (id == null)
+                throw new InvalidOperationException("主键值不能为null");
+
+            using (var connection = new SqliteConnection(_connectionString))
+            {
+                await connection.OpenAsync(cancellationToken);
+                var command = connection.CreateCommand();
+                command.CommandText = $"DELETE FROM {_tableName} WHERE {_primaryKeyProperty.Name} = $id";
+                command.Parameters.AddWithValue("$id", id);
+                await command.ExecuteNonQueryAsync(cancellationToken);
+            }
+        }
+
+        /// <summary>
+        /// 异步根据条件删除对象
+        /// </summary>
+        public async Task<int> DeleteWhereAsync(Dictionary<string, object> whereConditions, CancellationToken cancellationToken = default)
+        {
+            using (var connection = new SqliteConnection(_connectionString))
+            {
+                await connection.OpenAsync(cancellationToken);
+                var command = connection.CreateCommand();
+
+                string whereClause = "";
+                if (whereConditions != null && whereConditions.Count > 0)
+                {
+                    var conditions = whereConditions.Select(kvp => $"{kvp.Key} = ${kvp.Key}");
+                    whereClause = $"WHERE {string.Join(" AND ", conditions)}";
+                }
+                else
+                {
+                    throw new ArgumentException("删除条件不能为空");
+                }
+
+                command.CommandText = $"DELETE FROM {_tableName} {whereClause}";
+
+                foreach (var condition in whereConditions)
+                {
+                    command.Parameters.AddWithValue($"${condition.Key}", condition.Value ?? DBNull.Value);
+                }
+
+                return await command.ExecuteNonQueryAsync(cancellationToken);
+            }
+        }
+
+        /// <summary>
+        /// 异步修复（替换）数据库中的特定条目
+        /// </summary>
+        public async Task<bool> RepairAsync(T item, Dictionary<string, object> identifierConditions, CancellationToken cancellationToken = default)
+        {
+            if (identifierConditions == null || identifierConditions.Count == 0)
+            {
+                throw new ArgumentException("必须提供至少一个条件来识别要替换的条目");
+            }
+
+            var existingItems = await ReadAsync(identifierConditions, cancellationToken);
+            var existingItem = existingItems.FirstOrDefault();
+
+            if (existingItem != null)
+            {
+                _primaryKeyProperty.SetValue(item, _primaryKeyProperty.GetValue(existingItem));
+                await SaveAsync(item, cancellationToken);
+                return true;
+            }
+            else
+            {
+                await SaveAsync(item, cancellationToken);
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// 异步根据单个条件修复（替换）数据库中的特定条目
+        /// </summary>
+        public async Task<bool> RepairAsync(T item, string propertyName, object propertyValue, CancellationToken cancellationToken = default)
+        {
+            var conditions = new Dictionary<string, object>
+            {
+                { propertyName, propertyValue }
+            };
+            return await RepairAsync(item, conditions, cancellationToken);
+        }
+
+        #endregion
+
+        #region 异步关联表操作
+
+        private async Task SaveRelationshipAsync(int parentId, IEnumerable<IDataBase> items, string tableName, string parentKeyName, Type childType, CancellationToken cancellationToken = default)
+        {
+            using (var connection = new SqliteConnection(_connectionString))
+            {
+                await connection.OpenAsync(cancellationToken);
+                using (var transaction = connection.BeginTransaction())
+                {
+                    try
+                    {
+                        var deleteCommand = connection.CreateCommand();
+                        deleteCommand.Transaction = transaction;
+                        deleteCommand.CommandText = $"DELETE FROM {tableName} WHERE {parentKeyName} = $parentId";
+                        deleteCommand.Parameters.AddWithValue("$parentId", parentId);
+                        await deleteCommand.ExecuteNonQueryAsync(cancellationToken);
+
+                        foreach (var item in items)
+                        {
+                            var parentKeyProp = childType.GetProperty(parentKeyName);
+                            if (parentKeyProp != null)
+                            {
+                                parentKeyProp.SetValue(item, parentId);
+                            }
+
+                            var sqliteType = typeof(SqliteUnified<>).MakeGenericType(childType);
+                            var sqliteInstance = Activator.CreateInstance(sqliteType, _connectionString.Replace("Data Source=", ""));
+                            var saveMethod = sqliteType.GetMethod("SaveAsync");
+                            await (Task)saveMethod.Invoke(sqliteInstance, new object[] { item, cancellationToken });
+                        }
+
+                        transaction.Commit();
+                    }
+                    catch
+                    {
+                        transaction.Rollback();
+                        throw;
+                    }
+                }
+            }
+        }
+
+        private async Task<List<IDataBase>> LoadRelationshipAsync(int parentId, string tableName, string parentKeyName, Type childType, CancellationToken cancellationToken = default)
+        {
+            var sqliteType = typeof(SqliteUnified<>).MakeGenericType(childType);
+            var sqliteInstance = Activator.CreateInstance(sqliteType, _connectionString.Replace("Data Source=", ""));
+            var readMethod = sqliteType.GetMethod("ReadAsync");
+            var conditions = new Dictionary<string, object>
+            {
+                { parentKeyName, parentId }
+            };
+            var result = await (Task<System.Collections.IList>)readMethod.Invoke(sqliteInstance, new object[] { conditions, cancellationToken });
+            return result?.Cast<IDataBase>().ToList() ?? new List<IDataBase>();
         }
 
         #endregion

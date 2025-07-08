@@ -1,0 +1,338 @@
+﻿@page
+@model KaxServer.Pages.Account.RegisterModel
+@{
+    ViewData["Title"] = "注册账号";
+}
+
+<div class="container" style="min-height: calc(100vh - var(--nav-height)); display: flex; align-items: center; justify-content: center; padding: 2rem 0;">
+    <!-- 添加提示框容器 -->
+    <div id="alertBox" class="alert-box" style="display: none;">
+        <div class="alert-content">
+            <i class="fas fa-exclamation-circle alert-icon"></i>
+            <span id="alertMessage"></span>
+            <button class="alert-close" onclick="closeAlert()">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+    </div>
+
+    <div class="form-card">
+        <div class="form-header">
+            <h1 class="form-title">创建新账号</h1>
+            <p class="form-subtitle">加入我们，开启您的专属旅程</p>
+        </div>
+        
+        <div asp-validation-summary="ModelOnly" class="text-danger" style="margin-bottom: 1rem; text-align: center;"></div>
+
+        <form method="post" asp-page-handler="Register">
+            <div class="form-group">
+                <div class="input-wrapper">
+                    <i class="fas fa-user input-icon"></i>
+                    <input type="text" class="form-control with-icon" id="username" name="userName" placeholder="用户名" required>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <div class="input-wrapper">
+                    <i class="fas fa-envelope input-icon"></i>
+                    <input type="email" class="form-control with-icon" id="email" name="email" placeholder="电子邮箱" required>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <div class="input-wrapper verification-code-wrapper">
+                    <i class="fas fa-key input-icon"></i>
+                    <input type="text" class="form-control with-icon with-button" id="verificationCode" name="verificationCode" placeholder="验证码" required>
+                    <button type="button" id="sendVerificationCode" class="btn-send-code">发送验证码</button>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <div class="input-wrapper">
+                    <i class="fas fa-lock input-icon"></i>
+                    <input type="password" class="form-control with-icon" id="password" name="password" placeholder="密码" required>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <div class="input-wrapper">
+                    <i class="fas fa-lock input-icon"></i>
+                    <input type="password" class="form-control with-icon" id="confirmPassword" name="confirmPassword" placeholder="确认密码" required>
+                </div>
+            </div>
+
+            <button type="submit" class="btn-primary" style="margin-top: 1rem;">立即注册</button>
+            
+            <div class="form-divider">
+                <span>或者</span>
+            </div>
+
+            <a href="/Account/Login" class="btn-link">返回登录</a>
+        </form>
+    </div>
+</div>
+
+@section Styles {
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+    <style>
+        .btn-primary {
+            width: 100%;
+            display: block;
+            cursor: pointer;
+        }
+
+        .text-danger {
+            color: #ff6b6b;
+        }
+
+        .verification-code-wrapper {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            position: relative;
+        }
+
+        .with-button {
+            padding-right: 140px; /* 为按钮留出更多空间 */
+        }
+
+        .btn-send-code {
+            position: absolute;
+            right: 6px;
+            top: 50%;
+            transform: translateY(-50%);
+            padding: 0.6rem 1.2rem;
+            background: linear-gradient(45deg, var(--accent-color), var(--accent-color-hover));
+            color: white;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: var(--border-radius-md);
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 0.875rem;
+            letter-spacing: 0.5px;
+            transition: all 0.25s ease-out;
+            box-shadow: 0 0 15px rgba(124, 77, 255, 0.3),
+                        inset 0 0 5px rgba(255, 255, 255, 0.2);
+            text-transform: uppercase;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 120px;
+        }
+
+        .btn-send-code:hover {
+            transform: translateY(-50%) scale(1.02);
+            box-shadow: 0 0 25px rgba(124, 77, 255, 0.5),
+                        inset 0 0 8px rgba(255, 255, 255, 0.25);
+            border-color: rgba(255, 255, 255, 0.2);
+        }
+
+        .btn-send-code:active {
+            transform: translateY(-50%) scale(0.98);
+            box-shadow: 0 0 10px rgba(124, 77, 255, 0.2),
+                        inset 0 0 10px rgba(0, 0, 0, 0.3);
+            transition-duration: 0.1s;
+        }
+
+        .btn-send-code:disabled {
+            background: linear-gradient(45deg, #2a2b2c, #3a3b3c);
+            color: var(--secondary-color);
+            cursor: not-allowed;
+            box-shadow: none;
+            border-color: var(--border-color);
+        }
+
+        .btn-send-code:disabled:hover {
+            transform: translateY(-50%);
+            box-shadow: none;
+            border-color: var(--border-color);
+        }
+
+        /* 倒计时动画 */
+        @@keyframes countdown {
+            from {
+                transform: translateY(-50%) scale(1);
+            }
+            to {
+                transform: translateY(-50%) scale(0.95);
+            }
+        }
+
+        .btn-send-code.counting {
+            animation: countdown 1s ease-in-out infinite alternate;
+        }
+
+        /* 提示框样式 */
+        .alert-box {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1000;
+            animation: slideIn 0.3s ease-out;
+        }
+
+        .alert-content {
+            background-color: #ff6b6b;
+            color: white;
+            padding: 15px 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            min-width: 300px;
+        }
+
+        .alert-icon {
+            font-size: 20px;
+        }
+
+        .alert-close {
+            margin-left: auto;
+            background: none;
+            border: none;
+            color: white;
+            cursor: pointer;
+            padding: 0;
+            font-size: 16px;
+            opacity: 0.8;
+            transition: opacity 0.2s;
+        }
+
+        .alert-close:hover {
+            opacity: 1;
+        }
+
+        @@keyframes slideIn {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+
+        @@keyframes slideOut {
+            from {
+                transform: translateX(0);
+                opacity: 1;
+            }
+            to {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+        }
+    </style>
+}
+
+@section Scripts {
+    <script>
+        // 显示提示框
+        function showAlert(message) {
+            const alertBox = document.getElementById('alertBox');
+            const alertMessage = document.getElementById('alertMessage');
+            
+            alertMessage.textContent = message;
+            alertBox.style.display = 'block';
+            alertBox.style.animation = 'slideIn 0.3s ease-out';
+
+            // 5秒后自动关闭
+            setTimeout(() => {
+                closeAlert();
+            }, 5000);
+        }
+
+        // 关闭提示框
+        function closeAlert() {
+            const alertBox = document.getElementById('alertBox');
+            alertBox.style.animation = 'slideOut 0.3s ease-out';
+            setTimeout(() => {
+                alertBox.style.display = 'none';
+            }, 300);
+        }
+
+        document.querySelector('form').addEventListener('submit', function(e) {
+            const password = document.getElementById('password').value;
+            const confirmPassword = document.getElementById('confirmPassword').value;
+            const verificationCode = document.getElementById('verificationCode').value;
+            
+            if (password !== confirmPassword) {
+                e.preventDefault();
+                showAlert('两次输入的密码不一致，请重新输入');
+                return;
+            }
+
+            if (!verificationCode) {
+                e.preventDefault();
+                showAlert('请输入验证码');
+                return;
+            }
+        });
+
+        // 验证码发送功能
+        document.getElementById('sendVerificationCode').addEventListener('click', async function() {
+            const email = document.getElementById('email').value;
+            if (!email) {
+                showAlert('请先输入邮箱地址');
+                return;
+            }
+
+            const button = this;
+            button.disabled = true;
+            button.classList.add('counting');
+            let countdown = 60; // 改为60秒倒计时
+
+            try {
+                const response = await fetch('/Account/Register?handler=SendVerificationCode', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'RequestVerificationToken': document.querySelector('input[name="__RequestVerificationToken"]').value
+                    },
+                    body: JSON.stringify({ email: email })
+                });
+
+                const result = await response.json();
+                if (result.success) {
+                    showAlert('验证码已发送到您的邮箱');
+                    // 开始倒计时
+                    const timer = setInterval(() => {
+                        button.textContent = `${countdown}秒`;
+                        countdown--;
+
+                        if (countdown < 0) {
+                            clearInterval(timer);
+                            button.disabled = false;
+                            button.classList.remove('counting');
+                            button.textContent = '发送验证码';
+                        }
+                    }, 1000);
+                } else {
+                    showAlert(result.message || '验证码发送失败');
+                    button.disabled = false;
+                    button.classList.remove('counting');
+                }
+            } catch (error) {
+                showAlert('发送验证码时出现错误');
+                button.disabled = false;
+                button.classList.remove('counting');
+            }
+        });
+
+        // 如果存在ModelState错误，显示第一个错误
+        @if (!ModelState.IsValid)
+        {
+            <text>
+            window.onload = function() {
+                const error = '@Html.Raw(ModelState.Values.FirstOrDefault()?.Errors.FirstOrDefault()?.ErrorMessage)';
+                if (error) {
+                    showAlert(error);
+                }
+            };
+            </text>
+        }
+    </script>
+}
