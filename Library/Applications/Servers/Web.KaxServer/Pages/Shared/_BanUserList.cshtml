@@ -1,0 +1,204 @@
+﻿@using Web.KaxServer.Services.Repositorys
+
+<hr class="ban-divider" />
+
+<div class="ban-user-list">
+    @foreach (var user in UserRepository.GetAllUsers()){
+        <div class="user-card">
+            <div class="user-info">
+                @if (!string.IsNullOrEmpty(user.AvatarUrl))
+                {
+                    <img src="@user.AvatarUrl" alt="用户头像" class="user-avatar">
+                }
+                else
+                {
+                    <div class="user-avatar-placeholder">
+                        <i class="fas fa-user"></i>
+                    </div>
+                }
+                <div class="user-details">
+                    <h3 class="user-name">@user.Username</h3>
+                    <div class="user-meta">
+                        <span class="user-id">ID: @user.UserId</span>
+                        <span class="user-registration-date">注册时间: @user.CreatedAt.ToString("yyyy-MM-dd")</span>
+                    </div>
+                    @if (user.IsBanned())
+                    {
+                        <p class="user-ban-status">已封禁至: @user.BanEndTime.ToString("yyyy-MM-dd HH:mm")</p>
+                    }
+                </div>
+            </div>
+            <div class="user-actions">
+                <form method="post" asp-page="/Account/Management" asp-page-handler="BanUser" class="ban-form">
+                    <input type="hidden" name="userId" value="@user.UserId" />
+                    @if (!user.IsBanned())
+                    {
+                        <div class="ban-duration-container">
+                            <select name="banDuration" class="ban-duration-select">
+                                <option value="60">1小时</option>
+                                <option value="1440">1天</option>
+                                <option value="10080">7天</option>
+                                <option value="43200">30天</option>
+                                <option value="-1">永久</option>
+                            </select>
+                        </div>
+                    }
+                    <button type="submit" class="btn btn-danger btn-sm">@(user.IsBanned() ? "解封" : "封禁")</button>
+                </form>
+            </div>
+        </div>
+    }
+</div>
+
+<style>
+    .ban-divider {
+        height: 1px;
+        background-color: var(--border-color);
+        border: none;
+        margin: 1rem 0 1.5rem 0;
+    }
+
+    .ban-user-list {
+        max-height: 580px;
+        overflow-y: auto;
+        padding: 0rem;
+    }
+
+    .user-card {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 1.25rem;
+        border-radius: 10px;
+        background-color: var(--bg-color);
+        border: 1px solid var(--border-color);
+        margin-bottom: 1rem;
+        transition: var(--transition-standard);
+    }
+
+    .user-card:hover {
+        border-color: var(--accent-color);
+    }
+
+    .user-info {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+    }
+
+    .user-avatar, .user-avatar-placeholder {
+        width: 50px;
+        height: 50px;
+        border-radius: 50%;
+        object-fit: cover;
+        border: 1px solid var(--border-color);
+    }
+
+    .user-avatar-placeholder {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background-color: var(--light-bg);
+        color: var(--muted-color);
+        font-size: 1.5rem;
+    }
+
+    .user-details {
+        display: flex;
+        flex-direction: column;
+    }
+
+    .user-name {
+        font-size: 1.1rem;
+        font-weight: 600;
+        margin: 0;
+        color: var(--text-color);
+    }
+
+    .user-meta {
+        display: flex;
+        gap: 1rem;
+        margin-top: 0.25rem;
+    }
+
+    .user-id, .user-registration-date, .user-ban-status {
+        font-size: 0.85rem;
+        color: var(--muted-color);
+        margin: 0;
+    }
+
+    .user-ban-status {
+        color: #dc2626;
+        font-weight: 500;
+        margin-top: 0.25rem;
+    }
+
+    .user-actions {
+        display: flex;
+        align-items: center;
+        margin-left: 1rem;
+    }
+
+    .ban-form {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .ban-duration-container {
+        position: relative;
+    }
+
+    .ban-duration-select {
+        padding: 0.5rem;
+        border-radius: 6px;
+        border: 1px solid var(--border-color);
+        background-color: var(--bg-color);
+        font-size: 0.85rem;
+        color: var(--text-color);
+        cursor: pointer;
+        appearance: none;
+        padding-right: 1.5rem;
+    }
+
+    .ban-duration-container::after {
+        content: '';
+        position: absolute;
+        top: 50%;
+        right: 0.5rem;
+        width: 0.5em;
+        height: 0.5em;
+        border-left: 2px solid var(--muted-color);
+        border-bottom: 2px solid var(--muted-color);
+        transform: translateY(-70%) rotate(-45deg);
+        pointer-events: none;
+    }
+
+    .btn-danger {
+        background-color: #dc2626;
+        color: white;
+        padding: 0.5rem 1.5rem;
+    }
+
+    .btn-danger:hover {
+        background-color: #b91c1c;
+    }
+
+    /* 自定义滚动条样式 */
+    .ban-user-list::-webkit-scrollbar {
+        width: 6px;
+    }
+
+    .ban-user-list::-webkit-scrollbar-track {
+        background: transparent;
+    }
+
+    .ban-user-list::-webkit-scrollbar-thumb {
+        background-color: rgba(0, 0, 0, 0.15);
+        border-radius: 10px;
+    }
+
+    .ban-user-list::-webkit-scrollbar-thumb:hover {
+        background-color: rgba(0, 0, 0, 0.3);
+    }
+</style>

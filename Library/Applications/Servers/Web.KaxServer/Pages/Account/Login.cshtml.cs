@@ -3,13 +3,11 @@ using Microsoft.AspNetCore.Mvc.RazorPages;
 using Web.KaxServer.Services;
 using Drx.Sdk.Network.Session;
 using Web.KaxServer.Models;
-using System.IO;
-using System.Xml;
-using System.Linq;
 using System;
-using System.Globalization;
-using System.Xml.Linq;
-using Microsoft.AspNetCore.Hosting;
+using System.Linq;
+using Web.KaxServer.Services.Repositorys;
+using DRX.Framework;
+using System.Threading.Tasks;
 
 namespace Web.KaxServer.Pages.Account
 {
@@ -17,7 +15,6 @@ namespace Web.KaxServer.Pages.Account
     {
         private readonly SessionManager _sessionManager;
         private readonly MessageBoxService _messageBoxService;
-        private readonly IUserService _userService;
 
         [BindProperty]
         public required string Username { get; set; }
@@ -28,11 +25,10 @@ namespace Web.KaxServer.Pages.Account
         [BindProperty]
         public bool RememberMe { get; set; }
 
-        public LoginModel(SessionManager sessionManager, MessageBoxService messageBoxService, IUserService userService)
+        public LoginModel(SessionManager sessionManager, MessageBoxService messageBoxService)
         {
             _sessionManager = sessionManager;
             _messageBoxService = messageBoxService;
-            _userService = userService;
         }
 
         public void OnGet(string returnUrl = null)
@@ -53,72 +49,70 @@ namespace Web.KaxServer.Pages.Account
             }
         }
 
-        public IActionResult OnPost()
+        public async Task<IActionResult> OnPostAsync()
         {
             if (!ModelState.IsValid)
             {
-                _messageBoxService.Inject("登录失败", "请输入有效的用户名和密码。", "我知道了");
+                _ = _messageBoxService.Inject("登录失败", "请输入有效的用户名和密码。", "我知道了");
                 return Page();
             }
 
-            // 验证用户凭据
-            var userSession = _userService.AuthenticateUser(Username, Password);
+            // 等待 1 ~ 3 秒，模拟网络延迟，同时缓解服务器压力
+            await Task.Delay(new Random().Next(1000, 3000));
 
-            if (userSession != null)
+            var userData = UserRepository.GetUser(Username);
+
+            // 验证用户凭据 (注意: 密码应哈希存储和比较)
+            if (userData == null || userData.Password != Password)
             {
-                try
-                {
-                    // Find and remove any existing sessions for this user to enforce single-session login
-                    var existingSessions = _sessionManager.GetAllSessions()
-                        .OfType<UserSession>()
-                        .Where(s => s.Username.Equals(Username, StringComparison.OrdinalIgnoreCase))
-                        .ToList();
-
-                    foreach (var sessionToKick in existingSessions)
-                    {
-                        _sessionManager.RemoveSession(sessionToKick.ID);
-                    }
-                    
-                    // 设置会话，如果选择"记住我"，则设置Cookie
-                    var newSession = _sessionManager.CreateSession(userSession, RememberMe);
-
-                    // Persist session change to user data file by updating the session ID
-                    if (_userService is UserService concreteUserService)
-                    {
-                        var userData = concreteUserService.GetUserDataById(userSession.UserId);
-                        if (userData != null)
-                        {
-                            userData.SessionId = newSession;
-                            userSession.Coins = userData.Coins;
-                            userSession.Email = userData.Email;
-                            userSession.Username = userData.Username;
-                            userSession.AvatarUrl = userData.AvatarUrl;
-                            userSession.UserPermission = userData.UserPermission;
-                            userSession.UserId = userData.UserId;
-                        }
-                    }
-
-                    // 检查是否有重定向URL
-                    if (TempData["ReturnUrl"] is string returnUrl && !string.IsNullOrEmpty(returnUrl) && Url.IsLocalUrl(returnUrl))
-                    {
-                        return Redirect(returnUrl);
-                    }
-
-                    // 登录成功，重定向到首页
-                    return RedirectToPage("/Index");
-                }
-                catch (System.Exception)
-                {
-                     _messageBoxService.Inject("登录失败", "登录过程中发生未知错误。", "我知道了");
-                    return Page();
-                }
+                _ = _messageBoxService.Inject("登录失败", "用户名或密码错误。", "我知道了");
+                return Page();
             }
-            else
+            
+            // 检测用户是否被封禁
+            if (userData.IsBanned())
             {
-                // 登录失败
-                _messageBoxService.Inject("登录失败", "用户名或密码错误。", "我知道了");
+                _ = _messageBoxService.Inject("登录失败", $"您已被封禁，封禁结束时间：{userData.BanEndTime:yyyy-MM-dd HH:mm:ss}", "我知道了");
+                Logger.Info($"用户 {Username} 尝试登陆，但被封禁。\r\n封禁结束时间：{userData.BanEndTime:yyyy-MM-dd HH:mm:ss}");
+                return Page();
+            }
+
+            try
+            {
+                // 强制单一会话登录：查找并移除该用户已存在的会话
+                var existingSessions = _sessionManager.GetAllSessions()
+                    .OfType<UserSession>()
+                    .Where(s => s.Username.Equals(Username, StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+
+                foreach (var sessionToKick in existingSessions)
+                {
+                    _sessionManager.RemoveSession(sessionToKick.ID, removeCookie: true);
+                }
+                
+                // 创建新的用户会话
+                var userSession = new UserSession(userData);
+                var newSessionId = _sessionManager.CreateSession(userSession, RememberMe);
+
+                // 将新的会话ID持久化到用户数据中
+                userData.SessionId = newSessionId;
+                UserRepository.SaveUser(userData);
+                
+                // 检查是否有重定向URL
+                if (TempData["ReturnUrl"] is string returnUrl && !string.IsNullOrEmpty(returnUrl) && Url.IsLocalUrl(returnUrl))
+                {
+                    return Redirect(returnUrl);
+                }
+
+                // 登录成功，重定向到首页
+                return RedirectToPage("/Index");
+            }
+            catch (System.Exception ex)
+            {
+                Logger.Error($"登录过程中发生未知错误: {ex}");
+                _ = _messageBoxService.Inject("登录失败", "登录过程中发生未知错误。", "我知道了");
                 return Page();
             }
         }
     }
-} 
+}

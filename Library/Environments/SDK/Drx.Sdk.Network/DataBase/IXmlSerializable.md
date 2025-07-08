@@ -105,11 +105,8 @@ public class Product : IXmlSerializable
         // 日期 - 转换为字符串
         node.PushString("info", "createdDate", CreatedDate.ToString("o"));
         
-        // 集合 - 序列化为多个值或单独的节点
-        if (Categories.Count > 0)
-        {
-            node.PushString("categories", "items", Categories.ToArray());
-        }
+        // 使用新的PushList方法直接序列化列表
+        node.PushList("categories", "items", Categories);
     }
     
     public void ReadFromXml(IXmlNode node)
@@ -126,8 +123,8 @@ public class Product : IXmlSerializable
             CreatedDate = date;
         }
         
-        // 集合 - 反序列化
-        Categories = new List<string>(node.GetStringArray("categories", "items"));
+        // 使用新的GetList方法直接反序列化列表
+        Categories = node.GetList<string>("categories", "items");
     }
 }
 ```
@@ -230,6 +227,7 @@ public class Order : IXmlSerializable
     public string Id { get; set; }
     public DateTime OrderDate { get; set; }
     public List<OrderItem> Items { get; set; } = new List<OrderItem>();
+    public Dictionary<string, decimal> Taxes { get; set; } = new Dictionary<string, decimal>();
     
     public void WriteToXml(IXmlNode node)
     {
@@ -239,6 +237,9 @@ public class Order : IXmlSerializable
         
         // 对象集合 - 使用SerializeList
         node.SerializeList("items", Items);
+        
+        // 字典数据 - 使用新的PushDictionary方法
+        node.PushDictionary("financial", "taxes", Taxes);
     }
     
     public void ReadFromXml(IXmlNode node)
@@ -254,6 +255,44 @@ public class Order : IXmlSerializable
         
         // 对象集合 - 使用DeserializeList
         Items = node.DeserializeList<OrderItem>("items");
+        
+        // 字典数据 - 使用新的GetDictionary方法
+        Taxes = node.GetDictionary<string, decimal>("financial", "taxes");
+    }
+}
+```
+
+### 使用新方法简化复杂数据结构
+
+```csharp
+public class UserProfile : IXmlSerializable
+{
+    public string UserId { get; set; }
+    public string DisplayName { get; set; }
+    public Dictionary<string, string> Preferences { get; set; } = new Dictionary<string, string>();
+    public List<int> FavoriteItems { get; set; } = new List<int>();
+    public Dictionary<int, DateTime> ItemPurchases { get; set; } = new Dictionary<int, DateTime>();
+    
+    public void WriteToXml(IXmlNode node)
+    {
+        node.PushString("profile", "userId", UserId);
+        node.PushString("profile", "displayName", DisplayName);
+        
+        // 使用新方法直接序列化复杂数据结构
+        node.PushDictionary("settings", "preferences", Preferences);
+        node.PushList("favorites", "items", FavoriteItems);
+        node.PushDictionary("purchases", "history", ItemPurchases);
+    }
+    
+    public void ReadFromXml(IXmlNode node)
+    {
+        UserId = node.GetString("profile", "userId");
+        DisplayName = node.GetString("profile", "displayName");
+        
+        // 使用新方法直接反序列化复杂数据结构
+        Preferences = node.GetDictionary<string, string>("settings", "preferences");
+        FavoriteItems = node.GetList<int>("favorites", "items");
+        ItemPurchases = node.GetDictionary<int, DateTime>("purchases", "history");
     }
 }
 ```

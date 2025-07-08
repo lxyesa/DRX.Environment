@@ -690,6 +690,18 @@
     </div>
 
     <div class="card">
+        <div class=""card-header">
+            <div class="card-header-group">
+                <div class="balance-icon"><i class="fas fa-user-shield"></i></div>
+                <h2>封禁管理</h2>
+            </div>
+        </div>
+        <div id="ban-user-list-container">
+            @await Html.PartialAsync("Shared/_BanUserList", Model)
+        </div>
+    </div>
+
+    <div class="card">
         <div class="card-header">
             <div class="card-header-group">
                 <div class="balance-icon"><i class="fas fa-cubes"></i></div>

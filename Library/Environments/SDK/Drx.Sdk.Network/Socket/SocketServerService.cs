@@ -31,7 +31,7 @@ namespace Drx.Sdk.Network.Socket
         private readonly IPacketIntegrityProvider _packetIntegrityProvider;
         private readonly IReadOnlyList<ConnectionMiddleware> _connectionMiddlewares;
         private readonly IReadOnlyList<MessageMiddleware> _messageMiddlewares;
-        private readonly ConcurrentDictionary<TcpClient, bool> _connectedClients = new ConcurrentDictionary<TcpClient, bool>();
+        private readonly ConcurrentDictionary<DrxTcpClient, bool> _connectedClients = new ConcurrentDictionary<DrxTcpClient, bool>();
         private readonly IReadOnlyList<ISocketService> _socketServices;
         private Task _servicesTask;
 
@@ -42,7 +42,7 @@ namespace Drx.Sdk.Network.Socket
         /// <summary>
         /// Gets a collection of all currently connected clients.
         /// </summary>
-        public ICollection<TcpClient> ConnectedClients => _connectedClients.Keys;
+        public ICollection<DrxTcpClient> ConnectedClients => _connectedClients.Keys;
 
         /// <summary>
         /// 获取指定类型的服务实例
@@ -125,7 +125,11 @@ namespace Drx.Sdk.Network.Socket
                 while (!token.IsCancellationRequested)
                 {
                     _logger.LogInformation("[socket] waiting for client...");
-                    TcpClient client = await _listener.AcceptTcpClientAsync(token);
+                    TcpClient tcpClient = await _listener.AcceptTcpClientAsync(token);
+                    
+                    // 将 TcpClient 转换为 DrxTcpClient
+                    DrxTcpClient client = tcpClient.ToDrxTcpClient();
+                    
                     _logger.LogInformation("[socket] client connected!");
 
                     // 在单独的任务中处理客户端
@@ -147,7 +151,7 @@ namespace Drx.Sdk.Network.Socket
             }
         }
 
-        private async Task HandleClientAsync(TcpClient client, CancellationToken token)
+        private async Task HandleClientAsync(DrxTcpClient client, CancellationToken token)
         {
             // --- Connection Middleware Pipeline ---
             var connectionContext = new ConnectionContext(this, client, token);
@@ -269,7 +273,7 @@ namespace Drx.Sdk.Network.Socket
             }
         }
 
-        public async Task SendResponseAsync(TcpClient client, SocketStatusCode code, CancellationToken token, params object[] args)
+        public async Task SendResponseAsync(DrxTcpClient client, SocketStatusCode code, CancellationToken token, params object[] args)
         {
             if (client == null || !client.Connected)
             {
@@ -324,7 +328,7 @@ namespace Drx.Sdk.Network.Socket
 
         #region Service Hook Triggers
         
-        private async Task TriggerConnectHooks(TcpClient client, CancellationToken token)
+        private async Task TriggerConnectHooks(DrxTcpClient client, CancellationToken token)
         {
             foreach (var service in _socketServices)
             {
@@ -340,7 +344,7 @@ namespace Drx.Sdk.Network.Socket
             }
         }
 
-        private async Task TriggerDisconnectHooks(TcpClient client)
+        private async Task TriggerDisconnectHooks(DrxTcpClient client)
         {
             foreach (var service in _socketServices)
             {
@@ -356,7 +360,7 @@ namespace Drx.Sdk.Network.Socket
             }
         }
         
-        private async Task TriggerReceiveHooks(TcpClient client, ReadOnlyMemory<byte> data, CancellationToken token)
+        private async Task TriggerReceiveHooks(DrxTcpClient client, ReadOnlyMemory<byte> data, CancellationToken token)
         {
             foreach (var service in _socketServices)
             {
@@ -372,7 +376,7 @@ namespace Drx.Sdk.Network.Socket
             }
         }
 
-        private async Task TriggerSendHooks(TcpClient client, ReadOnlyMemory<byte> data, CancellationToken token)
+        private async Task TriggerSendHooks(DrxTcpClient client, ReadOnlyMemory<byte> data, CancellationToken token)
         {
             foreach (var service in _socketServices)
             {

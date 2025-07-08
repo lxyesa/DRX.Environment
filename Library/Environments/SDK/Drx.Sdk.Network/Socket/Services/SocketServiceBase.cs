@@ -12,15 +12,15 @@ namespace Drx.Sdk.Network.Socket.Services
     public abstract class SocketServiceBase : ISocketService
     {
         public virtual Task ExecuteAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-        public virtual Task OnClientConnectAsync(SocketServerService server, TcpClient client, CancellationToken cancellationToken) => Task.CompletedTask;
-        public virtual Task OnClientDisconnectAsync(SocketServerService server, TcpClient client) => Task.CompletedTask;
-        public virtual Task OnServerReceiveAsync(SocketServerService server, TcpClient client, ReadOnlyMemory<byte> data, CancellationToken cancellationToken) => Task.CompletedTask;
-        public virtual Task OnServerSendAsync(SocketServerService server, TcpClient client, ReadOnlyMemory<byte> data, CancellationToken cancellationToken) => Task.CompletedTask;
+        public virtual Task OnClientConnectAsync(SocketServerService server, DrxTcpClient client, CancellationToken cancellationToken) => Task.CompletedTask;
+        public virtual Task OnClientDisconnectAsync(SocketServerService server, DrxTcpClient client) => Task.CompletedTask;
+        public virtual Task OnServerReceiveAsync(SocketServerService server, DrxTcpClient client, ReadOnlyMemory<byte> data, CancellationToken cancellationToken) => Task.CompletedTask;
+        public virtual Task OnServerSendAsync(SocketServerService server, DrxTcpClient client, ReadOnlyMemory<byte> data, CancellationToken cancellationToken) => Task.CompletedTask;
         
         public virtual void Execute() { }
-        public virtual void OnClientConnect(SocketServerService server, TcpClient client) { }
-        public virtual void OnClientDisconnect(SocketServerService server, TcpClient client) { }
-        public virtual void OnServerReceive(SocketServerService server, TcpClient client, ReadOnlyMemory<byte> data) { }
-        public virtual void OnServerSend(SocketServerService server, TcpClient client, ReadOnlyMemory<byte> data) { }
+        public virtual void OnClientConnect(SocketServerService server, DrxTcpClient client) { }
+        public virtual void OnClientDisconnect(SocketServerService server, DrxTcpClient client) { }
+        public virtual void OnServerReceive(SocketServerService server, DrxTcpClient client, ReadOnlyMemory<byte> data) { }
+        public virtual void OnServerSend(SocketServerService server, DrxTcpClient client, ReadOnlyMemory<byte> data) { }
     }
 } 

@@ -15,16 +15,18 @@ namespace Web.KaxServer.Models
         public string UserToken { get; set; }
         public UserPermissionType UserPermission { get; set; }
         public decimal Coins { get; set; } // 用户金币
-        public Dictionary<int, DateTime> OwnedAssets { get; set; } // 已有资产ID和过期时间的字典
-        public Dictionary<int, string> McaCodes { get; set; } // 已有资产ID和机械码的字典
+        public List<UserOwnedAsset> OwnedAssets { get; set; } // 用户拥有的资产列表，键为资产ID，值为过期时间
+        public List<McaCode> McaCodes { get; set; } // 用户的MCA码列表，键为资产ID，值为MCA码
         public List<int> PublishedAssetIds { get; set; } = new List<int>(); // 用户发布的资产ID列表
         public string AvatarUrl { get; set; }   /* 用户头像URL */
+
+        public UserData UserData { get; set; }
 
         public UserSession()
             : base("UserAuth", 604800)
         {
-            OwnedAssets = new Dictionary<int, DateTime>();
-            McaCodes = new Dictionary<int, string>();
+            OwnedAssets = new List<UserOwnedAsset>();
+            McaCodes = new List<McaCode>();
         }
 
         /// <summary>
@@ -43,9 +45,10 @@ namespace Web.KaxServer.Models
             McaCodes = userData.McaCodes ?? new Dictionary<int, string>();
             PublishedAssetIds = userData.PublishedAssetIds ?? new List<int>();
             AvatarUrl = userData.AvatarUrl;
-            
+
             // Generate a new user token for this session
             UserToken = GenerateUserToken(Username, Email);
+            UserData = userData;
         }
 
         public UserSession(string username, string email) 

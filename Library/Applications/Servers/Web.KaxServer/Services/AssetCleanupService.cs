@@ -8,6 +8,7 @@ using Drx.Sdk.Network.DataBase;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Web.KaxServer.Models;
+using Web.KaxServer.Services.Repositorys;
 
 namespace Web.KaxServer.Services
 {
@@ -46,8 +47,7 @@ namespace Web.KaxServer.Services
         {
             _logger.LogInformation("Running expired assets cleanup task.");
 
-            var userDataRepository = new IndexedRepository<UserData>(Path.Combine(Directory.GetCurrentDirectory(), "user_data"), "user_");
-            var userDatas = userDataRepository.GetAll();
+            var userDatas = UserRepository.GetAllUsers();
 
             foreach (var userData in userDatas)
             {
@@ -56,8 +56,8 @@ namespace Web.KaxServer.Services
                     if (asset.Value <= DateTime.Now)
                     {
                         userData.OwnedAssets.Remove(asset.Key);
-                        userDataRepository.Save(userData);
-                        _logger.LogInformation($"Expired asset {asset.Key} removed from user {userData.Id}");
+                        UserRepository.SaveUser(userData);
+                        _logger.LogInformation($"Expired asset {asset.Key} removed from user {userData.UserId}");
                     }
                 }
             }

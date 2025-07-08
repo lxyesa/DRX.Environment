@@ -11,6 +11,7 @@ using Web.KaxServer.Services;
 using Microsoft.Extensions.Logging;
 using System.Threading.Tasks;
 using System.IO;
+using Web.KaxServer.Services.Repositorys;
 
 namespace Web.KaxServer.Pages.Account
 {
@@ -61,12 +62,12 @@ namespace Web.KaxServer.Pages.Account
                 _logger.LogWarning("Unauthorized access attempt to Payments page without a valid session.");
                 return RedirectToPage("/Account/Login");
             }
-            
+
             // Populate user's published assets from the main store items list
             var allItems = _storeService.GetAllItems();
             User.PublishedAssetIds = allItems.Where(i => i.AuthorId == User.UserId).Select(i => i.Id).ToList();
 
-            foreach (var asset in User.OwnedAssets.OrderByDescending(a => a.Value))
+            foreach (var asset in UserRepository.GetUser(User.UserId).OwnedAssets.OrderByDescending(a => a.Value))
             {
                 var assetDetails = allItems.FirstOrDefault(i => i.Id == asset.Key);
                 if (assetDetails != null)
@@ -76,8 +77,8 @@ namespace Web.KaxServer.Pages.Account
 
                     // 使用 assetDetails 中的 DurationDays（如果存在且有效）
                     var initialDurationDays = assetDetails.DurationDays;
-                    var progress = (initialDurationDays > 0) 
-                        ? CalculateProgress(initialDurationDays, expiry) 
+                    var progress = (initialDurationDays > 0)
+                        ? CalculateProgress(initialDurationDays, expiry)
                         : 100.0; // 如果没有设置时长，默认为100%
 
                     var ownedItem = new OwnedItem
@@ -88,10 +89,11 @@ namespace Web.KaxServer.Pages.Account
                         TimeRemaining = timeRemaining,
                         ExpiryProgress = progress,
                         ExpiryStatus = GetStatusClass(timeRemaining),
-                        McaCode = User.McaCodes.TryGetValue(asset.Key, out var mca) ? mca : "未初始化"
+                        McaCode = _userService.GetUserDataById(User.UserId).McaCodes.TryGetValue(asset.Key, out var mca) ? mca : "未初始化"
                     };
 
                     OwnedItems.Add(ownedItem);
+                    User.OwnedAssets = UserRepository.GetUser(User.UserId).OwnedAssets;
                 }
             }
 
@@ -115,6 +117,14 @@ namespace Web.KaxServer.Pages.Account
             {
                 // Remove the asset from user's owned assets
                 User.OwnedAssets.Remove(assetId);
+                User.McaCodes.Remove(assetId);
+                var userData = _userService.GetUserDataById(User.UserId);
+                if (userData != null)
+                {
+                    userData.OwnedAssets = User.OwnedAssets;
+                    userData.McaCodes = User.McaCodes;
+                    UserRepository.SaveUser(userData);
+                }
 
                 // Update session via SessionManager
                 _sessionManager.UpdateSession(User, true);
@@ -208,7 +218,7 @@ namespace Web.KaxServer.Pages.Account
             if (totalDuration <= 0) return 100;
 
             var elapsed = (DateTime.Now - startDate).TotalSeconds;
-            
+
             // 计算剩余进度的百分比
             var progress = ((totalDuration - elapsed) / totalDuration) * 100;
 
@@ -235,4 +245,4 @@ namespace Web.KaxServer.Pages.Account
             public string ExpiryStatus { get; set; }
         }
     }
-} 
+}

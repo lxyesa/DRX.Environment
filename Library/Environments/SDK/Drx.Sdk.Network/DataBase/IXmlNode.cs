@@ -236,5 +236,45 @@ namespace Drx.Sdk.Network.DataBase
         /// <param name="value">对象值</param>
         /// <returns>当前节点</returns>
         IXmlNode Push(string nodeName, string keyName, object value);
+        
+        /// <summary>
+        /// 向节点添加列表数据
+        /// </summary>
+        /// <typeparam name="T">列表元素类型</typeparam>
+        /// <param name="nodeName">节点名称</param>
+        /// <param name="keyName">键名</param>
+        /// <param name="list">列表数据</param>
+        /// <returns>当前节点</returns>
+        IXmlNode PushList<T>(string nodeName, string keyName, List<T> list);
+        
+        /// <summary>
+        /// 获取列表数据
+        /// </summary>
+        /// <typeparam name="T">列表元素类型</typeparam>
+        /// <param name="nodeName">节点名称</param>
+        /// <param name="keyName">键名</param>
+        /// <returns>列表数据，如果不存在则返回空列表</returns>
+        List<T> GetList<T>(string nodeName, string keyName);
+        
+        /// <summary>
+        /// 向节点添加字典数据
+        /// </summary>
+        /// <typeparam name="TKey">字典键类型</typeparam>
+        /// <typeparam name="TValue">字典值类型</typeparam>
+        /// <param name="nodeName">节点名称</param>
+        /// <param name="keyName">键名</param>
+        /// <param name="dictionary">字典数据</param>
+        /// <returns>当前节点</returns>
+        IXmlNode PushDictionary<TKey, TValue>(string nodeName, string keyName, Dictionary<TKey, TValue> dictionary);
+        
+        /// <summary>
+        /// 获取字典数据
+        /// </summary>
+        /// <typeparam name="TKey">字典键类型</typeparam>
+        /// <typeparam name="TValue">字典值类型</typeparam>
+        /// <param name="nodeName">节点名称</param>
+        /// <param name="keyName">键名</param>
+        /// <returns>字典数据，如果不存在则返回空字典</returns>
+        Dictionary<TKey, TValue> GetDictionary<TKey, TValue>(string nodeName, string keyName);
     }
 } 

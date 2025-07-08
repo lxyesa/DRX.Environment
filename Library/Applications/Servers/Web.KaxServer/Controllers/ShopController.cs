@@ -7,6 +7,7 @@ using Web.KaxServer.Services;
 using System.Linq;
 using System.Xml.Linq;
 using Drx.Sdk.Network.DataBase;
+using Web.KaxServer.Services.Repositorys;
 
 namespace Web.KaxServer.Controllers
 {
@@ -59,24 +60,33 @@ namespace Web.KaxServer.Controllers
                 return BadRequest(new { message = "您的金币余额不足。" });
             }
 
+            var userDataToUpdate = UserRepository.GetUser(userSession.UserId);
+
             userSession.Coins -= cost;
             var expiryDate = DateTime.Now.AddDays((double)days);
             userSession.OwnedAssets[itemId] = expiryDate;
 
             try
             {
-                var userDataIndexPath = Path.Combine(Directory.GetCurrentDirectory(), "user_data");
-                var userDataRepository = new IndexedRepository<UserData>(userDataIndexPath, "user_");
-                var userDataToUpdate = userDataRepository.Get(userSession.UserId.ToString());
 
                 if (userDataToUpdate == null)
                 {
                     return StatusCode(500, new { message = "未找到您的用户记录。" });
                 }
 
+                if (userDataToUpdate.Banned)
+                {
+                    return BadRequest(new { message = "您已被封禁，无法购买商品，若已解封，请刷新页面。" });
+                }
+
+                if (userDataToUpdate.BanEndTime > DateTime.Now)
+                {
+                    return BadRequest(new { message = "您已被封禁，无法购买商品，若已解封，请刷新页面。" });
+                }
+
                 userDataToUpdate.Coins = userSession.Coins;
                 userDataToUpdate.OwnedAssets = userSession.OwnedAssets;
-                userDataRepository.Save(userDataToUpdate);
+                UserRepository.SaveUser(userDataToUpdate);
             }
             catch (System.Exception)
             {
@@ -204,15 +214,24 @@ namespace Web.KaxServer.Controllers
                 return BadRequest(new { message = "您的金币余额不足。" });
             }
 
+            var userDataToUpdate = UserRepository.GetUser(userSession.UserId);
+
             userSession.Coins -= cost;
             var expiryDate = DateTime.Now.AddDays((double)days);
             userSession.OwnedAssets[request.ItemId] = expiryDate;
 
+            if (userDataToUpdate.Banned)
+            {
+                return BadRequest(new { message = "您已被封禁，无法购买商品，若已解封，请刷新页面。" });
+            }
+
+            if (userDataToUpdate.BanEndTime > DateTime.Now)
+            {
+                return BadRequest(new { message = "您已被封禁，无法购买商品，若已解封，请刷新页面。" });
+            }
+
             try
             {
-                var userDataRepository = new IndexedRepository<UserData>(Path.Combine(Directory.GetCurrentDirectory(), "user_data"), "user_");
-                var userDataToUpdate = userDataRepository.Get(userSession.UserId.ToString());
-
                 if (userDataToUpdate == null)
                 {
                     return StatusCode(500, new { message = $"未找到您的用户记录或用户数据文件丢失, 用户ID: {userSession.UserId}" });
@@ -220,7 +239,7 @@ namespace Web.KaxServer.Controllers
 
                 userDataToUpdate.Coins = userSession.Coins;
                 userDataToUpdate.OwnedAssets = userSession.OwnedAssets;
-                userDataRepository.Save(userDataToUpdate);
+                UserRepository.SaveUser(userDataToUpdate);
             }
             catch (System.Exception ex)
             {
@@ -315,4 +334,4 @@ namespace Web.KaxServer.Controllers
         public int Duration { get; set; }
         public string Unit { get; set; }
     }
-} 
+}

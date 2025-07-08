@@ -19,6 +19,7 @@ using System.Linq.Expressions;
 using Web.KaxServer.Services.Queries;
 using Drx.Sdk.Network.DataBase;
 using DRX.Framework;
+using Web.KaxServer.Services.Repositorys;
 
 namespace Web.KaxServer.Pages.Account
 {
@@ -57,7 +58,7 @@ namespace Web.KaxServer.Pages.Account
 
         [BindProperty(SupportsGet = true)]
         public int CurrentPage { get; set; } = 1;
-        
+
         public int PageSize { get; } = 10;
         public int TotalPages { get; private set; }
         public int TotalCount { get; private set; }
@@ -85,8 +86,6 @@ namespace Web.KaxServer.Pages.Account
         public bool IsLoggedIn { get; private set; }
         public string Username { get; private set; } = string.Empty;
         public UserPermissionType UserPermission { get; private set; }
-
-        private readonly string _usersDataPath = Path.Combine(AppContext.BaseDirectory, "user", "users.xml");
 
         public ManagementModel(SessionManager sessionManager, ICdkService cdkService, StoreService storeService, IWebHostEnvironment env, ILogger<ManagementModel> logger, ForumDataHelper forumDataHelper)
         {
@@ -143,13 +142,13 @@ namespace Web.KaxServer.Pages.Account
             LoadCdkBatches();
             return Partial("Shared/_CdkList", this);
         }
-        
+
         public PartialViewResult OnGetUserSessionList()
         {
             LoadActiveUserSessions();
             return Partial("Shared/_UserSessionList", this);
         }
-        
+
         public PartialViewResult OnGetEditUserPartial(string sessionId)
         {
             if (string.IsNullOrEmpty(sessionId))
@@ -159,10 +158,10 @@ namespace Web.KaxServer.Pages.Account
 
             LoadActiveUserSessions();
             var userSession = ActiveUserSessions.FirstOrDefault(s => s.ID == sessionId);
-            
+
             return Partial("_EditUserForm", userSession);
         }
-        
+
         private void LoadCdkData()
         {
             var parameters = new CdkQueryParameters
@@ -281,8 +280,8 @@ namespace Web.KaxServer.Pages.Account
                 return Forbid();
             }
 
-            if (SelectedUserSession != null && 
-                !string.IsNullOrEmpty(SelectedUserSession.ID) && 
+            if (SelectedUserSession != null &&
+                !string.IsNullOrEmpty(SelectedUserSession.ID) &&
                 !string.IsNullOrEmpty(SelectedUserSession.Username))
             {
                 // 更新会话信息
@@ -294,17 +293,15 @@ namespace Web.KaxServer.Pages.Account
                     _sessionManager.UpdateSession(sessionInManager, updateCookie: false);
                 }
 
-                // 更新 user_data/index.xml
-                var userDataIndexPath = Path.Combine(_env.ContentRootPath, "user_data");
+                // 更新用户数据库
                 try
                 {
-                    var userDataRepository = new IndexedRepository<UserData>(userDataIndexPath, "user_");
-                    var userDataToUpdate = userDataRepository.Get(SelectedUserSession.UserId.ToString());
+                    var userDataToUpdate = UserRepository.GetUser(SelectedUserSession.UserId);
                     if (userDataToUpdate != null)
                     {
                         userDataToUpdate.Coins = SelectedUserSession.Coins;
                         userDataToUpdate.UserPermission = SelectedUserSession.UserPermission;
-                        userDataRepository.Save(userDataToUpdate);
+                        UserRepository.SaveUser(userDataToUpdate);
                     }
                 }
                 catch (Exception ex)
@@ -358,7 +355,7 @@ namespace Web.KaxServer.Pages.Account
             {
                 return NotFound();
             }
-            
+
             return PhysicalFile(filePath, "text/plain", fileName);
         }
 
@@ -367,7 +364,7 @@ namespace Web.KaxServer.Pages.Account
             if (string.IsNullOrEmpty(fileName))
             {
                 ErrorMessage = "无效的文件名。";
-                LoadCdkData(); 
+                LoadCdkData();
                 return Partial("Shared/_CdkList", this);
             }
 
@@ -384,7 +381,7 @@ namespace Web.KaxServer.Pages.Account
                 }
 
                 var firstCdkCode = System.IO.File.ReadLines(filePath).FirstOrDefault();
-                
+
                 if (!string.IsNullOrEmpty(firstCdkCode))
                 {
                     var batchId = _cdkService.GetBatchIdFromCdkCode(firstCdkCode);
@@ -395,7 +392,7 @@ namespace Web.KaxServer.Pages.Account
                 }
 
                 System.IO.File.Delete(filePath);
-                
+
                 SuccessMessage = "批次已成功删除。";
                 LoadCdkData();
                 LoadCdkBatches();
@@ -437,36 +434,29 @@ namespace Web.KaxServer.Pages.Account
                 _logger.LogError(ex, "An error occurred during forum data loading and processing.");
             }
         }
-        
+
         private Dictionary<string, string> GetAvatarUrlsByUsernames(HashSet<string> usernames)
         {
             var avatars = new Dictionary<string, string>();
-            if (!System.IO.File.Exists(_usersDataPath) || !usernames.Any())
+            if (!usernames.Any())
             {
                 return avatars;
             }
 
             try
             {
-                var doc = XDocument.Load(_usersDataPath);
-                var userElements = doc.Root?.Elements("user") ?? Enumerable.Empty<XElement>();
-                
-                foreach (var userElement in userElements)
+                var allUsers = UserRepository.GetAllUsers();
+                foreach (var user in allUsers)
                 {
-                    var username = userElement.Attribute("username")?.Value;
-                    if (!string.IsNullOrEmpty(username) && usernames.Contains(username))
+                    if (usernames.Contains(user.Username) && !string.IsNullOrEmpty(user.AvatarUrl))
                     {
-                        var avatarUrl = userElement.Attribute("avatarUrl")?.Value;
-                        if (!string.IsNullOrEmpty(avatarUrl))
-                        {
-                            avatars[username] = avatarUrl;
-                        }
+                        avatars[user.Username] = user.AvatarUrl;
                     }
                 }
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error reading user avatars from {Path}", _usersDataPath);
+                _logger.LogError(ex, "Error reading user avatars from database");
             }
 
             return avatars;
@@ -521,7 +511,7 @@ namespace Web.KaxServer.Pages.Account
                 Views = 280,
                 LastPostInfo = new LastPostInfoModel { AuthorName = user1, PostTime = postTime2 }
             };
-            
+
             _forumDataHelper.SaveThread(thread1);
             _forumDataHelper.SaveThread(thread2);
 
@@ -530,8 +520,74 @@ namespace Web.KaxServer.Pages.Account
             category.ThreadCount = 2;
             category.PostCount = 1; // thread2 has one comment
             category.LastThreadId = thread2.Id;
-            
+
             _forumDataHelper.SaveCategory(category);
+        }
+
+        public IActionResult OnPostBanUser(int userId, int? banDuration)
+        {
+            if (!IsLoggedIn || UserPermission != UserPermissionType.Developer)
+            {
+                return Forbid();
+            }
+
+            var userData = UserRepository.GetUser(userId);
+            if (userData == null)
+            {
+                ErrorMessage = "用户不存在。";
+                return RedirectToPage();
+            }
+
+            // 检查用户是否已被封禁，如果是则解封
+            if (userData.IsBanned())
+            {
+                userData.Banned = false;
+                userData.BanEndTime = DateTime.MinValue;
+                UserRepository.SaveUser(userData);
+                SuccessMessage = $"用户 {userData.Username} 已被解封。";
+                return RedirectToPage();
+            }
+
+            // 如果不是解封操作，则进行封禁
+            int banMinutes;
+            
+            // 处理封禁时长
+            if (banDuration.HasValue)
+            {
+                if (banDuration.Value == -1)
+                {
+                    // 永久封禁，设置为100年
+                    banMinutes = 60 * 24 * 365 * 100;
+                }
+                else
+                {
+                    // 使用传入的分钟数
+                    banMinutes = banDuration.Value;
+                }
+            }
+            else
+            {
+                // 默认封禁1天
+                banMinutes = 60 * 24;
+            }
+
+            userData.Ban(banMinutes);
+            UserRepository.SaveUser(userData);
+
+            // 查找并销毁该用户的所有会话
+            var userSessions = _sessionManager.GetAllSessions()
+                .OfType<UserSession>()
+                .Where(s => s.UserId == userId)
+                .ToList();
+
+            foreach (var session in userSessions)
+            {
+                _sessionManager.RemoveSession(session.ID, true);
+                _logger.LogInformation($"已销毁被封禁用户 {userData.Username}(ID:{userId}) 的会话 {session.ID}");
+            }
+
+            SuccessMessage = $"用户 {userData.Username} 已被封禁，并已销毁其所有会话。";
+            return RedirectToPage();
         }
     }
 } 

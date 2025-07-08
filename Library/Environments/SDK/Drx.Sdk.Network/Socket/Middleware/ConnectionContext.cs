@@ -16,7 +16,7 @@ namespace Drx.Sdk.Network.Socket.Middleware
         /// <summary>
         /// The connected TCP client.
         /// </summary>
-        public TcpClient Client { get; }
+        public DrxTcpClient Client { get; }
         
         /// <summary>
         /// The cancellation token for the connection.
@@ -29,7 +29,7 @@ namespace Drx.Sdk.Network.Socket.Middleware
         /// </summary>
         public bool IsRejected { get; set; } = false;
 
-        public ConnectionContext(SocketServerService server, TcpClient client, CancellationToken cancellationToken)
+        public ConnectionContext(SocketServerService server, DrxTcpClient client, CancellationToken cancellationToken)
         {
             Server = server;
             Client = client;

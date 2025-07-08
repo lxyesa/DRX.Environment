@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Text;
 using System.Xml;
 
 namespace Drx.Sdk.Network.DataBase
@@ -537,9 +538,190 @@ namespace Drx.Sdk.Network.DataBase
             return PushString(nodeName, keyName, value.ToString());
         }
 
+        /// <summary>
+        /// 向节点添加列表数据
+        /// </summary>
+        public IXmlNode PushList<T>(string nodeName, string keyName, List<T> list)
+        {
+            if (list == null || list.Count == 0)
+            {
+                return PushString(nodeName, keyName, string.Empty);
+            }
+
+            string serializedList;
+            
+            if (typeof(T) == typeof(string))
+            {
+                serializedList = string.Join(",", list.Cast<string>());
+            }
+            else if (typeof(T) == typeof(int))
+            {
+                serializedList = string.Join(",", list.Cast<int>().Select(v => v.ToString(CultureInfo.InvariantCulture)));
+            }
+            else if (typeof(T) == typeof(float))
+            {
+                serializedList = string.Join(",", list.Cast<float>().Select(v => v.ToString(CultureInfo.InvariantCulture)));
+            }
+            else if (typeof(T) == typeof(decimal))
+            {
+                serializedList = string.Join(",", list.Cast<decimal>().Select(v => v.ToString(CultureInfo.InvariantCulture)));
+            }
+            else if (typeof(T) == typeof(bool))
+            {
+                serializedList = string.Join(",", list.Cast<bool>().Select(v => v.ToString()));
+            }
+            else if (typeof(T) == typeof(DateTime))
+            {
+                serializedList = string.Join(",", list.Cast<DateTime>().Select(v => v.ToString("o")));
+            }
+            else
+            {
+                serializedList = string.Join(",", list.Select(v => v.ToString()));
+            }
+
+            return PushString(nodeName, keyName, serializedList);
+        }
+
+        /// <summary>
+        /// 获取列表数据
+        /// </summary>
+        public List<T> GetList<T>(string nodeName, string keyName)
+        {
+            string value = GetString(nodeName, keyName);
+            if (string.IsNullOrEmpty(value))
+            {
+                return new List<T>();
+            }
+
+            string[] parts = value.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries);
+            var result = new List<T>(parts.Length);
+
+            foreach (var part in parts)
+            {
+                if (typeof(T) == typeof(string))
+                {
+                    result.Add((T)(object)part);
+                }
+                else if (typeof(T) == typeof(int))
+                {
+                    if (int.TryParse(part, NumberStyles.Any, CultureInfo.InvariantCulture, out var intValue))
+                    {
+                        result.Add((T)(object)intValue);
+                    }
+                }
+                else if (typeof(T) == typeof(float))
+                {
+                    if (float.TryParse(part, NumberStyles.Any, CultureInfo.InvariantCulture, out var floatValue))
+                    {
+                        result.Add((T)(object)floatValue);
+                    }
+                }
+                else if (typeof(T) == typeof(decimal))
+                {
+                    if (decimal.TryParse(part, NumberStyles.Any, CultureInfo.InvariantCulture, out var decimalValue))
+                    {
+                        result.Add((T)(object)decimalValue);
+                    }
+                }
+                else if (typeof(T) == typeof(bool))
+                {
+                    if (bool.TryParse(part, out var boolValue))
+                    {
+                        result.Add((T)(object)boolValue);
+                    }
+                }
+                else if (typeof(T) == typeof(DateTime))
+                {
+                    if (DateTime.TryParse(part, null, DateTimeStyles.RoundtripKind, out var dateValue))
+                    {
+                        result.Add((T)(object)dateValue);
+                    }
+                }
+                else
+                {
+                    // 尝试使用默认转换
+                    try
+                    {
+                        var converter = System.ComponentModel.TypeDescriptor.GetConverter(typeof(T));
+                        if (converter.CanConvertFrom(typeof(string)))
+                        {
+                            result.Add((T)converter.ConvertFromString(part));
+                        }
+                    }
+                    catch
+                    {
+                        // 忽略转换错误
+                    }
+                }
+            }
+
+            return result;
+        }
+
+        /// <summary>
+        /// 向节点添加字典数据
+        /// </summary>
+        public IXmlNode PushDictionary<TKey, TValue>(string nodeName, string keyName, Dictionary<TKey, TValue> dictionary)
+        {
+            if (dictionary == null || dictionary.Count == 0)
+            {
+                return PushString(nodeName, keyName, string.Empty);
+            }
+
+            // 序列化格式：key1:value1,key2:value2,...
+            string serializedDict = string.Join(",", dictionary.Select(kv => 
+            {
+                string keyStr = FormatDictionaryComponent(kv.Key);
+                string valueStr = FormatDictionaryComponent(kv.Value);
+                return $"{keyStr}:{valueStr}";
+            }));
+
+            return PushString(nodeName, keyName, serializedDict);
+        }
+
+        /// <summary>
+        /// 获取字典数据
+        /// </summary>
+        public Dictionary<TKey, TValue> GetDictionary<TKey, TValue>(string nodeName, string keyName)
+        {
+            string value = GetString(nodeName, keyName);
+            if (string.IsNullOrEmpty(value))
+            {
+                return new Dictionary<TKey, TValue>();
+            }
+
+            var result = new Dictionary<TKey, TValue>();
+            string[] pairs = value.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries);
+
+            foreach (var pair in pairs)
+            {
+                string[] parts = pair.Split(new[] { ':' }, 2);
+                if (parts.Length != 2)
+                {
+                    continue;
+                }
+
+                if (TryParseDictionaryComponent<TKey>(parts[0], out var key) && 
+                    TryParseDictionaryComponent<TValue>(parts[1], out var val))
+                {
+                    result[key] = val;
+                }
+            }
+
+            return result;
+        }
+
         private XmlElement GetChildElement(string name)
         {
-            return _element.SelectSingleNode(name) as XmlElement;
+            // 不使用XPath选择，而是直接遍历子节点查找匹配的名称
+            foreach (System.Xml.XmlNode childNode in _element.ChildNodes)
+            {
+                if (childNode.NodeType == XmlNodeType.Element && childNode.Name == name)
+                {
+                    return (XmlElement)childNode;
+                }
+            }
+            return null;
         }
 
         private XmlElement GetOrCreateChildElement(string name)
@@ -547,10 +729,161 @@ namespace Drx.Sdk.Network.DataBase
             var element = GetChildElement(name);
             if (element == null)
             {
+                // 检查节点名称是否合法
+                if (!IsValidXmlName(name))
+                {
+                    // 如果不合法，替换为安全的XML名称
+                    name = MakeSafeXmlName(name);
+                }
+                
                 element = _element.OwnerDocument.CreateElement(name);
                 _element.AppendChild(element);
             }
             return element;
+        }
+        
+        // 验证XML节点名称是否合法
+        private bool IsValidXmlName(string name)
+        {
+            if (string.IsNullOrEmpty(name))
+                return false;
+                
+            // 检查节点名称是否符合XML规范
+            try
+            {
+                // 尝试创建一个临时元素来验证名称
+                var doc = new XmlDocument();
+                doc.CreateElement(name);
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+        
+        // 将任意字符串转换为安全的XML节点名称
+        private string MakeSafeXmlName(string name)
+        {
+            if (string.IsNullOrEmpty(name))
+                return "item";
+                
+            // 移除或替换非法字符
+            StringBuilder result = new StringBuilder();
+            
+            // 第一个字符必须是字母或下划线
+            if (!char.IsLetter(name[0]) && name[0] != '_')
+                result.Append('_');
+                
+            foreach (char c in name)
+            {
+                if (char.IsLetterOrDigit(c) || c == '_' || c == '-' || c == '.')
+                    result.Append(c);
+                else
+                    result.Append('_'); // 替换非法字符为下划线
+            }
+            
+            string safeName = result.ToString();
+            return string.IsNullOrEmpty(safeName) ? "item" : safeName;
+        }
+
+        // 辅助方法：格式化字典组件
+        private string FormatDictionaryComponent<T>(T value)
+        {
+            if (value == null)
+            {
+                return string.Empty;
+            }
+
+            if (typeof(T) == typeof(string))
+            {
+                // 对字符串进行编码，避免特殊字符冲突
+                return Uri.EscapeDataString((string)(object)value);
+            }
+            else if (typeof(T) == typeof(DateTime))
+            {
+                return ((DateTime)(object)value).ToString("o");
+            }
+            else
+            {
+                return value.ToString();
+            }
+        }
+
+        // 辅助方法：解析字典组件
+        private bool TryParseDictionaryComponent<T>(string value, out T result)
+        {
+            result = default;
+            if (string.IsNullOrEmpty(value))
+            {
+                return false;
+            }
+
+            try
+            {
+                if (typeof(T) == typeof(string))
+                {
+                    // 解码字符串
+                    result = (T)(object)Uri.UnescapeDataString(value);
+                    return true;
+                }
+                else if (typeof(T) == typeof(int))
+                {
+                    if (int.TryParse(value, NumberStyles.Any, CultureInfo.InvariantCulture, out var intValue))
+                    {
+                        result = (T)(object)intValue;
+                        return true;
+                    }
+                }
+                else if (typeof(T) == typeof(float))
+                {
+                    if (float.TryParse(value, NumberStyles.Any, CultureInfo.InvariantCulture, out var floatValue))
+                    {
+                        result = (T)(object)floatValue;
+                        return true;
+                    }
+                }
+                else if (typeof(T) == typeof(decimal))
+                {
+                    if (decimal.TryParse(value, NumberStyles.Any, CultureInfo.InvariantCulture, out var decimalValue))
+                    {
+                        result = (T)(object)decimalValue;
+                        return true;
+                    }
+                }
+                else if (typeof(T) == typeof(bool))
+                {
+                    if (bool.TryParse(value, out var boolValue))
+                    {
+                        result = (T)(object)boolValue;
+                        return true;
+                    }
+                }
+                else if (typeof(T) == typeof(DateTime))
+                {
+                    if (DateTime.TryParse(value, null, DateTimeStyles.RoundtripKind, out var dateValue))
+                    {
+                        result = (T)(object)dateValue;
+                        return true;
+                    }
+                }
+                else
+                {
+                    // 尝试使用默认转换
+                    var converter = System.ComponentModel.TypeDescriptor.GetConverter(typeof(T));
+                    if (converter.CanConvertFrom(typeof(string)))
+                    {
+                        result = (T)converter.ConvertFromString(value);
+                        return true;
+                    }
+                }
+            }
+            catch
+            {
+                // 忽略转换错误
+            }
+
+            return false;
         }
     }
 

@@ -9,6 +9,29 @@
 - **类型参数**: `T` - 必须实现 `IIndexable`, `IXmlSerializable` 接口，并有一个无参构造函数
 - **主要职责**: 提供对象的存储、检索和管理功能
 
+## ExposedValue 类
+
+`ExposedValue` 类用于配置在索引中暴露的对象内部值，使得可以通过这些值进行查找。
+
+### 属性
+
+- `Name`: 暴露值的名称，用作索引中的键
+- `NodeName`: XML节点名称，指定要从中获取值的节点
+- `KeyName`: XML属性名称，指定要获取的属性
+
+### 构造函数
+
+```csharp
+public ExposedValue(string name, string nodeName, string keyName)
+```
+
+创建一个新的暴露值配置。
+
+**参数**:
+- `name`: 暴露值的名称
+- `nodeName`: XML节点名称
+- `keyName`: XML属性名称
+
 ## 构造函数
 
 ```csharp
@@ -33,8 +56,103 @@ var userRepo = new IndexedRepository<User>("data/users", "user_");
 - `_indexFilePath`: 索引文件的路径
 - `_keyPrefix`: 键前缀，用于生成有效的XML标签名
 - `_config`: 索引系统配置
+- `_exposedValues`: 暴露值配置的字典
 
 ## 主要方法
+
+### 暴露值相关方法
+
+#### AddExposedValue
+
+```csharp
+public void AddExposedValue(ExposedValue exposedValue)
+```
+
+添加一个暴露值配置，使得可以通过该值进行查找。
+
+**参数**:
+- `exposedValue`: 暴露值配置
+
+**示例**:
+```csharp
+var exposedValue = new ExposedValue("email", "info", "email");
+userRepo.AddExposedValue(exposedValue);
+```
+
+```csharp
+public void AddExposedValue(string name, string nodeName, string keyName)
+```
+
+添加一个暴露值配置，使得可以通过该值进行查找。
+
+**参数**:
+- `name`: 暴露值的名称
+- `nodeName`: XML节点名称
+- `keyName`: XML属性名称
+
+**示例**:
+```csharp
+userRepo.AddExposedValue("email", "info", "email");
+```
+
+#### RemoveExposedValue
+
+```csharp
+public bool RemoveExposedValue(string name)
+```
+
+移除一个暴露值配置。
+
+**参数**:
+- `name`: 要移除的暴露值名称
+
+**返回值**:
+- 如果成功移除则返回true，否则返回false
+
+**示例**:
+```csharp
+bool removed = userRepo.RemoveExposedValue("email");
+```
+
+#### GetByExposedValue
+
+```csharp
+public List<T> GetByExposedValue(string exposedValueName, string value)
+```
+
+通过暴露值查找对象。
+
+**参数**:
+- `exposedValueName`: 暴露值的名称
+- `value`: 要查找的值
+
+**返回值**:
+- 匹配的对象列表
+
+**示例**:
+```csharp
+var users = userRepo.GetByExposedValue("email", "john@example.com");
+```
+
+#### GetSingleByExposedValue
+
+```csharp
+public T GetSingleByExposedValue(string exposedValueName, string value)
+```
+
+通过暴露值查找单个对象（如果有多个匹配项，则返回第一个）。
+
+**参数**:
+- `exposedValueName`: 暴露值的名称
+- `value`: 要查找的值
+
+**返回值**:
+- 匹配的对象，如果没有找到则返回null
+
+**示例**:
+```csharp
+var user = userRepo.GetSingleByExposedValue("email", "john@example.com");
+```
 
 ### Get
 
@@ -100,6 +218,89 @@ public void Save(T item)
 ```csharp
 var user = new User { Id = "12345", Name = "John Doe" };
 userRepo.Save(user);
+```
+
+### Update
+
+```csharp
+public void Update(T item)
+```
+
+更新单个对象，但不立即保存更改。此方法适用于需要批量更新多个对象时提高性能。
+
+**参数**:
+- `item`: 要更新的对象
+
+**行为**:
+- 如果对象ID已存在，则更新现有对象
+- 如果对象ID不存在，则创建新对象
+- 不自动保存更改到磁盘，需要手动调用 `SaveChanges()`
+
+**示例**:
+```csharp
+// 批量更新多个对象
+foreach (var user in usersToUpdate)
+{
+    userRepo.Update(user);
+}
+// 一次性保存所有更改
+userRepo.SaveChanges();
+```
+
+### Remove
+
+```csharp
+public bool Remove(string id)
+```
+
+从存储库中删除指定ID的对象。
+
+**参数**:
+- `id`: 要删除的对象ID
+
+**返回值**:
+- 如果对象存在并被成功删除则返回true，否则返回false
+
+**行为**:
+- 检查对象是否存在
+- 从索引中删除对象引用
+- 删除对象的数据文件
+- 自动保存更改到磁盘
+
+**示例**:
+```csharp
+bool deleted = userRepo.Remove("12345");
+if (deleted)
+{
+    Console.WriteLine("User was successfully deleted");
+}
+else
+{
+    Console.WriteLine("User not found");
+}
+```
+
+### SaveChanges
+
+```csharp
+public void SaveChanges()
+```
+
+保存所有挂起的更改到磁盘。在调用多个Update方法后使用此方法一次性保存所有更改。
+
+**行为**:
+- 将内存中的所有更改写入磁盘
+- 重置脏标志
+
+**示例**:
+```csharp
+// 更新多个对象
+userRepo.Update(user1);
+userRepo.Update(user2);
+userRepo.Update(user3);
+
+// 一次性保存所有更改
+userRepo.SaveChanges();
 ```
 
 ### SaveAll
@@ -172,6 +373,10 @@ if (user != null)
     userRepo.Save(user);
 }
 
+// 删除用户
+bool deleted = userRepo.Remove("user1");
+Console.WriteLine(deleted ? "User deleted" : "User not found");
+
 // 获取所有用户
 var allUsers = userRepo.GetAll();
 foreach (var u in allUsers)
@@ -183,105 +388,63 @@ foreach (var u in allUsers)
 userRepo.Close();
 ```
 
-### 批量数据导入
+### 使用暴露值进行查找
+
+```csharp
+// 创建存储库
+var userRepo = new IndexedRepository<User>("data/users");
+
+// 添加暴露值配置
+userRepo.AddExposedValue("email", "info", "email");
+userRepo.AddExposedValue("role", "info", "role");
+
+// 保存用户
+var user1 = new User { Id = "1", Name = "John", Email = "john@example.com", Role = "admin" };
+var user2 = new User { Id = "2", Name = "Jane", Email = "jane@example.com", Role = "user" };
+userRepo.Save(user1);
+userRepo.Save(user2);
+
+// 通过暴露值查找用户
+var adminUsers = userRepo.GetByExposedValue("role", "admin");
+Console.WriteLine($"Found {adminUsers.Count} admin users");
+
+// 通过暴露值查找单个用户
+var johnUser = userRepo.GetSingleByExposedValue("email", "john@example.com");
+if (johnUser != null)
+{
+    Console.WriteLine($"Found user: {johnUser.Name}");
+}
+
+// 移除暴露值配置
+userRepo.RemoveExposedValue("role");
+```
+
+### 批量操作
 
 ```csharp
 // 创建存储库
 var productRepo = new IndexedRepository<Product>("data/products", "prod_");
 
-// 准备批量数据
-var products = new List<Product>();
-for (int i = 1; i <= 100; i++)
+// 批量更新产品
+var productsToUpdate = productRepo.GetAll();
+foreach (var product in productsToUpdate)
 {
-    products.Add(new Product
-    {
-        Id = i.ToString(),
-        Name = $"Product {i}",
-        Price = 10.0m + i
-    });
+    product.Price *= 1.1m; // 提价10%
+    productRepo.Update(product); // 不立即保存
 }
 
-// 批量保存（会覆盖现有数据）
-productRepo.SaveAll(products);
+// 一次性保存所有更改
+productRepo.SaveChanges();
 
-// 验证导入
-var count = productRepo.GetAll().Count;
-Console.WriteLine($"Imported {count} products");
-
-// 关闭存储库
-productRepo.Close();
+// 批量删除产品
+var productsToDelete = productRepo.GetAll().Where(p => p.Price > 100).ToList();
+foreach (var product in productsToDelete)
+{
+    productRepo.Remove(product.Id);
+}
 ```
 
 ### 与自定义对象一起使用
 
-```csharp
-// 定义符合要求的类
-public class Customer : IIndexable, IXmlSerializable
-{
-    public string Id { get; set; }
-    public string Name { get; set; }
-    public string Address { get; set; }
-    public DateTime RegistrationDate { get; set; }
-    
-    public void WriteToXml(IXmlNode node)
-    {
-        node.PushString("info", "name", Name);
-        node.PushString("info", "address", Address);
-        node.PushString("info", "registrationDate", RegistrationDate.ToString("o"));
-    }
-    
-    public void ReadFromXml(IXmlNode node)
-    {
-        Name = node.GetString("info", "name");
-        Address = node.GetString("info", "address");
-        
-        var dateStr = node.GetString("info", "registrationDate");
-        if (DateTime.TryParse(dateStr, out var date))
-        {
-            RegistrationDate = date;
-        }
-    }
-}
-
-// 使用存储库
-var customerRepo = new IndexedRepository<Customer>("data/customers");
-
-// 添加客户
-var customer = new Customer
-{
-    Id = "c001",
-    Name = "ACME Corp",
-    Address = "123 Main St",
-    RegistrationDate = DateTime.Now
-};
-customerRepo.Save(customer);
-
-// 检索客户
-var retrievedCustomer = customerRepo.Get("c001");
 ```
-
-## 工作原理
-
-1. 存储库在指定目录中创建一个索引文件（`index.xml`）和多个数据文件
-2. 每个对象存储在单独的XML文件中，文件名基于对象ID
-3. 索引文件包含从对象ID到数据文件的映射
-4. 读取对象时，存储库首先查找索引，然后加载相应的数据文件
-5. 保存对象时，存储库更新数据文件和索引（如果需要）
-
-## 文件结构示例
-
 ```
-data/users/
-  ├── index.xml          # 索引文件，包含ID到文件的映射
-  ├── user_1.xml         # 用户1的数据文件
-  ├── user_2.xml         # 用户2的数据文件
-  └── user_3.xml         # 用户3的数据文件
-```
-
-## 注意事项
-
-- 对象必须实现 `IIndexable` 接口，提供唯一ID
-- 对象必须实现 `IXmlSerializable` 接口，处理XML序列化和反序列化
-- 对象必须有一个无参构造函数，用于反序列化
-- `SaveAll` 方法会删除所有现有数据，谨慎使用
-- 为避免资源泄漏，应在不再需要存储库时调用 `Close()` 方法 

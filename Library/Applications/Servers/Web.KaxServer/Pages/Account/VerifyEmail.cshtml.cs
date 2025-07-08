@@ -5,13 +5,13 @@ using Web.KaxServer.Models;
 using System;
 using Web.KaxServer.Services;
 using System.Linq;
+using Web.KaxServer.Services.Repositorys;
 
 namespace Web.KaxServer.Pages.Account
 {
     public class VerifyEmailModel : PageModel
     {
         private readonly SessionManager _sessionManager;
-        private readonly IUserService _userService;
 
         [TempData]
         public string ErrorMessage { get; set; }
@@ -19,10 +19,9 @@ namespace Web.KaxServer.Pages.Account
         [TempData]
         public string UsernameForSuccessPage { get; set; }
 
-        public VerifyEmailModel(SessionManager sessionManager, IUserService userService)
+        public VerifyEmailModel(SessionManager sessionManager)
         {
             _sessionManager = sessionManager;
-            _userService = userService;
         }
 
         public IActionResult OnGet(string token)
@@ -41,16 +40,8 @@ namespace Web.KaxServer.Pages.Account
                  return RedirectToPage("/Account/RegisterError");
             }
 
-            // At this point, the user is verified. Now create the user in the new system.
-            var concreteUserService = _userService as UserService;
-            if (concreteUserService == null)
-            {
-                ErrorMessage = "系统服务异常，请联系管理员。";
-                return RedirectToPage("/Account/RegisterError");
-            }
-
             // Redundant check for safety, the main check is now in Register.cshtml.cs
-            if (concreteUserService.GetAllUsers().Any(u => u.Username.Equals(session.Username, StringComparison.OrdinalIgnoreCase) || u.Email.Equals(session.Email, StringComparison.OrdinalIgnoreCase)))
+            if (UserRepository.GetAllUsers().Any(u => u.Username.Equals(session.Username, StringComparison.OrdinalIgnoreCase) || u.Email.Equals(session.Email, StringComparison.OrdinalIgnoreCase)))
             {
                 ErrorMessage = "用户名或邮箱已被注册，请使用其他信息重新注册。";
                 _sessionManager.RemoveSession(token);
@@ -68,7 +59,7 @@ namespace Web.KaxServer.Pages.Account
                 AvatarUrl = "/img/avatars/default.png" // Default avatar
             };
 
-            concreteUserService.SaveUser(newUser);
+            UserRepository.SaveUser(newUser);
             
             _sessionManager.RemoveSession(token);
             

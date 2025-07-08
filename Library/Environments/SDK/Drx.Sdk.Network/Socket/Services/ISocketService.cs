@@ -19,22 +19,22 @@ namespace Drx.Sdk.Network.Socket.Services
         /// <summary>
         /// Triggered asynchronously when a client successfully connects and passes connection middleware.
         /// </summary>
-        Task OnClientConnectAsync(SocketServerService server, TcpClient client, CancellationToken cancellationToken);
+        Task OnClientConnectAsync(SocketServerService server, DrxTcpClient client, CancellationToken cancellationToken);
 
         /// <summary>
         /// Triggered asynchronously when a client disconnects for any reason.
         /// </summary>
-        Task OnClientDisconnectAsync(SocketServerService server, TcpClient client);
+        Task OnClientDisconnectAsync(SocketServerService server, DrxTcpClient client);
 
         /// <summary>
         /// Triggered asynchronously when the server receives a message from a client, after decryption/integrity checks.
         /// </summary>
-        Task OnServerReceiveAsync(SocketServerService server, TcpClient client, ReadOnlyMemory<byte> data, CancellationToken cancellationToken);
+        Task OnServerReceiveAsync(SocketServerService server, DrxTcpClient client, ReadOnlyMemory<byte> data, CancellationToken cancellationToken);
 
         /// <summary>
         /// Triggered asynchronously when the server is about to send a message to a client, before encryption/signing.
         /// </summary>
-        Task OnServerSendAsync(SocketServerService server, TcpClient client, ReadOnlyMemory<byte> data, CancellationToken cancellationToken);
+        Task OnServerSendAsync(SocketServerService server, DrxTcpClient client, ReadOnlyMemory<byte> data, CancellationToken cancellationToken);
 
         /// <summary>
         /// Synchronously executes the main logic of the service. Called once at server startup.
@@ -45,21 +45,21 @@ namespace Drx.Sdk.Network.Socket.Services
         /// <summary>
         /// Triggered synchronously when a client connects.
         /// </summary>
-        void OnClientConnect(SocketServerService server, TcpClient client);
+        void OnClientConnect(SocketServerService server, DrxTcpClient client);
 
         /// <summary>
         /// Triggered synchronously when a client disconnects.
         /// </summary>
-        void OnClientDisconnect(SocketServerService server, TcpClient client);
+        void OnClientDisconnect(SocketServerService server, DrxTcpClient client);
 
         /// <summary>
         /// Triggered synchronously when the server receives a message.
         /// </summary>
-        void OnServerReceive(SocketServerService server, TcpClient client, ReadOnlyMemory<byte> data);
+        void OnServerReceive(SocketServerService server, DrxTcpClient client, ReadOnlyMemory<byte> data);
 
         /// <summary>
         /// Triggered synchronously when the server is about to send a message.
         /// </summary>
-        void OnServerSend(SocketServerService server, TcpClient client, ReadOnlyMemory<byte> data);
+        void OnServerSend(SocketServerService server, DrxTcpClient client, ReadOnlyMemory<byte> data);
     }
 } 

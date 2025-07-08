@@ -215,38 +215,106 @@ namespace Drx.Sdk.Network.DataBase
             }
 
             var indexFilePath = Path.Combine(config.RootPath, "index.xml");
-            var indexNode = database.CreateRoot(indexFilePath);
+            
+            // 清除内存中已加载的索引文件，确保每次都重新从磁盘加载
+            try
+            {
+                if (File.Exists(indexFilePath))
+                {
+                    // 确保关闭之前打开的文件，这样下一次会重新从磁盘加载
+                    database.CloseFile(indexFilePath);
+                }
+            }
+            catch (Exception)
+            {
+                // 忽略关闭文件时的错误，继续执行
+            }
+            
+            // 如果文件已存在，先加载并使用现有内容
+            IXmlNode indexNode;
+            try
+            {
+                if (File.Exists(indexFilePath))
+                {
+                    indexNode = database.OpenRoot(indexFilePath);
+                }
+                else
+                {
+                    indexNode = database.CreateRoot(indexFilePath);
+                }
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException($"无法访问索引文件: {ex.Message}", ex);
+            }
+            
             var indexElement = indexNode.GetOrCreateNode("index");
 
             var itemKey = keySelector(item);
+            
             try
             {
                 XmlConvert.VerifyName(itemKey);
             }
-            catch (XmlException)
+            catch (XmlException ex)
             {
-                throw new ArgumentException("The key selected for the item is not a valid XML tag name.", nameof(keySelector));
+                throw new ArgumentException("项目键不是有效的XML标签名", nameof(keySelector), ex);
             }
 
-            var itemReference = indexElement.GetReference(itemKey);
             string fileName;
+            bool isNewItem = false;
 
-            if (itemReference != null && !string.IsNullOrEmpty(itemReference.ReferencePath))
+            try
             {
-                // Item exists, use its existing file path.
-                fileName = itemReference.ReferencePath;
+                var itemReference = indexElement.GetReference(itemKey);
+                
+                if (itemReference != null && !string.IsNullOrEmpty(itemReference.ReferencePath))
+                {
+                    // 项目已存在，使用现有文件路径
+                    fileName = itemReference.ReferencePath;
+                }
+                else
+                {
+                    // 新项目，创建新文件名
+                    fileName = itemKey + ".xml";
+                    
+                    // 向索引添加新引用
+                    indexElement.PushReference(itemKey, fileName);
+                    isNewItem = true;
+                    
+                    // 立即保存索引文件，确保引用被记录
+                    database.SaveFile(indexFilePath);
+                }
             }
-            else
+            catch (Exception ex)
             {
-                // New item, create a new file name.
-                fileName = itemKey + ".xml";
-                // Add the new reference to the index.
-                indexElement.PushReference(itemKey, fileName);
+                throw new InvalidOperationException($"处理索引引用时出错: {ex.Message}", ex);
             }
             
             var dataFilePath = Path.Combine(config.RootPath, fileName);
-            var itemRoot = database.CreateRoot(dataFilePath);
-            item.WriteToXml(itemRoot);
+            
+            try
+            {
+                // 保存数据文件
+                var itemRoot = database.CreateRoot(dataFilePath);
+                item.WriteToXml(itemRoot);
+                
+                // 先保存数据文件
+                database.SaveFile(dataFilePath);
+                
+                // 如果是新项目，再次保存索引文件确保引用被记录
+                if (isNewItem)
+                {
+                    database.SaveFile(indexFilePath);
+                }
+                
+                // 最后再保存一次所有更改，确保所有文件都被正确写入
+                database.SaveChanges();
+            }
+            catch (Exception ex)
+            {
+                throw new IOException($"保存文件时出错: {ex.Message}", ex);
+            }
         }
 
         /// <summary>
@@ -336,6 +404,54 @@ namespace Drx.Sdk.Network.DataBase
             item.ReadFromXml(itemRoot);
 
             return item;
+        }
+
+        /// <summary>
+        /// 从索引系统中删除指定键的项目。
+        /// </summary>
+        /// <typeparam name="T">要删除的对象类型。</typeparam>
+        /// <param name="database">数据库实例。</param>
+        /// <param name="indexFilePath">索引文件的完整路径。</param>
+        /// <param name="key">要删除的项目的唯一键。</param>
+        /// <returns>如果找到并删除了项目则返回true，否则返回false。</returns>
+        public static bool RemoveFromIndexSystem<T>(this XmlDatabase database, string indexFilePath, string key) where T : IXmlSerializable, new()
+        {
+            if (!File.Exists(indexFilePath))
+            {
+                return false;
+            }
+
+            var indexNode = database.OpenRoot(indexFilePath);
+            var indexElement = indexNode.GetNode("index");
+            if (indexElement == null)
+            {
+                return false;
+            }
+
+            var itemReference = indexElement.GetReference(key);
+            if (itemReference == null || string.IsNullOrEmpty(itemReference.ReferencePath))
+            {
+                return false;
+            }
+
+            // 获取数据文件的路径
+            var indexFileDir = Path.GetDirectoryName(Path.GetFullPath(indexFilePath));
+            var dataFilePath = Path.Combine(indexFileDir, itemReference.ReferencePath);
+
+            // 从索引中移除引用
+            var indexElementAsXmlNode = indexElement as XmlNode;
+            if (indexElementAsXmlNode != null)
+            {
+                var element = indexElementAsXmlNode.GetUnderlyingElement();
+                var referenceElement = element.SelectSingleNode(key) as XmlElement;
+                if (referenceElement != null)
+                {
+                    element.RemoveChild(referenceElement);
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         // This method needs to be added to XmlNode to expose the underlying element for the dummy GetAllChildren

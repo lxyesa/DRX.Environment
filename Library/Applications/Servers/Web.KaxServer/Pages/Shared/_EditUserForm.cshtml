@@ -1,5 +1,6 @@
 @using Web.KaxServer.Models
 @using Web.KaxServer.Services
+@using Web.KaxServer.Services.Repositorys
 @inject StoreService StoreService
 @model Web.KaxServer.Models.UserSession
 
@@ -9,6 +10,8 @@
         <input type="hidden" name="SelectedUserSession.ID" value="@Model.ID" />
         <input type="hidden" name="SelectedUserSession.Username" value="@Model.Username" />
         <input type="hidden" name="SelectedUserSession.UserId" value="@Model.UserId" />
+        <input type="hidden" name="SelectedUserSession.Banned" value="@UserRepository.GetUser(Model.UserId).Banned" />
+        <input type="hidden" name="SelectedUserSession.BanEndTime" value="@UserRepository.GetUser(Model.UserId).BanEndTime" />
         
         <div class="form-row">
             <div class="form-col">

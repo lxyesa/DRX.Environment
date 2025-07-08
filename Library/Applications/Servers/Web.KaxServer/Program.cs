@@ -39,9 +39,11 @@ builder.Services.AddHostedService<AssetCleanupService>();
 
 // 添加socket服务
 var socket = builder.Services.AddSocketService()
-    .WithEncryption<AesEncryptor>();
+    //.WithEncryption<AesEncryptor>()
+    .AddService<SocketMapService>()
+    .AddService<ClientCleanService>();
 
-CommandRegistry.RegisterCommands(socket);
+Web.KaxServer.SocketCommands.CommandHandler.RegisterCommands(socket);
 
 builder.Services.AddSingleton<SessionManager>();
 builder.Services.AddScoped<ICdkService, CdkService>();

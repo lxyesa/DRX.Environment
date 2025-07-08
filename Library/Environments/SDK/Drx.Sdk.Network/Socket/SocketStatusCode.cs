@@ -12,6 +12,7 @@ namespace Drx.Sdk.Network.Socket
         Failure_UserNotFound = 0x20000002,            // 验证失败：用户不存在或未登录。
         Failure_AssetInvalid = 0x20000003,            // 验证失败：用户不拥有指定资产或资产已过期。
         Failure_SessionConflict = 0x20000004,         // 验证失败：找到了多个冲突的用户会话。
+        Failure_UserAlreadyLoggedIn = 0x20000005,      // 验证失败：用户已登录。
 
         // 成功代码 (0x21000000 - 0x21FFFFFF) - 表示请求已成功处理。
         Success_General = 0x21000000,               // 通用成功。客户端应将此视为一个肯定性、非特定的响应。

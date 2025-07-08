@@ -23,6 +23,8 @@
       <PackageReference Include="Microsoft.AspNetCore.JsonPatch" Version="9.0.6" />
       <PackageReference Include="Microsoft.AspNetCore.Mvc.Core" Version="2.3.0" />
       <PackageReference Include="Microsoft.AspNetCore.Routing" Version="2.3.0" />
+      <PackageReference Include="Microsoft.Data.Sqlite" Version="9.0.6" />
+      <PackageReference Include="SQLite" Version="3.13.0" />
     </ItemGroup>
 
     <ItemGroup>

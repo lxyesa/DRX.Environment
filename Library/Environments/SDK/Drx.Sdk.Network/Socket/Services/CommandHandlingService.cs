@@ -22,7 +22,7 @@ namespace Drx.Sdk.Network.Socket.Services
             _commandHandlers = commandHandlers;
         }
 
-        public override async Task OnServerReceiveAsync(SocketServerService server, TcpClient client, ReadOnlyMemory<byte> data, CancellationToken cancellationToken)
+        public override async Task OnServerReceiveAsync(SocketServerService server, DrxTcpClient client, ReadOnlyMemory<byte> data, CancellationToken cancellationToken)
         {
             string rawMessage = Encoding.UTF8.GetString(data.Span);
 

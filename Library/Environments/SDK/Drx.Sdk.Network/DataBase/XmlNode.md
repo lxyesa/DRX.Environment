@@ -233,6 +233,56 @@ public IXmlNodeReference PushReference(string nodeName, string path)
 var reference = node.PushReference("config", "configs/settings.xml");
 ```
 
+#### PushList
+
+```csharp
+public IXmlNode PushList<T>(string nodeName, string keyName, List<T> list)
+```
+
+向节点添加列表类型数据。
+
+**参数**:
+- `nodeName`: 子节点名称
+- `keyName`: 属性名称
+- `list`: 列表数据
+
+**返回值**:
+- 当前节点实例，支持链式调用
+
+**示例**:
+```csharp
+var tags = new List<string> { "xml", "database", "storage" };
+node.PushList("tags", "items", tags);
+
+var scores = new List<int> { 10, 20, 30, 40 };
+node.PushList("scores", "points", scores);
+```
+
+#### PushDictionary
+
+```csharp
+public IXmlNode PushDictionary<TKey, TValue>(string nodeName, string keyName, Dictionary<TKey, TValue> dictionary)
+```
+
+向节点添加字典类型数据。
+
+**参数**:
+- `nodeName`: 子节点名称
+- `keyName`: 属性名称
+- `dictionary`: 字典数据
+
+**返回值**:
+- 当前节点实例，支持链式调用
+
+**示例**:
+```csharp
+var userRoles = new Dictionary<string, string> { { "john", "admin" }, { "jane", "user" } };
+node.PushDictionary("access", "roles", userRoles);
+
+var productPrices = new Dictionary<int, decimal> { { 1, 19.99m }, { 2, 29.99m } };
+node.PushDictionary("products", "prices", productPrices);
+```
+
 ### 数据读取方法
 
 #### GetString
@@ -467,6 +517,48 @@ foreach (var user in users)
 {
     Console.WriteLine(user.Name);
 }
+```
+
+#### GetList<T>
+
+```csharp
+public List<T> GetList<T>(string nodeName, string keyName)
+```
+
+获取列表类型数据。
+
+**参数**:
+- `nodeName`: 子节点名称
+- `keyName`: 属性名称
+
+**返回值**:
+- 列表数据，如果不存在则返回空列表
+
+**示例**:
+```csharp
+List<string> tags = node.GetList<string>("tags", "items");
+List<int> scores = node.GetList<int>("scores", "points");
+```
+
+#### GetDictionary
+
+```csharp
+public Dictionary<TKey, TValue> GetDictionary<TKey, TValue>(string nodeName, string keyName)
+```
+
+获取字典类型数据。
+
+**参数**:
+- `nodeName`: 子节点名称
+- `keyName`: 属性名称
+
+**返回值**:
+- 字典数据，如果不存在则返回空字典
+
+**示例**:
+```csharp
+Dictionary<string, string> userRoles = node.GetDictionary<string, string>("access", "roles");
+Dictionary<int, decimal> productPrices = node.GetDictionary<int, decimal>("products", "prices");
 ```
 
 #### GetReference
@@ -742,6 +834,22 @@ rootNode.SerializeList("users", users);
 
 // 反序列化对象列表
 var loadedUsers = rootNode.DeserializeList<User>("users");
+```
+
+### 复杂数据类型操作
+
+```csharp
+// 列表操作
+var tags = new List<string> { "xml", "database", "storage" };
+rootNode.PushList("metadata", "tags", tags);
+
+var retrievedTags = rootNode.GetList<string>("metadata", "tags");
+
+// 字典操作
+var userScores = new Dictionary<string, int> { { "john", 100 }, { "jane", 95 } };
+rootNode.PushDictionary("game", "scores", userScores);
+
+var retrievedScores = rootNode.GetDictionary<string, int>("game", "scores");
 ```
 
 ## 注意事项

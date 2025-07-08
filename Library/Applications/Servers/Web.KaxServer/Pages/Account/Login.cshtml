@@ -206,6 +206,31 @@
         .register-link a:hover {
             text-decoration: underline;
         }
+        
+        /* 加载状态样式 */
+        .btn-loading {
+            position: relative;
+            pointer-events: none;
+            color: transparent !important;
+        }
+        
+        .btn-loading::after {
+            content: '';
+            position: absolute;
+            width: 1.2rem;
+            height: 1.2rem;
+            top: calc(50% - 0.6rem);
+            left: calc(50% - 0.6rem);
+            border: 2px solid #fff;
+            border-radius: 50%;
+            border-right-color: transparent;
+            animation: spin 0.75s linear infinite;
+        }
+        
+        @@keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
     </style>
 }
 
@@ -245,7 +270,7 @@
                 <a href="#" class="forgot-password-link">忘记密码？</a>
             </div>
             
-            <button type="submit" class="btn btn-accent btn-block">登录</button>
+            <button type="submit" id="loginButton" class="btn btn-accent btn-block">登录</button>
         </form>
         
         <div class="divider">或</div>
@@ -260,4 +285,37 @@
             还没有账户？ <a asp-page="/Account/Register">立即注册</a>
         </p>
     </div>
-</div> 
+</div>
+
+@section Scripts {
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const loginForm = document.getElementById('loginForm');
+            const loginButton = document.getElementById('loginButton');
+            
+            loginForm.addEventListener('submit', async function(e) {
+                e.preventDefault();
+                
+                // 禁用按钮并显示加载状态
+                loginButton.disabled = true;
+                loginButton.classList.add('btn-loading');
+                loginButton.innerText = '登录中...';
+                
+                try {
+                    // 提交表单
+                    this.submit();
+                } catch (error) {
+                    console.error('登录过程中发生错误:', error);
+                    
+                    // 恢复按钮状态
+                    loginButton.disabled = false;
+                    loginButton.classList.remove('btn-loading');
+                    loginButton.innerText = '登录';
+                    
+                    // 显示错误信息
+                    showCustomMessage('登录失败', '请稍后重试或联系管理员。', true);
+                }
+            });
+        });
+    </script>
+} 

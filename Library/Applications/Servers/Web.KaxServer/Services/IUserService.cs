@@ -32,5 +32,9 @@ namespace Web.KaxServer.Services
         /// <param name="password">密码</param>
         /// <returns>如果凭据有效，则返回用户会话；否则返回null。</returns>
         UserSession? AuthenticateUser(string username, string password);
+
+        UserData? GetUserDataById(int userId);
+
+        void UpdateUserData(UserData userData);
     }
 } 

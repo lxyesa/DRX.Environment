@@ -1,36 +1,31 @@
 using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
-using Drx.Sdk.Network.DataBase;
 using Microsoft.AspNetCore.Hosting;
 using Web.KaxServer.Models;
 using Web.KaxServer.Services.Queries;
+using Web.KaxServer.Services.Repositorys;
 
 namespace Web.KaxServer.Services
 {
     public class CdkService : ICdkService
     {
         private readonly StoreService _storeService;
-        private readonly string _filePath;
-        private readonly XmlDatabase _database;
-        private static readonly object FileLock = new object();
+        private readonly string _dataDirectory;
 
         public CdkService(StoreService storeService, IWebHostEnvironment env)
         {
             _storeService = storeService;
-            _database = new XmlDatabase();
-            var dataDirectory = Path.Combine(env.ContentRootPath, "Data");
-            Directory.CreateDirectory(dataDirectory); // Ensure the directory exists
-            _filePath = Path.Combine(dataDirectory, "cdks.xml");
+            _dataDirectory = Path.Combine(env.ContentRootPath, "Data", "Cdk");
+            Directory.CreateDirectory(_dataDirectory); // 确保目录存在
         }
 
         public List<Cdk> CreateCdks(int quantity, CdkType type, int? assetId, decimal? coinAmount, int? durationValue = null, DurationUnit? durationUnit = null)
         {
-            var allCdks = LoadCdksFromFile();
+            var allCdks = CdkRepository.GetAllCdks();
             var newCdks = new List<Cdk>();
             var batchId = Guid.NewGuid().ToString("N");
 
@@ -63,22 +58,22 @@ namespace Web.KaxServer.Services
                 }
                 
                 newCdks.Add(cdk);
+                CdkRepository.SaveCdk(cdk);
             }
 
             if (newCdks.Any())
             {
-                allCdks.AddRange(newCdks);
-                SaveCdksToFile(allCdks);
                 SaveCdkBatchFile(newCdks, type, assetId, coinAmount, durationValue, durationUnit);
             }
+            
             return newCdks;
         }
 
         public CdkQueryResult QueryCdks(CdkQueryParameters parameters)
         {
-            var allCdks = LoadCdksFromFile();
+            var allCdks = CdkRepository.GetAllCdks();
 
-            // 1. Filtering
+            // 1. 筛选
             var filteredCdks = allCdks;
             if (!string.IsNullOrWhiteSpace(parameters.SearchTerm))
             {
@@ -98,7 +93,7 @@ namespace Web.KaxServer.Services
                 }).ToList();
             }
 
-            // 2. Sorting
+            // 2. 排序
             var sortedCdks = (parameters.SortBy switch
             {
                 "type" => filteredCdks.OrderBy(c => c.Type).ThenByDescending(c => c.CreationDate),
@@ -106,7 +101,7 @@ namespace Web.KaxServer.Services
                 _ => filteredCdks.OrderByDescending(c => c.CreationDate)
             }).AsQueryable();
 
-            // 3. Pagination
+            // 3. 分页
             var totalCount = sortedCdks.Count();
             var pagedCdks = sortedCdks.Skip((parameters.Page - 1) * parameters.PageSize).Take(parameters.PageSize).ToList();
 
@@ -119,7 +114,7 @@ namespace Web.KaxServer.Services
 
         public Cdk? GetCdkByCode(string code)
         {
-            return LoadCdksFromFile().FirstOrDefault(c => c.Code == code);
+            return CdkRepository.GetCdk(code);
         }
 
         public Cdk? VerifyCdk(string code)
@@ -134,8 +129,7 @@ namespace Web.KaxServer.Services
 
         public Cdk? ActivateCdk(string code, UserSession userSession)
         {
-            var allCdks = LoadCdksFromFile();
-            var cdk = allCdks.FirstOrDefault(c => c.Code == code);
+            var cdk = GetCdkByCode(code);
             
             if (cdk == null || cdk.IsUsed)
             {
@@ -173,22 +167,14 @@ namespace Web.KaxServer.Services
             cdk.UsedByUsername = userSession.Username;
             cdk.UsedDate = DateTime.UtcNow;
             
-            SaveCdksToFile(allCdks);
+            CdkRepository.SaveCdk(cdk);
 
             return cdk;
         }
 
         public void DeleteCdksByBatchId(string batchId)
         {
-            var allCdks = LoadCdksFromFile();
-            var updatedCdks = allCdks.Where(c => c.BatchId != batchId).ToList();
-
-            if (allCdks.Count == updatedCdks.Count)
-            {
-                return;
-            }
-
-            SaveCdksToFile(updatedCdks);
+            CdkRepository.DeleteCdk(batchId);
         }
 
         public string? GetBatchIdFromCdkCode(string code)
@@ -242,44 +228,6 @@ namespace Web.KaxServer.Services
                 return BitConverter.ToString(bytes, 0, 4).Replace("-", "");
             }
         }
-
-        private List<Cdk> LoadCdksFromFile()
-        {
-            lock (FileLock)
-            {
-                try
-                {
-                    if (!File.Exists(_filePath)) return new List<Cdk>();
-
-                    var rootNode = _database.CreateRoot(_filePath);
-                    var cdkList = rootNode.DeserializeList<Cdk>("cdks");
-
-                    return cdkList ?? new List<Cdk>();
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"Error loading CDKs from file: {_filePath}. Error: {ex.Message}");
-                    return new List<Cdk>();
-                }
-            }
-        }
-
-        private void SaveCdksToFile(List<Cdk> cdkList)
-        {
-            lock (FileLock)
-            {
-                try
-                {
-                    var rootNode = _database.CreateRoot(_filePath);
-                    rootNode.SerializeList("cdks", cdkList);
-                    _database.SaveChanges();
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"Error saving CDKs to file: {_filePath}. Error: {ex.Message}");
-                }
-            }
-        }
         
         private void SaveCdkBatchFile(List<Cdk> cdks, CdkType type, int? assetId, decimal? coinAmount, int? durationValue, DurationUnit? durationUnit)
         {
@@ -298,7 +246,7 @@ namespace Web.KaxServer.Services
                     var storeItem = _storeService.GetItemById(assetId.Value);
                     if (storeItem != null)
                     {
-                        // Sanitize asset name for use in a filename
+                        // 清理资产名称，使其适用于文件名
                         assetName = string.Join("_", storeItem.Title.Split(Path.GetInvalidFileNameChars()));
                     }
                 }
@@ -316,18 +264,9 @@ namespace Web.KaxServer.Services
             }
             
             var batchFileName = $"{timestamp}_{typeStr}_{details}_{count}Count.txt";
-            var batchFilePath = Path.Combine(Path.GetDirectoryName(_filePath), batchFileName);
+            var batchFilePath = Path.Combine(_dataDirectory, "Batches", batchFileName);
 
-            try
-            {
-                var codes = cdks.Select(c => c.Code);
-                File.WriteAllLines(batchFilePath, codes);
-            }
-            catch (Exception ex)
-            {
-                // Log the error, but don't let it crash the main operation
-                Console.WriteLine($"Error saving CDK batch file to: {batchFilePath}. Error: {ex.Message}");
-            }
+            CdkRepository.CreateBatchFile(cdks, batchFilePath);
         }
     }
 } 

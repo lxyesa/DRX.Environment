@@ -16,7 +16,7 @@ namespace Drx.Sdk.Network.Socket.Middleware
         /// <summary>
         /// The TCP client that sent the message.
         /// </summary>
-        public TcpClient Client { get; }
+        public DrxTcpClient Client { get; }
 
         /// <summary>
         /// The raw message data received from the client. Can be modified by middleware.
@@ -34,7 +34,7 @@ namespace Drx.Sdk.Network.Socket.Middleware
         /// </summary>
         public bool IsHandled { get; set; } = false;
 
-        public MessageContext(SocketServerService server, TcpClient client, byte[] data, CancellationToken cancellationToken)
+        public MessageContext(SocketServerService server, DrxTcpClient client, byte[] data, CancellationToken cancellationToken)
         {
             Server = server;
             Client = client;

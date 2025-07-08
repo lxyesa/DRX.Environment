@@ -9,7 +9,7 @@ using System;
 
 namespace Drx.Sdk.Network.Socket
 {
-    public delegate Task CommandHandler(SocketServerService server, TcpClient client, string[] args, string rawMessage);
+    public delegate Task CommandHandler(SocketServerService server, DrxTcpClient client, string[] args, string rawMessage);
 
     public class SocketServerBuilder
     {
