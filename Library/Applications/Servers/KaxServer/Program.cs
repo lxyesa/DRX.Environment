@@ -1,6 +1,7 @@
 using Drx.Sdk.Network.Session;
 using KaxServer.Services;
 using Microsoft.AspNetCore.Http;
+using Drx.Sdk.Network.Extensions;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -8,29 +9,24 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddRazorPages();
 builder.Services.AddHttpContextAccessor();
 
-builder.Services.AddDistributedMemoryCache();
-builder.Services.AddSession(options =>
+// 配置DRX会话系统
+builder.Services.AddDRXSession(options => 
 {
-    options.IdleTimeout = TimeSpan.FromDays(7);
-    options.Cookie.HttpOnly = true;
-    options.Cookie.IsEssential = true;
-    options.Cookie.MaxAge = TimeSpan.FromDays(7);
-});
-
-builder.Services.Configure<CookiePolicyOptions>(options =>
-{
-    options.CheckConsentNeeded = context => false; // 不需要用户同意即可使用Cookie
-    options.MinimumSameSitePolicy = SameSiteMode.Lax;
+    options.ApplicationName = "KaxServer";
+    options.KeysDirectory = "Data/Keys";
 });
 
 builder.Services.AddSingleton<EmailVerificationCode>();
 builder.Services.AddSingleton(sp =>
 {
     var config = sp.GetRequiredService<IConfiguration>();
+    var senderEmail = config["Email:SenderEmail"] ?? string.Empty;
+    var authCode = config["Email:AuthCode"] ?? string.Empty;
+    var emailVerificationCode = sp.GetRequiredService<EmailVerificationCode>();
     return new EmailService(
-        config["Email:SenderEmail"],
-        config["Email:AuthCode"],
-        sp.GetRequiredService<EmailVerificationCode>()
+        senderEmail,
+        authCode,
+        emailVerificationCode
     );
 });
 
@@ -49,10 +45,7 @@ app.UseHttpsRedirection();
 app.UseStaticFiles();
 app.UseRouting();
 
-// 添加Cookie策略中间件
-app.UseCookiePolicy();
-
 app.UseAuthorization();
-app.UseSession();
+app.UseDRXSession();
 app.MapRazorPages();
 app.Run();

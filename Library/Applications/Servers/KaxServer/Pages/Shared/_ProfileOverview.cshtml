@@ -1,0 +1,299 @@
+@model KaxServer.Models.UserData
+
+<div class="profile-overview">
+    <div class="profile-header">
+        <div class="profile-avatar-large">
+            <div class="avatar-wrapper">
+                <span class="material-icons">account_circle</span>
+                <button class="avatar-edit-btn">
+                    <span class="material-icons">edit</span>
+                </button>
+            </div>
+        </div>
+        <div class="profile-info">
+            <h2 class="profile-name">@Model.UserName</h2>
+            <p class="profile-email">@Model.Email</p>
+            <div class="profile-badges">
+                <span class="badge">
+                    <span class="material-icons">verified</span>
+                    已验证用户
+                </span>
+                <span class="badge">
+                    <span class="material-icons">military_tech</span>
+                    等级 @Model.Level
+                </span>
+            </div>
+        </div>
+    </div>
+
+    <div class="stats-grid">
+        <div class="stat-card">
+            <div class="stat-icon">
+                <span class="material-icons">stars</span>
+            </div>
+            <div class="stat-content">
+                <span class="stat-value">@Model.Level</span>
+                <span class="stat-label">等级</span>
+            </div>
+            <div class="stat-progress">
+                <div class="progress-ring">
+                    <svg viewBox="0 0 36 36">
+                        <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" 
+                              stroke="var(--accent-color)" 
+                              stroke-width="2" 
+                              fill="none" 
+                              stroke-dasharray="@(((double)Model.Exp / Model.NextLevelExp) * 100), 100"/>
+                    </svg>
+                    <span class="progress-text">@(((double)Model.Exp / Model.NextLevelExp * 100).ToString("F0"))%</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="stat-card">
+            <div class="stat-icon">
+                <span class="material-icons">monetization_on</span>
+            </div>
+            <div class="stat-content">
+                <span class="stat-value">@Model.Coins</span>
+                <span class="stat-label">金币</span>
+            </div>
+            <div class="stat-trend positive">
+                <span class="material-icons">trending_up</span>
+                <span>本周 +50</span>
+            </div>
+        </div>
+
+        <div class="stat-card">
+            <div class="stat-icon">
+                <span class="material-icons">military_tech</span>
+            </div>
+            <div class="stat-content">
+                <span class="stat-value">@Model.Exp</span>
+                <span class="stat-label">经验值</span>
+            </div>
+            <div class="stat-info">
+                距离下一级还需 @(Model.NextLevelExp - Model.Exp)
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .profile-overview {
+        padding: 2rem;
+        background: var(--surface-color);
+        border-radius: var(--border-radius-lg);
+        border: 1px solid var(--border-color);
+    }
+
+    .profile-header {
+        display: flex;
+        align-items: center;
+        gap: 2rem;
+        margin-bottom: 2rem;
+    }
+
+    .profile-avatar-large {
+        position: relative;
+    }
+
+    .avatar-wrapper {
+        width: 120px;
+        height: 120px;
+        border-radius: 50%;
+        background: linear-gradient(45deg, var(--accent-color), var(--accent-color-hover));
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        position: relative;
+    }
+
+    .avatar-wrapper .material-icons {
+        font-size: 64px;
+        color: white;
+    }
+
+    .avatar-edit-btn {
+        position: absolute;
+        bottom: 0;
+        right: 0;
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        background: var(--surface-color);
+        border: 2px solid var(--accent-color);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: all var(--transition-speed) ease;
+    }
+
+    .avatar-edit-btn:hover {
+        background: var(--accent-color);
+    }
+
+    .avatar-edit-btn .material-icons {
+        font-size: 20px;
+        color: var(--accent-color);
+    }
+
+    .avatar-edit-btn:hover .material-icons {
+        color: white;
+    }
+
+    .profile-info {
+        flex: 1;
+    }
+
+    .profile-name {
+        font-size: 2rem;
+        font-weight: 600;
+        margin: 0;
+        color: var(--primary-color);
+    }
+
+    .profile-email {
+        color: var(--secondary-color);
+        margin: 0.5rem 0;
+    }
+
+    .profile-badges {
+        display: flex;
+        gap: 1rem;
+        margin-top: 1rem;
+    }
+
+    .badge {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.5rem 1rem;
+        background: rgba(124, 77, 255, 0.1);
+        border-radius: var(--border-radius-md);
+        color: var(--accent-color);
+        font-size: 0.875rem;
+    }
+
+    .badge .material-icons {
+        font-size: 1rem;
+    }
+
+    .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+        gap: 1.5rem;
+        margin-top: 2rem;
+    }
+
+    .stat-card {
+        background: rgba(255, 255, 255, 0.03);
+        border-radius: var(--border-radius-lg);
+        padding: 1.5rem;
+        display: flex;
+        align-items: center;
+        gap: 1.5rem;
+        position: relative;
+        overflow: hidden;
+    }
+
+    .stat-icon {
+        width: 48px;
+        height: 48px;
+        border-radius: var(--border-radius-md);
+        background: linear-gradient(45deg, var(--accent-color), var(--accent-color-hover));
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .stat-icon .material-icons {
+        font-size: 24px;
+        color: white;
+    }
+
+    .stat-content {
+        flex: 1;
+    }
+
+    .stat-value {
+        font-size: 1.5rem;
+        font-weight: 600;
+        color: var(--primary-color);
+        display: block;
+    }
+
+    .stat-label {
+        color: var(--secondary-color);
+        font-size: 0.875rem;
+    }
+
+    .stat-progress {
+        position: absolute;
+        right: 1.5rem;
+        width: 64px;
+        height: 64px;
+    }
+
+    .progress-ring {
+        position: relative;
+        width: 100%;
+        height: 100%;
+    }
+
+    .progress-ring svg {
+        transform: rotate(-90deg);
+    }
+
+    .progress-ring path {
+        stroke-linecap: round;
+    }
+
+    .progress-text {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        font-size: 0.75rem;
+        font-weight: 600;
+        color: var(--accent-color);
+    }
+
+    .stat-trend {
+        display: flex;
+        align-items: center;
+        gap: 0.25rem;
+        font-size: 0.875rem;
+        margin-top: 0.5rem;
+    }
+
+    .stat-trend.positive {
+        color: #4caf50;
+    }
+
+    .stat-trend .material-icons {
+        font-size: 1rem;
+    }
+
+    .stat-info {
+        font-size: 0.875rem;
+        color: var(--secondary-color);
+        margin-top: 0.5rem;
+    }
+
+    @@media (max-width: 768px) {
+        .profile-header {
+            flex-direction: column;
+            text-align: center;
+            gap: 1rem;
+        }
+
+        .profile-badges {
+            justify-content: center;
+        }
+
+        .stats-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+</style> 

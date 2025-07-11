@@ -1,0 +1,126 @@
+@model KaxServer.Models.UserData
+
+<div class="profile-sidenav">
+    <div class="profile-user-info">
+        <div class="profile-avatar">
+            <span class="material-icons">account_circle</span>
+        </div>
+        <div class="profile-user-details">
+            <h3>@Model.UserName</h3>
+            <p>@Model.Email</p>
+        </div>
+    </div>
+    
+    <nav class="profile-nav">
+        <a href="#overview" class="profile-nav-item active" data-view="overview">
+            <span class="material-icons">dashboard</span>
+            概览
+        </a>
+        <a href="#settings" class="profile-nav-item" data-view="settings">
+            <span class="material-icons">settings</span>
+            账号设置
+        </a>
+        <a href="#security" class="profile-nav-item" data-view="security">
+            <span class="material-icons">security</span>
+            安全中心
+        </a>
+        <a href="#notifications" class="profile-nav-item" data-view="notifications">
+            <span class="material-icons">notifications</span>
+            消息通知
+        </a>
+        <a href="#achievements" class="profile-nav-item" data-view="achievements">
+            <span class="material-icons">emoji_events</span>
+            成就系统
+        </a>
+        <a href="#subscriptions" class="profile-nav-item" data-view="subscriptions">
+            <span class="material-icons">subscriptions</span>
+            管理订阅
+        </a>
+    </nav>
+</div>
+
+<style>
+    .profile-sidenav {
+        background: var(--surface-color);
+        border-radius: var(--border-radius-lg);
+        border: 1px solid var(--border-color);
+        padding: 1.5rem;
+        width: 280px;
+        height: fit-content;
+    }
+
+    .profile-user-info {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        padding-bottom: 1.5rem;
+        border-bottom: 1px solid var(--border-color);
+        margin-bottom: 1.5rem;
+    }
+
+    .profile-avatar {
+        width: 64px;
+        height: 64px;
+        border-radius: 50%;
+        background: linear-gradient(45deg, var(--accent-color), var(--accent-color-hover));
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .profile-avatar .material-icons {
+        font-size: 36px;
+        color: white;
+    }
+
+    .profile-user-details h3 {
+        margin: 0;
+        color: var(--primary-color);
+        font-size: 1.125rem;
+        font-weight: 600;
+    }
+
+    .profile-user-details p {
+        margin: 0.25rem 0 0;
+        color: var(--secondary-color);
+        font-size: 0.875rem;
+    }
+
+    .profile-nav {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+
+    .profile-nav-item {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 0.75rem 1rem;
+        color: var(--secondary-color);
+        text-decoration: none;
+        border-radius: var(--border-radius-md);
+        transition: all var(--transition-speed) ease;
+    }
+
+    .profile-nav-item:hover {
+        background: rgba(124, 77, 255, 0.1);
+        color: var(--primary-color);
+    }
+
+    .profile-nav-item.active {
+        background: var(--accent-color);
+        color: white;
+    }
+
+    .profile-nav-item .material-icons {
+        font-size: 1.25rem;
+    }
+
+    @@media (max-width: 768px) {
+        .profile-sidenav {
+            width: 100%;
+            margin-bottom: 1rem;
+        }
+    }
+</style> 

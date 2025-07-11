@@ -1,0 +1,149 @@
+﻿@model KaxServer.Models.UserData
+
+<div class="profile-section">
+    <h2 class="section-title-main">
+        <span class="material-icons" style="vertical-align: middle;">manage_accounts</span>
+        账号设置
+    </h2>
+    <p class="section-desc-main">管理您的账号信息和偏好设置</p>
+
+    <form id="accountSettingsForm" class="settings-form" method="post" asp-page-handler="SaveUserData">
+        <div class="settings-section">
+            <h3 class="section-title">基本信息</h3>
+
+            <div class="form-group">
+                <label class="form-label" for="username">用户名</label>
+                <div class="input-wrapper" style="position:relative;">
+                    <span class="material-icons input-icon">person</span>
+                    @{
+                        // 计算剩余冷却时间（秒）
+                        var now = DateTime.UtcNow;
+                        var nextChange = Model.UserSettingData?.NextChangeNameTime ?? DateTime.MinValue;
+                        var remain = (nextChange > now) ? (nextChange - now) : TimeSpan.Zero;
+                        bool nameCooldown = remain.TotalSeconds > 0;
+                        long remainSeconds = (long)remain.TotalSeconds;
+                        string cooldownMsg = nameCooldown
+                            ? $"用户名修改冷却中，剩余 <span id='cooldown-timer'>{remain.Days} 天 {remain.Hours} 小时 {remain.Minutes} 分钟</span>"
+                            : "";
+                    }
+                    <input type="text" class="form-control with-icon" id="username" name="username"
+                        value="@Model.UserName" @(nameCooldown ? "disabled" : "")>
+                    @if (nameCooldown)
+                    {
+                        <div class="cooldown-overlay" id="cooldown-overlay">
+                            <span class="material-icons">hourglass_empty</span>
+                            <span class="cooldown-text">@Html.Raw(cooldownMsg)</span>
+                        </div>
+                    }
+                </div>
+                <p class="form-hint">用户名将显示在您的个人主页和评论中</p>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="email">邮箱地址</label>
+                <div class="input-wrapper">
+                    <span class="material-icons input-icon">email</span>
+                    <input type="email" class="form-control with-icon email-readonly input-forbidden" id="email"
+                        name="email" value="@Model.Email" readonly placeholder="禁止输入">
+                </div>
+                <p class="form-hint">用于接收重要通知和找回密码</p>
+                <p class="form-hint email-readonly-tip" style="color:#d9534f;margin-top:2px;">邮箱地址不可修改</p>
+            </div>
+        </div>
+
+        <div class="settings-section">
+            <h3 class="section-title">通知设置</h3>
+
+            <div class="settings-options">
+                <div class="setting-item">
+                    <div class="setting-info">
+                        <label class="setting-label" for="newsSubscription">订阅资讯</label>
+                        <p class="setting-description">接收最新活动和优惠信息</p>
+                    </div>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="newsSubscription" name="newsSubscription"
+                            @(Model.UserSettingData?.NewsSubscription == true ? "checked" : "")>
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
+                <div class="setting-item">
+                    <div class="setting-info">
+                        <label class="setting-label" for="marketingSubscription">市场推广订阅</label>
+                        <p class="setting-description">接收产品推荐、市场活动等营销信息</p>
+                    </div>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="marketingSubscription" name="marketingSubscription"
+                            @(Model.UserSettingData?.MarketingSubscription == true ? "checked" : "")>
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
+            </div>
+        </div>
+
+        <div class="settings-section">
+            <h3 class="section-title">账号安全</h3>
+
+            <div class="security-options">
+                <a href="#" class="clickable-card">
+                    <span class="material-icons">lock</span>
+                    <div class="card-info">
+                        <h4>修改密码</h4>
+                        <p>定期更改密码以确保账号安全</p>
+                    </div>
+                    <span class="material-icons">chevron_right</span>
+                </a>
+
+                <a href="#" class="clickable-card">
+                    <span class="material-icons">verified_user</span>
+                    <div class="card-info">
+                        <h4>两步验证</h4>
+                        <p>添加额外的安全层级</p>
+                    </div>
+                    <span class="material-icons">chevron_right</span>
+                </a>
+            </div>
+        </div>
+
+        <div class="form-actions">
+            <button type="submit" class="btn-primary">保存更改</button>
+            <button type="reset" class="btn-secondary">重置</button>
+        </div>
+    </form>
+</div>
+
+<script>
+    // 冷却倒计时动态刷新，覆盖层方式
+    (function () {
+        var remainSeconds = @((Model.UserSettingData?.NextChangeNameTime ?? DateTime.MinValue) > DateTime.UtcNow
+            ? (long)((Model.UserSettingData?.NextChangeNameTime ?? DateTime.MinValue) - DateTime.UtcNow).TotalSeconds
+            : 0);
+        var timerSpan = document.getElementById('cooldown-timer');
+        var input = document.getElementById('username');
+        var overlay = document.getElementById('cooldown-overlay');
+        if (remainSeconds > 0 && timerSpan && input && overlay) {
+            input.disabled = true;
+            overlay.style.display = 'flex';
+            var interval = setInterval(function () {
+                if (remainSeconds <= 0) {
+                    clearInterval(interval);
+                    timerSpan.innerText = '';
+                    input.disabled = false;
+                    overlay.style.display = 'none';
+                    return;
+                }
+                var days = Math.floor(remainSeconds / 86400);
+                var hours = Math.floor((remainSeconds % 86400) / 3600);
+                var minutes = Math.floor((remainSeconds % 3600) / 60);
+                var seconds = remainSeconds % 60;
+                var text = '';
+                if (days > 0) text += days + ' 天 ';
+                if (hours > 0 || days > 0) text += hours + ' 小时 ';
+                if (minutes > 0 || hours > 0 || days > 0) text += minutes + ' 分钟 ';
+                text += seconds + ' 秒';
+                timerSpan.innerText = text;
+                remainSeconds--;
+            }, 1000);
+        }
+    })();
+</script>
+

@@ -5,12 +5,12 @@
 }
 
 @section Styles {
+    <!-- 添加 Material Icons 样式 -->
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
     <style>
         .hero {
             padding: 6rem 0;
             text-align: center;
-            /* background-color: #f8fafc; */
-            /* 移除浅色背景 */
         }
 
         .hero-title {
@@ -28,6 +28,106 @@
             margin-left: auto;
             margin-right: auto;
             line-height: 1.6;
+        }
+
+        /* 功能卡片样式 */
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+            margin-top: 3rem;
+        }
+
+        .feature-card {
+            background: var(--surface-color);
+            border-radius: var(--border-radius-lg);
+            padding: 2rem;
+            text-align: center;
+            border: 1px solid var(--border-color);
+            transition: all 0.3s ease;
+        }
+
+        .feature-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 0 25px rgba(124, 77, 255, 0.2);
+            border-color: var(--accent-color);
+        }
+
+        .feature-icon {
+            width: 64px;
+            height: 64px;
+            margin: 0 auto 1.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(45deg, var(--accent-color), var(--accent-color-hover));
+            border-radius: 50%;
+            color: white;
+        }
+
+        .feature-icon .material-icons {
+            font-size: 32px; /* 调整图标大小 */
+        }
+
+        .feature-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: var(--primary-color);
+            margin-bottom: 1rem;
+        }
+
+        .feature-description {
+            color: var(--secondary-color);
+            line-height: 1.6;
+            font-size: 0.95rem;
+        }
+
+        /* 统计数据样式 */
+        .stats-section {
+            margin-top: 5rem;
+            padding: 3rem 0;
+            background: var(--surface-color);
+            border-top: 1px solid var(--border-color);
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 2rem;
+            text-align: center;
+        }
+
+        .stat-item {
+            padding: 1rem;
+        }
+
+        .stat-number {
+            font-size: 2.5rem;
+            font-weight: 700;
+            color: var(--accent-color);
+            margin-bottom: 0.5rem;
+        }
+
+        .stat-label {
+            color: var(--secondary-color);
+            font-size: 1rem;
+        }
+
+        .stat-icon {
+            font-size: 24px;
+            margin-bottom: 1rem;
+            color: var(--accent-color);
+        }
+
+        @@media (max-width: 768px) {
+            .features-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .stats-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
         }
     </style>
 }
@@ -47,7 +147,7 @@
         <div>
             @if (Model.CurrentUser != null)
             {
-                <a href="/" class="btn-primary btn-lg">
+                <a href="/Account/Profile" class="btn-primary btn-lg">
                     <span class="btn-text">个人主页</span>
                     <div class="btn-background"></div>
                 </a>
@@ -68,10 +168,67 @@
 </div>
 
 <div class="container" style="padding-top: 4rem; padding-bottom: 4rem;">
-    <h2 style="text-align: center; font-size: 2rem; margin-bottom: 2rem;">主要功能</h2>
-    <p style="text-align: center; color: var(--secondary-color);">更多内容正在建设中...</p>
+    <h2 style="text-align: center; font-size: 2rem; margin-bottom: 3rem;">探索 Kax 平台</h2>
+    
+    <div class="features-grid">
+        <div class="feature-card">
+            <div class="feature-icon">
+                <span class="material-icons">cloud_upload</span>
+            </div>
+            <h3 class="feature-title">模组上传</h3>
+            <p class="feature-description">
+                轻松上传您的游戏模组，支持多种格式。我们提供完善的版本控制和更新管理系统、内核保护，让您的创作得到最好的展示。
+            </p>
+        </div>
+        
+        <div class="feature-card">
+            <div class="feature-icon">
+                <span class="material-icons">security</span>
+            </div>
+            <h3 class="feature-title">安全保障</h3>
+            <p class="feature-description">
+                所有模组经过严格的安全检查，确保用户下载使用时的安全。支持数字签名和完整性验证，杜绝恶意代码。
+            </p>
+        </div>
+        
+        <div class="feature-card">
+            <div class="feature-icon">
+                <span class="material-icons">groups</span>
+            </div>
+            <h3 class="feature-title">社区互动</h3>
+            <p class="feature-description">
+                加入充满活力的模组创作者社区，分享经验、交流技术。支持评论、评分和反馈系统，促进作品改进。
+            </p>
+        </div>
+    </div>
+</div>
+
+<div class="stats-section">
+    <div class="container">
+        <div class="stats-grid">
+            <div class="stat-item">
+                <span class="material-icons stat-icon">extension</span>
+                <div class="stat-number">{int}</div>
+                <div class="stat-label">活跃模组</div>
+            </div>
+            <div class="stat-item">
+                <span class="material-icons stat-icon">download</span>
+                <div class="stat-number">{int}</div>
+                <div class="stat-label">用户下载</div>
+            </div>
+            <div class="stat-item">
+                <span class="material-icons stat-icon">verified_user</span>
+                <div class="stat-number">{int}</div>
+                <div class="stat-label">认证作者</div>
+            </div>
+            <div class="stat-item">
+                <span class="material-icons stat-icon">all_inclusive</span>
+                <div class="stat-number">{int}%</div>
+                <div class="stat-label">正常运行时间</div>
+            </div>
+        </div>
+    </div>
 </div>
 
 @section Scripts {
-    <!-- 这里可以添加页面特定的脚本 -->
 }

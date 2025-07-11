@@ -4,1496 +4,1070 @@ using System.Reflection;
 using System.IO;
 using System.Linq;
 using Microsoft.Data.Sqlite;
-using System.Text.Json;
 using System.Collections;
-using System.Threading.Tasks;
 using System.Threading;
+using System.Threading.Tasks;
+using System.Linq.Expressions;
+using System.Text;
+using System.ComponentModel.DataAnnotations;
 
 namespace Drx.Sdk.Network.Sqlite
 {
     /// <summary>
-    /// 用于标记不应被保存到SQLite数据库的属性
+    /// 基于 Microsoft.Data.Sqlite 的统一数据库操作类
     /// </summary>
-    [AttributeUsage(AttributeTargets.Property, AllowMultiple = false)]
-    public class SqliteIgnoreAttribute : Attribute
-    {
-    }
-
-    /// <summary>
-    /// 用于标记关联表的特性
-    /// </summary>
-    [AttributeUsage(AttributeTargets.Property, AllowMultiple = false)]
-    public class SqliteRelationAttribute : Attribute
-    {
-        public string TableName { get; }
-        public string ForeignKeyProperty { get; }
-
-        public SqliteRelationAttribute(string tableName, string foreignKeyProperty)
-        {
-            TableName = tableName;
-            ForeignKeyProperty = foreignKeyProperty;
-        }
-    }
-
-    /// <summary>
-    /// 统一的SQLite数据库操作封装类，集成了基础操作和关联表处理功能
-    /// </summary>
-    /// <typeparam name="T">要操作的数据类型</typeparam>
+    /// <typeparam name="T">继承自 IDataBase 的数据类型</typeparam>
     public class SqliteUnified<T> where T : class, IDataBase, new()
     {
         private readonly string _connectionString;
         private readonly string _tableName;
-        private readonly PropertyInfo[] _properties;
-        private readonly PropertyInfo _primaryKeyProperty;
-        private readonly Dictionary<PropertyInfo, SqliteRelationAttribute> _relationProperties;
+        private readonly Dictionary<string, PropertyInfo> _properties;
+        private readonly Dictionary<string, PropertyInfo> _dataTableProperties;
+        private readonly Dictionary<string, PropertyInfo> _dataTableListProperties;
+
+        // 静态缓存getter/setter委托，提升反射性能
+        private static readonly Dictionary<Type, Dictionary<string, Func<object, object?>>> GetterCache = new();
+        private static readonly Dictionary<Type, Dictionary<string, Action<object, object?>>> SetterCache = new();
+        // 优化：缓存子表类型的可读写属性列表和无参构造委托，减少反射损耗
+        private static readonly System.Collections.Concurrent.ConcurrentDictionary<Type, PropertyInfo[]> ChildTypePropertiesCache = new();
+        private static readonly System.Collections.Concurrent.ConcurrentDictionary<Type, Func<object>> ChildTypeFactoryCache = new();
 
         /// <summary>
-        /// 初始化SQLite封装
+        /// 初始化 SqliteUnified 实例
         /// </summary>
-        /// <param name="path">数据库文件路径</param>
-        public SqliteUnified(string path)
+        /// <param name="databasePath">数据库文件路径（相对于程序运行根目录）</param>
+        /// <param name="basePath">基础路径，默认为程序运行根目录</param>
+        public SqliteUnified(string databasePath, string? basePath = null)
         {
-            _connectionString = $"Data Source={path}";
-            _tableName = typeof(T).Name;
-            _properties = typeof(T).GetProperties();
+            basePath = basePath ?? AppDomain.CurrentDomain.BaseDirectory;
+            var fullPath = Path.Combine(basePath, databasePath);
             
-            // 主键将始终是IDataBase接口中的Id
-            _primaryKeyProperty = typeof(T).GetProperty(nameof(IDataBase.Id))!;
-            
-            // 获取所有关联表属性
-            _relationProperties = new Dictionary<PropertyInfo, SqliteRelationAttribute>();
-            foreach (var prop in _properties)
+            // 确保目录存在
+            var directory = Path.GetDirectoryName(fullPath);
+            if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
             {
-                var relationAttr = prop.GetCustomAttribute<SqliteRelationAttribute>();
-                if (relationAttr != null)
+                Directory.CreateDirectory(directory);
+            }
+
+            _connectionString = $"Data Source={fullPath}";
+            _tableName = typeof(T).Name;
+            
+            // 缓存属性信息
+            _properties = typeof(T).GetProperties()
+                .Where(p => p.CanRead && p.CanWrite)
+                .ToDictionary(p => p.Name, p => p);
+
+            // 缓存getter/setter委托
+            CacheAccessors(typeof(T));
+
+            // 缓存继承自 IDataTable 的属性（一对一关系）
+            _dataTableProperties = _properties
+                .Where(kvp => typeof(IDataTable).IsAssignableFrom(kvp.Value.PropertyType))
+                .ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
+
+            // 缓存 List<IDataTable> 类型的属性（一对多关系）
+            _dataTableListProperties = _properties
+                .Where(kvp => IsDataTableList(kvp.Value.PropertyType))
+                .ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
+
+            // 初始化数据库和表
+            InitializeDatabase();
+
+            // 自动修复表结构
+            RepairTable();
+
+        }
+
+        /// <summary>
+        /// 修复表结构，自动添加缺失字段
+        /// </summary>
+        private void RepairTable()
+        {
+            using var connection = new SqliteConnection(_connectionString);
+            connection.Open();
+
+            // 修复主表
+            RepairTableForType(connection, typeof(T), _tableName);
+
+            // 修复一对一子表
+            foreach (var dataTableProp in _dataTableProperties.Values)
+            {
+                var childType = dataTableProp.PropertyType;
+                var childTableName = $"{_tableName}_{dataTableProp.Name}";
+                RepairTableForType(connection, childType, childTableName);
+            }
+
+            // 修复一对多子表
+            foreach (var dataTableListProp in _dataTableListProperties.Values)
+            {
+                var childType = GetDataTableListElementType(dataTableListProp.PropertyType);
+                var childTableName = $"{_tableName}_{dataTableListProp.Name}";
+                RepairTableForType(connection, childType, childTableName);
+            }
+        }
+
+        /// <summary>
+        /// 修复指定表结构
+        /// </summary>
+        private void RepairTableForType(SqliteConnection connection, Type type, string tableName)
+        {
+            // 获取表中已有字段
+            var existingColumns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            using (var cmd = new SqliteCommand($"PRAGMA table_info([{tableName}])", connection))
+            using (var reader = cmd.ExecuteReader())
+            {
+                while (reader.Read())
                 {
-                    _relationProperties.Add(prop, relationAttr);
+                    var colName = reader["name"] as string;
+                    if (!string.IsNullOrEmpty(colName))
+                        existingColumns.Add(colName);
                 }
             }
 
-            Initialize();
+            // 检查 Data 类属性，补充缺失字段
+            foreach (var property in type.GetProperties().Where(p => p.CanRead && p.CanWrite))
+            {
+                if (!existingColumns.Contains(property.Name))
+                {
+                    var columnType = GetSqliteType(property.PropertyType);
+                    var alterSql = $"ALTER TABLE [{tableName}] ADD COLUMN [{property.Name}] {columnType}";
+                    using var alterCmd = new SqliteCommand(alterSql, connection);
+                    alterCmd.ExecuteNonQuery();
+                }
+            }
+
+            // 自动为所有表的唯一标识字段创建唯一索引
+            // 主表优先使用Id，子表优先使用ParentId
+            string uniqueField = null;
+            if (existingColumns.Contains("Id"))
+                uniqueField = "Id";
+            else if (existingColumns.Contains("ParentId"))
+                uniqueField = "ParentId";
+
+            if (!string.IsNullOrEmpty(uniqueField))
+            {
+                var createIndexSql = $"CREATE UNIQUE INDEX IF NOT EXISTS idx_{tableName}_{uniqueField} ON [{tableName}]([{uniqueField}]);";
+                using var indexCmd = new SqliteCommand(createIndexSql, connection);
+                indexCmd.ExecuteNonQuery();
+            }
+        }
+        /// 构建并缓存类型的getter/setter委托
+        /// </summary>
+        private static void CacheAccessors(Type type)
+        {
+            lock (GetterCache)
+            {
+                if (!GetterCache.ContainsKey(type))
+                {
+                    var getterDict = new Dictionary<string, Func<object, object?>>();
+                    var setterDict = new Dictionary<string, Action<object, object?>>();
+                    foreach (var prop in type.GetProperties(BindingFlags.Instance | BindingFlags.Public))
+                    {
+                        if (!prop.CanRead || !prop.CanWrite) continue;
+                        var getMethod = prop.GetGetMethod();
+                        var setMethod = prop.GetSetMethod();
+                        if (getMethod != null)
+                        {
+                            var instance = Expression.Parameter(typeof(object), "instance");
+                            var convert = Expression.Convert(instance, type);
+                            var call = Expression.Call(convert, getMethod);
+                            var castResult = Expression.Convert(call, typeof(object));
+                            var lambda = Expression.Lambda<Func<object, object?>>(castResult, instance).Compile();
+                            getterDict[prop.Name] = lambda;
+                        }
+                        if (setMethod != null)
+                        {
+                            var instance = Expression.Parameter(typeof(object), "instance");
+                            var value = Expression.Parameter(typeof(object), "value");
+                            var convert = Expression.Convert(instance, type);
+                            var valueCast = Expression.Convert(value, prop.PropertyType);
+                            var call = Expression.Call(convert, setMethod, valueCast);
+                            var lambda = Expression.Lambda<Action<object, object?>>(call, instance, value).Compile();
+                            setterDict[prop.Name] = lambda;
+                        }
+                    }
+                    GetterCache[type] = getterDict;
+                    SetterCache[type] = setterDict;
+                }
+            }
         }
 
         /// <summary>
         /// 初始化数据库和表结构
         /// </summary>
-        private void Initialize()
+        private void InitializeDatabase()
         {
-            using (var connection = new SqliteConnection(_connectionString))
+            using var connection = new SqliteConnection(_connectionString);
+            connection.Open();
+
+            // 创建主表
+            CreateTable(connection, typeof(T), _tableName);
+
+            // 创建关联表（一对一）
+            foreach (var dataTableProp in _dataTableProperties.Values)
             {
-                connection.Open();
-                var command = connection.CreateCommand();
+                var childType = dataTableProp.PropertyType;
+                var childTableName = $"{_tableName}_{dataTableProp.Name}";
+                CreateTable(connection, childType, childTableName);
+            }
 
-                // 创建表
-                var columns = new List<string>();
-                foreach (var prop in _properties)
-                {
-                    // 跳过标记为忽略的属性
-                    if (prop.GetCustomAttribute<SqliteIgnoreAttribute>() != null)
-                        continue;
-                    
-                    // 跳过关联表属性
-                    if (_relationProperties.ContainsKey(prop))
-                        continue;
-                        
-                    string sqlType = GetSqliteType(prop.PropertyType);
-                    string primaryKey = (prop == _primaryKeyProperty) ? "PRIMARY KEY" : "";
-                    columns.Add($"{prop.Name} {sqlType} {primaryKey}".Trim());
-                }
-
-                command.CommandText = $"CREATE TABLE IF NOT EXISTS {_tableName} ({string.Join(", ", columns)})";
-                command.ExecuteNonQuery();
-
-                // 检查并添加新列
-                var existingColumns = GetTableColumns(connection);
-                foreach (var prop in _properties)
-                {
-                    // 跳过标记为忽略的属性
-                    if (prop.GetCustomAttribute<SqliteIgnoreAttribute>() != null)
-                        continue;
-                    
-                    // 跳过关联表属性
-                    if (_relationProperties.ContainsKey(prop))
-                        continue;
-                        
-                    if (!existingColumns.Contains(prop.Name, StringComparer.OrdinalIgnoreCase))
-                    {
-                        var addColumnCommand = connection.CreateCommand();
-                        string sqlType = GetSqliteType(prop.PropertyType);
-                        addColumnCommand.CommandText = $"ALTER TABLE {_tableName} ADD COLUMN {prop.Name} {sqlType};";
-                        addColumnCommand.ExecuteNonQuery();
-                    }
-                }
+            // 创建关联表（一对多）
+            foreach (var dataTableListProp in _dataTableListProperties.Values)
+            {
+                var childType = GetDataTableListElementType(dataTableListProp.PropertyType);
+                var childTableName = $"{_tableName}_{dataTableListProp.Name}";
+                CreateTable(connection, childType, childTableName);
             }
         }
 
-        private List<string> GetTableColumns(SqliteConnection connection)
+        /// <summary>
+        /// 创建表
+        /// </summary>
+        private void CreateTable(SqliteConnection connection, Type type, string tableName)
         {
+            var sql = new StringBuilder($"CREATE TABLE IF NOT EXISTS [{tableName}] (");
             var columns = new List<string>();
-            var command = connection.CreateCommand();
-            command.CommandText = $"PRAGMA table_info({_tableName})";
-            using (var reader = command.ExecuteReader())
+
+            foreach (var property in type.GetProperties().Where(p => p.CanRead && p.CanWrite))
             {
-                while (reader.Read())
+                var columnName = property.Name;
+                var columnType = GetSqliteType(property.PropertyType);
+                
+                var columnDef = $"[{columnName}] {columnType}";
+                
+                // 主键处理
+                if (property.Name == "Id")
                 {
-                    columns.Add(reader.GetString(1)); // "name" column
+                    columnDef += " PRIMARY KEY";
                 }
+                
+                columns.Add(columnDef);
             }
-            return columns;
-        }
 
-        #region 基础数据库操作
+            sql.Append(string.Join(", ", columns));
+            sql.Append(")");
 
-        /// <summary>
-        /// 保存对象到数据库
-        /// </summary>
-        /// <param name="item">要保存的对象</param>
-        /// <remarks>
-        /// 使用 INSERT OR REPLACE 语法，当插入的数据主键已存在时，会替换原有记录。
-        /// 这确保了相同ID的数据会被更新而不是产生重复记录。
-        /// </remarks>
-        public void Save(T item)
-        {
-            using (var connection = new SqliteConnection(_connectionString))
-            {
-                connection.Open();
-                using (var transaction = connection.BeginTransaction())
-                {
-                    try
-                    {
-                        var command = connection.CreateCommand();
-                        command.Transaction = transaction;
-
-                        // 过滤掉标记为忽略的属性和关联表属性
-                        var validProperties = _properties.Where(p => 
-                            p.GetCustomAttribute<SqliteIgnoreAttribute>() == null && 
-                            !_relationProperties.ContainsKey(p)).ToArray();
-                        
-                        var columns = validProperties.Select(p => p.Name);
-                        var parameters = validProperties.Select(p => $"${p.Name}");
-
-                        command.CommandText = $@"
-                            INSERT OR REPLACE INTO {_tableName} 
-                            ({string.Join(", ", columns)})
-                            VALUES ({string.Join(", ", parameters)})";
-
-                        foreach (var prop in validProperties)
-                        {
-                            var value = prop.GetValue(item);
-                            if (value != null && GetSqliteType(prop.PropertyType) == "TEXT" && (prop.PropertyType.IsGenericType || prop.PropertyType.IsArray))
-                            {
-                                command.Parameters.AddWithValue($"${prop.Name}", JsonSerializer.Serialize(value));
-                            }
-                            else
-                            {
-                                command.Parameters.AddWithValue($"${prop.Name}", value ?? DBNull.Value);
-                            }
-                        }
-
-                        command.ExecuteNonQuery();
-                        
-                        // 处理关联表
-                        if (_relationProperties.Count > 0 && item != null)
-                        {
-                            // 确保主键已设置
-                            var id = _primaryKeyProperty.GetValue(item);
-                            if (id != null)
-                            {
-                                int itemId = Convert.ToInt32(id);
-                                
-                                // 保存每个关联表
-                                foreach (var relationProp in _relationProperties)
-                                {
-                                    var prop = relationProp.Key;
-                                    var attr = relationProp.Value;
-                                    var value = prop.GetValue(item);
-                                    
-                                    // 如果属性是集合类型
-                                    if (value != null && typeof(IEnumerable).IsAssignableFrom(prop.PropertyType) && 
-                                        prop.PropertyType != typeof(string))
-                                    {
-                                        // 获取集合元素类型
-                                        Type elementType;
-                                        if (prop.PropertyType.IsGenericType)
-                                        {
-                                            elementType = prop.PropertyType.GetGenericArguments()[0];
-                                        }
-                                        else if (prop.PropertyType.IsArray)
-                                        {
-                                            elementType = prop.PropertyType.GetElementType();
-                                        }
-                                        else
-                                        {
-                                            continue;
-                                        }
-                                        
-                                        // 确保元素类型实现了IDataBase接口
-                                        if (!typeof(IDataBase).IsAssignableFrom(elementType))
-                                        {
-                                            continue;
-                                        }
-                                        
-                                        // 将值转换为IEnumerable
-                                        var items = ((IEnumerable)value).Cast<IDataBase>();
-                                        
-                                        // 保存关联表数据
-                                        SaveRelationship(itemId, items, attr.TableName, attr.ForeignKeyProperty, elementType);
-                                    }
-                                }
-                            }
-                        }
-                        
-                        transaction.Commit();
-                    }
-                    catch
-                    {
-                        transaction.Rollback();
-                        throw;
-                    }
-                }
-            }
+            using var command = new SqliteCommand(sql.ToString(), connection);
+            command.ExecuteNonQuery();
         }
 
         /// <summary>
-        /// 批量保存对象到数据库
+        /// 获取 SQLite 对应的数据类型
         /// </summary>
-        /// <param name="items">要保存的对象集合</param>
-        public void SaveAll(IEnumerable<T> items)
+        private string GetSqliteType(Type? type)
         {
-            using (var connection = new SqliteConnection(_connectionString))
+            if (type == null) return "TEXT";
+            
+            // 处理可空类型
+            if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Nullable<>))
             {
-                connection.Open();
-                using (var transaction = connection.BeginTransaction())
+                type = Nullable.GetUnderlyingType(type);
+            }
+
+            if (type == null) return "TEXT";
+
+            return type.Name switch
+            {
+                nameof(String) => "TEXT",
+                nameof(Int32) => "INTEGER",
+                nameof(Int64) => "INTEGER",
+                nameof(Boolean) => "INTEGER",
+                nameof(DateTime) => "TEXT",
+                nameof(Decimal) => "REAL",
+                nameof(Double) => "REAL",
+                nameof(Single) => "REAL",
+                _ => "TEXT"
+            };
+        }
+
+        /// <summary>
+        /// 将实体推送到数据库
+        /// </summary>
+        /// <param name="entity">要保存的实体</param>
+        public void Push(T entity)
+        {
+            if (entity == null) throw new ArgumentNullException(nameof(entity));
+            
+            // 如果ID为0，生成新的ID
+            if (entity.Id == 0)
+            {
+                entity.Id = (int)(DateTime.UtcNow.Ticks % int.MaxValue);
+            }
+
+            using var connection = new SqliteConnection(_connectionString);
+            connection.Open();
+            using var transaction = connection.BeginTransaction();
+
+            try
+            {
+                // 插入主表数据
+                InsertMainEntity(connection, transaction, entity);
+
+                // 处理关联表（一对一）
+                foreach (var dataTableProp in _dataTableProperties)
                 {
-                    try
+                    var childEntity = dataTableProp.Value.GetValue(entity) as IDataTable;
+                    if (childEntity != null)
                     {
-                        foreach (var item in items)
-                        {
-                            var command = connection.CreateCommand();
-                            command.Transaction = transaction;
-
-                            // 过滤掉标记为忽略的属性和关联表属性
-                            var validProperties = _properties.Where(p => 
-                                p.GetCustomAttribute<SqliteIgnoreAttribute>() == null && 
-                                !_relationProperties.ContainsKey(p)).ToArray();
-                            
-                            var columns = validProperties.Select(p => p.Name);
-                            var parameters = validProperties.Select(p => $"${p.Name}");
-
-                            command.CommandText = $@"
-                                INSERT OR REPLACE INTO {_tableName} 
-                                ({string.Join(", ", columns)})
-                                VALUES ({string.Join(", ", parameters)})";
-
-                            foreach (var prop in validProperties)
-                            {
-                                var value = prop.GetValue(item);
-                                if (value != null && GetSqliteType(prop.PropertyType) == "TEXT" && (prop.PropertyType.IsGenericType || prop.PropertyType.IsArray))
-                                {
-                                    command.Parameters.AddWithValue($"${prop.Name}", JsonSerializer.Serialize(value));
-                                }
-                                else
-                                {
-                                    command.Parameters.AddWithValue($"${prop.Name}", value ?? DBNull.Value);
-                                }
-                            }
-
-                            command.ExecuteNonQuery();
-                        }
-
-                        transaction.Commit();
+                        childEntity.ParentId = entity.Id;
                         
-                        // 处理关联表 - 对每个项目单独处理
-                        if (_relationProperties.Count > 0)
-                        {
-                            foreach (var item in items)
-                            {
-                                var id = _primaryKeyProperty.GetValue(item);
-                                if (id != null)
-                                {
-                                    int itemId = Convert.ToInt32(id);
-                                    
-                                    foreach (var relationProp in _relationProperties)
-                                    {
-                                        var prop = relationProp.Key;
-                                        var attr = relationProp.Value;
-                                        var value = prop.GetValue(item);
-                                        
-                                        if (value != null && typeof(IEnumerable).IsAssignableFrom(prop.PropertyType) && 
-                                            prop.PropertyType != typeof(string))
-                                        {
-                                            Type elementType;
-                                            if (prop.PropertyType.IsGenericType)
-                                            {
-                                                elementType = prop.PropertyType.GetGenericArguments()[0];
-                                            }
-                                            else if (prop.PropertyType.IsArray)
-                                            {
-                                                elementType = prop.PropertyType.GetElementType();
-                                            }
-                                            else
-                                            {
-                                                continue;
-                                            }
-                                            
-                                            if (!typeof(IDataBase).IsAssignableFrom(elementType))
-                                            {
-                                                continue;
-                                            }
-                                            
-                                            var items1 = ((IEnumerable)value).Cast<IDataBase>();
-                                            SaveRelationship(itemId, items1, attr.TableName, attr.ForeignKeyProperty, elementType);
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    catch
-                    {
-                        transaction.Rollback();
-                        throw;
+                        InsertChildEntity(connection, transaction, childEntity, $"{_tableName}_{dataTableProp.Key}");
                     }
                 }
+
+                // 处理关联表（一对多）
+                foreach (var dataTableListProp in _dataTableListProperties)
+                {
+                    var childList = dataTableListProp.Value.GetValue(entity) as IEnumerable;
+                    if (childList != null)
+                    {
+                        var tableName = $"{_tableName}_{dataTableListProp.Key}";
+                        
+                        // 先删除现有的子表数据
+                        var deleteSql = $"DELETE FROM [{tableName}] WHERE [ParentId] = @parentId";
+                        using var deleteCommand = new SqliteCommand(deleteSql, connection, transaction);
+                        deleteCommand.Parameters.AddWithValue("@parentId", entity.Id);
+                        deleteCommand.ExecuteNonQuery();
+                        
+                        // 插入新的子表数据
+                        foreach (IDataTable childEntity in childList)
+                        {
+                            if (childEntity != null)
+                            {
+                                childEntity.ParentId = entity.Id;
+                                InsertChildEntity(connection, transaction, childEntity, tableName);
+                            }
+                        }
+                    }
+                }
+
+                transaction.Commit();
+            }
+            catch
+            {
+                transaction.Rollback();
+                throw;
             }
         }
 
         /// <summary>
-        /// 根据条件查询对象
+        /// 插入主实体数据
         /// </summary>
-        /// <param name="whereConditions">查询条件字典，键为属性名，值为匹配值</param>
-        /// <returns>符合条件的对象集合</returns>
-        public List<T> Read(Dictionary<string, object>? whereConditions = null)
+        private void InsertMainEntity(SqliteConnection connection, SqliteTransaction transaction, T entity)
         {
+            var mainProperties = _properties.Where(kvp =>
+                !_dataTableProperties.ContainsKey(kvp.Key) &&
+                !_dataTableListProperties.ContainsKey(kvp.Key));
+            var columns = string.Join(", ", mainProperties.Select(kvp => $"[{kvp.Key}]"));
+            var parameters = string.Join(", ", mainProperties.Select(kvp => $"@{kvp.Key}"));
+            
+            var sql = $"INSERT OR REPLACE INTO [{_tableName}] ({columns}) VALUES ({parameters})";
+            
+            using var command = new SqliteCommand(sql, connection, transaction);
+            
+            var type = typeof(T);
+            var getterDict = GetterCache[type];
+            foreach (var prop in mainProperties)
+            {
+                var rawValue = getterDict[prop.Key](entity);
+                var value = ToDbDateTimeString(rawValue, prop.Value.PropertyType) ?? DBNull.Value;
+                command.Parameters.AddWithValue($"@{prop.Key}", value);
+            }
+            
+            command.ExecuteNonQuery();
+        }
+
+        /// <summary>
+        /// 插入子表数据
+        /// </summary>
+        private void InsertChildEntity(SqliteConnection connection, SqliteTransaction transaction, IDataTable childEntity, string tableName)
+        {
+            var childType = childEntity.GetType();
+            var properties = childType.GetProperties().Where(p => p.CanRead && p.CanWrite);
+            
+            var columns = string.Join(", ", properties.Select(p => $"[{p.Name}]"));
+            var parameters = string.Join(", ", properties.Select(p => $"@{p.Name}"));
+            
+            var sql = $"INSERT OR REPLACE INTO [{tableName}] ({columns}) VALUES ({parameters})";
+            
+            using var command = new SqliteCommand(sql, connection, transaction);
+            
+            var type = childEntity.GetType();
+            var getterDict = GetterCache[type];
+            foreach (var prop in properties)
+            {
+                var rawValue = getterDict[prop.Name](childEntity);
+                var value = ToDbDateTimeString(rawValue, prop.PropertyType) ?? DBNull.Value;
+                command.Parameters.AddWithValue($"@{prop.Name}", value);
+            }
+            
+            command.ExecuteNonQuery();
+        }
+
+        /// <summary>
+        /// 查询数据
+        /// </summary>
+        /// <param name="propertyName">要查询的属性名</param>
+        /// <param name="propertyValue">要查询的属性值</param>
+        /// <returns>查询结果列表</returns>
+        public List<T> Query(string propertyName, object propertyValue)
+        {
+            if (string.IsNullOrEmpty(propertyName)) throw new ArgumentNullException(nameof(propertyName));
+            if (!_properties.ContainsKey(propertyName))
+                throw new ArgumentException($"属性 {propertyName} 不存在于类型 {typeof(T).Name} 中");
+
             var results = new List<T>();
-            using (var connection = new SqliteConnection(_connectionString))
+            
+            using var connection = new SqliteConnection(_connectionString);
+            connection.Open();
+
+            var sql = $"SELECT * FROM [{_tableName}] WHERE [{propertyName}] = @value";
+            using var command = new SqliteCommand(sql, connection);
+            command.Parameters.AddWithValue("@value", propertyValue ?? DBNull.Value);
+
+            using var reader = command.ExecuteReader();
+            while (reader.Read())
             {
-                connection.Open();
-                var command = connection.CreateCommand();
+                var entity = CreateEntityFromReader(reader);
+                
+                // 加载关联表数据
+                LoadChildEntities(connection, entity);
+                
+                results.Add(entity);
+            }
 
-                string whereClause = "";
-                if (whereConditions != null && whereConditions.Count > 0)
+            return results;
+        }
+
+        /// <summary>
+        /// 根据ID查询单个实体
+        /// </summary>
+        /// <param name="id">实体ID</param>
+        /// <returns>查询到的实体，如果不存在则返回null</returns>
+        public T? QueryById(int id)
+        {
+            var results = Query("Id", id);
+            return results.FirstOrDefault();
+        }
+
+        /// <summary>
+        /// 更新实体（等同于Push方法）
+        /// </summary>
+        /// <param name="entity">要更新的实体</param>
+        public void Update(T entity)
+        {
+            if (entity == null) throw new ArgumentNullException(nameof(entity));
+            if (entity.Id == 0) throw new ArgumentException("实体ID不能为0");
+
+            // 更新操作与Push操作相同，使用INSERT OR REPLACE
+            Push(entity);
+        }
+
+        /// <summary>
+        /// 从 SqliteDataReader 创建实体
+        /// </summary>
+        private T CreateEntityFromReader(SqliteDataReader reader)
+        {
+            var entity = new T();
+            
+            var type = typeof(T);
+            var setterDict = SetterCache[type];
+            foreach (var prop in _properties.Where(kvp => !_dataTableProperties.ContainsKey(kvp.Key)))
+            {
+                var columnName = prop.Key;
+                if (HasColumn(reader, columnName))
                 {
-                    var conditions = whereConditions.Select(kvp => $"{kvp.Key} = ${kvp.Key}");
-                    whereClause = $"WHERE {string.Join(" AND ", conditions)}";
-                }
-
-                command.CommandText = $"SELECT * FROM {_tableName} {whereClause}";
-
-                if (whereConditions != null)
-                {
-                    foreach (var condition in whereConditions)
+                    var value = reader[columnName];
+                    if (value != DBNull.Value)
                     {
-                        command.Parameters.AddWithValue($"${condition.Key}", condition.Value ?? DBNull.Value);
+                        // 类型转换
+                        var convertedValue = ConvertValue(value, prop.Value.PropertyType);
+                        setterDict[prop.Key](entity, convertedValue);
                     }
                 }
+            }
+            
+            return entity;
+        }
 
-                using (var reader = command.ExecuteReader())
+        /// <summary>
+        /// 加载子表数据
+        /// </summary>
+        private void LoadChildEntities(SqliteConnection connection, T entity)
+        {
+            // 加载一对一关系
+            foreach (var dataTableProp in _dataTableProperties)
+            {
+                var childTableName = $"{_tableName}_{dataTableProp.Key}";
+                var childType = dataTableProp.Value.PropertyType;
+                
+                var sql = $"SELECT * FROM [{childTableName}] WHERE [ParentId] = @parentId";
+                using var command = new SqliteCommand(sql, connection);
+                command.Parameters.AddWithValue("@parentId", entity.Id);
+
+                using var reader = command.ExecuteReader();
+                if (reader.Read())
                 {
+                    var childEntity = Activator.CreateInstance(childType) as IDataTable;
+                    if (childEntity != null)
+                    {
+                        // 设置子表属性值
+                        var childProperties = childType.GetProperties().Where(p => p.CanRead && p.CanWrite);
+                        foreach (var prop in childProperties)
+                        {
+                            if (HasColumn(reader, prop.Name))
+                            {
+                                var value = reader[prop.Name];
+                                if (value != DBNull.Value)
+                                {
+                                    var convertedValue = ConvertValue(value, prop.PropertyType);
+                                    prop.SetValue(childEntity, convertedValue);
+                                }
+                            }
+                        }
+                        
+                        // 用setter委托赋值
+                        var setterDict = SetterCache[entity.GetType()];
+                        setterDict[dataTableProp.Key](entity, childEntity);
+                    }
+                }
+            }
+
+            // 加载一对多关系
+            foreach (var dataTableListProp in _dataTableListProperties)
+            {
+                var childTableName = $"{_tableName}_{dataTableListProp.Key}";
+                var childType = GetDataTableListElementType(dataTableListProp.Value.PropertyType);
+                
+                var sql = $"SELECT * FROM [{childTableName}] WHERE [ParentId] = @parentId";
+                using var command = new SqliteCommand(sql, connection);
+                command.Parameters.AddWithValue("@parentId", entity.Id);
+
+                var childList = Activator.CreateInstance(dataTableListProp.Value.PropertyType) as IList;
+                if (childList != null)
+                {
+                    using var reader = command.ExecuteReader();
                     while (reader.Read())
                     {
-                        T item = new T();
-                        for (int i = 0; i < reader.FieldCount; i++)
+                        var childEntity = Activator.CreateInstance(childType) as IDataTable;
+                        if (childEntity != null)
                         {
-                            string columnName = reader.GetName(i);
-                            var property = _properties.FirstOrDefault(p => 
-                                p.Name.Equals(columnName, StringComparison.OrdinalIgnoreCase));
+                            // 设置子表属性值
+                            var childProperties = childType.GetProperties().Where(p => p.CanRead && p.CanWrite);
+                            foreach (var prop in childProperties)
+                            {
+                                if (HasColumn(reader, prop.Name))
+                                {
+                                    var value = reader[prop.Name];
+                                    if (value != DBNull.Value)
+                                    {
+                                        var convertedValue = ConvertValue(value, prop.PropertyType);
+                                        prop.SetValue(childEntity, convertedValue);
+                                    }
+                                }
+                            }
                             
-                            if (property != null && !reader.IsDBNull(i))
-                            {
-                                var dbValue = reader.GetValue(i);
-                                
-                                if (dbValue is string stringValue && (property.PropertyType.IsGenericType || property.PropertyType.IsArray))
-                                {
-                                    try
-                                    {
-                                        var deserializedValue = JsonSerializer.Deserialize(stringValue, property.PropertyType);
-                                        property.SetValue(item, deserializedValue);
-                                    }
-                                    catch (JsonException)
-                                    {
-                                        // 如果反序列化失败，则按原样设置值（可能是普通字符串）
-                                        property.SetValue(item, Convert.ChangeType(dbValue, property.PropertyType));
-                                    }
-                                }
-                                else
-                                {
-                                    var targetType = Nullable.GetUnderlyingType(property.PropertyType) ?? property.PropertyType;
-                                    object value;
-                                    if (targetType.IsEnum)
-                                    {
-                                        if (dbValue is string s)
-                                            value = Enum.Parse(targetType, s, true);
-                                        else
-                                            value = Enum.ToObject(targetType, dbValue);
-                                    }
-                                    else
-                                    {
-                                        value = Convert.ChangeType(dbValue, targetType);
-                                    }
-                                    property.SetValue(item, value);
-                                }
-                            }
+                            childList.Add(childEntity);
                         }
-                        
-                        // 加载关联表数据
-                        if (_relationProperties.Count > 0)
-                        {
-                            var id = _primaryKeyProperty.GetValue(item);
-                            if (id != null)
-                            {
-                                int itemId = Convert.ToInt32(id);
-                                
-                                foreach (var relationProp in _relationProperties)
-                                {
-                                    var prop = relationProp.Key;
-                                    var attr = relationProp.Value;
-                                    
-                                    // 获取集合元素类型
-                                    Type elementType;
-                                    if (prop.PropertyType.IsGenericType)
-                                    {
-                                        elementType = prop.PropertyType.GetGenericArguments()[0];
-                                    }
-                                    else if (prop.PropertyType.IsArray)
-                                    {
-                                        elementType = prop.PropertyType.GetElementType();
-                                    }
-                                    else
-                                    {
-                                        continue;
-                                    }
-                                    
-                                    // 确保元素类型实现了IDataBase接口
-                                    if (!typeof(IDataBase).IsAssignableFrom(elementType))
-                                    {
-                                        continue;
-                                    }
-                                    
-                                    // 加载关联数据
-                                    var relationItems = LoadRelationship(itemId, attr.TableName, attr.ForeignKeyProperty, elementType);
-                                    
-                                    // 设置关联集合
-                                    if (prop.PropertyType.IsArray)
-                                    {
-                                        // 转换为数组
-                                        var array = Array.CreateInstance(elementType, relationItems.Count);
-                                        for (int i = 0; i < relationItems.Count; i++)
-                                        {
-                                            array.SetValue(relationItems[i], i);
-                                        }
-                                        prop.SetValue(item, array);
-                                    }
-                                    else
-                                    {
-                                        // 创建合适类型的集合
-                                        var listType = typeof(List<>).MakeGenericType(elementType);
-                                        var list = Activator.CreateInstance(listType);
-                                        
-                                        // 添加所有项目
-                                        var addRangeMethod = listType.GetMethod("AddRange");
-                                        addRangeMethod?.Invoke(list, new object[] { relationItems });
-                                        
-                                        prop.SetValue(item, list);
-                                    }
-                                }
-                            }
-                        }
-                        
-                        results.Add(item);
                     }
+                    
+                    dataTableListProp.Value.SetValue(entity, childList);
                 }
             }
-            return results;
-        }
-
-        public T ReadSingle(string where, object value)
-        {
-            var conditions = new Dictionary<string, object>
-            {
-                { where, value }
-            };
-
-            return Read(conditions).FirstOrDefault();
         }
 
         /// <summary>
-        /// 根据主键ID查询单个对象
+        /// 检查 reader 是否包含指定列
         /// </summary>
-        /// <param name="id">主键ID值</param>
-        /// <returns>对象或null</returns>
-        public T FindById(int id)
+        private bool HasColumn(SqliteDataReader reader, string columnName)
         {
-            if (_primaryKeyProperty == null)
-                throw new InvalidOperationException("无法找到主键属性");
-
-            var conditions = new Dictionary<string, object>
+            for (int i = 0; i < reader.FieldCount; i++)
             {
-                { _primaryKeyProperty.Name, id }
-            };
-
-            return Read(conditions).FirstOrDefault();
-        }
-
-        /// <summary>
-        /// 删除对象
-        /// </summary>
-        /// <param name="item">要删除的对象</param>
-        public void Delete(T item)
-        {
-            if (_primaryKeyProperty == null)
-                throw new InvalidOperationException("无法找到主键属性");
-
-            var id = _primaryKeyProperty.GetValue(item);
-            if (id == null)
-                throw new InvalidOperationException("主键值不能为null");
-
-            using (var connection = new SqliteConnection(_connectionString))
-            {
-                connection.Open();
-                var command = connection.CreateCommand();
-                command.CommandText = $"DELETE FROM {_tableName} WHERE {_primaryKeyProperty.Name} = $id";
-                command.Parameters.AddWithValue("$id", id);
-                command.ExecuteNonQuery();
+                if (reader.GetName(i).Equals(columnName, StringComparison.OrdinalIgnoreCase))
+                    return true;
             }
+            return false;
         }
 
         /// <summary>
-        /// 根据条件删除对象
+        /// 值类型转换
         /// </summary>
-        /// <param name="whereConditions">条件字典</param>
-        /// <returns>删除的行数</returns>
-        public int DeleteWhere(Dictionary<string, object> whereConditions)
+        /// <summary>
+        /// 值类型转换（支持 DateTime 字段反序列化）
+        /// </summary>
+        private object? ConvertValue(object value, Type targetType)
         {
-            using (var connection = new SqliteConnection(_connectionString))
-            {
-                connection.Open();
-                var command = connection.CreateCommand();
+            if (value == null || value == DBNull.Value)
+                return null;
 
-                string whereClause = "";
-                if (whereConditions != null && whereConditions.Count > 0)
+            // 处理可空类型
+            if (targetType.IsGenericType && targetType.GetGenericTypeDefinition() == typeof(Nullable<>))
+            {
+                var underlyingType = Nullable.GetUnderlyingType(targetType);
+                if (underlyingType != null)
                 {
-                    var conditions = whereConditions.Select(kvp => $"{kvp.Key} = ${kvp.Key}");
-                    whereClause = $"WHERE {string.Join(" AND ", conditions)}";
+                    targetType = underlyingType;
                 }
-                else
+            }
+
+            // 特殊处理 DateTime
+            if ((targetType == typeof(DateTime) || targetType == typeof(DateTime?)))
+            {
+                return ParseDbDateTimeString(value, targetType);
+            }
+
+            // 特殊处理 Boolean
+            if (targetType == typeof(bool) && value is long longValue)
+            {
+                return longValue != 0;
+            }
+
+            return Convert.ChangeType(value, targetType);
+        }
+
+        /// <summary>
+        /// 将数据库中的字符串安全转换为 DateTime/DateTime?
+        /// </summary>
+        private static object? ParseDbDateTimeString(object value, Type targetType)
+        {
+            if (value == null || value == DBNull.Value)
+                return targetType == typeof(DateTime) ? DateTime.MinValue : null;
+
+            var str = value.ToString();
+            if (string.IsNullOrWhiteSpace(str))
+                return targetType == typeof(DateTime) ? DateTime.MinValue : null;
+
+            if (DateTime.TryParse(str, out var dt))
+                return dt;
+
+            return targetType == typeof(DateTime) ? DateTime.MinValue : null;
+        }
+
+        /// <summary>
+        /// 将 DateTime/DateTime? 转为数据库存储字符串
+        /// </summary>
+        private static object? ToDbDateTimeString(object? value, Type type)
+        {
+            if (type == typeof(DateTime) || type == typeof(DateTime?))
+            {
+                if (value == null)
+                    return null;
+                var dt = (DateTime)value;
+                // 若为默认值，存 null
+                if (dt == DateTime.MinValue)
+                    return null;
+                return dt.ToString("yyyy-MM-dd HH:mm:ss.fffffff");
+            }
+            return value;
+        }
+
+        /// <summary>
+        /// 删除实体
+        /// </summary>
+        /// <param name="id">要删除的实体ID</param>
+        /// <returns>是否删除成功</returns>
+        public bool Delete(int id)
+        {
+            using var connection = new SqliteConnection(_connectionString);
+            connection.Open();
+            using var transaction = connection.BeginTransaction();
+
+            try
+            {
+                var affectedRows = 0;
+
+                // 删除关联表数据（一对一）
+                foreach (var dataTableProp in _dataTableProperties)
                 {
-                    throw new ArgumentException("删除条件不能为空");
+                    var childTableName = $"{_tableName}_{dataTableProp.Key}";
+                    var deleteSql = $"DELETE FROM [{childTableName}] WHERE [ParentId] = @id";
+                    using var deleteCommand = new SqliteCommand(deleteSql, connection, transaction);
+                    deleteCommand.Parameters.AddWithValue("@id", id);
+                    deleteCommand.ExecuteNonQuery();
                 }
 
-                command.CommandText = $"DELETE FROM {_tableName} {whereClause}";
-
-                foreach (var condition in whereConditions)
+                // 删除关联表数据（一对多）
+                foreach (var dataTableListProp in _dataTableListProperties)
                 {
-                    command.Parameters.AddWithValue($"${condition.Key}", condition.Value ?? DBNull.Value);
+                    var childTableName = $"{_tableName}_{dataTableListProp.Key}";
+                    var deleteSql = $"DELETE FROM [{childTableName}] WHERE [ParentId] = @id";
+                    using var deleteCommand = new SqliteCommand(deleteSql, connection, transaction);
+                    deleteCommand.Parameters.AddWithValue("@id", id);
+                    deleteCommand.ExecuteNonQuery();
                 }
 
-                return command.ExecuteNonQuery();
+                // 删除主表数据
+                var mainDeleteSql = $"DELETE FROM [{_tableName}] WHERE [Id] = @id";
+                using var mainDeleteCommand = new SqliteCommand(mainDeleteSql, connection, transaction);
+                mainDeleteCommand.Parameters.AddWithValue("@id", id);
+                affectedRows = mainDeleteCommand.ExecuteNonQuery();
+
+                transaction.Commit();
+                return affectedRows > 0;
+            }
+            catch
+            {
+                transaction.Rollback();
+                throw;
             }
         }
 
         /// <summary>
-        /// 根据指定条件修复（替换）数据库中的特定条目
+        /// 获取所有数据
         /// </summary>
-        /// <param name="item">包含新数据的对象</param>
-        /// <param name="identifierConditions">用于识别要替换的特定条目的条件</param>
-        /// <returns>true表示找到并更新了条目，false表示未找到匹配条目（此时会创建新条目）</returns>
-        public bool Repair(T item, Dictionary<string, object> identifierConditions)
-        {
-            if (identifierConditions == null || identifierConditions.Count == 0)
-            {
-                throw new ArgumentException("必须提供至少一个条件来识别要替换的条目");
-            }
-
-            // 首先查找匹配的条目
-            var existingItems = Read(identifierConditions);
-            var existingItem = existingItems.FirstOrDefault();
-
-            // 如果找到匹配项，设置ID以确保更新而不是插入
-            if (existingItem != null)
-            {
-                _primaryKeyProperty.SetValue(item, _primaryKeyProperty.GetValue(existingItem));
-                Save(item);
-                return true;
-            }
-            else
-            {
-                // 未找到匹配项，创建新条目
-                Save(item);
-                return false;
-            }
-        }
-
-        /// <summary>
-        /// 根据单个条件修复（替换）数据库中的特定条目
-        /// </summary>
-        /// <param name="item">包含新数据的对象</param>
-        /// <param name="propertyName">用于识别的属性名</param>
-        /// <param name="propertyValue">用于识别的属性值</param>
-        /// <returns>true表示找到并更新了条目，false表示未找到匹配条目（此时会创建新条目）</returns>
-        public bool Repair(T item, string propertyName, object propertyValue)
-        {
-            var conditions = new Dictionary<string, object>
-            {
-                { propertyName, propertyValue }
-            };
-            return Repair(item, conditions);
-        }
-
-        #endregion
-
-        #region 关联表操作
-
-        /// <summary>
-        /// 保存关联表数据
-        /// </summary>
-        /// <param name="parentId">父表ID</param>
-        /// <param name="items">要保存的子表项目集合</param>
-        /// <param name="tableName">关联表名称</param>
-        /// <param name="parentKeyName">父表外键名称</param>
-        /// <param name="childType">子表实体类型</param>
-        private void SaveRelationship(int parentId, IEnumerable<IDataBase> items, string tableName, string parentKeyName, Type childType)
-        {
-            using (var connection = new SqliteConnection(_connectionString))
-            {
-                connection.Open();
-                using (var transaction = connection.BeginTransaction())
-                {
-                    try
-                    {
-                        // 删除现有关联
-                        var deleteCommand = connection.CreateCommand();
-                        deleteCommand.Transaction = transaction;
-                        deleteCommand.CommandText = $"DELETE FROM {tableName} WHERE {parentKeyName} = $parentId";
-                        deleteCommand.Parameters.AddWithValue("$parentId", parentId);
-                        deleteCommand.ExecuteNonQuery();
-
-                        // 插入新的关联
-                        foreach (var item in items)
-                        {
-                            // 确保子项有正确的父ID
-                            var parentKeyProp = childType.GetProperty(parentKeyName);
-                            if (parentKeyProp != null)
-                            {
-                                parentKeyProp.SetValue(item, parentId);
-                            }
-
-                            // 保存子项
-                            var sqliteType = typeof(SqliteUnified<>).MakeGenericType(childType);
-                            var sqliteInstance = Activator.CreateInstance(sqliteType, _connectionString.Replace("Data Source=", ""));
-                            var saveMethod = sqliteType.GetMethod("Save");
-                            saveMethod?.Invoke(sqliteInstance, new object[] { item });
-                        }
-
-                        transaction.Commit();
-                    }
-                    catch
-                    {
-                        transaction.Rollback();
-                        throw;
-                    }
-                }
-            }
-        }
-
-        /// <summary>
-        /// 修复关联表数据 - 仅替换特定条目而不删除其他条目
-        /// </summary>
-        /// <param name="parentId">父表ID</param>
-        /// <param name="items">要修复的子表项目集合</param>
-        /// <param name="tableName">关联表名称</param>
-        /// <param name="parentKeyName">父表外键名称</param>
-        /// <param name="identifierProperty">用于识别特定条目的属性名（除了Id和父键外的唯一标识符）</param>
-        /// <param name="childType">子表实体类型</param>
-        public void RepairRelationship(int parentId, IEnumerable<IDataBase> items, string tableName, string parentKeyName, string identifierProperty, Type childType)
-        {
-            // 获取现有条目
-            var sqliteType = typeof(SqliteUnified<>).MakeGenericType(childType);
-            var sqliteInstance = Activator.CreateInstance(sqliteType, _connectionString.Replace("Data Source=", ""));
-            var readMethod = sqliteType.GetMethod("Read");
-            var conditions = new Dictionary<string, object>
-            {
-                { parentKeyName, parentId }
-            };
-            var existingItems = (System.Collections.IList?)readMethod?.Invoke(sqliteInstance, new object[] { conditions });
-            
-            if (existingItems == null) return;
-            
-            using (var connection = new SqliteConnection(_connectionString))
-            {
-                connection.Open();
-                using (var transaction = connection.BeginTransaction())
-                {
-                    try
-                    {
-                        foreach (var item in items)
-                        {
-                            // 确保子项有正确的父ID
-                            var parentKeyProp = childType.GetProperty(parentKeyName);
-                            if (parentKeyProp != null)
-                            {
-                                parentKeyProp.SetValue(item, parentId);
-                            }
-
-                            // 获取标识符属性
-                            var idProp = childType.GetProperty(identifierProperty);
-                            if (idProp == null)
-                            {
-                                throw new ArgumentException($"属性 {identifierProperty} 在类型 {childType.Name} 中不存在");
-                            }
-
-                            // 获取当前项的标识符值
-                            var idValue = idProp.GetValue(item);
-                            if (idValue == null)
-                            {
-                                throw new ArgumentException($"标识符属性 {identifierProperty} 的值不能为null");
-                            }
-
-                            // 查找匹配的现有项
-                            IDataBase existingItem = null;
-                            foreach (IDataBase e in existingItems)
-                            {
-                                if (object.Equals(idProp.GetValue(e), idValue))
-                                {
-                                    existingItem = e;
-                                    break;
-                                }
-                            }
-
-                            // 如果找到匹配项，设置ID以确保更新而不是插入
-                            if (existingItem != null)
-                            {
-                                var idProperty = typeof(IDataBase).GetProperty(nameof(IDataBase.Id));
-                                idProperty?.SetValue(item, idProperty.GetValue(existingItem));
-                            }
-
-                            // 保存/更新项
-                            var saveMethod = sqliteType.GetMethod("Save");
-                            saveMethod?.Invoke(sqliteInstance, new object[] { item });
-                        }
-
-                        transaction.Commit();
-                    }
-                    catch
-                    {
-                        transaction.Rollback();
-                        throw;
-                    }
-                }
-            }
-        }
-
-        /// <summary>
-        /// 修复单个关联项 - 根据指定属性查找并替换
-        /// </summary>
-        /// <param name="parentId">父表ID</param>
-        /// <param name="item">要修复的项目</param>
-        /// <param name="parentKeyName">父表外键名称</param>
-        /// <param name="identifierProperty">用于识别特定条目的属性名</param>
-        /// <param name="childType">子表实体类型</param>
-        public void RepairRelationshipItem(int parentId, IDataBase item, string parentKeyName, string identifierProperty, Type childType)
-        {
-            // 确保子项有正确的父ID
-            var parentKeyProp = childType.GetProperty(parentKeyName);
-            if (parentKeyProp != null)
-            {
-                parentKeyProp.SetValue(item, parentId);
-            }
-
-            // 获取标识符属性
-            var idProp = childType.GetProperty(identifierProperty);
-            if (idProp == null)
-            {
-                throw new ArgumentException($"属性 {identifierProperty} 在类型 {childType.Name} 中不存在");
-            }
-
-            // 获取当前项的标识符值
-            var idValue = idProp.GetValue(item);
-            if (idValue == null)
-            {
-                throw new ArgumentException($"标识符属性 {identifierProperty} 的值不能为null");
-            }
-
-            // 查找匹配的现有项
-            var sqliteType = typeof(SqliteUnified<>).MakeGenericType(childType);
-            var sqliteInstance = Activator.CreateInstance(sqliteType, _connectionString.Replace("Data Source=", ""));
-            var readMethod = sqliteType.GetMethod("Read");
-            var conditions = new Dictionary<string, object>
-            {
-                { parentKeyName, parentId },
-                { identifierProperty, idValue }
-            };
-            var existingItems = (System.Collections.IList?)readMethod?.Invoke(sqliteInstance, new object[] { conditions });
-            var existingItem = existingItems != null && existingItems.Count > 0 ? (IDataBase)existingItems[0] : null;
-
-            // 如果找到匹配项，设置ID以确保更新而不是插入
-            if (existingItem != null)
-            {
-                var idProperty = typeof(IDataBase).GetProperty(nameof(IDataBase.Id));
-                idProperty?.SetValue(item, idProperty.GetValue(existingItem));
-            }
-
-            // 保存/更新项
-            var saveMethod = sqliteType.GetMethod("Save");
-            saveMethod?.Invoke(sqliteInstance, new object[] { item });
-        }
-
-        /// <summary>
-        /// 加载关联表数据
-        /// </summary>
-        /// <param name="parentId">父表ID</param>
-        /// <param name="tableName">关联表名称</param>
-        /// <param name="parentKeyName">父表外键名称</param>
-        /// <param name="childType">子表实体类型</param>
-        /// <returns>子表项目集合</returns>
-        private List<IDataBase> LoadRelationship(int parentId, string tableName, string parentKeyName, Type childType)
-        {
-            var sqliteType = typeof(SqliteUnified<>).MakeGenericType(childType);
-            var sqliteInstance = Activator.CreateInstance(sqliteType, _connectionString.Replace("Data Source=", ""));
-            var readMethod = sqliteType.GetMethod("Read");
-            var conditions = new Dictionary<string, object>
-            {
-                { parentKeyName, parentId }
-            };
-            var result = (System.Collections.IList?)readMethod?.Invoke(sqliteInstance, new object[] { conditions });
-            return result?.Cast<IDataBase>().ToList() ?? new List<IDataBase>();
-        }
-
-        /// <summary>
-        /// 查询特定条件的关联项
-        /// </summary>
-        /// <param name="parentId">父表ID</param>
-        /// <param name="conditions">额外的查询条件</param>
-        /// <param name="parentKeyName">父表外键名称</param>
-        /// <param name="childType">子表实体类型</param>
-        /// <returns>符合条件的子表项目集合</returns>
-        public List<IDataBase> QueryRelationship(int parentId, Dictionary<string, object> conditions, string parentKeyName, Type childType)
-        {
-            var sqliteType = typeof(SqliteUnified<>).MakeGenericType(childType);
-            var sqliteInstance = Activator.CreateInstance(sqliteType, _connectionString.Replace("Data Source=", ""));
-            var readMethod = sqliteType.GetMethod("Read");
-            
-            var allConditions = new Dictionary<string, object>(conditions)
-            {
-                { parentKeyName, parentId }
-            };
-            
-            var result = (System.Collections.IList?)readMethod?.Invoke(sqliteInstance, new object[] { allConditions });
-            return result?.Cast<IDataBase>().ToList() ?? new List<IDataBase>();
-        }
-
-        /// <summary>
-        /// 更新单个关联项
-        /// </summary>
-        /// <param name="item">要更新的项目</param>
-        /// <param name="childType">子表实体类型</param>
-        public void UpdateRelationshipItem(IDataBase item, Type childType)
-        {
-            var sqliteType = typeof(SqliteUnified<>).MakeGenericType(childType);
-            var sqliteInstance = Activator.CreateInstance(sqliteType, _connectionString.Replace("Data Source=", ""));
-            var saveMethod = sqliteType.GetMethod("Save");
-            saveMethod?.Invoke(sqliteInstance, new object[] { item });
-        }
-
-        /// <summary>
-        /// 删除单个关联项
-        /// </summary>
-        /// <param name="item">要删除的项目</param>
-        /// <param name="childType">子表实体类型</param>
-        public void DeleteRelationshipItem(IDataBase item, Type childType)
-        {
-            var sqliteType = typeof(SqliteUnified<>).MakeGenericType(childType);
-            var sqliteInstance = Activator.CreateInstance(sqliteType, _connectionString.Replace("Data Source=", ""));
-            var deleteMethod = sqliteType.GetMethod("Delete");
-            deleteMethod?.Invoke(sqliteInstance, new object[] { item });
-        }
-
-        /// <summary>
-        /// 添加单个关联项
-        /// </summary>
-        /// <param name="parentId">父表ID</param>
-        /// <param name="item">要添加的项目</param>
-        /// <param name="parentKeyName">父表外键名称</param>
-        /// <param name="childType">子表实体类型</param>
-        public void AddRelationshipItem(int parentId, IDataBase item, string parentKeyName, Type childType)
-        {
-            var parentKeyProp = childType.GetProperty(parentKeyName);
-            if (parentKeyProp != null)
-            {
-                parentKeyProp.SetValue(item, parentId);
-            }
-
-            var sqliteType = typeof(SqliteUnified<>).MakeGenericType(childType);
-            var sqliteInstance = Activator.CreateInstance(sqliteType, _connectionString.Replace("Data Source=", ""));
-            var saveMethod = sqliteType.GetMethod("Save");
-            saveMethod?.Invoke(sqliteInstance, new object[] { item });
-        }
-
-        #endregion
-
-        #region 辅助方法
-
-        /// <summary>
-        /// 获取SQLite数据类型
-        /// </summary>
-        /// <param name="type">C#类型</param>
-        /// <returns>对应的SQLite类型</returns>
-        private string GetSqliteType(Type type)
-        {
-            type = Nullable.GetUnderlyingType(type) ?? type;
-
-            if (type.IsEnum)
-                return "TEXT";
-
-            if (type == typeof(int) || type == typeof(long) || type == typeof(short) ||
-                type == typeof(uint) || type == typeof(ulong) || type == typeof(ushort) ||
-                type == typeof(byte) || type == typeof(sbyte) || type == typeof(bool))
-                return "INTEGER";
-
-            if (type == typeof(float) || type == typeof(double) || type == typeof(decimal))
-                return "REAL";
-
-            if (type == typeof(DateTime))
-                return "TEXT";
-
-            if (type == typeof(Guid))
-                return "TEXT";
-
-            if (type == typeof(byte[]))
-                return "BLOB";
-
-            if (typeof(IDictionary).IsAssignableFrom(type) || 
-                (type.IsGenericType && typeof(IEnumerable).IsAssignableFrom(type)))
-                return "TEXT";
-
-            return "TEXT";
-        }
-
-        #endregion
-
-        #region 异步数据库操作
-
-        /// <summary>
-        /// 异步保存对象到数据库
-        /// </summary>
-        /// <param name="item">要保存的对象</param>
-        /// <param name="cancellationToken">取消令牌</param>
-        public async Task SaveAsync(T item, CancellationToken cancellationToken = default)
-        {
-            using (var connection = new SqliteConnection(_connectionString))
-            {
-                await connection.OpenAsync(cancellationToken);
-                using (var transaction = connection.BeginTransaction())
-                {
-                    try
-                    {
-                        var command = connection.CreateCommand();
-                        command.Transaction = transaction;
-
-                        var validProperties = _properties.Where(p => 
-                            p.GetCustomAttribute<SqliteIgnoreAttribute>() == null && 
-                            !_relationProperties.ContainsKey(p)).ToArray();
-                        
-                        var columns = validProperties.Select(p => p.Name);
-                        var parameters = validProperties.Select(p => $"${p.Name}");
-
-                        command.CommandText = $@"
-                            INSERT OR REPLACE INTO {_tableName} 
-                            ({string.Join(", ", columns)})
-                            VALUES ({string.Join(", ", parameters)})";
-
-                        foreach (var prop in validProperties)
-                        {
-                            var value = prop.GetValue(item);
-                            if (value != null && GetSqliteType(prop.PropertyType) == "TEXT" && (prop.PropertyType.IsGenericType || prop.PropertyType.IsArray))
-                            {
-                                command.Parameters.AddWithValue($"${prop.Name}", JsonSerializer.Serialize(value));
-                            }
-                            else
-                            {
-                                command.Parameters.AddWithValue($"${prop.Name}", value ?? DBNull.Value);
-                            }
-                        }
-
-                        await command.ExecuteNonQueryAsync(cancellationToken);
-                        
-                        if (_relationProperties.Count > 0 && item != null)
-                        {
-                            var id = _primaryKeyProperty.GetValue(item);
-                            if (id != null)
-                            {
-                                int itemId = Convert.ToInt32(id);
-                                
-                                foreach (var relationProp in _relationProperties)
-                                {
-                                    var prop = relationProp.Key;
-                                    var attr = relationProp.Value;
-                                    var value = prop.GetValue(item);
-                                    
-                                    if (value != null && typeof(IEnumerable).IsAssignableFrom(prop.PropertyType) && 
-                                        prop.PropertyType != typeof(string))
-                                    {
-                                        Type elementType;
-                                        if (prop.PropertyType.IsGenericType)
-                                        {
-                                            elementType = prop.PropertyType.GetGenericArguments()[0];
-                                        }
-                                        else if (prop.PropertyType.IsArray)
-                                        {
-                                            elementType = prop.PropertyType.GetElementType();
-                                        }
-                                        else
-                                        {
-                                            continue;
-                                        }
-                                        
-                                        if (!typeof(IDataBase).IsAssignableFrom(elementType))
-                                        {
-                                            continue;
-                                        }
-                                        
-                                        var items = ((IEnumerable)value).Cast<IDataBase>();
-                                        await SaveRelationshipAsync(itemId, items, attr.TableName, attr.ForeignKeyProperty, elementType, cancellationToken);
-                                    }
-                                }
-                            }
-                        }
-                        
-                        transaction.Commit();
-                    }
-                    catch
-                    {
-                        transaction.Rollback();
-                        throw;
-                    }
-                }
-            }
-        }
-
-        /// <summary>
-        /// 异步批量保存对象到数据库
-        /// </summary>
-        /// <param name="items">要保存的对象集合</param>
-        /// <param name="cancellationToken">取消令牌</param>
-        public async Task SaveAllAsync(IEnumerable<T> items, CancellationToken cancellationToken = default)
-        {
-            using (var connection = new SqliteConnection(_connectionString))
-            {
-                await connection.OpenAsync(cancellationToken);
-                using (var transaction = connection.BeginTransaction())
-                {
-                    try
-                    {
-                        foreach (var item in items)
-                        {
-                            var command = connection.CreateCommand();
-                            command.Transaction = transaction;
-
-                            var validProperties = _properties.Where(p => 
-                                p.GetCustomAttribute<SqliteIgnoreAttribute>() == null && 
-                                !_relationProperties.ContainsKey(p)).ToArray();
-                            
-                            var columns = validProperties.Select(p => p.Name);
-                            var parameters = validProperties.Select(p => $"${p.Name}");
-
-                            command.CommandText = $@"
-                                INSERT OR REPLACE INTO {_tableName} 
-                                ({string.Join(", ", columns)})
-                                VALUES ({string.Join(", ", parameters)})";
-
-                            foreach (var prop in validProperties)
-                            {
-                                var value = prop.GetValue(item);
-                                if (value != null && GetSqliteType(prop.PropertyType) == "TEXT" && (prop.PropertyType.IsGenericType || prop.PropertyType.IsArray))
-                                {
-                                    command.Parameters.AddWithValue($"${prop.Name}", JsonSerializer.Serialize(value));
-                                }
-                                else
-                                {
-                                    command.Parameters.AddWithValue($"${prop.Name}", value ?? DBNull.Value);
-                                }
-                            }
-
-                            await command.ExecuteNonQueryAsync(cancellationToken);
-                        }
-
-                        transaction.Commit();
-                        
-                        if (_relationProperties.Count > 0)
-                        {
-                            foreach (var item in items)
-                            {
-                                var id = _primaryKeyProperty.GetValue(item);
-                                if (id != null)
-                                {
-                                    int itemId = Convert.ToInt32(id);
-                                    
-                                    foreach (var relationProp in _relationProperties)
-                                    {
-                                        var prop = relationProp.Key;
-                                        var attr = relationProp.Value;
-                                        var value = prop.GetValue(item);
-                                        
-                                        if (value != null && typeof(IEnumerable).IsAssignableFrom(prop.PropertyType) && 
-                                            prop.PropertyType != typeof(string))
-                                        {
-                                            Type elementType;
-                                            if (prop.PropertyType.IsGenericType)
-                                            {
-                                                elementType = prop.PropertyType.GetGenericArguments()[0];
-                                            }
-                                            else if (prop.PropertyType.IsArray)
-                                            {
-                                                elementType = prop.PropertyType.GetElementType();
-                                            }
-                                            else
-                                            {
-                                                continue;
-                                            }
-                                            
-                                            if (!typeof(IDataBase).IsAssignableFrom(elementType))
-                                            {
-                                                continue;
-                                            }
-                                            
-                                            var items1 = ((IEnumerable)value).Cast<IDataBase>();
-                                            await SaveRelationshipAsync(itemId, items1, attr.TableName, attr.ForeignKeyProperty, elementType, cancellationToken);
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    catch
-                    {
-                        transaction.Rollback();
-                        throw;
-                    }
-                }
-            }
-        }
-
-        /// <summary>
-        /// 异步根据条件查询对象
-        /// </summary>
-        /// <param name="whereConditions">查询条件字典，键为属性名，值为匹配值</param>
-        /// <param name="cancellationToken">取消令牌</param>
-        /// <returns>符合条件的对象集合</returns>
-        public async Task<List<T>> ReadAsync(Dictionary<string, object>? whereConditions = null, CancellationToken cancellationToken = default)
+        /// <returns>所有实体列表</returns>
+        public List<T> GetAll()
         {
             var results = new List<T>();
-            using (var connection = new SqliteConnection(_connectionString))
+            
+            using var connection = new SqliteConnection(_connectionString);
+            connection.Open();
+
+            var sql = $"SELECT * FROM [{_tableName}]";
+            using var command = new SqliteCommand(sql, connection);
+
+            using var reader = command.ExecuteReader();
+            while (reader.Read())
             {
-                await connection.OpenAsync(cancellationToken);
-                var command = connection.CreateCommand();
+                var entity = CreateEntityFromReader(reader);
+                
+                // 加载关联表数据
+                LoadChildEntities(connection, entity);
+                
+                results.Add(entity);
+            }
 
-                string whereClause = "";
-                if (whereConditions != null && whereConditions.Count > 0)
+            return results;
+        }
+
+        /// <summary>
+        /// 检查类型是否为 List<IDataTable> 类型
+        /// </summary>
+        private bool IsDataTableList(Type propertyType)
+        {
+            if (!propertyType.IsGenericType) return false;
+            
+            var genericTypeDef = propertyType.GetGenericTypeDefinition();
+            if (genericTypeDef != typeof(List<>) && genericTypeDef != typeof(IList<>) && 
+                genericTypeDef != typeof(ICollection<>) && genericTypeDef != typeof(IEnumerable<>))
+                return false;
+            
+            var genericArg = propertyType.GetGenericArguments()[0];
+            return typeof(IDataTable).IsAssignableFrom(genericArg);
+        }
+
+        /// <summary>
+        /// 获取List<IDataTable>中的元素类型
+        /// </summary>
+        private Type GetDataTableListElementType(Type listType)
+        {
+            return listType.GetGenericArguments()[0];
+        }
+
+        #region Async Methods
+
+        /// <summary>
+        /// 异步将实体推送到数据库
+        /// </summary>
+        public async Task PushAsync(T entity, CancellationToken cancellationToken = default)
+        {
+            if (entity == null) throw new ArgumentNullException(nameof(entity));
+            if (entity.Id == 0)
+            {
+                entity.Id = (int)(DateTime.UtcNow.Ticks % int.MaxValue);
+            }
+            await using var connection = new SqliteConnection(_connectionString);
+            await connection.OpenAsync(cancellationToken);
+            await using var transactionObj = await connection.BeginTransactionAsync(cancellationToken);
+            var transaction = transactionObj as SqliteTransaction ?? throw new InvalidOperationException("SqliteTransaction 获取失败");
+            try
+            {
+                await InsertMainEntityAsync(connection, transaction, entity, cancellationToken);
+                // 一对一
+                foreach (var dataTableProp in _dataTableProperties)
                 {
-                    var conditions = whereConditions.Select(kvp => $"{kvp.Key} = ${kvp.Key}");
-                    whereClause = $"WHERE {string.Join(" AND ", conditions)}";
-                }
-
-                command.CommandText = $"SELECT * FROM {_tableName} {whereClause}";
-
-                if (whereConditions != null)
-                {
-                    foreach (var condition in whereConditions)
+                    var childEntity = dataTableProp.Value.GetValue(entity) as IDataTable;
+                    if (childEntity != null)
                     {
-                        command.Parameters.AddWithValue($"${condition.Key}", condition.Value ?? DBNull.Value);
+                        childEntity.ParentId = entity.Id;
+                        await InsertChildEntityAsync(connection, transaction, childEntity, $"{_tableName}_{dataTableProp.Key}", cancellationToken);
                     }
                 }
-
-                using (var reader = await command.ExecuteReaderAsync(cancellationToken))
+                // 一对多
+                foreach (var dataTableListProp in _dataTableListProperties)
                 {
-                    while (await reader.ReadAsync(cancellationToken))
+                    var childList = dataTableListProp.Value.GetValue(entity) as IEnumerable;
+                    if (childList != null)
                     {
-                        T item = new T();
-                        for (int i = 0; i < reader.FieldCount; i++)
+                        var tableName = $"{_tableName}_{dataTableListProp.Key}";
+                        var deleteSql = $"DELETE FROM [{tableName}] WHERE [ParentId] = @parentId";
+                        await using (var deleteCommand = new SqliteCommand(deleteSql, connection, transaction))
                         {
-                            string columnName = reader.GetName(i);
-                            var property = _properties.FirstOrDefault(p => 
-                                p.Name.Equals(columnName, StringComparison.OrdinalIgnoreCase));
-                            
-                            if (property != null && !reader.IsDBNull(i))
+                            deleteCommand.Parameters.AddWithValue("@parentId", entity.Id);
+                            await deleteCommand.ExecuteNonQueryAsync(cancellationToken);
+                        }
+                        foreach (IDataTable childEntity in childList)
+                        {
+                            if (childEntity != null)
                             {
-                                var dbValue = reader.GetValue(i);
-                                
-                                if (dbValue is string stringValue && (property.PropertyType.IsGenericType || property.PropertyType.IsArray))
-                                {
-                                    try
-                                    {
-                                        var deserializedValue = JsonSerializer.Deserialize(stringValue, property.PropertyType);
-                                        property.SetValue(item, deserializedValue);
-                                    }
-                                    catch (JsonException)
-                                    {
-                                        property.SetValue(item, Convert.ChangeType(dbValue, property.PropertyType));
-                                    }
-                                }
-                                else
-                                {
-                                    var targetType = Nullable.GetUnderlyingType(property.PropertyType) ?? property.PropertyType;
-                                    object value;
-                                    if (targetType.IsEnum)
-                                    {
-                                        if (dbValue is string s)
-                                            value = Enum.Parse(targetType, s, true);
-                                        else
-                                            value = Enum.ToObject(targetType, dbValue);
-                                    }
-                                    else
-                                    {
-                                        value = Convert.ChangeType(dbValue, targetType);
-                                    }
-                                    property.SetValue(item, value);
-                                }
+                                childEntity.ParentId = entity.Id;
+                                await InsertChildEntityAsync(connection, transaction, childEntity, tableName, cancellationToken);
                             }
                         }
-                        
-                        if (_relationProperties.Count > 0)
-                        {
-                            var id = _primaryKeyProperty.GetValue(item);
-                            if (id != null)
-                            {
-                                int itemId = Convert.ToInt32(id);
-                                
-                                foreach (var relationProp in _relationProperties)
-                                {
-                                    var prop = relationProp.Key;
-                                    var attr = relationProp.Value;
-                                    
-                                    Type elementType;
-                                    if (prop.PropertyType.IsGenericType)
-                                    {
-                                        elementType = prop.PropertyType.GetGenericArguments()[0];
-                                    }
-                                    else if (prop.PropertyType.IsArray)
-                                    {
-                                        elementType = prop.PropertyType.GetElementType();
-                                    }
-                                    else
-                                    {
-                                        continue;
-                                    }
-                                    
-                                    if (!typeof(IDataBase).IsAssignableFrom(elementType))
-                                    {
-                                        continue;
-                                    }
-                                    
-                                    var relationItems = await LoadRelationshipAsync(itemId, attr.TableName, attr.ForeignKeyProperty, elementType, cancellationToken);
-                                    
-                                    if (prop.PropertyType.IsArray)
-                                    {
-                                        var array = Array.CreateInstance(elementType, relationItems.Count);
-                                        for (int i = 0; i < relationItems.Count; i++)
-                                        {
-                                            array.SetValue(relationItems[i], i);
-                                        }
-                                        prop.SetValue(item, array);
-                                    }
-                                    else
-                                    {
-                                        var listType = typeof(List<>).MakeGenericType(elementType);
-                                        var list = Activator.CreateInstance(listType);
-                                        
-                                        var addRangeMethod = listType.GetMethod("AddRange");
-                                        addRangeMethod?.Invoke(list, new object[] { relationItems });
-                                        
-                                        prop.SetValue(item, list);
-                                    }
-                                }
-                            }
-                        }
-                        
-                        results.Add(item);
                     }
                 }
+                await transaction.CommitAsync(cancellationToken);
+            }
+            catch
+            {
+                await transaction.RollbackAsync(cancellationToken);
+                throw;
+            }
+        }
+
+        /// <summary>
+        /// 异步插入主实体数据
+        /// </summary>
+        private async Task InsertMainEntityAsync(SqliteConnection connection, SqliteTransaction transaction, T entity, CancellationToken cancellationToken)
+        {
+            var mainProperties = _properties.Where(kvp =>
+                !_dataTableProperties.ContainsKey(kvp.Key) &&
+                !_dataTableListProperties.ContainsKey(kvp.Key));
+            var columns = string.Join(", ", mainProperties.Select(kvp => $"[{kvp.Key}]"));
+            var parameters = string.Join(", ", mainProperties.Select(kvp => $"@{kvp.Key}"));
+            var sql = $"INSERT OR REPLACE INTO [{_tableName}] ({columns}) VALUES ({parameters})";
+            await using var command = new SqliteCommand(sql, connection, transaction);
+            foreach (var prop in mainProperties)
+            {
+                var rawValue = prop.Value.GetValue(entity);
+                var value = ToDbDateTimeString(rawValue, prop.Value.PropertyType) ?? DBNull.Value;
+                command.Parameters.AddWithValue($"@{prop.Key}", value);
+            }
+            await command.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        /// <summary>
+        /// 异步插入子表数据
+        /// </summary>
+        private async Task InsertChildEntityAsync(SqliteConnection connection, SqliteTransaction transaction, IDataTable childEntity, string tableName, CancellationToken cancellationToken)
+        {
+            var childType = childEntity.GetType();
+            var properties = childType.GetProperties().Where(p => p.CanRead && p.CanWrite);
+            var columns = string.Join(", ", properties.Select(p => $"[{p.Name}]"));
+            var parameters = string.Join(", ", properties.Select(p => $"@{p.Name}"));
+            var sql = $"INSERT OR REPLACE INTO [{tableName}] ({columns}) VALUES ({parameters})";
+            await using var command = new SqliteCommand(sql, connection, transaction);
+            foreach (var prop in properties)
+            {
+                var rawValue = prop.GetValue(childEntity);
+                var value = ToDbDateTimeString(rawValue, prop.PropertyType) ?? DBNull.Value;
+                command.Parameters.AddWithValue($"@{prop.Name}", value);
+            }
+            await command.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        /// <summary>
+        /// 异步查询数据
+        /// </summary>
+        public async Task<List<T>> QueryAsync(string propertyName, object propertyValue, CancellationToken cancellationToken = default)
+        {
+            if (string.IsNullOrEmpty(propertyName)) throw new ArgumentNullException(nameof(propertyName));
+            if (!_properties.ContainsKey(propertyName))
+                throw new ArgumentException($"属性 {propertyName} 不存在于类型 {typeof(T).Name} 中");
+            var results = new List<T>();
+            await using var connection = new SqliteConnection(_connectionString);
+            await connection.OpenAsync(cancellationToken);
+            var sql = $"SELECT * FROM [{_tableName}] WHERE [{propertyName}] = @value";
+            await using var command = new SqliteCommand(sql, connection);
+            command.Parameters.AddWithValue("@value", propertyValue ?? DBNull.Value);
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                var entity = CreateEntityFromReader(reader);
+                await LoadChildEntitiesAsync(connection, entity, cancellationToken);
+                results.Add(entity);
             }
             return results;
         }
 
         /// <summary>
-        /// 异步根据单个条件查询对象
+        /// 异步根据ID查询单个实体
         /// </summary>
-        public async Task<T> ReadSingleAsync(string where, object value, CancellationToken cancellationToken = default)
+        public async Task<T?> QueryByIdAsync(int id, CancellationToken cancellationToken = default)
         {
-            var conditions = new Dictionary<string, object>
-            {
-                { where, value }
-            };
-
-            var results = await ReadAsync(conditions, cancellationToken);
+            var results = await QueryAsync("Id", id, cancellationToken);
             return results.FirstOrDefault();
         }
 
         /// <summary>
-        /// 异步根据主键ID查询单个对象
+        /// 异步更新实体（等同于PushAsync）
         /// </summary>
-        public async Task<T> FindByIdAsync(int id, CancellationToken cancellationToken = default)
+        public async Task UpdateAsync(T entity, CancellationToken cancellationToken = default)
         {
-            if (_primaryKeyProperty == null)
-                throw new InvalidOperationException("无法找到主键属性");
-
-            var conditions = new Dictionary<string, object>
-            {
-                { _primaryKeyProperty.Name, id }
-            };
-
-            var results = await ReadAsync(conditions, cancellationToken);
-            return results.FirstOrDefault();
+            if (entity == null) throw new ArgumentNullException(nameof(entity));
+            if (entity.Id == 0) throw new ArgumentException("实体ID不能为0");
+            await PushAsync(entity, cancellationToken);
         }
 
         /// <summary>
-        /// 异步删除对象
+        /// 异步加载子表数据
         /// </summary>
-        public async Task DeleteAsync(T item, CancellationToken cancellationToken = default)
+        private async Task LoadChildEntitiesAsync(SqliteConnection connection, T entity, CancellationToken cancellationToken)
         {
-            if (_primaryKeyProperty == null)
-                throw new InvalidOperationException("无法找到主键属性");
-
-            var id = _primaryKeyProperty.GetValue(item);
-            if (id == null)
-                throw new InvalidOperationException("主键值不能为null");
-
-            using (var connection = new SqliteConnection(_connectionString))
+            // 一对一
+            foreach (var dataTableProp in _dataTableProperties)
             {
-                await connection.OpenAsync(cancellationToken);
-                var command = connection.CreateCommand();
-                command.CommandText = $"DELETE FROM {_tableName} WHERE {_primaryKeyProperty.Name} = $id";
-                command.Parameters.AddWithValue("$id", id);
-                await command.ExecuteNonQueryAsync(cancellationToken);
-            }
-        }
-
-        /// <summary>
-        /// 异步根据条件删除对象
-        /// </summary>
-        public async Task<int> DeleteWhereAsync(Dictionary<string, object> whereConditions, CancellationToken cancellationToken = default)
-        {
-            using (var connection = new SqliteConnection(_connectionString))
-            {
-                await connection.OpenAsync(cancellationToken);
-                var command = connection.CreateCommand();
-
-                string whereClause = "";
-                if (whereConditions != null && whereConditions.Count > 0)
+                var childTableName = $"{_tableName}_{dataTableProp.Key}";
+                var childType = dataTableProp.Value.PropertyType;
+                var sql = $"SELECT * FROM [{childTableName}] WHERE [ParentId] = @parentId";
+                await using var command = new SqliteCommand(sql, connection);
+                command.Parameters.AddWithValue("@parentId", entity.Id);
+                await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+                if (await reader.ReadAsync(cancellationToken))
                 {
-                    var conditions = whereConditions.Select(kvp => $"{kvp.Key} = ${kvp.Key}");
-                    whereClause = $"WHERE {string.Join(" AND ", conditions)}";
-                }
-                else
-                {
-                    throw new ArgumentException("删除条件不能为空");
-                }
-
-                command.CommandText = $"DELETE FROM {_tableName} {whereClause}";
-
-                foreach (var condition in whereConditions)
-                {
-                    command.Parameters.AddWithValue($"${condition.Key}", condition.Value ?? DBNull.Value);
-                }
-
-                return await command.ExecuteNonQueryAsync(cancellationToken);
-            }
-        }
-
-        /// <summary>
-        /// 异步修复（替换）数据库中的特定条目
-        /// </summary>
-        public async Task<bool> RepairAsync(T item, Dictionary<string, object> identifierConditions, CancellationToken cancellationToken = default)
-        {
-            if (identifierConditions == null || identifierConditions.Count == 0)
-            {
-                throw new ArgumentException("必须提供至少一个条件来识别要替换的条目");
-            }
-
-            var existingItems = await ReadAsync(identifierConditions, cancellationToken);
-            var existingItem = existingItems.FirstOrDefault();
-
-            if (existingItem != null)
-            {
-                _primaryKeyProperty.SetValue(item, _primaryKeyProperty.GetValue(existingItem));
-                await SaveAsync(item, cancellationToken);
-                return true;
-            }
-            else
-            {
-                await SaveAsync(item, cancellationToken);
-                return false;
-            }
-        }
-
-        /// <summary>
-        /// 异步根据单个条件修复（替换）数据库中的特定条目
-        /// </summary>
-        public async Task<bool> RepairAsync(T item, string propertyName, object propertyValue, CancellationToken cancellationToken = default)
-        {
-            var conditions = new Dictionary<string, object>
-            {
-                { propertyName, propertyValue }
-            };
-            return await RepairAsync(item, conditions, cancellationToken);
-        }
-
-        #endregion
-
-        #region 异步关联表操作
-
-        private async Task SaveRelationshipAsync(int parentId, IEnumerable<IDataBase> items, string tableName, string parentKeyName, Type childType, CancellationToken cancellationToken = default)
-        {
-            using (var connection = new SqliteConnection(_connectionString))
-            {
-                await connection.OpenAsync(cancellationToken);
-                using (var transaction = connection.BeginTransaction())
-                {
-                    try
+                    // 优先用缓存的无参构造委托
+                    var childFactory = ChildTypeFactoryCache.GetOrAdd(childType, t => {
+                        var ctor = t.GetConstructor(Type.EmptyTypes);
+                        if (ctor == null) throw new InvalidOperationException($"类型 {t.FullName} 缺少无参构造函数");
+                        var exp = System.Linq.Expressions.Expression.Lambda<Func<object>>(System.Linq.Expressions.Expression.New(ctor));
+                        return exp.Compile();
+                    });
+                    var childEntity = childFactory() as IDataTable;
+                    if (childEntity != null)
                     {
-                        var deleteCommand = connection.CreateCommand();
-                        deleteCommand.Transaction = transaction;
-                        deleteCommand.CommandText = $"DELETE FROM {tableName} WHERE {parentKeyName} = $parentId";
-                        deleteCommand.Parameters.AddWithValue("$parentId", parentId);
-                        await deleteCommand.ExecuteNonQueryAsync(cancellationToken);
-
-                        foreach (var item in items)
+                        // 优先用缓存的属性列表
+                        var childProperties = ChildTypePropertiesCache.GetOrAdd(childType, t => t.GetProperties().Where(p => p.CanRead && p.CanWrite).ToArray());
+                        foreach (var prop in childProperties)
                         {
-                            var parentKeyProp = childType.GetProperty(parentKeyName);
-                            if (parentKeyProp != null)
+                            if (HasColumn(reader, prop.Name))
                             {
-                                parentKeyProp.SetValue(item, parentId);
+                                var value = reader[prop.Name];
+                                if (value != DBNull.Value)
+                                {
+                                    var convertedValue = ConvertValue(value, prop.PropertyType);
+                                    prop.SetValue(childEntity, convertedValue);
+                                }
                             }
-
-                            var sqliteType = typeof(SqliteUnified<>).MakeGenericType(childType);
-                            var sqliteInstance = Activator.CreateInstance(sqliteType, _connectionString.Replace("Data Source=", ""));
-                            var saveMethod = sqliteType.GetMethod("SaveAsync");
-                            await (Task)saveMethod.Invoke(sqliteInstance, new object[] { item, cancellationToken });
                         }
-
-                        transaction.Commit();
+                        dataTableProp.Value.SetValue(entity, childEntity);
                     }
-                    catch
+                }
+            }
+            // 一对多
+            foreach (var dataTableListProp in _dataTableListProperties)
+            {
+                var childTableName = $"{_tableName}_{dataTableListProp.Key}";
+                var childType = GetDataTableListElementType(dataTableListProp.Value.PropertyType);
+                var sql = $"SELECT * FROM [{childTableName}] WHERE [ParentId] = @parentId";
+                await using var command = new SqliteCommand(sql, connection);
+                command.Parameters.AddWithValue("@parentId", entity.Id);
+                var childList = Activator.CreateInstance(dataTableListProp.Value.PropertyType) as IList;
+                if (childList != null)
+                {
+                    await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+                    // 缓存工厂和属性
+                    var childFactory = ChildTypeFactoryCache.GetOrAdd(childType, t => {
+                        var ctor = t.GetConstructor(Type.EmptyTypes);
+                        if (ctor == null) throw new InvalidOperationException($"类型 {t.FullName} 缺少无参构造函数");
+                        var exp = System.Linq.Expressions.Expression.Lambda<Func<object>>(System.Linq.Expressions.Expression.New(ctor));
+                        return exp.Compile();
+                    });
+                    var childProperties = ChildTypePropertiesCache.GetOrAdd(childType, t => t.GetProperties().Where(p => p.CanRead && p.CanWrite).ToArray());
+                    while (await reader.ReadAsync(cancellationToken))
                     {
-                        transaction.Rollback();
-                        throw;
+                        var childEntity = childFactory() as IDataTable;
+                        if (childEntity != null)
+                        {
+                            foreach (var prop in childProperties)
+                            {
+                                if (HasColumn(reader, prop.Name))
+                                {
+                                    var value = reader[prop.Name];
+                                    if (value != DBNull.Value)
+                                    {
+                                        var convertedValue = ConvertValue(value, prop.PropertyType);
+                                        prop.SetValue(childEntity, convertedValue);
+                                    }
+                                }
+                            }
+                            childList.Add(childEntity);
+                        }
                     }
+                    dataTableListProp.Value.SetValue(entity, childList);
                 }
             }
         }
 
-        private async Task<List<IDataBase>> LoadRelationshipAsync(int parentId, string tableName, string parentKeyName, Type childType, CancellationToken cancellationToken = default)
+        /// <summary>
+        /// 异步删除实体
+        /// </summary>
+        public async Task<bool> DeleteAsync(int id, CancellationToken cancellationToken = default)
         {
-            var sqliteType = typeof(SqliteUnified<>).MakeGenericType(childType);
-            var sqliteInstance = Activator.CreateInstance(sqliteType, _connectionString.Replace("Data Source=", ""));
-            var readMethod = sqliteType.GetMethod("ReadAsync");
-            var conditions = new Dictionary<string, object>
+            await using var connection = new SqliteConnection(_connectionString);
+            await connection.OpenAsync(cancellationToken);
+            await using var transactionObj = await connection.BeginTransactionAsync(cancellationToken);
+            var transaction = transactionObj as SqliteTransaction ?? throw new InvalidOperationException("SqliteTransaction 获取失败");
+            try
             {
-                { parentKeyName, parentId }
-            };
-            var result = await (Task<System.Collections.IList>)readMethod.Invoke(sqliteInstance, new object[] { conditions, cancellationToken });
-            return result?.Cast<IDataBase>().ToList() ?? new List<IDataBase>();
+                var affectedRows = 0;
+                // 一对一
+                foreach (var dataTableProp in _dataTableProperties)
+                {
+                    var childTableName = $"{_tableName}_{dataTableProp.Key}";
+                    var deleteSql = $"DELETE FROM [{childTableName}] WHERE [ParentId] = @id";
+                    await using (var deleteCommand = new SqliteCommand(deleteSql, connection, transaction))
+                    {
+                        deleteCommand.Parameters.AddWithValue("@id", id);
+                        await deleteCommand.ExecuteNonQueryAsync(cancellationToken);
+                    }
+                }
+                // 一对多
+                foreach (var dataTableListProp in _dataTableListProperties)
+                {
+                    var childTableName = $"{_tableName}_{dataTableListProp.Key}";
+                    var deleteSql = $"DELETE FROM [{childTableName}] WHERE [ParentId] = @id";
+                    await using (var deleteCommand = new SqliteCommand(deleteSql, connection, transaction))
+                    {
+                        deleteCommand.Parameters.AddWithValue("@id", id);
+                        await deleteCommand.ExecuteNonQueryAsync(cancellationToken);
+                    }
+                }
+                // 主表
+                var mainDeleteSql = $"DELETE FROM [{_tableName}] WHERE [Id] = @id";
+                await using (var mainDeleteCommand = new SqliteCommand(mainDeleteSql, connection, transaction))
+                {
+                    mainDeleteCommand.Parameters.AddWithValue("@id", id);
+                    affectedRows = await mainDeleteCommand.ExecuteNonQueryAsync(cancellationToken);
+                }
+                await transaction.CommitAsync(cancellationToken);
+                return affectedRows > 0;
+            }
+            catch
+            {
+                await transaction.RollbackAsync(cancellationToken);
+                throw;
+            }
         }
 
+        /// <summary>
+        /// 异步获取所有数据
+        /// </summary>
+        public async Task<List<T>> GetAllAsync(CancellationToken cancellationToken = default)
+        {
+            var results = new List<T>();
+            await using var connection = new SqliteConnection(_connectionString);
+            await connection.OpenAsync(cancellationToken);
+            var sql = $"SELECT * FROM [{_tableName}]";
+            await using var command = new SqliteCommand(sql, connection);
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                var entity = CreateEntityFromReader(reader);
+                await LoadChildEntitiesAsync(connection, entity, cancellationToken);
+                results.Add(entity);
+            }
+            return results;
+        }
         #endregion
     }
 }

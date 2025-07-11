@@ -1,0 +1,92 @@
+@page
+@model KaxServer.Pages.Account.ProfileModel
+@{
+    ViewData["Title"] = "个人主页";
+}
+
+<div class="container">
+    <div class="profile-layout">
+        <!-- 侧边导航栏 -->
+        <partial name="_ProfileSideNav" model="@Model.CurrentUser" />
+        
+        <!-- 内容区域 -->
+        <div class="profile-content">
+            <div class="profile-view active" id="overview">
+                <partial name="_ProfileOverview" model="@Model.CurrentUser" />
+            </div>
+            
+            <!-- 其他视图将通过JavaScript动态显示 -->
+            <div class="profile-view" id="settings">
+                <partial name="_ProfileAccountSetting" model="@Model.CurrentUser" />
+            </div>
+            
+            <div class="profile-view" id="security">
+                <!-- 安全中心内容 -->
+            </div>
+            
+            <div class="profile-view" id="notifications">
+                <!-- 消息通知内容 -->
+            </div>
+            
+            <div class="profile-view" id="achievements">
+                <!-- 成就系统内容 -->
+            </div>
+
+            <div class="profile-view" id="subscriptions">
+                <partial name="_ProfileSubscription" model="@Model.CurrentUser" />
+        </div>
+    </div>
+</div>
+
+<style>
+    .profile-layout {
+        display: flex;
+        gap: 2rem;
+        padding: 2rem 0;
+    }
+
+    .profile-content {
+        flex: 1;
+    }
+
+    .profile-view {
+        display: none;
+    }
+
+    .profile-view.active {
+        display: block;
+    }
+
+    @@media (max-width: 768px) {
+        .profile-layout {
+            flex-direction: column;
+            padding: 1rem 0;
+        }
+    }
+</style>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const navItems = document.querySelectorAll('.profile-nav-item');
+        const views = document.querySelectorAll('.profile-view');
+
+        navItems.forEach(item => {
+            item.addEventListener('click', function(e) {
+                e.preventDefault();
+                
+                // 移除所有导航项的激活状态
+                navItems.forEach(nav => nav.classList.remove('active'));
+                // 激活当前导航项
+                this.classList.add('active');
+
+                // 获取目标视图
+                const targetView = this.getAttribute('data-view');
+                
+                // 隐藏所有视图
+                views.forEach(view => view.classList.remove('active'));
+                // 显示目标视图
+                document.getElementById(targetView).classList.add('active');
+            });
+        });
+    });
+</script> 

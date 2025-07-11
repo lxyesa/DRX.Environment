@@ -1,6 +1,8 @@
+@using Microsoft.AspNetCore.Http
 <nav class="navbar">
     <div class="container">
         <a class="navbar-brand" asp-area="" asp-page="/Index">Kax Platform</a>
+
         <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target=".navbar-collapse">
             <span class="navbar-toggler-icon"></span>
         </button>
@@ -8,6 +10,32 @@
             <ul class="navbar-nav">
                 <li class="nav-item">
                     <a class="nav-link nav-link--streamer" asp-area="" asp-page="/Index">首页</a>
+                </li>
+                <!-- 菜单作为导航项 -->
+                <li class="nav-item dropdown" id="mainMenu">
+                    <div class="nav-link nav-link--streamer dropdown-toggle" onclick="toggleDropdown()">
+                        菜单
+                        <span class="material-icons">expand_more</span>
+                    </div>
+                    <div class="dropdown-menu">
+                        <a href="/mods" class="dropdown-item">
+                            <span class="material-icons">extension</span>
+                            浏览模组
+                        </a>
+                        <a href="/upload" class="dropdown-item">
+                            <span class="material-icons">cloud_upload</span>
+                            上传模组
+                        </a>
+                        <div class="dropdown-divider"></div>
+                        <a href="/community" class="dropdown-item">
+                            <span class="material-icons">forum</span>
+                            社区讨论
+                        </a>
+                        <a href="/tutorials" class="dropdown-item">
+                            <span class="material-icons">school</span>
+                            教程中心
+                        </a>
+                    </div>
                 </li>
                 <li class="nav-item">
                     <a class="nav-link nav-link--streamer" asp-area="" asp-page="/About">关于</a>
@@ -30,4 +58,18 @@
             </ul>
         </div>
     </div>
-</nav> 
+</nav>
+
+<script>
+function toggleDropdown() {
+    const dropdown = document.getElementById('mainMenu');
+    dropdown.classList.toggle('show');
+
+    // 点击外部关闭下拉菜单
+    document.addEventListener('click', function(event) {
+        if (!dropdown.contains(event.target)) {
+            dropdown.classList.remove('show');
+        }
+    });
+}
+</script> 

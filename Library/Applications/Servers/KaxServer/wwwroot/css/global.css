@@ -1,4 +1,5 @@
 ﻿/* 全局变量 - Sophisticated Dark Theme */
+/* 这是一个全局的样式css文件，这里只应该存在定义好可重复使用的样式 */
 :root {
     --primary-color: #e4e6eb;       /* 主要文本色 - 亮灰色 */
     --secondary-color: #b0b3b8;     /* 次要文本色 - 中灰色 */
@@ -13,7 +14,6 @@
     --border-radius-sm: 4px;
     --border-radius-md: 8px;
     --border-radius-lg: 16px;
-    /* 暗色主题下的阴影通常更微妙，或使用发光效果 */
     --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.2);
     --shadow-md: 0 4px 8px rgba(0, 0, 0, 0.2);
     --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.2);
@@ -45,9 +45,9 @@ main {
     padding-left: 1.5rem;
 }
 
-/* 导航栏样式 - Dark Theme */
+/* 导航栏布局 */
 .navbar {
-    background-color: rgba(36, 37, 38, 0.85); /* 半透明表面颜色 */
+    background-color: rgba(36, 37, 38, 0.85);
     backdrop-filter: saturate(180%) blur(20px);
     position: fixed;
     top: 0;
@@ -56,7 +56,7 @@ main {
     height: var(--nav-height);
     z-index: 1000;
     transition: box-shadow var(--transition-speed) ease, background-color var(--transition-speed) ease;
-    padding: 0 2rem; /* 增加内边距 */
+    padding: 0 2rem;
     border-bottom: 1px solid var(--border-color);
 }
 
@@ -69,15 +69,27 @@ main {
     margin: 0 auto;
 }
 
+.navbar-left {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.navbar-right {
+    display: flex;
+    align-items: center;
+}
+
 .navbar-brand {
     color: var(--primary-color);
     font-weight: 600;
-    font-size: 1.5rem; /* 品牌文字更大 */
+    font-size: 1.5rem;
     text-decoration: none;
     display: flex;
     align-items: center;
     gap: 0.75rem;
     letter-spacing: -0.5px;
+    margin-right: 1rem;
 }
 
 .navbar-nav {
@@ -87,21 +99,30 @@ main {
     margin: 0;
     align-items: center;
     height: 100%;
-    gap: 1rem; /* 增加链接间距 */
+    gap: 1rem;
 }
 
+.nav-item {
+    position: relative;
+    height: 100%;
+    display: flex;
+    align-items: center;
+}
+
+/* 导航链接样式 */
 .nav-link {
     color: var(--secondary-color);
-    font-size: 0.95rem; /* 字体大小 */
+    font-size: 0.95rem;
     font-weight: 500;
     text-decoration: none;
     transition: all var(--transition-speed) ease;
     display: flex;
     align-items: center;
-    padding: 0.6rem 1.2rem; /* 更大的胶囊 */
+    padding: 0.6rem 1.2rem;
     margin: 0;
     position: relative;
     border-radius: var(--border-radius-md);
+    white-space: nowrap;
 }
 
 .nav-link:hover {
@@ -345,6 +366,30 @@ body {
 .form-control.with-icon {
     padding-left: 3rem;
 }
+/* 智能插入：优化带图标输入框的左侧内边距，确保禁用/只读/禁止输入时也生效 */
+.form-control.with-icon,
+.input-forbidden.with-icon,
+input[readonly].form-control.with-icon,
+input[readonly].input-forbidden.with-icon,
+input[disabled].form-control.with-icon,
+input[disabled].input-forbidden.with-icon {
+    padding-left: 3rem !important;
+}
+
+/* 智能插入：输入框图标样式，保证不遮挡内容 */
+.input-icon {
+    position: absolute;
+    left: 1.25rem;
+    color: var(--secondary-color);
+    font-size: 1.125rem;
+    pointer-events: none;
+    z-index: 2;
+    width: 1.5rem;
+    height: 1.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
 
 .form-control:hover {
     border-color: var(--secondary-color);
@@ -474,4 +519,474 @@ body {
     color: #ffffff;
     background-color: rgba(124, 77, 255, 0.1);
     border-radius: var(--border-radius-md);
+}
+
+/* 导航栏下拉菜单样式 */
+.dropdown {
+    height: 100%;
+    display: flex;
+    align-items: center;
+}
+
+.dropdown-toggle {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: pointer;
+    height: 100%;
+}
+
+.dropdown-toggle .material-icons {
+    font-size: 1.2rem;
+    transition: transform var(--transition-speed) ease;
+}
+
+.dropdown.show .dropdown-toggle .material-icons {
+    transform: rotate(180deg);
+}
+
+.dropdown-menu {
+    position: absolute;
+    top: calc(100% + 0.5rem);
+    left: 50%;
+    transform: translateX(-50%) translateY(-10px);
+    min-width: 220px;
+    background: var(--surface-color);
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius-md);
+    padding: 0.5rem 0;
+    opacity: 0;
+    visibility: hidden;
+    transition: all var(--transition-speed) ease;
+    box-shadow: var(--shadow-lg);
+    z-index: 1000;
+}
+
+.dropdown.show .dropdown-menu {
+    opacity: 1;
+    visibility: visible;
+    transform: translateX(-50%) translateY(0);
+}
+
+.dropdown-item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem 1rem;
+    color: var(--primary-color);
+    text-decoration: none;
+    transition: all var(--transition-speed) ease;
+}
+
+.dropdown-item:hover {
+    background: rgba(124, 77, 255, 0.1);
+    color: var(--accent-color);
+}
+
+.dropdown-item .material-icons {
+    font-size: 1.25rem;
+    color: var(--secondary-color);
+}
+
+.dropdown-item:hover .material-icons {
+    color: var(--accent-color);
+}
+
+.dropdown-divider {
+    height: 1px;
+    background: var(--border-color);
+    margin: 0.5rem 0;
+}
+
+/* 响应式调整 */
+@media (max-width: 768px) {
+    .navbar {
+        padding: 0 1rem;
+    }
+
+    .navbar-left {
+        flex-grow: 1;
+    }
+
+    .navbar-brand {
+        font-size: 1.25rem;
+    }
+
+    .dropdown-menu {
+        position: static;
+        transform: none;
+        width: 100%;
+        margin-top: 0.5rem;
+        box-shadow: none;
+        border: none;
+        background: transparent;
+    }
+
+    .navbar-collapse {
+        position: fixed;
+        top: var(--nav-height);
+        left: 0;
+        right: 0;
+        background: var(--surface-color);
+        padding: 1rem;
+        border-bottom: 1px solid var(--border-color);
+    }
+
+    .navbar-nav {
+        flex-direction: column;
+        width: 100%;
+        gap: 0.5rem;
+    }
+
+    .nav-item {
+        width: 100%;
+        height: auto;
+    }
+
+    .nav-link {
+        width: 100%;
+        padding: 0.75rem 1rem;
+    }
+}
+
+/* 设置页面通用样式 */
+.settings-container {
+    background: var(--surface-color);
+    border-radius: var(--border-radius-lg);
+    border: 1px solid var(--border-color);
+    padding: 2rem;
+}
+
+.settings-header {
+    margin-bottom: 2rem;
+}
+
+.settings-header h2 {
+    color: var(--primary-color);
+    font-size: 1.5rem;
+    font-weight: 600;
+    margin: 0;
+}
+
+.settings-description {
+    color: var(--secondary-color);
+    margin: 0.5rem 0 0;
+    font-size: 0.875rem;
+}
+
+.settings-section {
+    margin-bottom: 2.5rem;
+    padding-bottom: 2rem;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.settings-section:last-child {
+    border-bottom: none;
+    margin-bottom: 0;
+    padding-bottom: 0;
+}
+
+.section-title {
+    color: var(--primary-color);
+    font-size: 1.125rem;
+    font-weight: 600;
+    margin: 0 0 1.5rem;
+}
+
+/* 开关按钮样式 */
+.toggle-switch {
+    position: relative;
+    display: inline-block;
+    width: 50px;
+    height: 24px;
+}
+
+.toggle-switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.toggle-slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: var(--border-color);
+    transition: .4s;
+    border-radius: 34px;
+}
+
+.toggle-slider:before {
+    position: absolute;
+    content: "";
+    height: 20px;
+    width: 20px;
+    left: 2px;
+    bottom: 2px;
+    background-color: white;
+    transition: .4s;
+    border-radius: 50%;
+}
+
+input:checked + .toggle-slider {
+    background-color: var(--accent-color);
+}
+
+input:checked + .toggle-slider:before {
+    transform: translateX(26px);
+}
+
+/* 设置选项卡片样式 */
+.setting-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem;
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: var(--border-radius-md);
+}
+
+.setting-info {
+    flex: 1;
+}
+
+.setting-label {
+    color: var(--primary-color);
+    font-weight: 500;
+    display: block;
+    margin-bottom: 0.25rem;
+}
+
+.setting-description {
+    color: var(--secondary-color);
+    font-size: 0.875rem;
+    margin: 0;
+}
+
+/* 表单提示文本 */
+.form-hint {
+    color: var(--secondary-color);
+    font-size: 0.75rem;
+/* 冷却提示专用样式，风格与全局统一 */
+.form-warning {
+    color: #ff9800;
+    background: rgba(255, 152, 0, 0.08);
+    border: 1px solid #ff9800;
+    border-radius: var(--border-radius-md);
+    padding: 0.75rem 1rem;
+    font-size: 0.92rem;
+    margin: 0.5rem 0 0.25rem 0;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-weight: 500;
+}
+.form-warning .material-icons {
+    color: #ff9800;
+    font-size: 1.2rem;
+    vertical-align: middle;
+}
+    margin: 0.25rem 0 0;
+}
+
+/* 操作按钮容器 */
+.form-actions {
+    display: flex;
+    gap: 1rem;
+    margin-top: 2rem;
+}
+
+/* 可点击卡片样式 */
+.clickable-card {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1rem;
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: var(--border-radius-md);
+    text-decoration: none;
+    color: var(--primary-color);
+    transition: all var(--transition-speed) ease;
+}
+
+.clickable-card:hover {
+    background: rgba(124, 77, 255, 0.1);
+}
+
+.clickable-card .material-icons {
+    color: var(--accent-color);
+    font-size: 24px;
+}
+
+.clickable-card .material-icons:last-child {
+    color: var(--secondary-color);
+    margin-left: auto;
+}
+
+.card-info {
+    flex: 1;
+}
+
+.card-info h4 {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 500;
+}
+
+.card-info p {
+    margin: 0.25rem 0 0;
+    font-size: 0.875rem;
+    color: var(--secondary-color);
+}
+
+/* 响应式调整 */
+@media (max-width: 768px) {
+    .settings-container {
+        padding: 1.5rem;
+    }
+
+    .form-actions {
+        flex-direction: column;
+    }
+
+    .form-actions .btn-primary,
+    .form-actions .btn-secondary {
+        width: 100%;
+    }
+}
+
+/* 禁止输入的输入框样式（完全继承 form-control 基础样式，仅禁用交互） */
+.input-forbidden,
+input[readonly].input-forbidden,
+input[disabled].input-forbidden {
+    /* 继承 .form-control 的全部外观 */
+    width: 100%;
+    height: 52px;
+    padding: 0 1rem;
+    font-size: 1rem;
+    color: var(--primary-color);
+    background-color: #1c1c1e; /* 与 .form-control 一致 */
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius-md);
+    transition: all var(--transition-speed) ease;
+    box-sizing: border-box;
+    -webkit-appearance: none;
+    opacity: 1 !important;
+    /* 禁用交互 */
+    cursor: not-allowed !important;
+    pointer-events: none;
+    /* 禁止输入时可选的视觉弱化 */
+    background-color: #232325 !important;
+    color: #888 !important;
+}
+
+/* “禁止输入”提示文本样式 */
+.input-forbidden::placeholder {
+    color: #b0b3b8 !important;
+    font-style: italic;
+    opacity: 1 !important;
+}
+/* 统一 Profile Section 风格 */
+.profile-section {
+    background: var(--surface-color);
+    border-radius: var(--border-radius-lg);
+    border: 1px solid var(--border-color);
+    padding: 2rem;
+    margin-bottom: 2rem;
+}
+.profile-section h2 {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 1.25rem;
+    color: var(--primary-color);
+    margin-bottom: 0.5rem;
+}
+.section-desc {
+    color: var(--secondary-color);
+    font-size: 0.95rem;
+    margin-bottom: 1.5rem;
+}
+.subscription-list {
+    min-height: 60px;
+}
+.subscription-item.empty,
+.section-empty {
+    color: var(--secondary-color);
+    text-align: center;
+    padding: 2rem 0;
+    font-size: 1rem;
+}
+
+/* 账号设置冷却覆盖层样式（全局统一） */
+.cooldown-overlay {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(24,25,26,0.85);
+    border-radius: var(--border-radius-md);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10;
+    pointer-events: auto;
+    cursor: not-allowed;
+    gap: 0.5rem;
+    font-size: 1rem;
+    color: #ff9800;
+    font-weight: 600;
+    transition: opacity 0.2s;
+    user-select: none;
+}
+.cooldown-overlay .material-icons {
+    color: #ff9800;
+    font-size: 1.3rem;
+}
+.cooldown-overlay .cooldown-text {
+    color: #ff9800;
+    font-size: 1rem;
+    font-weight: 600;
+}
+/* 账号设置局部辅助样式 */
+.settings-options,
+.security-options {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+.email-readonly {
+    cursor: not-allowed !important;
+    background-color: #f5f5f5;
+    color: #888;
+}
+.email-readonly:focus {
+    outline: none;
+    box-shadow: none;
+}
+.email-readonly-tip {
+    font-size: 0.95em;
+    margin-left: 2.2em;
+}
+
+/* 统一主标题与副标题样式（适用于所有section header） */
+.section-title-main {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 1.5rem;
+    color: var(--primary-color);
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+    line-height: 1.2;
+}
+.section-desc-main {
+    color: var(--secondary-color);
+    font-size: 1rem;
+    margin-bottom: 1.5rem;
+    line-height: 1.6;
 }
