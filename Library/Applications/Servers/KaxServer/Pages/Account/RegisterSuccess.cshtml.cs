@@ -6,7 +6,7 @@ namespace KaxServer.Pages.Account
 {
     public class RegisterSuccessModel : PageModel
     {
-        public UserData CurrentUser { get; set; }
+        public UserData? CurrentUser { get; set; }
 
         public async Task OnGet()
         {

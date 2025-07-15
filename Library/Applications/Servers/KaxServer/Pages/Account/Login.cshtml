@@ -4,7 +4,8 @@
     ViewData["Title"] = "登录";
 }
 
-<div class="container" style="min-height: calc(100vh - var(--nav-height)); display: flex; align-items: center; justify-content: center;">
+<div class="container"
+    style="min-height: calc(100vh - var(--nav-height)); display: flex; align-items: center; justify-content: center;">
     <div class="form-card">
         <div class="form-header">
             <h1 class="form-title">欢迎回来</h1>
@@ -16,20 +17,23 @@
             <div class="form-group">
                 <div class="input-wrapper">
                     <i class="fas fa-user input-icon"></i>
-                    <input asp-for="Input.Username" class="form-control with-icon" placeholder="用户名或电子邮箱" required autofocus>
+                    <input asp-for="Input.Username" class="form-control with-icon" placeholder="用户名或电子邮箱" required
+                        autofocus>
                 </div>
-                 <span asp-validation-for="Input.Username" class="text-danger"></span>
+                <span asp-validation-for="Input.Username" class="text-danger"></span>
             </div>
 
             <div class="form-group">
                 <div class="input-wrapper">
                     <i class="fas fa-lock input-icon"></i>
-                    <input asp-for="Input.Password" type="password" class="form-control with-icon" placeholder="密码" required>
+                    <input asp-for="Input.Password" type="password" class="form-control with-icon" placeholder="密码"
+                        required>
                 </div>
                 <span asp-validation-for="Input.Password" class="text-danger"></span>
             </div>
-            
-            <div class="form-group" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+
+            <div class="form-group"
+                style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
                 <div class="remember-me">
                     <input asp-for="Input.RememberMe" type="checkbox" id="remember-me">
                     <label for="remember-me">记住我</label>
@@ -37,14 +41,38 @@
                 <a href="/Account/ForgotPassword" class="btn-link" style="margin-top: 0; padding: 0;">忘记密码?</a>
             </div>
 
-            <button type="submit" class="btn-primary">立即登录</button>
-            
+            <button type="submit" class="btn-primary" id="loginBtn">
+                <span id="loginBtnText">立即登录</span>
+                <span id="loginBtnLoading" style="display:none;margin-left:8px;"><i
+                        class="fas fa-spinner fa-spin"></i></span>
+            </button>
+
             <div class="form-divider">
                 <span>或者</span>
             </div>
 
             <a href="/Account/Register" class="btn-link">创建新账号</a>
         </form>
+        <script>
+            document.addEventListener('DOMContentLoaded', function () {
+                const form = document.querySelector('form[method="post"]');
+                const loginBtn = document.getElementById('loginBtn');
+                const btnText = document.getElementById('loginBtnText');
+                const btnLoading = document.getElementById('loginBtnLoading');
+                if (form && loginBtn) {
+                    form.addEventListener('submit', function (e) {
+                        loginBtn.disabled = true;
+                        btnText.style.display = 'none';
+                        btnLoading.style.display = 'inline-block';
+                    });
+                    // 可选：防止多次点击
+                    loginBtn.addEventListener('click', function () {
+                        if (loginBtn.disabled) return false;
+                    });
+                }
+                // 可选：页面刷新或响应后恢复按钮（如需AJAX登录可加此逻辑）
+            });
+        </script>
     </div>
 </div>
 
@@ -57,7 +85,7 @@
             margin: 1rem 0;
             cursor: pointer;
         }
-        
+
         .text-danger {
             color: #dc3545;
             font-size: 0.875em;
@@ -83,8 +111,9 @@
             user-select: none;
         }
 
-        .remember-me input[type="checkbox"]:checked + label {
+        .remember-me input[type="checkbox"]:checked+label {
             color: var(--accent-color);
         }
     </style>
-} 
+}
+ 

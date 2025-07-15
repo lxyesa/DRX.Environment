@@ -34,6 +34,19 @@
 
             <div class="profile-view" id="subscriptions">
                 <partial name="_ProfileSubscription" model="@Model.CurrentUser" />
+            </div>
+            
+            <div class="profile-view" id="management">
+                <partial name="_ProfileManagement" model="@Model.CurrentUser" />
+            </div>
+
+            <div class="profile-view" id="management-user">
+                <partial name="Shared/Managements/_ManagementUser" model="@Model.CurrentUser" />
+            </div>
+
+            <div class="profile-view" id="management-user-edit">
+                <partial name="Shared/Managements/_ManagementUserEdit" model="@Model.CurrentUser" />
+            </div>
         </div>
     </div>
 </div>
@@ -70,23 +83,64 @@
         const navItems = document.querySelectorAll('.profile-nav-item');
         const views = document.querySelectorAll('.profile-view');
 
+        // 切换视图并同步URL参数
+        function switchView(targetView) {
+            // 隐藏所有视图
+            views.forEach(view => view.classList.remove('active'));
+            // 显示目标视图
+            const target = document.getElementById(targetView);
+            if (target) target.classList.add('active');
+
+            // 移除所有导航项的激活状态
+            navItems.forEach(nav => nav.classList.remove('active'));
+            // 激活当前导航项
+            navItems.forEach(nav => {
+                if (nav.getAttribute('data-view') === targetView) {
+                    nav.classList.add('active');
+                }
+            });
+
+            // 更新URL参数
+            const url = new URL(window.location);
+            url.searchParams.set('view', targetView);
+            window.history.replaceState({}, '', url);
+        }
+
         navItems.forEach(item => {
             item.addEventListener('click', function(e) {
                 e.preventDefault();
-                
-                // 移除所有导航项的激活状态
-                navItems.forEach(nav => nav.classList.remove('active'));
-                // 激活当前导航项
-                this.classList.add('active');
-
-                // 获取目标视图
                 const targetView = this.getAttribute('data-view');
-                
-                // 隐藏所有视图
-                views.forEach(view => view.classList.remove('active'));
-                // 显示目标视图
-                document.getElementById(targetView).classList.add('active');
+                switchView(targetView);
             });
         });
+
+        // 页面加载时根据URL参数显示对应视图
+        const params = new URLSearchParams(window.location.search);
+        const viewParam = params.get('view');
+        if (viewParam && document.getElementById(viewParam)) {
+            switchView(viewParam);
+        } else {
+            // 默认显示第一个active视图
+            const firstActive = document.querySelector('.profile-view.active');
+            if (!firstActive && views.length > 0) {
+                views[0].classList.add('active');
+            }
+        }
     });
-</script> 
+
+    // 监听跨iframe的视图切换消息
+    window.addEventListener('message', function(e) {
+        if (e.data && e.data.view) {
+            // 切换视图并同步URL参数
+            if (typeof switchView === 'function') {
+                switchView(e.data.view);
+            } else {
+                // fallback
+                const views = document.querySelectorAll('.profile-view');
+                views.forEach(view => view.classList.remove('active'));
+                const target = document.getElementById(e.data.view);
+                if (target) target.classList.add('active');
+            }
+        }
+    });
+</script>

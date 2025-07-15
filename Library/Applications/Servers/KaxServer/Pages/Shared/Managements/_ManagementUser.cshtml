@@ -1,0 +1,151 @@
+@using KaxServer.Models
+@using KaxServer.Services
+@using Microsoft.AspNetCore.Http
+
+@inject IHttpContextAccessor HttpContextAccessor
+
+@functions {
+    // 静态方法调用，不能用 @inject
+    public List<UserData> GetAllUsers()
+    {
+        // 注意：同步调用异步方法仅用于演示，生产建议异步传递
+        var task = KaxServer.Services.UserManager.GetAllUsersAsync();
+        task.Wait();
+        return task.Result;
+    }
+}
+
+@{
+    var httpContext = HttpContextAccessor?.HttpContext;
+    var currentUser = httpContext != null ? UserManager.GetCurrentUserAsync(httpContext).Result : null;
+    var isAdmin = currentUser?.UserStatusData.IsAdmin ?? false;
+    
+    var users = isAdmin ? GetAllUsers() : new List<UserData>();
+}
+
+<style>
+    .access-denied-container {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 300px;
+        padding: 2rem;
+    }
+
+    .access-denied-content {
+        text-align: center;
+        max-width: 400px;
+    }
+
+    .access-denied-icon {
+        font-size: 3rem;
+        color: #dc3545;
+        margin-bottom: 1rem;
+    }
+
+    .access-denied-title {
+        font-size: 1.5rem;
+        font-weight: 600;
+        color: var(--primary-color);
+        margin-bottom: 0.5rem;
+    }
+
+    .access-denied-message {
+        font-size: 1rem;
+        color: var(--secondary-color);
+        margin-bottom: 1.5rem;
+        line-height: 1.5;
+    }
+
+    .access-denied-actions .btn-primary {
+        padding: 0.8rem 1.8rem;
+        background: linear-gradient(45deg, var(--accent-color), var(--accent-color-hover));
+        color: white;
+        text-decoration: none;
+        border-radius: var(--border-radius-md);
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        transition: all 0.25s ease-out;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        box-shadow: 0 0 15px rgba(124, 77, 255, 0.3),
+                    inset 0 0 5px rgba(255, 255, 255, 0.2);
+        letter-spacing: 0.5px;
+        text-transform: uppercase;
+        font-size: 0.875rem;
+        font-weight: 600;
+    }
+
+    .access-denied-actions .btn-primary:hover {
+        transform: translateY(-2px) scale(1.02);
+        box-shadow: 0 0 25px rgba(124, 77, 255, 0.5),
+                    inset 0 0 8px rgba(255, 255, 255, 0.25);
+        border-color: rgba(255, 255, 255, 0.2);
+    }
+</style>
+
+<link rel="stylesheet" href="~/css/card.css" asp-append-version="true" />
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" />
+
+<div class="settings-section">
+    @if (!isAdmin)
+    {
+        <div class="access-denied-container">
+            <div class="access-denied-content">
+                <div class="access-denied-icon">
+                    <i class="fas fa-shield-alt"></i>
+                </div>
+                <h3 class="access-denied-title">Error: 拒绝访问</h3>
+                <p class="access-denied-message">您没有权限访问此页面。需要管理员权限。</p>
+                <div class="access-denied-actions">
+                    <a href="/AccessDenied" class="btn-primary">
+                        <i class="fas fa-arrow-right"></i>
+                        了解更多
+                    </a>
+                </div>
+            </div>
+        </div>
+    }
+    else
+    {
+        <div style="display: flex; flex-wrap: wrap; row-gap: 0.5rem; column-gap: 1.5rem;">
+            @if (users != null && users.Count > 0)
+            {
+                foreach (var user in users)
+                {
+                    <clickable-card title="@user.Username" description="UID:@user.Id" forward-data-userid="@user.Id"></clickable-card>
+                }
+            }
+            else
+            {
+                <div class="section-empty">暂无用户数据</div>
+            }
+        </div>
+    }
+</div>
+<script>
+
+</script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // 兼容动态渲染的 clickable-card
+    function bindClickableCard() {
+        document.querySelectorAll('.clickable-card').forEach(function(card) {
+            // 防止重复绑定
+            if (!card._alertBinded) {
+                card.addEventListener('click', function() {
+                    // 获取用户ID
+                    var userId = card.getAttribute('data-userid') || card.getAttribute('forward-data-userid');
+                    // 发送消息给父页面切换到编辑视图，并传递用户ID
+                    window.parent.postMessage({ view: 'management-user-edit', userId: userId }, '*');
+                });
+                card._alertBinded = true;
+            }
+        });
+    }
+    bindClickableCard();
+    // 监听 DOM 变化（如有异步渲染可用）
+    const observer = new MutationObserver(bindClickableCard);
+    observer.observe(document.body, { childList: true, subtree: true });
+});
+</script>

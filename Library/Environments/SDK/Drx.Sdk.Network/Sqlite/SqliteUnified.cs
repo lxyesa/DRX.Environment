@@ -25,6 +25,11 @@ namespace Drx.Sdk.Network.Sqlite
         private readonly Dictionary<string, PropertyInfo> _dataTableProperties;
         private readonly Dictionary<string, PropertyInfo> _dataTableListProperties;
 
+        // 新增：缓存数组、字典、链表等复杂集合属性
+        private readonly Dictionary<string, PropertyInfo> _arrayProperties;
+        private readonly Dictionary<string, PropertyInfo> _dictionaryProperties;
+        private readonly Dictionary<string, PropertyInfo> _linkedListProperties;
+
         // 静态缓存getter/setter委托，提升反射性能
         private static readonly Dictionary<Type, Dictionary<string, Func<object, object?>>> GetterCache = new();
         private static readonly Dictionary<Type, Dictionary<string, Action<object, object?>>> SetterCache = new();
@@ -41,7 +46,7 @@ namespace Drx.Sdk.Network.Sqlite
         {
             basePath = basePath ?? AppDomain.CurrentDomain.BaseDirectory;
             var fullPath = Path.Combine(basePath, databasePath);
-            
+
             // 确保目录存在
             var directory = Path.GetDirectoryName(fullPath);
             if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
@@ -51,7 +56,7 @@ namespace Drx.Sdk.Network.Sqlite
 
             _connectionString = $"Data Source={fullPath}";
             _tableName = typeof(T).Name;
-            
+
             // 缓存属性信息
             _properties = typeof(T).GetProperties()
                 .Where(p => p.CanRead && p.CanWrite)
@@ -69,6 +74,33 @@ namespace Drx.Sdk.Network.Sqlite
             _dataTableListProperties = _properties
                 .Where(kvp => IsDataTableList(kvp.Value.PropertyType))
                 .ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
+
+            // 缓存数组属性（如 T[]、int[]、UserData[] 等）
+            _arrayProperties = _properties
+                .Where(kvp => IsArrayProperty(kvp.Value.PropertyType))
+                .ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
+
+            // 缓存字典属性（如 Dictionary<K,V>，支持嵌套）
+            _dictionaryProperties = _properties
+                .Where(kvp => IsDictionaryProperty(kvp.Value.PropertyType))
+                .ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
+
+            // 缓存链表属性（如 LinkedList<T>）
+            _linkedListProperties = _properties
+                .Where(kvp => IsLinkedListProperty(kvp.Value.PropertyType))
+                .ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
+
+            // 为所有子类型缓存 getter/setter
+            foreach (var dataTableProp in _dataTableProperties.Values)
+            {
+                CacheAccessors(dataTableProp.PropertyType);
+            }
+
+            foreach (var dataTableListProp in _dataTableListProperties.Values)
+            {
+                var childType = GetDataTableListElementType(dataTableListProp.PropertyType);
+                CacheAccessors(childType);
+            }
 
             // 初始化数据库和表
             InitializeDatabase();
@@ -104,6 +136,41 @@ namespace Drx.Sdk.Network.Sqlite
                 var childTableName = $"{_tableName}_{dataTableListProp.Name}";
                 RepairTableForType(connection, childType, childTableName);
             }
+
+            // 修复数组子表
+            foreach (var arrayProp in _arrayProperties.Values)
+            {
+                var elemType = arrayProp.PropertyType.GetElementType();
+                if (elemType != null)
+                {
+                    var childTableName = $"{_tableName}_{arrayProp.Name}";
+                    RepairTableForType(connection, elemType, childTableName);
+                }
+            }
+
+            // 修复链表子表
+            foreach (var linkedProp in _linkedListProperties.Values)
+            {
+                var elemType = linkedProp.PropertyType.GetGenericArguments()[0];
+                var childTableName = $"{_tableName}_{linkedProp.Name}";
+                RepairTableForType(connection, elemType, childTableName);
+            }
+
+            // 修复字典子表
+            foreach (var dictProp in _dictionaryProperties.Values)
+            {
+                var keyType = dictProp.PropertyType.GetGenericArguments()[0];
+                var valueType = dictProp.PropertyType.GetGenericArguments()[1];
+                var childTableName = $"{_tableName}_{dictProp.Name}";
+                // 字典子表结构：Id, ParentId, DictKey, DictValue
+                RepairTableForType(connection, typeof(DictionaryEntrySurrogate), childTableName);
+                // 若值为复杂类型，递归建表
+                if (IsComplexType(valueType))
+                {
+                    var valueTableName = $"{childTableName}_Value";
+                    RepairTableForType(connection, valueType, valueTableName);
+                }
+            }
         }
 
         /// <summary>
@@ -111,6 +178,17 @@ namespace Drx.Sdk.Network.Sqlite
         /// </summary>
         private void RepairTableForType(SqliteConnection connection, Type type, string tableName)
         {
+            // 检查表是否存在，不存在则先创建
+            using (var checkCmd = new SqliteCommand($"SELECT name FROM sqlite_master WHERE type='table' AND name='{tableName}'", connection))
+            using (var checkReader = checkCmd.ExecuteReader())
+            {
+                if (!checkReader.Read())
+                {
+                    // 表不存在，自动创建
+                    CreateTable(connection, type, tableName);
+                }
+            }
+
             // 获取表中已有字段
             var existingColumns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             using (var cmd = new SqliteCommand($"PRAGMA table_info([{tableName}])", connection))
@@ -125,7 +203,7 @@ namespace Drx.Sdk.Network.Sqlite
             }
 
             // 检查 Data 类属性，补充缺失字段
-            foreach (var property in type.GetProperties().Where(p => p.CanRead && p.CanWrite))
+            foreach (var property in type.GetProperties().Where(p => p.CanRead && p.CanWrite && IsSimpleType(p.PropertyType)))
             {
                 if (!existingColumns.Contains(property.Name))
                 {
@@ -136,17 +214,19 @@ namespace Drx.Sdk.Network.Sqlite
                 }
             }
 
-            // 自动为所有表的唯一标识字段创建唯一索引
-            // 主表优先使用Id，子表优先使用ParentId
-            string uniqueField = null;
+            // 自动为表的主键字段创建唯一索引
+            // 只对Id字段创建唯一索引，ParentId不应该是唯一的（一对多关系）
             if (existingColumns.Contains("Id"))
-                uniqueField = "Id";
-            else if (existingColumns.Contains("ParentId"))
-                uniqueField = "ParentId";
-
-            if (!string.IsNullOrEmpty(uniqueField))
             {
-                var createIndexSql = $"CREATE UNIQUE INDEX IF NOT EXISTS idx_{tableName}_{uniqueField} ON [{tableName}]([{uniqueField}]);";
+                var createIndexSql = $"CREATE UNIQUE INDEX IF NOT EXISTS idx_{tableName}_Id ON [{tableName}]([Id]);";
+                using var indexCmd = new SqliteCommand(createIndexSql, connection);
+                indexCmd.ExecuteNonQuery();
+            }
+
+            // 为ParentId创建普通索引（非唯一），提高查询性能
+            if (existingColumns.Contains("ParentId"))
+            {
+                var createIndexSql = $"CREATE INDEX IF NOT EXISTS idx_{tableName}_ParentId ON [{tableName}]([ParentId]);";
                 using var indexCmd = new SqliteCommand(createIndexSql, connection);
                 indexCmd.ExecuteNonQuery();
             }
@@ -218,6 +298,49 @@ namespace Drx.Sdk.Network.Sqlite
                 var childTableName = $"{_tableName}_{dataTableListProp.Name}";
                 CreateTable(connection, childType, childTableName);
             }
+
+            // 创建数组子表
+            foreach (var arrayProp in _arrayProperties.Values)
+            {
+                var elemType = arrayProp.PropertyType.GetElementType();
+                if (elemType != null)
+                {
+                    var childTableName = $"{_tableName}_{arrayProp.Name}";
+                    // 为简单类型数组创建包含ParentId的代理表
+                    if (IsSimpleType(elemType))
+                    {
+                        CreateSimpleTypeCollectionTable(connection, childTableName, elemType);
+                    }
+                    else
+                    {
+                        CreateTable(connection, elemType, childTableName);
+                    }
+                }
+            }
+
+            // 创建链表子表
+            foreach (var linkedProp in _linkedListProperties.Values)
+            {
+                var elemType = linkedProp.PropertyType.GetGenericArguments()[0];
+                var childTableName = $"{_tableName}_{linkedProp.Name}";
+                // 为简单类型链表创建包含ParentId的代理表
+                if (IsSimpleType(elemType))
+                {
+                    CreateSimpleTypeCollectionTable(connection, childTableName, elemType);
+                }
+                else
+                {
+                    CreateTable(connection, elemType, childTableName);
+                }
+            }
+
+            // 创建字典子表
+            foreach (var dictProp in _dictionaryProperties.Values)
+            {
+                var childTableName = $"{_tableName}_{dictProp.Name}";
+                // 字典子表结构：Id, ParentId, DictKey, DictValue
+                CreateTable(connection, typeof(DictionaryEntrySurrogate), childTableName);
+            }
         }
 
         /// <summary>
@@ -232,16 +355,28 @@ namespace Drx.Sdk.Network.Sqlite
             {
                 var columnName = property.Name;
                 var columnType = GetSqliteType(property.PropertyType);
-                
+
+                // 只处理简单类型，跳过不可映射的复杂类型（如数组、字典、集合等）
+                if (!IsSimpleType(property.PropertyType) && !typeof(IDataTable).IsAssignableFrom(property.PropertyType))
+                {
+                    continue;
+                }
+
                 var columnDef = $"[{columnName}] {columnType}";
-                
+
                 // 主键处理
                 if (property.Name == "Id")
                 {
                     columnDef += " PRIMARY KEY";
                 }
-                
+
                 columns.Add(columnDef);
+            }
+
+            // 防止无字段导致语法错误
+            if (columns.Count == 0)
+            {
+                columns.Add("[Id] INTEGER PRIMARY KEY");
             }
 
             sql.Append(string.Join(", ", columns));
@@ -252,12 +387,40 @@ namespace Drx.Sdk.Network.Sqlite
         }
 
         /// <summary>
+        /// 为简单类型集合创建包含ParentId的代理表
+        /// </summary>
+        private void CreateSimpleTypeCollectionTable(SqliteConnection connection, string tableName, Type elementType)
+        {
+            var elementSqlType = GetSqliteType(elementType);
+            var sql = $@"CREATE TABLE IF NOT EXISTS [{tableName}] (
+                [Id] INTEGER PRIMARY KEY AUTOINCREMENT,
+                [ParentId] INTEGER NOT NULL,
+                [Value] {elementSqlType}
+            )";
+
+            using var command = new SqliteCommand(sql, connection);
+            command.ExecuteNonQuery();
+        }
+
+        /// <summary>
+        /// 插入简单类型集合元素到代理表
+        /// </summary>
+        private void InsertSimpleTypeCollectionElement(SqliteConnection connection, SqliteTransaction transaction, string tableName, int parentId, object value)
+        {
+            var sql = $"INSERT INTO [{tableName}] ([ParentId], [Value]) VALUES (@parentId, @value)";
+            using var command = new SqliteCommand(sql, connection, transaction);
+            command.Parameters.AddWithValue("@parentId", parentId);
+            command.Parameters.AddWithValue("@value", value ?? DBNull.Value);
+            command.ExecuteNonQuery();
+        }
+
+        /// <summary>
         /// 获取 SQLite 对应的数据类型
         /// </summary>
         private string GetSqliteType(Type? type)
         {
             if (type == null) return "TEXT";
-            
+
             // 处理可空类型
             if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Nullable<>))
             {
@@ -287,7 +450,7 @@ namespace Drx.Sdk.Network.Sqlite
         public void Push(T entity)
         {
             if (entity == null) throw new ArgumentNullException(nameof(entity));
-            
+
             // 如果ID为0，生成新的ID
             if (entity.Id == 0)
             {
@@ -310,7 +473,6 @@ namespace Drx.Sdk.Network.Sqlite
                     if (childEntity != null)
                     {
                         childEntity.ParentId = entity.Id;
-                        
                         InsertChildEntity(connection, transaction, childEntity, $"{_tableName}_{dataTableProp.Key}");
                     }
                 }
@@ -322,13 +484,11 @@ namespace Drx.Sdk.Network.Sqlite
                     if (childList != null)
                     {
                         var tableName = $"{_tableName}_{dataTableListProp.Key}";
-                        
                         // 先删除现有的子表数据
                         var deleteSql = $"DELETE FROM [{tableName}] WHERE [ParentId] = @parentId";
                         using var deleteCommand = new SqliteCommand(deleteSql, connection, transaction);
                         deleteCommand.Parameters.AddWithValue("@parentId", entity.Id);
                         deleteCommand.ExecuteNonQuery();
-                        
                         // 插入新的子表数据
                         foreach (IDataTable childEntity in childList)
                         {
@@ -336,6 +496,140 @@ namespace Drx.Sdk.Network.Sqlite
                             {
                                 childEntity.ParentId = entity.Id;
                                 InsertChildEntity(connection, transaction, childEntity, tableName);
+                            }
+                        }
+                    }
+                }
+
+                // 新增：处理数组属性
+                foreach (var arrayProp in _arrayProperties)
+                {
+                    var arr = arrayProp.Value.GetValue(entity) as Array;
+                    if (arr != null)
+                    {
+                        var tableName = $"{_tableName}_{arrayProp.Key}";
+                        // 先删除现有的子表数据
+                        var deleteSql = $"DELETE FROM [{tableName}] WHERE [ParentId] = @parentId";
+                        using var deleteCommand = new SqliteCommand(deleteSql, connection, transaction);
+                        deleteCommand.Parameters.AddWithValue("@parentId", entity.Id);
+                        deleteCommand.ExecuteNonQuery();
+                        // 插入新数组元素
+                        foreach (var elem in arr)
+                        {
+                            if (elem != null)
+                            {
+                                // 若为复杂类型，需有ParentId属性
+                                if (IsComplexType(elem.GetType()))
+                                {
+                                    var pi = elem.GetType().GetProperty("ParentId");
+                                    if (pi != null) pi.SetValue(elem, entity.Id);
+                                }
+                                if (elem is IDataTable dtElem)
+                                {
+                                    InsertChildEntity(connection, transaction, dtElem, tableName);
+                                }
+                                else
+                                {
+                                    // 基础类型或未实现IDataTable，序列化为字符串存储
+                                    var surrogate = new DictionaryEntrySurrogate
+                                    {
+                                        ParentId = entity.Id,
+                                        DictKey = "",
+                                        DictValue = elem?.ToString() ?? ""
+                                    };
+                                    InsertChildEntity(connection, transaction, surrogate, tableName);
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // 新增：处理链表属性
+                foreach (var linkedProp in _linkedListProperties)
+                {
+                    var linked = linkedProp.Value.GetValue(entity) as System.Collections.IEnumerable;
+                    if (linked != null)
+                    {
+                        var tableName = $"{_tableName}_{linkedProp.Key}";
+                        var elemType = linkedProp.Value.PropertyType.GetGenericArguments()[0];
+
+                        // 先删除现有的子表数据
+                        var deleteSql = $"DELETE FROM [{tableName}] WHERE [ParentId] = @parentId";
+                        using var deleteCommand = new SqliteCommand(deleteSql, connection, transaction);
+                        deleteCommand.Parameters.AddWithValue("@parentId", entity.Id);
+                        deleteCommand.ExecuteNonQuery();
+
+                        foreach (var elem in linked)
+                        {
+                            if (elem != null)
+                            {
+                                if (IsSimpleType(elemType))
+                                {
+                                    // 简单类型元素，插入到代理表
+                                    InsertSimpleTypeCollectionElement(connection, transaction, tableName, entity.Id, elem);
+                                }
+                                else if (elem is IDataTable dtElem)
+                                {
+                                    // 复杂类型且实现IDataTable
+                                    dtElem.ParentId = entity.Id;
+                                    InsertChildEntity(connection, transaction, dtElem, tableName);
+                                }
+                                else if (IsComplexType(elem.GetType()))
+                                {
+                                    // 复杂类型但未实现IDataTable，尝试设置ParentId属性
+                                    var pi = elem.GetType().GetProperty("ParentId");
+                                    if (pi != null) pi.SetValue(elem, entity.Id);
+                                    // 这里需要更复杂的处理逻辑，暂时跳过
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // 新增：处理字典属性
+                foreach (var dictProp in _dictionaryProperties)
+                {
+                    var dict = dictProp.Value.GetValue(entity);
+                    if (dict is System.Collections.IDictionary idict)
+                    {
+                        var tableName = $"{_tableName}_{dictProp.Key}";
+                        // 先删除现有的子表数据
+                        var deleteSql = $"DELETE FROM [{tableName}] WHERE [ParentId] = @parentId";
+                        using var deleteCommand = new SqliteCommand(deleteSql, connection, transaction);
+                        deleteCommand.Parameters.AddWithValue("@parentId", entity.Id);
+                        deleteCommand.ExecuteNonQuery();
+                        foreach (System.Collections.DictionaryEntry entry in idict)
+                        {
+                            var surrogate = new DictionaryEntrySurrogate
+                            {
+                                ParentId = entity.Id,
+                                DictKey = entry.Key?.ToString() ?? "",
+                                DictValue = entry.Value?.ToString() ?? ""
+                            };
+                            InsertChildEntity(connection, transaction, surrogate, tableName);
+
+                            // 若值为复杂类型，递归插入
+                            if (entry.Value != null && IsComplexType(entry.Value.GetType()))
+                            {
+                                var valueTableName = $"{tableName}_Value";
+                                if (entry.Value.GetType().GetProperty("ParentId") != null)
+                                {
+                                    entry.Value.GetType().GetProperty("ParentId")?.SetValue(entry.Value, entity.Id);
+                                }
+                                if (entry.Value is IDataTable dtVal)
+                                {
+                                    InsertChildEntity(connection, transaction, dtVal, valueTableName);
+                                }
+                                else
+                                {
+                                    var surrogateVal = new DictionaryEntrySurrogate
+                                    {
+                                        ParentId = entity.Id,
+                                        DictKey = entry.Key?.ToString() ?? "",
+                                        DictValue = entry.Value?.ToString() ?? ""
+                                    };
+                                    InsertChildEntity(connection, transaction, surrogateVal, valueTableName);
+                                }
                             }
                         }
                     }
@@ -357,14 +651,19 @@ namespace Drx.Sdk.Network.Sqlite
         {
             var mainProperties = _properties.Where(kvp =>
                 !_dataTableProperties.ContainsKey(kvp.Key) &&
-                !_dataTableListProperties.ContainsKey(kvp.Key));
+                !_dataTableListProperties.ContainsKey(kvp.Key) &&
+                !_arrayProperties.ContainsKey(kvp.Key) &&
+                !_dictionaryProperties.ContainsKey(kvp.Key) &&
+                !_linkedListProperties.ContainsKey(kvp.Key) &&
+                IsSimpleType(kvp.Value.PropertyType)); // 只处理简单类型
+
             var columns = string.Join(", ", mainProperties.Select(kvp => $"[{kvp.Key}]"));
             var parameters = string.Join(", ", mainProperties.Select(kvp => $"@{kvp.Key}"));
-            
+
             var sql = $"INSERT OR REPLACE INTO [{_tableName}] ({columns}) VALUES ({parameters})";
-            
+
             using var command = new SqliteCommand(sql, connection, transaction);
-            
+
             var type = typeof(T);
             var getterDict = GetterCache[type];
             foreach (var prop in mainProperties)
@@ -373,7 +672,7 @@ namespace Drx.Sdk.Network.Sqlite
                 var value = ToDbDateTimeString(rawValue, prop.Value.PropertyType) ?? DBNull.Value;
                 command.Parameters.AddWithValue($"@{prop.Key}", value);
             }
-            
+
             command.ExecuteNonQuery();
         }
 
@@ -383,16 +682,36 @@ namespace Drx.Sdk.Network.Sqlite
         private void InsertChildEntity(SqliteConnection connection, SqliteTransaction transaction, IDataTable childEntity, string tableName)
         {
             var childType = childEntity.GetType();
+
+            // 检查子实体是否有Id属性，如果有且为0，则生成新的Id
+            var idProperty = childType.GetProperty("Id");
+            if (idProperty != null && idProperty.CanRead && idProperty.CanWrite)
+            {
+                var currentId = idProperty.GetValue(childEntity);
+                if (currentId is int intId && intId == 0)
+                {
+                    var newId = (int)(DateTime.UtcNow.Ticks % int.MaxValue);
+                    idProperty.SetValue(childEntity, newId);
+                }
+            }
+
             var properties = childType.GetProperties().Where(p => p.CanRead && p.CanWrite);
-            
+
             var columns = string.Join(", ", properties.Select(p => $"[{p.Name}]"));
             var parameters = string.Join(", ", properties.Select(p => $"@{p.Name}"));
-            
-            var sql = $"INSERT OR REPLACE INTO [{tableName}] ({columns}) VALUES ({parameters})";
-            
+
+            var sql = $"INSERT INTO [{tableName}] ({columns}) VALUES ({parameters})";
+
             using var command = new SqliteCommand(sql, connection, transaction);
-            
+
             var type = childEntity.GetType();
+
+            // 确保子类型的 getter/setter 已被缓存
+            if (!GetterCache.ContainsKey(type))
+            {
+                CacheAccessors(type);
+            }
+
             var getterDict = GetterCache[type];
             foreach (var prop in properties)
             {
@@ -400,7 +719,7 @@ namespace Drx.Sdk.Network.Sqlite
                 var value = ToDbDateTimeString(rawValue, prop.PropertyType) ?? DBNull.Value;
                 command.Parameters.AddWithValue($"@{prop.Name}", value);
             }
-            
+
             command.ExecuteNonQuery();
         }
 
@@ -417,7 +736,7 @@ namespace Drx.Sdk.Network.Sqlite
                 throw new ArgumentException($"属性 {propertyName} 不存在于类型 {typeof(T).Name} 中");
 
             var results = new List<T>();
-            
+
             using var connection = new SqliteConnection(_connectionString);
             connection.Open();
 
@@ -429,10 +748,10 @@ namespace Drx.Sdk.Network.Sqlite
             while (reader.Read())
             {
                 var entity = CreateEntityFromReader(reader);
-                
+
                 // 加载关联表数据
                 LoadChildEntities(connection, entity);
-                
+
                 results.Add(entity);
             }
 
@@ -469,10 +788,16 @@ namespace Drx.Sdk.Network.Sqlite
         private T CreateEntityFromReader(SqliteDataReader reader)
         {
             var entity = new T();
-            
+
             var type = typeof(T);
             var setterDict = SetterCache[type];
-            foreach (var prop in _properties.Where(kvp => !_dataTableProperties.ContainsKey(kvp.Key)))
+            foreach (var prop in _properties.Where(kvp =>
+                !_dataTableProperties.ContainsKey(kvp.Key) &&
+                !_dataTableListProperties.ContainsKey(kvp.Key) &&
+                !_arrayProperties.ContainsKey(kvp.Key) &&
+                !_dictionaryProperties.ContainsKey(kvp.Key) &&
+                !_linkedListProperties.ContainsKey(kvp.Key) &&
+                IsSimpleType(kvp.Value.PropertyType))) // 只处理简单类型
             {
                 var columnName = prop.Key;
                 if (HasColumn(reader, columnName))
@@ -486,7 +811,7 @@ namespace Drx.Sdk.Network.Sqlite
                     }
                 }
             }
-            
+
             return entity;
         }
 
@@ -500,7 +825,7 @@ namespace Drx.Sdk.Network.Sqlite
             {
                 var childTableName = $"{_tableName}_{dataTableProp.Key}";
                 var childType = dataTableProp.Value.PropertyType;
-                
+
                 var sql = $"SELECT * FROM [{childTableName}] WHERE [ParentId] = @parentId";
                 using var command = new SqliteCommand(sql, connection);
                 command.Parameters.AddWithValue("@parentId", entity.Id);
@@ -525,7 +850,7 @@ namespace Drx.Sdk.Network.Sqlite
                                 }
                             }
                         }
-                        
+
                         // 用setter委托赋值
                         var setterDict = SetterCache[entity.GetType()];
                         setterDict[dataTableProp.Key](entity, childEntity);
@@ -538,7 +863,7 @@ namespace Drx.Sdk.Network.Sqlite
             {
                 var childTableName = $"{_tableName}_{dataTableListProp.Key}";
                 var childType = GetDataTableListElementType(dataTableListProp.Value.PropertyType);
-                
+
                 var sql = $"SELECT * FROM [{childTableName}] WHERE [ParentId] = @parentId";
                 using var command = new SqliteCommand(sql, connection);
                 command.Parameters.AddWithValue("@parentId", entity.Id);
@@ -566,11 +891,11 @@ namespace Drx.Sdk.Network.Sqlite
                                     }
                                 }
                             }
-                            
+
                             childList.Add(childEntity);
                         }
                     }
-                    
+
                     dataTableListProp.Value.SetValue(entity, childList);
                 }
             }
@@ -719,7 +1044,7 @@ namespace Drx.Sdk.Network.Sqlite
         public List<T> GetAll()
         {
             var results = new List<T>();
-            
+
             using var connection = new SqliteConnection(_connectionString);
             connection.Open();
 
@@ -730,10 +1055,10 @@ namespace Drx.Sdk.Network.Sqlite
             while (reader.Read())
             {
                 var entity = CreateEntityFromReader(reader);
-                
+
                 // 加载关联表数据
                 LoadChildEntities(connection, entity);
-                
+
                 results.Add(entity);
             }
 
@@ -746,14 +1071,71 @@ namespace Drx.Sdk.Network.Sqlite
         private bool IsDataTableList(Type propertyType)
         {
             if (!propertyType.IsGenericType) return false;
-            
+
             var genericTypeDef = propertyType.GetGenericTypeDefinition();
-            if (genericTypeDef != typeof(List<>) && genericTypeDef != typeof(IList<>) && 
+            if (genericTypeDef != typeof(List<>) && genericTypeDef != typeof(IList<>) &&
                 genericTypeDef != typeof(ICollection<>) && genericTypeDef != typeof(IEnumerable<>))
                 return false;
-            
+
             var genericArg = propertyType.GetGenericArguments()[0];
             return typeof(IDataTable).IsAssignableFrom(genericArg);
+        }
+
+        // 新增：判断是否为数组属性
+        private bool IsArrayProperty(Type propertyType)
+        {
+            return propertyType.IsArray && IsComplexType(propertyType.GetElementType());
+        }
+
+        // 新增：判断是否为字典属性
+        private bool IsDictionaryProperty(Type propertyType)
+        {
+            if (!propertyType.IsGenericType) return false;
+            var genericTypeDef = propertyType.GetGenericTypeDefinition();
+            if (genericTypeDef != typeof(Dictionary<,>)) return false;
+            var args = propertyType.GetGenericArguments();
+            // 只支持Key为基础类型，Value为复杂类型或基础类型
+            return IsSimpleType(args[0]) && (IsSimpleType(args[1]) || IsComplexType(args[1]));
+        }
+
+        // 新增：判断是否为链表属性
+        private bool IsLinkedListProperty(Type propertyType)
+        {
+            if (!propertyType.IsGenericType) return false;
+            var genericTypeDef = propertyType.GetGenericTypeDefinition();
+            return genericTypeDef == typeof(LinkedList<>);
+        }
+
+        // 新增：判断是否为复杂类型（非基础类型、非string）
+        private bool IsComplexType(Type? type)
+        {
+            if (type == null) return false;
+            return !(type.IsPrimitive || type.IsEnum || type == typeof(string) || type == typeof(decimal) || type == typeof(DateTime));
+        }
+
+        // 新增：判断是否为简单类型
+        private bool IsSimpleType(Type? type)
+        {
+            if (type == null) return false;
+
+            // 处理可空类型
+            if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Nullable<>))
+            {
+                type = Nullable.GetUnderlyingType(type);
+                if (type == null) return false;
+            }
+
+            return type.IsPrimitive || type.IsEnum || type == typeof(string) || type == typeof(decimal) || type == typeof(DateTime);
+        }
+
+        // 新增：字典子表结构代理
+        private class DictionaryEntrySurrogate : IDataTable
+        {
+            public int Id { get; set; }
+            public int ParentId { get; set; }
+            public string DictKey { get; set; }
+            public string DictValue { get; set; }
+            public string TableName => "DictionaryEntry";
         }
 
         /// <summary>
@@ -832,7 +1214,12 @@ namespace Drx.Sdk.Network.Sqlite
         {
             var mainProperties = _properties.Where(kvp =>
                 !_dataTableProperties.ContainsKey(kvp.Key) &&
-                !_dataTableListProperties.ContainsKey(kvp.Key));
+                !_dataTableListProperties.ContainsKey(kvp.Key) &&
+                !_arrayProperties.ContainsKey(kvp.Key) &&
+                !_dictionaryProperties.ContainsKey(kvp.Key) &&
+                !_linkedListProperties.ContainsKey(kvp.Key) &&
+                IsSimpleType(kvp.Value.PropertyType)); // 只处理简单类型
+
             var columns = string.Join(", ", mainProperties.Select(kvp => $"[{kvp.Key}]"));
             var parameters = string.Join(", ", mainProperties.Select(kvp => $"@{kvp.Key}"));
             var sql = $"INSERT OR REPLACE INTO [{_tableName}] ({columns}) VALUES ({parameters})";
@@ -852,14 +1239,35 @@ namespace Drx.Sdk.Network.Sqlite
         private async Task InsertChildEntityAsync(SqliteConnection connection, SqliteTransaction transaction, IDataTable childEntity, string tableName, CancellationToken cancellationToken)
         {
             var childType = childEntity.GetType();
+
+            // 检查子实体是否有Id属性，如果有且为0，则生成新的Id
+            var idProperty = childType.GetProperty("Id");
+            if (idProperty != null && idProperty.CanRead && idProperty.CanWrite)
+            {
+                var currentId = idProperty.GetValue(childEntity);
+                if (currentId is int intId && intId == 0)
+                {
+                    var newId = (int)(DateTime.UtcNow.Ticks % int.MaxValue);
+                    idProperty.SetValue(childEntity, newId);
+                }
+            }
+
             var properties = childType.GetProperties().Where(p => p.CanRead && p.CanWrite);
             var columns = string.Join(", ", properties.Select(p => $"[{p.Name}]"));
             var parameters = string.Join(", ", properties.Select(p => $"@{p.Name}"));
             var sql = $"INSERT OR REPLACE INTO [{tableName}] ({columns}) VALUES ({parameters})";
             await using var command = new SqliteCommand(sql, connection, transaction);
+
+            // 确保子类型的 getter/setter 已被缓存
+            if (!GetterCache.ContainsKey(childType))
+            {
+                CacheAccessors(childType);
+            }
+
+            var getterDict = GetterCache[childType];
             foreach (var prop in properties)
             {
-                var rawValue = prop.GetValue(childEntity);
+                var rawValue = getterDict[prop.Name](childEntity);
                 var value = ToDbDateTimeString(rawValue, prop.PropertyType) ?? DBNull.Value;
                 command.Parameters.AddWithValue($"@{prop.Name}", value);
             }
@@ -926,7 +1334,8 @@ namespace Drx.Sdk.Network.Sqlite
                 if (await reader.ReadAsync(cancellationToken))
                 {
                     // 优先用缓存的无参构造委托
-                    var childFactory = ChildTypeFactoryCache.GetOrAdd(childType, t => {
+                    var childFactory = ChildTypeFactoryCache.GetOrAdd(childType, t =>
+                    {
                         var ctor = t.GetConstructor(Type.EmptyTypes);
                         if (ctor == null) throw new InvalidOperationException($"类型 {t.FullName} 缺少无参构造函数");
                         var exp = System.Linq.Expressions.Expression.Lambda<Func<object>>(System.Linq.Expressions.Expression.New(ctor));
@@ -966,7 +1375,8 @@ namespace Drx.Sdk.Network.Sqlite
                 {
                     await using var reader = await command.ExecuteReaderAsync(cancellationToken);
                     // 缓存工厂和属性
-                    var childFactory = ChildTypeFactoryCache.GetOrAdd(childType, t => {
+                    var childFactory = ChildTypeFactoryCache.GetOrAdd(childType, t =>
+                    {
                         var ctor = t.GetConstructor(Type.EmptyTypes);
                         if (ctor == null) throw new InvalidOperationException($"类型 {t.FullName} 缺少无参构造函数");
                         var exp = System.Linq.Expressions.Expression.Lambda<Func<object>>(System.Linq.Expressions.Expression.New(ctor));

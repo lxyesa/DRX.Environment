@@ -11,7 +11,7 @@
             </div>
         </div>
         <div class="profile-info">
-            <h2 class="profile-name">@Model.UserName</h2>
+            <h2 class="profile-name">@Model.Username</h2>
             <p class="profile-email">@Model.Email</p>
             <div class="profile-badges">
                 <span class="badge">
@@ -38,11 +38,9 @@
             <div class="stat-progress">
                 <div class="progress-ring">
                     <svg viewBox="0 0 36 36">
-                        <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" 
-                              stroke="var(--accent-color)" 
-                              stroke-width="2" 
-                              fill="none" 
-                              stroke-dasharray="@(((double)Model.Exp / Model.NextLevelExp) * 100), 100"/>
+                        <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                            stroke="var(--accent-color)" stroke-width="2" fill="none"
+                            stroke-dasharray="@(((double)Model.Exp / Model.NextLevelExp) * 100), 100" />
                     </svg>
                     <span class="progress-text">@(((double)Model.Exp / Model.NextLevelExp * 100).ToString("F0"))%</span>
                 </div>
@@ -296,4 +294,4 @@
             grid-template-columns: 1fr;
         }
     }
-</style> 
+</style>

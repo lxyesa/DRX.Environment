@@ -1,15 +1,24 @@
 ﻿/* 全局变量 - Sophisticated Dark Theme */
 /* 这是一个全局的样式css文件，这里只应该存在定义好可重复使用的样式 */
 :root {
-    --primary-color: #e4e6eb;       /* 主要文本色 - 亮灰色 */
-    --secondary-color: #b0b3b8;     /* 次要文本色 - 中灰色 */
-    --accent-color: #7c4dff;        /* 强调色 - 优雅紫 */
-    --accent-color-hover: #651fff;  /* 强调色悬停 */
-    --background-color: #18191a;    /* 页面背景色 - 深黑灰 */
-    --surface-color: #242526;       /* 卡片/表面颜色 - 深灰 */
-    --footer-bg-color: #242526;     /* 页脚背景色 */
-    --border-color: #3a3b3c;        /* 边框颜色 */
-    --nav-height: 4rem;             /* 导航栏高度增加 (64px) */
+    --primary-color: #e4e6eb;
+    /* 主要文本色 - 亮灰色 */
+    --secondary-color: #b0b3b8;
+    /* 次要文本色 - 中灰色 */
+    --accent-color: #7c4dff;
+    /* 强调色 - 优雅紫 */
+    --accent-color-hover: #651fff;
+    /* 强调色悬停 */
+    --background-color: #18191a;
+    /* 页面背景色 - 深黑灰 */
+    --surface-color: #242526;
+    /* 卡片/表面颜色 - 深灰 */
+    --footer-bg-color: #242526;
+    /* 页脚背景色 */
+    --border-color: #3a3b3c;
+    /* 边框颜色 */
+    --nav-height: 4rem;
+    /* 导航栏高度增加 (64px) */
     --transition-speed: 0.2s;
     --border-radius-sm: 4px;
     --border-radius-md: 8px;
@@ -22,6 +31,7 @@
 /* 基础和布局 */
 body {
     padding-top: var(--nav-height);
+    padding-bottom: 0;
     background-color: var(--background-color);
     color: var(--primary-color);
     margin: 0;
@@ -38,7 +48,8 @@ main {
 
 .container {
     width: 100%;
-    max-width: 1200px; /* 稍微减小容器宽度 */
+    max-width: 1200px;
+    /* 稍微减小容器宽度 */
     margin-right: auto;
     margin-left: auto;
     padding-right: 1.5rem;
@@ -147,7 +158,8 @@ main {
 /* 导航链接流光效果版本 - 模仿按钮样式 */
 .nav-link--streamer {
     transition: all 0.25s ease-out;
-    border: 1px solid transparent; /* 占位边框 */
+    border: 1px solid transparent;
+    /* 占位边框 */
 }
 
 .nav-link--streamer:hover {
@@ -163,14 +175,14 @@ main {
     font-weight: 600;
     background: linear-gradient(45deg, var(--accent-color), var(--accent-color-hover));
     box-shadow: 0 0 15px rgba(124, 77, 255, 0.3),
-                inset 0 0 5px rgba(255, 255, 255, 0.2);
+        inset 0 0 5px rgba(255, 255, 255, 0.2);
     border-color: rgba(255, 255, 255, 0.1);
 }
 
 .nav-link--streamer.active:hover {
     transform: translateY(-2px);
     box-shadow: 0 0 25px rgba(124, 77, 255, 0.5),
-                inset 0 0 8px rgba(255, 255, 255, 0.25);
+        inset 0 0 8px rgba(255, 255, 255, 0.25);
     border-color: rgba(255, 255, 255, 0.2);
 }
 
@@ -195,7 +207,8 @@ main {
 .footer {
     background-color: var(--footer-bg-color);
     color: var(--secondary-color);
-    font-size: 0.875rem; /* 14px */
+    font-size: 0.875rem;
+    /* 14px */
     padding: 2.5rem 1.5rem;
     margin-top: auto;
     border-top: 1px solid var(--border-color);
@@ -228,16 +241,20 @@ main {
 .btn-primary {
     background: linear-gradient(45deg, var(--accent-color), var(--accent-color-hover));
     color: white;
-    padding: 0.8rem 1.8rem; /* 更大的按钮 */
+    padding: 0.8rem 1.8rem;
+    /* 更大的按钮 */
     border-radius: var(--border-radius-md);
     text-decoration: none;
     font-weight: 600;
     transition: all 0.25s ease-out;
-    border: 1px solid rgba(255, 255, 255, 0.1); /* 光感边框 */
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    /* 光感边框 */
     display: inline-block;
     margin: 0.5rem 0;
-    box-shadow: 0 0 15px rgba(124, 77, 255, 0.3), /* 外发光 */
-                inset 0 0 5px rgba(255, 255, 255, 0.2); /* 内高光 */
+    box-shadow: 0 0 15px rgba(124, 77, 255, 0.3),
+        /* 外发光 */
+        inset 0 0 5px rgba(255, 255, 255, 0.2);
+    /* 内高光 */
     letter-spacing: 0.5px;
     text-transform: uppercase;
     font-size: 0.875rem;
@@ -245,22 +262,35 @@ main {
     overflow: hidden;
 }
 
+/* btn-sm：适用于primary/secondary按钮的尺寸修饰符 */
+.btn-sm {
+    padding: 0.3rem 0.9rem;
+    font-size: 0.78rem;
+    border-radius: var(--border-radius-sm);
+    box-shadow: none;
+    margin: 0;
+}
+
 .btn-primary:hover {
-    transform: translateY(-2px) scale(1.02); /* 悬浮放大效果 */
-    box-shadow: 0 0 25px rgba(124, 77, 255, 0.5), /* 增强光晕 */
-                inset 0 0 8px rgba(255, 255, 255, 0.25);
+    transform: translateY(-2px) scale(1.02);
+    /* 悬浮放大效果 */
+    box-shadow: 0 0 25px rgba(124, 77, 255, 0.5),
+        /* 增强光晕 */
+        inset 0 0 8px rgba(255, 255, 255, 0.25);
     border-color: rgba(255, 255, 255, 0.2);
 }
 
 .btn-primary:active {
     transform: translateY(0) scale(1);
     box-shadow: 0 0 10px rgba(124, 77, 255, 0.2),
-                inset 0 0 10px rgba(0, 0, 0, 0.3); /* 按下时的内阴影 */
+        inset 0 0 10px rgba(0, 0, 0, 0.3);
+    /* 按下时的内阴影 */
     transition-duration: 0.1s;
 }
 
 .btn-secondary {
-    background: linear-gradient(45deg, #2a2b2c, #3a3b3c); /* 石墨灰渐变 */
+    background: linear-gradient(45deg, #2a2b2c, #3a3b3c);
+    /* 石墨灰渐变 */
     color: var(--primary-color);
     padding: 0.8rem 1.8rem;
     border-radius: var(--border-radius-md);
@@ -273,16 +303,26 @@ main {
     letter-spacing: 0.5px;
     text-transform: uppercase;
     font-size: 0.875rem;
-    box-shadow: 0 0 10px rgba(255, 255, 255, 0.05), /* 中性白色辉光 */
-                inset 0 0 5px rgba(255, 255, 255, 0.1);
+    box-shadow: 0 0 10px rgba(255, 255, 255, 0.05),
+        /* 中性白色辉光 */
+        inset 0 0 5px rgba(255, 255, 255, 0.1);
     position: relative;
     overflow: hidden;
 }
 
+.btn-secondary.btn-sm {
+    padding: 0.3rem 0.9rem;
+    font-size: 0.78rem;
+    border-radius: var(--border-radius-sm);
+    box-shadow: none;
+    margin: 0;
+}
+
 .btn-secondary:hover {
     transform: translateY(-2px) scale(1.02);
-    box-shadow: 0 0 20px rgba(255, 255, 255, 0.1), /* 增强辉光 */
-                inset 0 0 8px rgba(255, 255, 255, 0.15);
+    box-shadow: 0 0 20px rgba(255, 255, 255, 0.1),
+        /* 增强辉光 */
+        inset 0 0 8px rgba(255, 255, 255, 0.15);
     border-color: rgba(255, 255, 255, 0.2);
     color: #ffffff;
 }
@@ -290,7 +330,8 @@ main {
 .btn-secondary:active {
     transform: translateY(0) scale(1);
     box-shadow: 0 0 5px rgba(255, 255, 255, 0.05),
-                inset 0 0 10px rgba(0, 0, 0, 0.4); /* 按下时的内阴影 */
+        inset 0 0 10px rgba(0, 0, 0, 0.4);
+    /* 按下时的内阴影 */
     transition-duration: 0.1s;
 }
 
@@ -298,7 +339,8 @@ main {
 .btn-full {
     display: block;
     width: 100%;
-    text-align: center; /* 确保按钮文本居中 */
+    text-align: center;
+    /* 确保按钮文本居中 */
 }
 
 .btn-lg {
@@ -307,15 +349,7 @@ main {
 }
 
 /* 移除 body 的底部内边距 */
-body {
-    padding-top: var(--nav-height);
-    padding-bottom: 0;
-    background-color: var(--background-color);
-    color: var(--primary-color);
-    min-height: 100vh;
-    display: flex;
-    flex-direction: column;
-}
+/* 删除重复的 body 样式，已合并到上方 */
 
 /* 响应式调整 */
 @media (max-width: 768px) {
@@ -327,10 +361,13 @@ body {
         flex-direction: column;
         text-align: center;
     }
+
     .footer a {
         margin: 0.25rem 0.5rem;
     }
-    .btn-primary, .btn-secondary {
+
+    .btn-primary,
+    .btn-secondary {
         padding: 0.7rem 1.5rem;
     }
 }
@@ -355,7 +392,8 @@ body {
     padding: 0 1rem;
     font-size: 1rem;
     color: var(--primary-color);
-    background-color: #1c1c1e; /* 稍亮的输入框背景 */
+    background-color: #1c1c1e;
+    /* 稍亮的输入框背景 */
     border: 1px solid var(--border-color);
     border-radius: var(--border-radius-md);
     transition: all var(--transition-speed) ease;
@@ -366,6 +404,7 @@ body {
 .form-control.with-icon {
     padding-left: 3rem;
 }
+
 /* 智能插入：优化带图标输入框的左侧内边距，确保禁用/只读/禁止输入时也生效 */
 .form-control.with-icon,
 .input-forbidden.with-icon,
@@ -399,7 +438,8 @@ input[disabled].input-forbidden.with-icon {
     border-color: var(--accent-color);
     outline: 0;
     box-shadow: 0 0 0 3px rgba(124, 77, 255, 0.2);
-    background-color: #1c1c1e; /* 确保聚焦时背景也是暗色 */
+    background-color: #1c1c1e;
+    /* 确保聚焦时背景也是暗色 */
 }
 
 .form-control::placeholder {
@@ -411,9 +451,11 @@ input[disabled].input-forbidden.with-icon {
     background: var(--surface-color);
     border-radius: var(--border-radius-lg);
     box-shadow: var(--shadow-lg);
-    padding: 3rem; /* 增加内边距 */
+    padding: 3rem;
+    /* 增加内边距 */
     width: 100%;
-    max-width: 440px; /* 增加卡片宽度 */
+    max-width: 440px;
+    /* 增加卡片宽度 */
     box-sizing: border-box;
     border: 1px solid var(--border-color);
 }
@@ -424,7 +466,8 @@ input[disabled].input-forbidden.with-icon {
 }
 
 .form-title {
-    font-size: 1.75rem; /* 增大标题 */
+    font-size: 1.75rem;
+    /* 增大标题 */
     font-weight: 600;
     color: var(--primary-color);
     margin-bottom: 0.75rem;
@@ -433,7 +476,8 @@ input[disabled].input-forbidden.with-icon {
 
 .form-subtitle {
     color: var(--secondary-color);
-    font-size: 1rem; /* 增大副标题 */
+    font-size: 1rem;
+    /* 增大副标题 */
     line-height: 1.5;
 }
 
@@ -454,14 +498,15 @@ input[disabled].input-forbidden.with-icon {
     transition: color var(--transition-speed) ease;
 }
 
-.form-control:focus ~ .input-icon {
+.form-control:focus~.input-icon {
     color: var(--accent-color);
 }
 
 .form-divider {
     position: relative;
     text-align: center;
-    margin: 2rem 0; /* 增加间距 */
+    margin: 2rem 0;
+    /* 增加间距 */
 }
 
 .form-divider::before,
@@ -483,7 +528,8 @@ input[disabled].input-forbidden.with-icon {
 }
 
 .form-divider span {
-    background-color: var(--surface-color); /* 匹配卡片背景 */
+    background-color: var(--surface-color);
+    /* 匹配卡片背景 */
     padding: 0 1rem;
     color: var(--secondary-color);
     font-size: 0.875rem;
@@ -731,11 +777,11 @@ input[disabled].input-forbidden.with-icon {
     border-radius: 50%;
 }
 
-input:checked + .toggle-slider {
+input:checked+.toggle-slider {
     background-color: var(--accent-color);
 }
 
-input:checked + .toggle-slider:before {
+input:checked+.toggle-slider:before {
     transform: translateX(26px);
 }
 
@@ -770,6 +816,9 @@ input:checked + .toggle-slider:before {
 .form-hint {
     color: var(--secondary-color);
     font-size: 0.75rem;
+    margin: 0.25rem 0 0;
+}
+
 /* 冷却提示专用样式，风格与全局统一 */
 .form-warning {
     color: #ff9800;
@@ -784,12 +833,11 @@ input:checked + .toggle-slider:before {
     gap: 0.5rem;
     font-weight: 500;
 }
+
 .form-warning .material-icons {
     color: #ff9800;
     font-size: 1.2rem;
     vertical-align: middle;
-}
-    margin: 0.25rem 0 0;
 }
 
 /* 操作按钮容器 */
@@ -812,6 +860,10 @@ input:checked + .toggle-slider:before {
     transition: all var(--transition-speed) ease;
 }
 
+.clickable-card-lg {
+    width: 100%;
+}
+
 .clickable-card:hover {
     background: rgba(124, 77, 255, 0.1);
 }
@@ -824,6 +876,10 @@ input:checked + .toggle-slider:before {
 .clickable-card .material-icons:last-child {
     color: var(--secondary-color);
     margin-left: auto;
+}
+
+.clickable-icon {
+    display: flex;
 }
 
 .card-info {
@@ -868,7 +924,8 @@ input[disabled].input-forbidden {
     padding: 0 1rem;
     font-size: 1rem;
     color: var(--primary-color);
-    background-color: #1c1c1e; /* 与 .form-control 一致 */
+    background-color: #1c1c1e;
+    /* 与 .form-control 一致 */
     border: 1px solid var(--border-color);
     border-radius: var(--border-radius-md);
     transition: all var(--transition-speed) ease;
@@ -889,6 +946,7 @@ input[disabled].input-forbidden {
     font-style: italic;
     opacity: 1 !important;
 }
+
 /* 统一 Profile Section 风格 */
 .profile-section {
     background: var(--surface-color);
@@ -897,6 +955,7 @@ input[disabled].input-forbidden {
     padding: 2rem;
     margin-bottom: 2rem;
 }
+
 .profile-section h2 {
     display: flex;
     align-items: center;
@@ -905,14 +964,17 @@ input[disabled].input-forbidden {
     color: var(--primary-color);
     margin-bottom: 0.5rem;
 }
+
 .section-desc {
     color: var(--secondary-color);
     font-size: 0.95rem;
     margin-bottom: 1.5rem;
 }
+
 .subscription-list {
     min-height: 60px;
 }
+
 .subscription-item.empty,
 .section-empty {
     color: var(--secondary-color);
@@ -928,7 +990,7 @@ input[disabled].input-forbidden {
     top: 0;
     width: 100%;
     height: 100%;
-    background: rgba(24,25,26,0.85);
+    background: rgba(24, 25, 26, 0.85);
     border-radius: var(--border-radius-md);
     display: flex;
     align-items: center;
@@ -943,15 +1005,18 @@ input[disabled].input-forbidden {
     transition: opacity 0.2s;
     user-select: none;
 }
+
 .cooldown-overlay .material-icons {
     color: #ff9800;
     font-size: 1.3rem;
 }
+
 .cooldown-overlay .cooldown-text {
     color: #ff9800;
     font-size: 1rem;
     font-weight: 600;
 }
+
 /* 账号设置局部辅助样式 */
 .settings-options,
 .security-options {
@@ -959,15 +1024,18 @@ input[disabled].input-forbidden {
     flex-direction: column;
     gap: 1rem;
 }
+
 .email-readonly {
     cursor: not-allowed !important;
     background-color: #f5f5f5;
     color: #888;
 }
+
 .email-readonly:focus {
     outline: none;
     box-shadow: none;
 }
+
 .email-readonly-tip {
     font-size: 0.95em;
     margin-left: 2.2em;
@@ -984,9 +1052,49 @@ input[disabled].input-forbidden {
     margin-bottom: 0.5rem;
     line-height: 1.2;
 }
+
 .section-desc-main {
     color: var(--secondary-color);
     font-size: 1rem;
     margin-bottom: 1.5rem;
     line-height: 1.6;
+}
+
+.btn-danger {
+    background: linear-gradient(45deg, #ff5252, #ff1744);
+    color: white;
+    padding: 0.8rem 1.8rem;
+    border-radius: var(--border-radius-md);
+    text-decoration: none;
+    font-weight: 600;
+    transition: all 0.25s ease-out;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    display: inline-block;
+    margin: 0.5rem 0;
+    box-shadow: 0 0 15px rgba(255, 82, 82, 0.3), inset 0 0 5px rgba(255, 255, 255, 0.15);
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    font-size: 0.875rem;
+    position: relative;
+    overflow: hidden;
+}
+
+.btn-danger.btn-sm {
+    padding: 0.3rem 0.9rem;
+    font-size: 0.78rem;
+    border-radius: var(--border-radius-sm);
+    box-shadow: none;
+    margin: 0;
+}
+
+.btn-danger:hover {
+    transform: translateY(-2px) scale(1.02);
+    box-shadow: 0 0 25px rgba(255, 82, 82, 0.5), inset 0 0 8px rgba(255, 255, 255, 0.25);
+    border-color: rgba(255, 255, 255, 0.2);
+}
+
+.btn-danger:active {
+    transform: translateY(0) scale(1);
+    box-shadow: 0 0 10px rgba(255, 82, 82, 0.2), inset 0 0 10px rgba(0, 0, 0, 0.3);
+    transition-duration: 0.1s;
 }

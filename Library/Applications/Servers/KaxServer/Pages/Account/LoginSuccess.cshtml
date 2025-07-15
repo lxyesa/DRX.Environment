@@ -15,7 +15,7 @@
         <h1 class="form-title">欢迎回来！</h1>
         <p class="form-subtitle">现在，我们将在<span id="countdown" class="countdown">3</span>秒后将您返回</p>
         <p class="small-text">若三秒后您还在这个页面，请点击下面的按钮</p>
-        <a href="@Model.ReturnUrl" class="btn-primary btn-lg">立即返回</a>
+        <a href="@(Model.ReturnUrl ?? "/")" class="btn-primary btn-lg">立即返回</a>
     </div>
 </div>
 
@@ -23,7 +23,7 @@
     <script>
         let countdown = 3;
         const countdownElement = document.getElementById('countdown');
-        const returnUrl = '@Html.Raw(Model.ReturnUrl)';
+        const returnUrl = '@Html.Raw(Model.ReturnUrl ?? "/")';
         
         const timer = setInterval(() => {
             countdown--;

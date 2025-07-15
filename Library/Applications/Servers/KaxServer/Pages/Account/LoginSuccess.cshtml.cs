@@ -8,9 +8,9 @@ namespace KaxServer.Pages.Account
     public class LoginSuccessModel : PageModel
     {
         [TempData]
-        public string ReturnUrl { get; set; }
+        public string? ReturnUrl { get; set; }
 
-        public UserData CurrentUser { get; set; }
+        public UserData? CurrentUser { get; set; }
 
         public async Task OnGet()
         {

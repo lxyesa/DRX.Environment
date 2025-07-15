@@ -77,7 +77,7 @@ namespace Drx.Sdk.Shared.Cryptography
         /// <param name="text">要计算哈希的字符串</param>
         /// <param name="encoding">使用的编码，默认为UTF8</param>
         /// <returns>小写十六进制字符串</returns>
-        public string ComputeHashString(string text, Encoding encoding = null)
+        public string ComputeHashString(string text, Encoding? encoding = null)
         {
             encoding ??= Encoding.UTF8;
             byte[] data = encoding.GetBytes(text);

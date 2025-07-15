@@ -14,21 +14,21 @@ namespace KaxServer.Pages.Account
         [BindProperty]
         public InputModel Input { get; set; }
 
-        public string ReturnUrl { get; set; }
+        public string? ReturnUrl { get; set; }
 
         [TempData]
-        public string ErrorMessage { get; set; }
+        public string? ErrorMessage { get; set; }
 
-        public UserData CurrentUser { get; set; }
+        public UserData? CurrentUser { get; set; }
 
         public class InputModel
         {
             [Required(ErrorMessage = "请输入用户名或电子邮箱。")]
-            public string Username { get; set; }
+            public string? Username { get; set; }
 
             [Required(ErrorMessage = "请输入密码。")]
             [DataType(DataType.Password)]
-            public string Password { get; set; }
+            public string? Password { get; set; }
 
             [Display(Name = "记住我?")]
             public bool RememberMe { get; set; }
@@ -58,10 +58,22 @@ namespace KaxServer.Pages.Account
 
             if (ModelState.IsValid)
             {
-                var result = await UserManager.Login(Input.Username, Input.Password);
+                if (Input == null || Input.Username == null || Input.Password == null)
+                {
+                    ModelState.AddModelError(string.Empty, "用户名和密码不能为空。");
+                    return Page();
+                }
+                var result = await UserManager.LoginWebAsync(Input.Username, Input.Password);
 
                 if (result.Success)
                 {
+                    // 检查账号是否被封禁
+                    if (result.User?.UserStatusData?.IsBanned == true)
+                    {
+                        ModelState.AddModelError(string.Empty, "账号已被封禁");
+                        return Page();
+                    }
+                
                     // 在Session中存储用户信息
                     var options = new CookieOptions
                     {
@@ -69,21 +81,21 @@ namespace KaxServer.Pages.Account
                         Secure = true,
                         SameSite = SameSiteMode.Lax
                     };
-
+                
                     if (Input.RememberMe)
                     {
                         options.MaxAge = TimeSpan.FromDays(7); // 设置Cookie过期时间为7天
                         HttpContext.Session.SetString("RememberMe", "true");
                     }
-
+                
                     // 设置持久化Cookie
                     HttpContext.Response.Cookies.Append("UserId", result.User.Id.ToString(), options);
-                    HttpContext.Response.Cookies.Append("UserName", result.User.UserName, options);
-
+                    HttpContext.Response.Cookies.Append("Username", result.User.Username, options);
+                
                     // 同时也存储在Session中
                     HttpContext.Session.SetInt32("UserId", result.User.Id);
-                    HttpContext.Session.SetString("UserName", result.User.UserName);
-
+                    HttpContext.Session.SetString("Username", result.User.Username);
+                
                     // 将returnUrl保存到TempData中，以便在LoginSuccess页面使用
                     TempData["ReturnUrl"] = returnUrl;
                     

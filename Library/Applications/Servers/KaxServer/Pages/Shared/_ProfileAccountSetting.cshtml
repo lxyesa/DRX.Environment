@@ -8,6 +8,7 @@
     <p class="section-desc-main">管理您的账号信息和偏好设置</p>
 
     <form id="accountSettingsForm" class="settings-form" method="post" asp-page-handler="SaveUserData">
+        @Html.AntiForgeryToken()
         <div class="settings-section">
             <h3 class="section-title">基本信息</h3>
 
@@ -27,7 +28,7 @@
                             : "";
                     }
                     <input type="text" class="form-control with-icon" id="username" name="username"
-                        value="@Model.UserName" @(nameCooldown ? "disabled" : "")>
+                        value="@Model.Username" @(nameCooldown ? "disabled" : "")>
                     @if (nameCooldown)
                     {
                         <div class="cooldown-overlay" id="cooldown-overlay">
@@ -107,6 +108,7 @@
         <div class="form-actions">
             <button type="submit" class="btn-primary">保存更改</button>
             <button type="reset" class="btn-secondary">重置</button>
+            <button type="logout" class="btn-danger">安全登出</button>
         </div>
     </form>
 </div>
@@ -145,5 +147,92 @@
             }, 1000);
         }
     })();
+</script>
+<script>
+    // 拦截表单提交，AJAX方式保存用户数据
+    document.addEventListener('DOMContentLoaded', function () {
+        const form = document.getElementById('accountSettingsForm');
+        if (!form) return;
+        form.addEventListener('submit', function (e) {
+            e.preventDefault();
+            const formData = new FormData(form);
+            fetch(form.action, {
+                method: 'POST',
+                body: formData,
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            })
+            .then(async resp => {
+                if (resp.ok) {
+                    // 只替换表单内容，避免嵌套父级结构
+                    const html = await resp.text();
+                    // 创建临时DOM解析返回内容
+                    const temp = document.createElement('div');
+                    temp.innerHTML = html;
+                    const newForm = temp.querySelector('#accountSettingsForm');
+                    if (newForm) {
+                        form.replaceWith(newForm);
+                        alert('保存成功');
+                        location.reload();
+                    } else {
+                        alert('保存成功，但未找到表单内容');
+                        location.reload();
+                    }
+                } else {
+                    // 处理错误
+                    const err = await resp.text();
+                    alert('保存失败：' + err);
+                }
+            })
+            .catch(err => {
+                alert('请求异常：' + err);
+            });
+        });
+
+        // 登出按钮
+        const logoutBtn = document.querySelector('.btn-danger');
+        if (logoutBtn) {
+            let isLoggingOut = false;
+            logoutBtn.addEventListener('click', async function (e) {
+                e.preventDefault();
+                if (isLoggingOut) return;
+                if (!confirm('确定要登出吗？')) return;
+                isLoggingOut = true;
+                logoutBtn.disabled = true;
+                logoutBtn.textContent = '正在登出...';
+                // 获取防伪 token
+                const tokenInput = document.querySelector('input[name="__RequestVerificationToken"]');
+                const token = tokenInput ? tokenInput.value : '';
+                const params = new URLSearchParams();
+                if (token) params.append('__RequestVerificationToken', token);
+                try {
+                    const resp = await fetch('/Account/Profile?handler=Logout', {
+                        method: 'POST',
+                        headers: {
+                            'X-Requested-With': 'XMLHttpRequest',
+                            'Content-Type': 'application/x-www-form-urlencoded'
+                        },
+                        body: params.toString()
+                    });
+                    let data = null;
+                    try {
+                        data = await resp.json();
+                    } catch (e) {}
+                    if (resp.ok && data && data.success) {
+                        window.location.href = '/Account/Login';
+                    } else {
+                        alert('登出失败' + (data && data.message ? (': ' + data.message) : ''));
+                    }
+                } catch (err) {
+                    alert('登出异常：' + err);
+                } finally {
+                    isLoggingOut = false;
+                    logoutBtn.disabled = false;
+                    logoutBtn.textContent = '安全登出';
+                }
+            });
+        }
+    });
 </script>
 

@@ -72,16 +72,28 @@ namespace Drx.Sdk.Network.Security
                 )
             );
 
-            Directory.CreateDirectory(Path.GetDirectoryName(_configPath));
+            var dir = Path.GetDirectoryName(_configPath);
+            if (dir == null)
+                throw new InvalidOperationException("Config path directory is null.");
+            Directory.CreateDirectory(dir);
             doc.Save(_configPath);
         }
 
         private void LoadKeysFromXml()
         {
             var doc = XDocument.Load(_configPath);
-            AesKey = Convert.FromBase64String(doc.Root.Element("Aes").Element("Key").Value);
-            AesIV = Convert.FromBase64String(doc.Root.Element("Aes").Element("IV").Value);
-            HmacKey = Convert.FromBase64String(doc.Root.Element("Hmac").Element("Key").Value);
+            var aesElem = doc.Root?.Element("Aes");
+            var hmacElem = doc.Root?.Element("Hmac");
+            if (aesElem == null || hmacElem == null)
+                throw new InvalidDataException("Key XML missing required elements.");
+            var keyElem = aesElem.Element("Key");
+            var ivElem = aesElem.Element("IV");
+            var hmacKeyElem = hmacElem.Element("Key");
+            if (keyElem == null || ivElem == null || hmacKeyElem == null)
+                throw new InvalidDataException("Key XML missing required sub-elements.");
+            AesKey = Convert.FromBase64String(keyElem.Value);
+            AesIV = Convert.FromBase64String(ivElem.Value);
+            HmacKey = Convert.FromBase64String(hmacKeyElem.Value);
         }
 
         /// <summary>
@@ -106,4 +118,4 @@ namespace Drx.Sdk.Network.Security
             return RandomNumberGenerator.GetBytes(length);
         }
     }
-} 
+}

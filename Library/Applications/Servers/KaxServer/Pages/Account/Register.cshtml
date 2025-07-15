@@ -29,14 +29,36 @@
                 <div class="input-wrapper">
                     <i class="fas fa-user input-icon"></i>
                     <input type="text" class="form-control with-icon" id="username" name="userName" placeholder="用户名" required>
+                    <i class="validation-icon" id="usernameIcon"></i>
                 </div>
+                <div class="validation-message" id="usernameValidation"></div>
             </div>
 
             <div class="form-group">
                 <div class="input-wrapper">
                     <i class="fas fa-envelope input-icon"></i>
                     <input type="email" class="form-control with-icon" id="email" name="email" placeholder="电子邮箱" required>
+                    <i class="validation-icon" id="emailIcon"></i>
                 </div>
+                <div class="validation-message" id="emailValidation"></div>
+            </div>
+
+            <div class="form-group">
+                <div class="input-wrapper">
+                    <i class="fas fa-lock input-icon"></i>
+                    <input type="password" class="form-control with-icon" id="password" name="password" placeholder="密码" required>
+                    <i class="validation-icon" id="passwordIcon"></i>
+                </div>
+                <div class="validation-message" id="passwordValidation"></div>
+            </div>
+
+            <div class="form-group">
+                <div class="input-wrapper">
+                    <i class="fas fa-lock input-icon"></i>
+                    <input type="password" class="form-control with-icon" id="confirmPassword" name="confirmPassword" placeholder="确认密码" required>
+                    <i class="validation-icon" id="confirmPasswordIcon"></i>
+                </div>
+                <div class="validation-message" id="confirmPasswordValidation"></div>
             </div>
 
             <div class="form-group">
@@ -44,20 +66,6 @@
                     <i class="fas fa-key input-icon"></i>
                     <input type="text" class="form-control with-icon with-button" id="verificationCode" name="verificationCode" placeholder="验证码" required>
                     <button type="button" id="sendVerificationCode" class="btn-send-code">发送验证码</button>
-                </div>
-            </div>
-
-            <div class="form-group">
-                <div class="input-wrapper">
-                    <i class="fas fa-lock input-icon"></i>
-                    <input type="password" class="form-control with-icon" id="password" name="password" placeholder="密码" required>
-                </div>
-            </div>
-
-            <div class="form-group">
-                <div class="input-wrapper">
-                    <i class="fas fa-lock input-icon"></i>
-                    <input type="password" class="form-control with-icon" id="confirmPassword" name="confirmPassword" placeholder="确认密码" required>
                 </div>
             </div>
 
@@ -163,6 +171,69 @@
             animation: countdown 1s ease-in-out infinite alternate;
         }
 
+        /* 验证消息样式 */
+        .validation-message {
+            font-size: 0.875rem;
+            margin-top: 0.25rem;
+            min-height: 1.25rem;
+            transition: all 0.3s ease;
+            padding-left: 0.5rem;
+        }
+
+        .validation-message.error {
+            color: #ff6b6b;
+        }
+
+        .validation-message.success {
+            color: #51cf66;
+        }
+
+        .form-control.error {
+            border-color: #ff6b6b;
+            box-shadow: 0 0 0 2px rgba(255, 107, 107, 0.2);
+        }
+
+        .form-control.success {
+            border-color: #51cf66;
+            box-shadow: 0 0 0 2px rgba(81, 207, 102, 0.2);
+        }
+
+        /* 验证图标样式 */
+        .validation-icon {
+            position: absolute;
+            right: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 1rem;
+            opacity: 0;
+            transition: all 0.3s ease;
+            z-index: 2;
+        }
+
+        .validation-icon.show {
+            opacity: 1;
+        }
+
+        .validation-icon.success {
+            color: #51cf66;
+        }
+
+        .validation-icon.error {
+            color: #ff6b6b;
+        }
+
+        .form-control.with-icon {
+            padding-right: 2.5rem;
+        }
+
+        .form-control.with-button {
+            padding-right: 140px;
+        }
+
+        .form-control.with-button.with-icon {
+            padding-right: 150px;
+        }
+
         /* 提示框样式 */
         .alert-box {
             position: fixed;
@@ -254,20 +325,185 @@
             }, 300);
         }
 
+        // 验证函数
+        function validateUserName(userName) {
+            const regex = /^[\u4e00-\u9fa5_a-zA-Z0-9]{2,32}$/;
+            return regex.test(userName);
+        }
+
+        function validatePassword(password) {
+            if (!password || password.length < 6 || password.length > 64) return false;
+            const hasUpper = /[A-Z]/.test(password);
+            const hasLower = /[a-z]/.test(password);
+            const hasDigit = /\d/.test(password);
+            return hasUpper && hasLower && hasDigit;
+        }
+
+        function validateEmail(email) {
+            const regex = /^[^\s@@]+@@[^\s@@]+\.[^\s@@]+$/;
+            return regex.test(email);
+        }
+
+        // 显示验证消息
+        function showValidation(elementId, message, isError = true) {
+            const element = document.getElementById(elementId);
+            const iconElement = document.getElementById(elementId.replace('Validation', 'Icon'));
+            
+            element.textContent = message;
+            element.className = `validation-message ${isError ? 'error' : 'success'}`;
+            
+            if (iconElement) {
+                iconElement.className = `validation-icon ${isError ? 'error' : 'success'} fas ${isError ? 'fa-times' : 'fa-check'} show`;
+            }
+        }
+
+        // 清除验证消息
+        function clearValidation(elementId) {
+            const element = document.getElementById(elementId);
+            const iconElement = document.getElementById(elementId.replace('Validation', 'Icon'));
+            
+            element.textContent = '';
+            element.className = 'validation-message';
+            
+            if (iconElement) {
+                iconElement.className = 'validation-icon';
+            }
+        }
+
+        // 实时验证
+        document.getElementById('username').addEventListener('input', function(e) {
+            const value = e.target.value;
+            const input = e.target;
+            
+            if (value.length === 0) {
+                clearValidation('usernameValidation');
+                input.classList.remove('error', 'success');
+            } else if (!validateUserName(value)) {
+                showValidation('usernameValidation', '用户名仅支持中英文、数字、下划线，长度2-32位', true);
+                input.classList.add('error');
+                input.classList.remove('success');
+            } else {
+                showValidation('usernameValidation', '用户名格式正确', false);
+                input.classList.add('success');
+                input.classList.remove('error');
+            }
+        });
+
+        document.getElementById('email').addEventListener('input', function(e) {
+            const value = e.target.value;
+            const input = e.target;
+            
+            if (value.length === 0) {
+                clearValidation('emailValidation');
+                input.classList.remove('error', 'success');
+            } else if (!validateEmail(value)) {
+                showValidation('emailValidation', '请输入正确的邮箱格式', true);
+                input.classList.add('error');
+                input.classList.remove('success');
+            } else {
+                showValidation('emailValidation', '邮箱格式正确', false);
+                input.classList.add('success');
+                input.classList.remove('error');
+            }
+        });
+
+        document.getElementById('password').addEventListener('input', function(e) {
+            const value = e.target.value;
+            const input = e.target;
+            
+            if (value.length === 0) {
+                clearValidation('passwordValidation');
+                input.classList.remove('error', 'success');
+            } else if (!validatePassword(value)) {
+                showValidation('passwordValidation', '密码需包含大小写字母、数字，长度6-64位', true);
+                input.classList.add('error');
+                input.classList.remove('success');
+            } else {
+                showValidation('passwordValidation', '密码强度符合要求', false);
+                input.classList.add('success');
+                input.classList.remove('error');
+            }
+            
+            // 同时验证确认密码
+            const confirmPassword = document.getElementById('confirmPassword');
+            if (confirmPassword.value) {
+                if (confirmPassword.value !== value) {
+                    showValidation('confirmPasswordValidation', '两次输入的密码不一致', true);
+                    confirmPassword.classList.add('error');
+                    confirmPassword.classList.remove('success');
+                } else {
+                    showValidation('confirmPasswordValidation', '密码确认正确', false);
+                    confirmPassword.classList.add('success');
+                    confirmPassword.classList.remove('error');
+                }
+            }
+        });
+
+        document.getElementById('confirmPassword').addEventListener('input', function(e) {
+            const value = e.target.value;
+            const password = document.getElementById('password').value;
+            const input = e.target;
+            
+            if (value.length === 0) {
+                clearValidation('confirmPasswordValidation');
+                input.classList.remove('error', 'success');
+            } else if (value !== password) {
+                showValidation('confirmPasswordValidation', '两次输入的密码不一致', true);
+                input.classList.add('error');
+                input.classList.remove('success');
+            } else {
+                showValidation('confirmPasswordValidation', '密码确认正确', false);
+                input.classList.add('success');
+                input.classList.remove('error');
+            }
+        });
+
+        // 表单提交验证
         document.querySelector('form').addEventListener('submit', function(e) {
+            const userName = document.getElementById('username').value;
             const password = document.getElementById('password').value;
             const confirmPassword = document.getElementById('confirmPassword').value;
+            const email = document.getElementById('email').value;
             const verificationCode = document.getElementById('verificationCode').value;
             
-            if (password !== confirmPassword) {
-                e.preventDefault();
-                showAlert('两次输入的密码不一致，请重新输入');
-                return;
+            let hasError = false;
+
+            // 验证用户名
+            if (!validateUserName(userName)) {
+                showValidation('usernameValidation', '用户名格式不正确');
+                document.getElementById('username').classList.add('error');
+                hasError = true;
             }
 
+            // 验证密码
+            if (!validatePassword(password)) {
+                showValidation('passwordValidation', '密码格式不正确');
+                document.getElementById('password').classList.add('error');
+                hasError = true;
+            }
+
+            // 验证邮箱
+            if (!validateEmail(email)) {
+                showValidation('emailValidation', '邮箱格式不正确');
+                document.getElementById('email').classList.add('error');
+                hasError = true;
+            }
+
+            // 验证确认密码
+            if (password !== confirmPassword) {
+                showValidation('confirmPasswordValidation', '两次输入的密码不一致');
+                document.getElementById('confirmPassword').classList.add('error');
+                hasError = true;
+            }
+
+            // 验证验证码
             if (!verificationCode) {
-                e.preventDefault();
                 showAlert('请输入验证码');
+                hasError = true;
+            }
+
+            if (hasError) {
+                e.preventDefault();
                 return;
             }
         });
@@ -280,10 +516,15 @@
                 return;
             }
 
+            if (!validateEmail(email)) {
+                showAlert('请输入正确的邮箱格式');
+                return;
+            }
+
             const button = this;
             button.disabled = true;
             button.classList.add('counting');
-            let countdown = 60; // 改为60秒倒计时
+            let countdown = 60;
 
             try {
                 const response = await fetch('/Account/Register?handler=SendVerificationCode', {

@@ -4,14 +4,32 @@
   "metadata": {
     "version": "2.0.0",
     "description": "project 级资源注册表",
-    "createdAt": "2025-07-01T20:50:47.283Z",
-    "updatedAt": "2025-07-01T20:50:47.284Z",
-    "resourceCount": 0
+    "createdAt": "2025-07-12T23:36:12.329Z",
+    "updatedAt": "2025-07-12T23:36:12.330Z",
+    "resourceCount": 1
   },
-  "resources": [],
+  "resources": [
+    {
+      "id": "llm",
+      "source": "project",
+      "protocol": "role",
+      "name": "Llm 角色",
+      "description": "专业角色，提供特定领域的专业能力",
+      "reference": "@project://.promptx/resource/domain/llm/llm.role.md",
+      "metadata": {
+        "createdAt": "2025-07-12T23:36:12.329Z",
+        "updatedAt": "2025-07-12T23:36:12.329Z",
+        "scannedAt": "2025-07-12T23:36:12.329Z"
+      }
+    }
+  ],
   "stats": {
-    "totalResources": 0,
-    "byProtocol": {},
-    "bySource": {}
+    "totalResources": 1,
+    "byProtocol": {
+      "role": 1
+    },
+    "bySource": {
+      "project": 1
+    }
   }
 }
