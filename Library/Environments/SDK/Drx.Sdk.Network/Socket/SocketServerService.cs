@@ -18,12 +18,12 @@ using Drx.Sdk.Network.Security;
 using Drx.Sdk.Network.Socket.Middleware;
 using System.Collections.Concurrent;
 using Drx.Sdk.Network.Socket.Services;
+using DRX.Framework;
 
 namespace Drx.Sdk.Network.Socket
 {
     public class SocketServerService : IHostedService, IDisposable
     {
-        private readonly ILogger<SocketServerService> _logger;
         private TcpListener _listener;
         private CancellationTokenSource _cancellationTokenSource;
         private readonly IServiceProvider _serviceProvider;
@@ -34,11 +34,15 @@ namespace Drx.Sdk.Network.Socket
         private readonly ConcurrentDictionary<DrxTcpClient, bool> _connectedClients = new ConcurrentDictionary<DrxTcpClient, bool>();
         private readonly IReadOnlyList<ISocketService> _socketServices;
         private Task _servicesTask;
+        private List<Task> _timerTasks = new List<Task>();
+        
+        // 每个客户端的数据包缓冲区
+        private readonly ConcurrentDictionary<DrxTcpClient, Queue<byte[]>> _clientPacketBuffers = new ConcurrentDictionary<DrxTcpClient, Queue<byte[]>>();
 
         public IHostEnvironment Env { get; }
-        public SessionManager SessionManager { get; }
+        // public SessionManager SessionManager { get; } // 已废弃，移除
         public IServiceProvider Services => _serviceProvider;
-        
+
         /// <summary>
         /// Gets a collection of all currently connected clients.
         /// </summary>
@@ -66,29 +70,25 @@ namespace Drx.Sdk.Network.Socket
         }
 
         public SocketServerService(
-            ILogger<SocketServerService> logger, 
-            IHostEnvironment env, 
-            SessionManager sessionManager, 
+            IHostEnvironment env,
             IServiceProvider serviceProvider,
             IReadOnlyList<ConnectionMiddleware> connectionMiddlewares,
             IReadOnlyList<MessageMiddleware> messageMiddlewares,
             IReadOnlyList<ISocketService> socketServices
             )
         {
-            _logger = logger;
             Env = env;
-            SessionManager = sessionManager;
             _serviceProvider = serviceProvider;
             _connectionMiddlewares = connectionMiddlewares;
             _messageMiddlewares = messageMiddlewares;
             _socketServices = socketServices;
-#pragma warning disable CS8601 // 引用类型赋值可能为 null。
+        #pragma warning disable CS8601 // 引用类型赋值可能为 null。
             _packetEncryptor = _serviceProvider.GetService<IPacketEncryptor>();
-#pragma warning restore CS8601 // 引用类型赋值可能为 null。
-#pragma warning disable CS8601 // 引用类型赋值可能为 null。
+        #pragma warning restore CS8601 // 引用类型赋值可能为 null。
+        #pragma warning disable CS8601 // 引用类型赋值可能为 null。
             _packetIntegrityProvider = _serviceProvider.GetService<IPacketIntegrityProvider>();
-#pragma warning restore CS8601 // 引用类型赋值可能为 null。
-
+        #pragma warning restore CS8601 // 引用类型赋值可能为 null。
+        
             if (_packetEncryptor != null && _packetIntegrityProvider != null)
             {
                 throw new InvalidOperationException("Cannot enable both encryption and integrity check simultaneously. Please choose one.");
@@ -101,12 +101,34 @@ namespace Drx.Sdk.Network.Socket
             var token = _cancellationTokenSource.Token;
 
             var serviceTasks = _socketServices.Select(s => s.ExecuteAsync(token)).ToList();
-            foreach(var service in _socketServices)
+            foreach (var service in _socketServices)
             {
                 // Run synchronous Execute methods in background threads so they don't block startup
                 serviceTasks.Add(Task.Run(() => service.Execute(), token));
             }
             _servicesTask = Task.WhenAll(serviceTasks);
+
+            // 启动定时器任务
+            var timerRegistrations = _serviceProvider.GetServices<SocketServerBuilder.TimerRegistration>();
+            foreach (var timer in timerRegistrations)
+            {
+                var t = Task.Run(async () =>
+                {
+                    while (!token.IsCancellationRequested)
+                    {
+                        try
+                        {
+                            timer.Handler(this);
+                        }
+                        catch (Exception ex)
+                        {
+                            Logger.Error($"[定时器] 定时器处理器发生错误。异常信息: {ex}");
+                        }
+                        await Task.Delay(TimeSpan.FromSeconds(timer.IntervalSeconds), token);
+                    }
+                }, token);
+                _timerTasks.Add(t);
+            }
 
             // 在后台线程中启动监听器
             Task.Run(() => ListenForClients(token), token);
@@ -118,19 +140,19 @@ namespace Drx.Sdk.Network.Socket
         {
             try
             {
-                _listener = new TcpListener(IPAddress.Any, 8463); 
+                _listener = new TcpListener(IPAddress.Any, 8463);
                 _listener.Start();
-                _logger.LogInformation("Socket server started on port 8463.");
+                Logger.Info($"[socket] 正在监听: {_listener.LocalEndpoint}");
 
                 while (!token.IsCancellationRequested)
                 {
-                    _logger.LogInformation("[socket] waiting for client...");
+                    Logger.Info("[socket] 等待新客户端连接...");
                     TcpClient tcpClient = await _listener.AcceptTcpClientAsync(token);
-                    
+
                     // 将 TcpClient 转换为 DrxTcpClient
                     DrxTcpClient client = tcpClient.ToDrxTcpClient();
-                    
-                    _logger.LogInformation("[socket] client connected!");
+
+                    Logger.Info($"[socket] 新客户端已连接: {client.Client.RemoteEndPoint}");
 
                     // 在单独的任务中处理客户端
                     _ = HandleClientAsync(client, token);
@@ -138,16 +160,16 @@ namespace Drx.Sdk.Network.Socket
             }
             catch (OperationCanceledException)
             {
-                _logger.LogInformation("[socket] socket server stopped by cancellation.");
+                Logger.Info("[socket] 套接字服务器已被取消停止。");
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "[socket] socket server error.");
+                Logger.Error($"[socket] 套接字服务器发生错误。异常信息: {ex}");
             }
             finally
             {
                 _listener?.Stop();
-                _logger.LogInformation("[socket] socket server stopped.");
+                Logger.Info("[socket] 套接字服务器已停止。");
             }
         }
 
@@ -162,14 +184,14 @@ namespace Drx.Sdk.Network.Socket
                     await middleware(connectionContext);
                     if (connectionContext.IsRejected)
                     {
-                        _logger.LogWarning("Connection from {clientEndpoint} was rejected by connection middleware.", client.Client.RemoteEndPoint);
+                        Logger.Warn($"来自 {client.Client.RemoteEndPoint} 的连接被连接中间件拒绝。");
                         client.Close();
                         return; // Stop processing this client
                     }
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "An exception occurred in a connection middleware for client {clientEndpoint}. Closing connection.", client.Client.RemoteEndPoint);
+                    Logger.Error($"连接中间件处理客户端 {client.Client.RemoteEndPoint} 时发生异常，连接已关闭。异常信息: {ex}");
                     client.Close();
                     return;
                 }
@@ -177,7 +199,10 @@ namespace Drx.Sdk.Network.Socket
             // --- End of Connection Middleware ---
 
             _connectedClients.TryAdd(client, true);
-            _logger.LogInformation("Client {clientEndpoint} added to connection list. Total clients: {clientCount}", client.Client.RemoteEndPoint, _connectedClients.Count);
+            Logger.Info($"客户端 {client.Client.RemoteEndPoint} 已加入连接列表。当前总连接数: {_connectedClients.Count}");
+
+            // 为新客户端初始化数据包缓冲区
+            _clientPacketBuffers.TryAdd(client, new Queue<byte[]>());
 
             // Fire and forget the connect hooks
             _ = Task.Run(() => TriggerConnectHooks(client, token), token);
@@ -192,84 +217,195 @@ namespace Drx.Sdk.Network.Socket
                     while (!token.IsCancellationRequested && (bytesRead = await stream.ReadAsync(buffer, 0, buffer.Length, token)) != 0)
                     {
                         var receivedData = buffer.AsSpan(0, bytesRead).ToArray();
-
+                        
+                        // 处理加密数据
                         if (_packetEncryptor != null)
                         {
-                            _logger.LogTrace("Decrypting received data...");
                             receivedData = _packetEncryptor.Decrypt(receivedData);
                             if (receivedData == null)
                             {
-                                _logger.LogWarning("Failed to decrypt data from client {clientEndpoint}. Closing connection.", client.Client.RemoteEndPoint);
+                                Logger.Warn($"无法解密来自客户端 {client.Client.RemoteEndPoint} 的数据，连接已关闭。");
                                 break;
                             }
                         }
                         else if (_packetIntegrityProvider != null)
                         {
-                            _logger.LogTrace("Verifying packet integrity...");
                             receivedData = _packetIntegrityProvider.Unprotect(receivedData);
                             if (receivedData == null)
                             {
-                                _logger.LogWarning("Packet integrity check failed for client {clientEndpoint}. Tampered packet suspected. Closing connection.", client.Client.RemoteEndPoint);
+                                Logger.Warn($"客户端 {client.Client.RemoteEndPoint} 的数据包完整性校验失败，疑似数据包被篡改，连接已关闭。");
                                 break;
                             }
                         }
 
-                        // Trigger receive hooks
-                        await TriggerReceiveHooks(client, receivedData, token);
-
-                        // --- Message Middleware Pipeline ---
-                        var messageContext = new MessageContext(this, client, receivedData, token);
-                        foreach (var middleware in _messageMiddlewares)
-                        {
-                            try
-                            {
-                                await middleware(messageContext);
-                                if (messageContext.IsHandled)
-                                {
-                                    break;
-                                }
-                            }
-                            catch (Exception ex)
-                            {
-                                _logger.LogError(ex, "An exception occurred in a message middleware for client {clientEndpoint}.", client.Client.RemoteEndPoint);
-                                // We can choose to break or continue; for robustness, we'll just log and continue processing.
-                            }
-                        }
-
-                        if (messageContext.IsHandled)
-                        {
-                            _logger.LogTrace("Message from {clientEndpoint} handled by middleware.", client.Client.RemoteEndPoint);
-                            continue; // Continue to the next ReadAsync to wait for the next message
-                        }
-                        // --- End of Message Middleware ---
-
-                        // The command handling logic is now inside CommandHandlingService,
-                        // which is called as part of the service receive hooks.
-                        // No further processing is needed here.
+                        // 处理数据包，包括缓冲区中的剩余数据
+                        await ProcessPacketData(client, receivedData, token);
                     }
                 }
             }
             catch (IOException ex) when (ex.InnerException is SocketException)
             {
-                _logger.LogWarning("[socket] Client disconnected abruptly.");
+                Logger.Warn("[socket] 客户端异常断开连接。");
             }
             catch (OperationCanceledException)
             {
-                 _logger.LogInformation("[socket] Client handling cancelled.");
+                Logger.Info("[socket] 客户端处理已取消。");
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "[socket] error handling client.");
+                Logger.Error($"[socket] 处理客户端时发生错误。异常信息: {ex}");
             }
             finally
             {
+                // Trigger  ClientDisconnectedMiddleware
+                var disconnectedMiddlewares = _serviceProvider.GetServices(typeof(Drx.Sdk.Network.Socket.Middleware.ClientDisconnectedMiddleware));
+                foreach (var middlewareObj in disconnectedMiddlewares)
+                {
+                    if (middlewareObj is Drx.Sdk.Network.Socket.Middleware.ClientDisconnectedMiddleware middleware)
+                    {
+                        await middleware.InvokeAsync(this, client);
+                    }
+                }
+
                 // Trigger disconnect hooks
                 _ = Task.Run(() => TriggerDisconnectHooks(client), token);
 
                 _connectedClients.TryRemove(client, out _);
-                _logger.LogInformation("Client {clientEndpoint} removed from connection list. Total clients: {clientCount}", client.Client.RemoteEndPoint, _connectedClients.Count);
+                // 清理客户端的数据包缓冲区
+                _clientPacketBuffers.TryRemove(client, out _);
+                
+                Logger.Info($"客户端 {client.Client.RemoteEndPoint} 已从连接列表移除。当前总连接数: {_connectedClients.Count}");
                 client.Close();
-                _logger.LogInformation("[socket] client disconnected.");
+                Logger.Info("[socket] 客户端已断开连接。");
+            }
+        }
+
+        /// <summary>
+        /// 处理数据包数据，包括处理分包和粘包的情况
+        /// </summary>
+        /// <param name="client">客户端</param>
+        /// <param name="newData">新接收到的数据</param>
+        /// <param name="token">取消令牌</param>
+        private async Task ProcessPacketData(DrxTcpClient client, byte[] newData, CancellationToken token)
+        {
+            if (!_clientPacketBuffers.TryGetValue(client, out var packetQueue))
+            {
+                Logger.Warn($"未找到客户端 {client.Client.RemoteEndPoint} 的数据包缓冲区。");
+                return;
+            }
+
+            // 将新数据添加到队列中
+            packetQueue.Enqueue(newData);
+
+            // 处理队列中的所有数据包
+            await ProcessPacketQueue(client, packetQueue, token);
+        }
+
+        /// <summary>
+        /// 处理数据包队列，提取完整的数据包
+        /// </summary>
+        /// <param name="client">客户端</param>
+        /// <param name="packetQueue">数据包队列</param>
+        /// <param name="token">取消令牌</param>
+        private async Task ProcessPacketQueue(DrxTcpClient client, Queue<byte[]> packetQueue, CancellationToken token)
+        {
+            // 合并队列中的所有数据
+            var allData = new List<byte>();
+            while (packetQueue.Count > 0)
+            {
+                allData.AddRange(packetQueue.Dequeue());
+            }
+
+            if (allData.Count == 0)
+                return;
+
+            var dataArray = allData.ToArray();
+            int offset = 0;
+
+            // 循环提取完整的数据包
+            while (offset < dataArray.Length)
+            {
+                // 检查是否有足够的数据读取包头（4字节长度）
+                if (offset + 4 > dataArray.Length)
+                {
+                    // 数据不完整，将剩余数据重新入队等待下次处理
+                    var remainingData = new byte[dataArray.Length - offset];
+                    Array.Copy(dataArray, offset, remainingData, 0, remainingData.Length);
+                    packetQueue.Enqueue(remainingData);
+                    break;
+                }
+
+                // 读取包长度（前4字节）
+                int packetSize = BitConverter.ToInt32(dataArray, offset);
+                int totalPacketSize = packetSize + 4; // 包长度 + 4字节的长度头
+
+                // 检查是否有完整的数据包
+                if (offset + totalPacketSize > dataArray.Length)
+                {
+                    // 数据包不完整，将剩余数据重新入队等待下次处理
+                    var remainingData = new byte[dataArray.Length - offset];
+                    Array.Copy(dataArray, offset, remainingData, 0, remainingData.Length);
+                    packetQueue.Enqueue(remainingData);
+                    break;
+                }
+
+                // 提取完整的数据包内容（不包括长度头）
+                var packetData = new byte[packetSize];
+                Array.Copy(dataArray, offset + 4, packetData, 0, packetSize);
+
+                // 处理完整的数据包
+                await ProcessCompletePacket(client, packetData, token);
+
+                // 移动到下一个数据包
+                offset += totalPacketSize;
+            }
+        }
+
+        /// <summary>
+        /// 处理完整的数据包
+        /// </summary>
+        /// <param name="client">客户端</param>
+        /// <param name="packetData">完整的数据包数据</param>
+        /// <param name="token">取消令牌</param>
+        private async Task ProcessCompletePacket(DrxTcpClient client, byte[] packetData, CancellationToken token)
+        {
+            try
+            {
+                // Trigger receive hooks
+                await TriggerReceiveHooks(client, packetData, token);
+
+                // --- Message Middleware Pipeline ---
+                var messageContext = new MessageContext(this, client, packetData, token);
+                foreach (var middleware in _messageMiddlewares)
+                {
+                    try
+                    {
+                        await middleware(messageContext);
+                        if (messageContext.IsHandled)
+                        {
+                            break;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Error($"消息中间件处理客户端 {client.Client.RemoteEndPoint} 时发生异常。异常信息: {ex}");
+                        // We can choose to break or continue; for robustness, we'll just log and continue processing.
+                    }
+                }
+
+                if (messageContext.IsHandled)
+                {
+                    return;
+                }
+                // --- End of Message Middleware ---
+
+                // The command handling logic is now inside CommandHandlingService,
+                // which is called as part of the service receive hooks.
+                // No further processing is needed here.
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"处理来自客户端 {client.Client.RemoteEndPoint} 的完整数据包时发生错误。异常信息: {ex}");
             }
         }
 
@@ -277,39 +413,57 @@ namespace Drx.Sdk.Network.Socket
         {
             if (client == null || !client.Connected)
             {
-                _logger.LogWarning("Cannot send response to a disconnected client.");
+                Logger.Warn("无法向已断开连接的客户端发送响应。");
                 return;
             }
 
-            var messageParts = new List<string> { ((int)code).ToString() };
-            messageParts.AddRange(args.Select(a => a?.ToString() ?? string.Empty));
-            var rawMessage = string.Join("|", messageParts);
+            string rawMessage;
+            if (args.Length == 1 && args[0] != null && args[0].GetType().IsClass && !(args[0] is string))
+            {
+                var obj = args[0];
+                var dict = new Dictionary<string, object>();
+                foreach (var prop in obj.GetType().GetProperties())
+                {
+                    var value = prop.GetValue(obj);
+                    dict[prop.Name] = value ?? string.Empty;
+                }
+                dict["status_code"] = (int)code;
+                rawMessage = System.Text.Json.JsonSerializer.Serialize(dict);
+            }
+            else
+            {
+                var messageParts = new List<string> { ((int)code).ToString() };
+                messageParts.AddRange(args.Select(a => a?.ToString() ?? string.Empty));
+                rawMessage = string.Join("|", messageParts);
+            }
 
-            byte[] messageBytes = Encoding.UTF8.GetBytes(rawMessage);
+            byte[] packBytes = Encoding.UTF8.GetBytes(rawMessage);
+            int size = packBytes.Length;
+            byte[] sizeBytes = BitConverter.GetBytes(size);
+            byte[] sendBytes = new byte[sizeBytes.Length + packBytes.Length];
+            Array.Copy(sizeBytes, 0, sendBytes, 0, sizeBytes.Length);
+            Array.Copy(packBytes, 0, sendBytes, sizeBytes.Length, packBytes.Length);
 
-            // Trigger send hooks before encryption/signing
-            await TriggerSendHooks(client, messageBytes, token);
+            // 发送前触发 send hooks（原始包格式）
+            await TriggerSendHooks(client, sendBytes, token);
 
             if (_packetEncryptor != null)
             {
-                _logger.LogTrace("Encrypting response data...");
-                messageBytes = _packetEncryptor.Encrypt(messageBytes);
+                sendBytes = _packetEncryptor.Encrypt(sendBytes);
             }
             else if (_packetIntegrityProvider != null)
             {
-                _logger.LogTrace("Signing response data...");
-                messageBytes = _packetIntegrityProvider.Protect(messageBytes);
+                sendBytes = _packetIntegrityProvider.Protect(sendBytes);
             }
 
             try
             {
                 var stream = client.GetStream();
-                await stream.WriteAsync(messageBytes, 0, messageBytes.Length, token);
-                _logger.LogInformation("Sent to {clientEndpoint}: {message}", client.Client.RemoteEndPoint, rawMessage);
+                await stream.WriteAsync(sendBytes, 0, sendBytes.Length, token);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to send response to {clientEndpoint}.", client.Client.RemoteEndPoint);
+                Logger.Error($"向客户端 {client.Client.RemoteEndPoint} 发送响应失败。异常信息: {ex}");
             }
         }
 
@@ -317,6 +471,15 @@ namespace Drx.Sdk.Network.Socket
         {
             _cancellationTokenSource?.Cancel();
             _listener?.Stop();
+            // 等待所有定时器任务结束
+            if (_timerTasks != null && _timerTasks.Count > 0)
+            {
+                try
+                {
+                    Task.WaitAll(_timerTasks.ToArray(), cancellationToken);
+                }
+                catch { /* 忽略取消异常 */ }
+            }
             return Task.CompletedTask;
         }
 
@@ -326,8 +489,14 @@ namespace Drx.Sdk.Network.Socket
             _listener?.Stop();
         }
 
+        public void DisconnectClient(DrxTcpClient client)
+        {
+            _connectedClients.TryRemove(client, out _);
+            client.Close();
+        }
+
         #region Service Hook Triggers
-        
+
         private async Task TriggerConnectHooks(DrxTcpClient client, CancellationToken token)
         {
             foreach (var service in _socketServices)
@@ -339,7 +508,7 @@ namespace Drx.Sdk.Network.Socket
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "Error in ISocketService OnClientConnect hook for service {serviceType}", service.GetType().Name);
+                    Logger.Error($"ISocketService 服务 {service.GetType().Name} 的 OnClientConnect 钩子发生错误。异常信息: {ex}");
                 }
             }
         }
@@ -355,11 +524,11 @@ namespace Drx.Sdk.Network.Socket
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "Error in ISocketService OnClientDisconnect hook for service {serviceType}", service.GetType().Name);
+                    Logger.Error($"ISocketService 服务 {service.GetType().Name} 的 OnClientDisconnect 钩子发生错误。异常信息: {ex}");
                 }
             }
         }
-        
+
         private async Task TriggerReceiveHooks(DrxTcpClient client, ReadOnlyMemory<byte> data, CancellationToken token)
         {
             foreach (var service in _socketServices)
@@ -371,7 +540,7 @@ namespace Drx.Sdk.Network.Socket
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "Error in ISocketService OnServerReceive hook for service {serviceType}", service.GetType().Name);
+                    Logger.Error($"ISocketService 服务 {service.GetType().Name} 的 OnServerReceive 钩子发生错误。异常信息: {ex}");
                 }
             }
         }
@@ -387,11 +556,11 @@ namespace Drx.Sdk.Network.Socket
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "Error in ISocketService OnServerSend hook for service {serviceType}", service.GetType().Name);
+                    Logger.Error($"ISocketService 服务 {service.GetType().Name} 的 OnServerSend 钩子发生错误。异常信息: {ex}");
                 }
             }
         }
 
         #endregion
     }
-} 
+}

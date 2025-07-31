@@ -7,93 +7,83 @@ using System.Threading.Tasks;
 using Drx.Sdk.Network.DataBase;
 using Microsoft.Data.Sqlite;
 using System.IO;
-using Drx.Sdk.Network.Sqlite;
 using DRX.Framework;
+using System.Threading.Tasks.Dataflow;
+using System.Text.Json;
+using Drx.Sdk.Network.Extensions;
 
 namespace SocketTest
 {
     class Program
     {
-        /// <summary>
-        /// 用户实体示例 - 继承自 IDataBase
-        /// </summary>
-        public class User : IDataBase
+        static async Task Main(string[] args)
         {
-            public int Id { get; set; }
-            public string TableName => null; // 使用类名作为表名
-
-            public string Name { get; set; } = string.Empty;
-            public string Email { get; set; } = string.Empty;
-            public DateTime CreateTime { get; set; }
-            public bool IsActive { get; set; }
-
-            // 关联表属性 - 继承自 IDataTable（一对多关系）
-            public List<UserProfile> Profiles { get; set; } = new List<UserProfile>();
-        }
-
-        /// <summary>
-        /// 用户档案实体 - 继承自 IDataTable，作为关联表
-        /// </summary>
-        public class UserProfile : IDataTable
-        {
-            public int Id { get; set; }        // 主键ID
-            public int ParentId { get; set; }  // 父表ID（User的ID）
-            public string TableName => "UserProfile"; // 子表名
-
-            public string Phone { get; set; } = string.Empty;
-            public string Address { get; set; } = string.Empty;
-            public DateTime Birthday { get; set; }
-            public int Age { get; set; }
-        }
-
-        static void Main(string[] args)
-        {
-            // 初始化数据库操作类
-            var sql = new SqliteUnified<User>("Data/users.db");
-
-
-
-            // 创建用户实例
-            var user = new User
+            // 创建 DrxTcpClient 实例
+            var client = new Drx.Sdk.Network.Socket.DrxTcpClient();
+            try
             {
-                Name = "张三",
-                Email = "zhangsan@example.com",
-                CreateTime = DateTime.Now,
-                IsActive = true,
-                Profiles = new List<UserProfile>
+                // 设置 AES 加密器
+                var encryptor = new Drx.Sdk.Network.Security.AesEncryptor();
+                client.SetEncryptor(encryptor);
+
+                // await client.ConnectAsync("1.116.135.26", 8463);
+                await client.ConnectAsync("127.0.0.1", 8463);
+                Console.WriteLine("已连接到服务器 1.116.135.26:8463");
+
+                var heartbeat = new
                 {
-                    new UserProfile
-                    {
-                        Phone = "13812345678",
-                        Address = "北京市朝阳区工作地址",
-                        Birthday = new DateTime(1990, 5, 15),
-                        Age = 33
-                    },
-                    new UserProfile
-                    {
-                        Phone = "15987654321",
-                        Address = "北京市海淀区家庭地址",
-                        Birthday = new DateTime(1990, 5, 15),
-                        Age = 33
+                    command = "heartbeat",
+                };
+
+                var login = new
+                {
+                    command = "login",
+                    args = new[]{
+                        new { username = "DRX", password = "Xiren123456" },
                     }
-                }
-            };
+                };
 
-            // 保存数据（Push操作）
-            sql.Push(user);
-            Console.WriteLine($"用户已保存，ID: {user.Id}");
+                var getuid = new
+                {
+                    command = "getuid",
+                };
 
-            // 查找子表字段Phone = 13812345678 的子表
-            var user1 = sql.Query("Name", "张三");
-            user1[0].Profiles.Add(new UserProfile
+                await client.SendPacketAsync(heartbeat, (c, data) =>
+                {
+                    var response = Encoding.UTF8.GetString(data);
+                    var message = response.GetJsonProperty<string>("message");
+                    var statusCode = response.GetJsonProperty<uint>("status_code");
+
+                    Logger.Info($"心跳响应: {message}, 状态码: 0x{statusCode:X2}");
+                }, TimeSpan.FromSeconds(30));
+
+                await client.SendPacketAsync(login, (c, data) =>
+                {
+                    var response = Encoding.UTF8.GetString(data);
+                    var message = response.GetJsonProperty<string>("message");
+                    var statusCode = response.GetJsonProperty<uint>("status_code");
+                    var userToken = response.GetJsonProperty<string>("user_token");
+
+                    Logger.Info($"登录响应: {message}, 状态码: 0x{statusCode:X2}, 用户令牌: {userToken}");
+                }, TimeSpan.FromSeconds(30));
+
+                await client.SendPacketAsync(login, (c, data) =>
+                {
+                    var response = Encoding.UTF8.GetString(data);
+                    var message = response.GetJsonProperty<string>("message");
+                    var statusCode = response.GetJsonProperty<uint>("status_code");
+                    var userToken = response.GetJsonProperty<string>("user_token");
+
+                    Logger.Info($"登录响应: {message}, 状态码: 0x{statusCode:X2}, 用户令牌: {userToken ?? "未获取"}");
+                }, TimeSpan.FromSeconds(30));
+
+                // 等待一段时间以确保所有操作完成
+                await Task.Delay(1000);
+            }
+            catch (Exception ex)
             {
-                Phone = "138123456781",
-                Address = "北京市朝阳区工作地址1",
-                Birthday = new DateTime(1990, 5, 15),
-                Age = 331
-            });
-
-            Logger.Info(user1[0].Profiles[0].Phone);
+                Console.WriteLine($"发生异常: {ex.Message}");
+            }
         }
     }
 }

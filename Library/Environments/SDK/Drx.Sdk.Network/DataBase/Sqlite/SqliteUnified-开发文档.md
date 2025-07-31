@@ -157,6 +157,57 @@ public class User : IDataBase
 }
 ```
 
+## [Publish] 属性标签说明
+
+### 1. 定义与作用
+`[Publish]` 是用于标记子表字段的特性标签。声明方式如下：
+```csharp
+public class UserProfile : IDataTable
+{
+    public int ParentId { get; set; }
+    [Publish]
+    public int Score { get; set; }
+    // 其他字段...
+}
+```
+其主要作用是将被标记字段与主表字段自动建立映射，实现主表与子表数据的同步。
+
+### 2. 主表字段自动映射机制
+当子表字段被 `[Publish]` 标记后，系统会自动在主表生成对应字段，并建立映射关系。例如：
+```csharp
+public class User : IDataBase
+{
+    public int Id { get; set; }
+    public List<UserProfile> Profiles { get; set; }
+    public int LatestScore { get; set; } // 自动映射自 Profiles 中被 [Publish] 标记的 Score 字段
+}
+```
+主表字段（如 `LatestScore`）会自动与子表中 `[Publish]` 字段（如 `Score`）进行关联，无需手动赋值。
+
+### 3. 保存与查询同步行为
+- 保存时：主表字段会自动同步为子表最新一条数据的 `[Publish]` 字段值。
+- 查询时：主表字段会自动加载子表最新 `[Publish]` 字段值，保证主表与子表数据一致性。
+- 支持一对多场景，主表字段始终反映子表集合中最新数据。
+
+### 4. 示例代码片段
+```csharp
+public class User : IDataBase
+{
+    public int Id { get; set; }
+    public List<UserProfile> Profiles { get; set; }
+    public int LatestScore { get; set; } // 自动同步 Profiles 中最新 Score
+}
+
+public class UserProfile : IDataTable
+{
+    public int ParentId { get; set; }
+    [Publish]
+    public int Score { get; set; }
+    public DateTime UpdateTime { get; set; }
+}
+
+// 保存数据时，LatestScore 会自动同步为 Profiles 集合中 UpdateTime 最新的 Score
+```
 ---
 
 ## 同步与异步 API 对比

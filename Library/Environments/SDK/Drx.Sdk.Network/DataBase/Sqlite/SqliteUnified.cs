@@ -11,7 +11,13 @@ using System.Linq.Expressions;
 using System.Text;
 using System.ComponentModel.DataAnnotations;
 
-namespace Drx.Sdk.Network.Sqlite
+// 新增 Publish 属性定义
+[AttributeUsage(AttributeTargets.Property)]
+public class PublishAttribute : Attribute
+{
+}
+
+namespace Drx.Sdk.Network.DataBase.Sqlite
 {
     /// <summary>
     /// 基于 Microsoft.Data.Sqlite 的统一数据库操作类
@@ -466,12 +472,23 @@ namespace Drx.Sdk.Network.Sqlite
                 // 插入主表数据
                 InsertMainEntity(connection, transaction, entity);
 
-                // 处理关联表（一对一）
+                // 新增：同步一对一子表被 [Publish] 标记且同名字段到主表
                 foreach (var dataTableProp in _dataTableProperties)
                 {
                     var childEntity = dataTableProp.Value.GetValue(entity) as IDataTable;
                     if (childEntity != null)
                     {
+                        // 遍历子表属性，查找被 Publish 标记且主表同名字段
+                        foreach (var prop in childEntity.GetType().GetProperties())
+                        {
+                            if (prop.CanRead && prop.CanWrite &&
+                                prop.GetCustomAttribute(typeof(PublishAttribute)) != null &&
+                                _properties.ContainsKey(prop.Name))
+                            {
+                                var value = prop.GetValue(childEntity);
+                                _properties[prop.Name].SetValue(entity, value);
+                            }
+                        }
                         childEntity.ParentId = entity.Id;
                         InsertChildEntity(connection, transaction, childEntity, $"{_tableName}_{dataTableProp.Key}");
                     }
@@ -483,6 +500,30 @@ namespace Drx.Sdk.Network.Sqlite
                     var childList = dataTableListProp.Value.GetValue(entity) as IEnumerable;
                     if (childList != null)
                     {
+                        // 新增：同步一对多子表被 [Publish] 标记且同名字段到主表（取最后一个子表值）
+                        object? lastPublishValue = null;
+                        string? publishFieldName = null;
+                        foreach (IDataTable childEntity in childList)
+                        {
+                            if (childEntity != null)
+                            {
+                                foreach (var prop in childEntity.GetType().GetProperties())
+                                {
+                                    if (prop.CanRead && prop.CanWrite &&
+                                        prop.GetCustomAttribute(typeof(PublishAttribute)) != null &&
+                                        _properties.ContainsKey(prop.Name))
+                                    {
+                                        lastPublishValue = prop.GetValue(childEntity);
+                                        publishFieldName = prop.Name;
+                                    }
+                                }
+                            }
+                        }
+                        if (publishFieldName != null && lastPublishValue != null)
+                        {
+                            _properties[publishFieldName].SetValue(entity, lastPublishValue);
+                        }
+
                         var tableName = $"{_tableName}_{dataTableListProp.Key}";
                         // 先删除现有的子表数据
                         var deleteSql = $"DELETE FROM [{tableName}] WHERE [ParentId] = @parentId";
@@ -851,6 +892,18 @@ namespace Drx.Sdk.Network.Sqlite
                             }
                         }
 
+                        // 加载被 [Publish] 标记且同名字段覆盖主表字段（已支持一对一）
+                        foreach (var prop in childProperties)
+                        {
+                            if (prop.CanRead && prop.CanWrite &&
+                                prop.GetCustomAttribute(typeof(PublishAttribute)) != null &&
+                                _properties.ContainsKey(prop.Name))
+                            {
+                                var value = prop.GetValue(childEntity);
+                                _properties[prop.Name].SetValue(entity, value);
+                            }
+                        }
+
                         // 用setter委托赋值
                         var setterDict = SetterCache[entity.GetType()];
                         setterDict[dataTableProp.Key](entity, childEntity);
@@ -858,7 +911,7 @@ namespace Drx.Sdk.Network.Sqlite
                 }
             }
 
-            // 加载一对多关系
+            // 加载一对多关系，自动加载所有主表映射字段的最新子表值（覆盖主表同名字段，取最后一个值）
             foreach (var dataTableListProp in _dataTableListProperties)
             {
                 var childTableName = $"{_tableName}_{dataTableListProp.Key}";
@@ -869,6 +922,9 @@ namespace Drx.Sdk.Network.Sqlite
                 command.Parameters.AddWithValue("@parentId", entity.Id);
 
                 var childList = Activator.CreateInstance(dataTableListProp.Value.PropertyType) as IList;
+                // 用于记录每个字段的最后一个值
+                var lastPublishValues = new Dictionary<string, object?>();
+
                 if (childList != null)
                 {
                     using var reader = command.ExecuteReader();
@@ -892,8 +948,25 @@ namespace Drx.Sdk.Network.Sqlite
                                 }
                             }
 
+                            // 收集被 [Publish] 标记且主表同名字段的最新值
+                            foreach (var prop in childProperties)
+                            {
+                                if (prop.CanRead && prop.CanWrite &&
+                                    prop.GetCustomAttribute(typeof(PublishAttribute)) != null &&
+                                    _properties.ContainsKey(prop.Name))
+                                {
+                                    lastPublishValues[prop.Name] = prop.GetValue(childEntity);
+                                }
+                            }
+
                             childList.Add(childEntity);
                         }
+                    }
+
+                    // 覆盖主表同名字段（多表取最后一个值）
+                    foreach (var kv in lastPublishValues)
+                    {
+                        _properties[kv.Key].SetValue(entity, kv.Value);
                     }
 
                     dataTableListProp.Value.SetValue(entity, childList);
@@ -945,6 +1018,15 @@ namespace Drx.Sdk.Network.Sqlite
             if (targetType == typeof(bool) && value is long longValue)
             {
                 return longValue != 0;
+            }
+
+            // 特殊处理枚举类型
+            if (targetType.IsEnum)
+            {
+                var str = value.ToString();
+                if (string.IsNullOrEmpty(str))
+                    throw new ArgumentException($"无法将空值转换为枚举类型 {targetType.Name}");
+                return Enum.Parse(targetType, str);
             }
 
             return Convert.ChangeType(value, targetType);
@@ -1035,6 +1117,16 @@ namespace Drx.Sdk.Network.Sqlite
                 transaction.Rollback();
                 throw;
             }
+        }
+
+        public async Task<IEnumerable<T>> QueryAllAsync(CancellationToken cancellationToken = default)
+        {
+            return await GetAllAsync(cancellationToken);
+        }
+
+        public List<T> QueryAll()
+        {
+            return GetAll();
         }
 
         /// <summary>
@@ -1158,6 +1250,56 @@ namespace Drx.Sdk.Network.Sqlite
             {
                 entity.Id = (int)(DateTime.UtcNow.Ticks % int.MaxValue);
             }
+        
+            // 新增：同步一对一子表被 [Publish] 标记且同名字段到主表
+            foreach (var dataTableProp in _dataTableProperties)
+            {
+                var childEntity = dataTableProp.Value.GetValue(entity) as IDataTable;
+                if (childEntity != null)
+                {
+                    foreach (var prop in childEntity.GetType().GetProperties())
+                    {
+                        if (prop.CanRead && prop.CanWrite &&
+                            prop.GetCustomAttribute(typeof(PublishAttribute)) != null &&
+                            _properties.ContainsKey(prop.Name))
+                        {
+                            var value = prop.GetValue(childEntity);
+                            _properties[prop.Name].SetValue(entity, value);
+                        }
+                    }
+                }
+            }
+            // 新增：同步一对多子表被 [Publish] 标记且同名字段到主表（取最后一个子表值）
+            foreach (var dataTableListProp in _dataTableListProperties)
+            {
+                var childList = dataTableListProp.Value.GetValue(entity) as IEnumerable;
+                if (childList != null)
+                {
+                    object? lastPublishValue = null;
+                    string? publishFieldName = null;
+                    foreach (IDataTable childEntity in childList)
+                    {
+                        if (childEntity != null)
+                        {
+                            foreach (var prop in childEntity.GetType().GetProperties())
+                            {
+                                if (prop.CanRead && prop.CanWrite &&
+                                    prop.GetCustomAttribute(typeof(PublishAttribute)) != null &&
+                                    _properties.ContainsKey(prop.Name))
+                                {
+                                    lastPublishValue = prop.GetValue(childEntity);
+                                    publishFieldName = prop.Name;
+                                }
+                            }
+                        }
+                    }
+                    if (publishFieldName != null && lastPublishValue != null)
+                    {
+                        _properties[publishFieldName].SetValue(entity, lastPublishValue);
+                    }
+                }
+            }
+        
             await using var connection = new SqliteConnection(_connectionString);
             await connection.OpenAsync(cancellationToken);
             await using var transactionObj = await connection.BeginTransactionAsync(cancellationToken);
@@ -1478,6 +1620,38 @@ namespace Drx.Sdk.Network.Sqlite
             }
             return results;
         }
+
+        /// <summary>
+        /// 异步清空数据库表中的所有数据。
+        /// </summary>
+        /// <param name="cancellationToken">用于取消操作的令牌。</param>
+        /// <returns>表示异步操作的任务。</returns>
+        /// <exception cref="InvalidOperationException">当无法获取有效的 SqliteTransaction 时抛出。</exception>
+        /// <remarks>
+        /// 此方法会打开数据库连接，启动事务，执行删除操作，并在成功时提交事务，失败时回滚事务。
+        /// </remarks>
+        public async Task ClearAsync(CancellationToken cancellationToken = default)
+        {
+            await using var connection = new SqliteConnection(_connectionString);
+            await connection.OpenAsync(cancellationToken);
+            await using var transactionObj = await connection.BeginTransactionAsync(cancellationToken);
+            var transaction = transactionObj as SqliteTransaction ?? throw new InvalidOperationException("SqliteTransaction 获取失败");
+            try
+            {
+                var deleteSql = $"DELETE FROM [{_tableName}]";
+                await using (var deleteCommand = new SqliteCommand(deleteSql, connection, transaction))
+                {
+                    await deleteCommand.ExecuteNonQueryAsync(cancellationToken);
+                }
+                await transaction.CommitAsync(cancellationToken);
+            }
+            catch
+            {
+                await transaction.RollbackAsync(cancellationToken);
+                throw;
+            }
+        }
+        
         #endregion
     }
 }

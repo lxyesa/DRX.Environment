@@ -13,6 +13,7 @@ namespace Drx.Sdk.Network.Socket
         Failure_AssetInvalid = 0x20000003,            // 验证失败：用户不拥有指定资产或资产已过期。
         Failure_SessionConflict = 0x20000004,         // 验证失败：找到了多个冲突的用户会话。
         Failure_UserAlreadyLoggedIn = 0x20000005,      // 验证失败：用户已登录。
+        Failure_InvalidCredentials = 0x20000006,       // 验证失败：提供的凭证（例如，用户名/密码）无效。
 
         // 成功代码 (0x21000000 - 0x21FFFFFF) - 表示请求已成功处理。
         Success_General = 0x21000000,               // 通用成功。客户端应将此视为一个肯定性、非特定的响应。

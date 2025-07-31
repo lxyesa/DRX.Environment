@@ -22,7 +22,7 @@ namespace KaxServer.Controllers
             var userInfoJson = new
             {
                 userid = userInfo?.Id,
-                username = userInfo?.UserName,
+                username = userInfo?.Username,
                 email = userInfo?.Email,
                 coins = userInfo?.Coins,
                 level = userInfo?.Level,
@@ -37,32 +37,7 @@ namespace KaxServer.Controllers
 
             return Ok(userInfoJson);
         }
-
-        [HttpPost("/login-app")]
-        public async Task<IActionResult> LoginAppAsync([FromBody] LoginRequest request)
-        {
-            var userNameOrEmail = request.UserNameOrEmail?.Trim();
-            var password = request.Password?.Trim();
-
-            if (string.IsNullOrEmpty(userNameOrEmail) || string.IsNullOrEmpty(password))
-            {
-                return BadRequest(new { message = "用户名/邮箱和密码不能为空" });
-            }
-
-            var LoginResult = await UserManager.LoginAppAsync(userNameOrEmail, password);
-            if (LoginResult.UserStatusData.IsAppLogin)
-            {
-                return Ok(new { message = "登录成功", token = LoginResult.UserStatusData.AppToken, userId = LoginResult.Id });
-            }
-
-            if (LoginResult == null)
-            {
-                return BadRequest(new { message = "用户不存在" });
-            }
-
-            return BadRequest(new { message = "未知的错误" });
-        }
-
+        
         [HttpPost("/logout-app")]
         public async Task<IActionResult> LogoutAppAsync([FromBody] int userId)
         {

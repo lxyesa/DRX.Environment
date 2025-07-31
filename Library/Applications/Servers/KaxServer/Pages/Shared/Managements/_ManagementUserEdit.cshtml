@@ -1,26 +1,22 @@
+@using KaxServer.Services
 @model KaxServer.Models.UserData
 
 <link rel="stylesheet" href="~/css/global.css" asp-append-version="true" />
-
-<div class="profile-section">
-    <h2 class="section-title-main">
-        <span class="material-icons" style="vertical-align: middle;">manage_accounts</span>
-        编辑用户信息
-    </h2>
-    <p class="section-desc-main">修改用户基本资料和权限</p>
-
     <form id="userEditForm" class="settings-form" method="post" asp-page-handler="EditUser">
         <div class="settings-section">
-            <h3 class="section-title">基本信息</h3>
+            <h3 class="section-title" style="margin-top: 1.5rem;">基本信息</h3>
             <div class="form-group">
                 <label class="form-label" for="userId">用户ID</label>
-                <input type="text" class="form-control input-forbidden" id="userId" name="userId" value="@Model.Id" readonly>
+                <input type="text" class="form-control with-icon email-readonly input-forbidden" id="userId"
+                    name="userId" value="@Model.Id" readonly />
+                <p class="form-hint email-readonly-tip" style="color:#d9534f;margin-top:2px;">用户ID不可修改</p>
             </div>
             <div class="form-group">
                 <label class="form-label" for="UserName">用户名 <span style="color:#ff9800">*</span></label>
                 <div class="input-wrapper">
                     <span class="material-icons input-icon">person</span>
-                    <input type="text" class="form-control with-icon" id="UserName" name="UserName" value="@Model.Username" required maxlength="32">
+                    <input type="text" class="form-control with-icon" id="UserName" name="UserName"
+                        value="@Model.Username" required maxlength="32">
                 </div>
                 <p class="form-hint">用户名将显示在用户主页和评论中</p>
             </div>
@@ -28,7 +24,8 @@
                 <label class="form-label" for="Email">邮箱 <span style="color:#ff9800">*</span></label>
                 <div class="input-wrapper">
                     <span class="material-icons input-icon">email</span>
-                    <input type="email" class="form-control with-icon email-readonly input-forbidden" id="Email" name="Email" value="@Model.Email" readonly>
+                    <input type="email" class="form-control with-icon email-readonly input-forbidden" id="Email"
+                        name="Email" value="@Model.Email" readonly>
                 </div>
                 <p class="form-hint email-readonly-tip" style="color:#d9534f;margin-top:2px;">邮箱地址不可修改</p>
             </div>
@@ -44,22 +41,26 @@
             <h3 class="section-title">成长与资产</h3>
             <div class="form-group">
                 <label class="form-label" for="Level">等级</label>
-                <input type="number" class="form-control" id="Level" name="Level" value="@Model.Level" min="0" max="999" />
+                <input type="number" class="form-control" id="Level" name="Level" value="@Model.Level" min="0"
+                    max="999" />
             </div>
             <div class="form-group">
                 <label class="form-label" for="Coins">金币</label>
-                <input type="number" class="form-control" id="Coins" name="Coins" value="@Model.Coins" min="0" max="9999999" />
+                <input type="number" class="form-control" id="Coins" name="Coins" value="@Model.Coins" min="0"
+                    max="9999999" />
             </div>
             <div class="form-group">
                 <label class="form-label" for="Exp">经验 (下一级：@Model.NextLevelExp)</label>
-                <input type="number" class="form-control" id="Exp" name="Exp" value="@Model.Exp" min="0" max="9999999" />
+                <input type="number" class="form-control" id="Exp" name="Exp" value="@Model.Exp" min="0"
+                    max="9999999" />
             </div>
         </div>
         <div class="settings-section">
             <h3 class="section-title">安全信息</h3>
             <div class="form-group">
                 <label class="form-label" for="PasswordHash">密码哈希</label>
-                <input type="text" class="form-control input-forbidden" id="PasswordHash" name="PasswordHash" value="@Model.PasswordHash" readonly />
+                <input type="text" class="form-control input-forbidden" id="PasswordHash" name="PasswordHash"
+                    value="@Model.PasswordHash" readonly />
                 <p class="form-hint">仅用于查看，无法直接修改。</p>
             </div>
         </div>
@@ -67,95 +68,124 @@
             <h3 class="section-title">个性化设置</h3>
             <div class="form-group">
                 <label class="form-label" for="EmailNotifications">
-                    <input type="checkbox" id="EmailNotifications" name="UserSettingData.EmailNotifications" @(Model.UserSettingData.EmailNotifications ? "checked" : "") />
+                    <input type="checkbox" id="EmailNotifications" name="UserSettingData.EmailNotifications"
+                        @(Model.UserSettingData.EmailNotifications ? "checked" : "") />
                     开启邮件通知
                 </label>
             </div>
             <div class="form-group">
                 <label class="form-label" for="NewsSubscription">
-                    <input type="checkbox" id="NewsSubscription" name="UserSettingData.NewsSubscription" @(Model.UserSettingData.NewsSubscription ? "checked" : "") />
+                    <input type="checkbox" id="NewsSubscription" name="UserSettingData.NewsSubscription"
+                        @(Model.UserSettingData.NewsSubscription ? "checked" : "") />
                     订阅新闻
                 </label>
             </div>
             <div class="form-group">
                 <label class="form-label" for="MarketingSubscription">
-                    <input type="checkbox" id="MarketingSubscription" name="UserSettingData.MarketingSubscription" @(Model.UserSettingData.MarketingSubscription ? "checked" : "") />
+                    <input type="checkbox" id="MarketingSubscription" name="UserSettingData.MarketingSubscription"
+                        @(Model.UserSettingData.MarketingSubscription ? "checked" : "") />
                     订阅营销信息
                 </label>
             </div>
             <div class="form-group">
                 <label class="form-label" for="LastChangeNameTime">上次改名时间</label>
-                <input type="datetime-local" class="form-control" id="LastChangeNameTime" name="UserSettingData.LastChangeNameTime" value="@(Model.UserSettingData.LastChangeNameTime.ToString("yyyy-MM-ddTHH:mm:ss"))" />
+                <input type="datetime-local" class="form-control" id="LastChangeNameTime"
+                    name="UserSettingData.LastChangeNameTime"
+                    value="@(Model.UserSettingData.LastChangeNameTime.ToString("yyyy-MM-ddTHH:mm:ss"))" />
             </div>
             <div class="form-group">
                 <label class="form-label" for="NextChangeNameTime">下次可改名时间</label>
-                <input type="datetime-local" class="form-control" id="NextChangeNameTime" name="UserSettingData.NextChangeNameTime" value="@(Model.UserSettingData.NextChangeNameTime.ToString("yyyy-MM-ddTHH:mm:ss"))" />
+                <input type="datetime-local" class="form-control" id="NextChangeNameTime"
+                    name="UserSettingData.NextChangeNameTime"
+                    value="@(Model.UserSettingData.NextChangeNameTime.ToString("yyyy-MM-ddTHH:mm:ss"))" />
             </div>
         </div>
         <div class="settings-section">
             <h3 class="section-title">状态信息</h3>
             <div class="form-group">
                 <label class="form-label" for="IsBanned">
-                    <input type="checkbox" id="IsBanned" name="UserStatusData.IsBanned" @(Model.UserStatusData.IsBanned ? "checked" : "") />
+                    <input type="checkbox" id="IsBanned" name="UserStatusData.IsBanned" @(Model.UserStatusData.IsBanned
+                                                                                                                ? "checked" : "") />
                     封禁用户
                 </label>
             </div>
             <div class="form-group">
                 <label class="form-label" for="IsAppLogin">
-                    <input type="checkbox" id="IsAppLogin" name="UserStatusData.IsAppLogin" @(Model.UserStatusData.IsAppLogin ? "checked" : "") />
+                    <input type="checkbox" id="IsAppLogin" name="UserStatusData.IsAppLogin"
+                        @(Model.UserStatusData.IsAppLogin ? "checked" : "") />
                     应用已登录
                 </label>
             </div>
             <div class="form-group">
                 <label class="form-label" for="IsWebLogin">
-                    <input type="checkbox" id="IsWebLogin" name="UserStatusData.IsWebLogin" @(Model.UserStatusData.IsWebLogin ? "checked" : "") />
+                    <input type="checkbox" id="IsWebLogin" name="UserStatusData.IsWebLogin"
+                        @(Model.UserStatusData.IsWebLogin ? "checked" : "") />
                     网页已登录
                 </label>
             </div>
             <div class="form-group">
                 <label class="form-label" for="AppToken">应用登录令牌</label>
-                <input type="text" class="form-control" id="AppToken" name="UserStatusData.AppToken" value="@Model.UserStatusData.AppToken" readonly />
+                <input type="text" class="form-control" id="AppToken" name="UserStatusData.AppToken"
+                    value="@Model.UserStatusData.AppToken" readonly />
             </div>
         </div>
         <div class="form-actions">
             <button type="submit" class="btn-primary">保存</button>
-            <button type="button" class="btn-secondary" onclick="window.parent.postMessage({ view: 'management-user' }, '*')">取消</button>
+            <button type="button" class="btn-secondary"
+                onclick="window.parent.postMessage({ view: 'management-user' }, '*')">取消</button>
         </div>
     </form>
-<script>
-document.addEventListener('DOMContentLoaded', function () {
-    const form = document.getElementById('userEditForm');
-    if (!form) return;
-    form.addEventListener('submit', function (e) {
-        e.preventDefault();
-        const formData = new FormData(form);
-        fetch(form.action, {
-            method: 'POST',
-            body: formData,
-            headers: { 'X-Requested-With': 'XMLHttpRequest' }
-        })
-        .then(async resp => {
-            if (resp.ok) {
-                const html = await resp.text();
-                // 用新内容替换当前编辑区域
-                const temp = document.createElement('div');
-                temp.innerHTML = html;
-                const newForm = temp.querySelector('#userEditForm');
-                if (newForm) {
-                    form.replaceWith(newForm);
-                    alert('保存成功');
-                } else {
-                    alert('保存成功，但未找到表单内容');
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const form = document.getElementById('userEditForm');
+            if (!form) return;
+
+            // 监听 postMessage 事件，接收 userId 并触发数据加载
+            window.addEventListener('message', function (event) {
+                console.log('[postMessage] 收到消息:', event.data);
+                if (event && event.data && event.data.userId) {
+                    const userIdInput = document.getElementById('userId');
+                    if (userIdInput) {
+                        userIdInput.value = event.data.userId;
+                        console.log('[postMessage] userId 已写入输入框:', event.data.userId);
+                        if (typeof loadUserDataById === 'function') {
+                            loadUserDataById(event.data.userId);
+                        }
+                    } else {
+                        console.warn('[postMessage] 未找到 userId 输入框');
+                    }
                 }
-            } else {
-                const err = await resp.text();
-                alert('保存失败：' + err);
-            }
-        })
-        .catch(err => {
-            alert('请求异常：' + err);
+            });
+
+            form.addEventListener('submit', function (e) {
+                e.preventDefault();
+                const formData = new FormData(form);
+                fetch(form.action, {
+                    method: 'POST',
+                    body: formData,
+                    headers: { 'X-Requested-With': 'XMLHttpRequest' }
+                })
+                    .then(async resp => {
+                        if (resp.ok) {
+                            const html = await resp.text();
+                            // 用新内容替换当前编辑区域
+                            const temp = document.createElement('div');
+                            temp.innerHTML = html;
+                            const newForm = temp.querySelector('#userEditForm');
+                            if (newForm) {
+                                form.replaceWith(newForm);
+                                alert('保存成功');
+                            } else {
+                                alert('保存成功，但未找到表单内容');
+                            }
+                        } else {
+                            const err = await resp.text();
+                            alert('保存失败：' + err);
+                        }
+                    })
+                    .catch(err => {
+                        alert('请求异常：' + err);
+                    });
+            });
         });
-    });
-});
-</script>
-</div>
+    </script>

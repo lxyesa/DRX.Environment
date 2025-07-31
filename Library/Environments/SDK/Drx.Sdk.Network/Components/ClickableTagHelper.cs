@@ -34,8 +34,6 @@ namespace Drx.Sdk.Network.Components
             {
                 output.TagName = "button";
                 output.Attributes.SetAttribute("class", "card clickable-card");
-                // 添加type属性，防止在表单中自动提交
-                output.Attributes.SetAttribute("type", "button");
             }
 
             // 转发属性，避免覆盖已设置的属性
@@ -48,12 +46,6 @@ namespace Drx.Sdk.Network.Components
                 }
             }
             
-            // 如果有data-userid属性，添加直接的onclick处理
-            if (ForwardedAttributes.TryGetValue("data-userid", out string userId) && !string.IsNullOrEmpty(userId))
-            {
-                string onclickJs = $"handleCardClick(event, '{userId}')";
-                output.Attributes.SetAttribute("onclick", onclickJs);
-            }
 
             output.Content.SetHtmlContent($@"
     <i class='card-icon {Icon}'></i>

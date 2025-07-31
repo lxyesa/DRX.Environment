@@ -1,3 +1,4 @@
+@using KaxServer.Services
 @model KaxServer.Models.UserData
 
 <div class="profile-overview">
@@ -15,12 +16,26 @@
             <p class="profile-email">@Model.Email</p>
             <div class="profile-badges">
                 <span class="badge">
-                    <span class="material-icons">verified</span>
-                    已验证用户
-                </span>
-                <span class="badge">
                     <span class="material-icons">military_tech</span>
                     等级 @Model.Level
+                </span>
+                @if (Model.UserStatusData.IsAdmin)
+                {
+                    <span class="badge">
+                        <span class="material-icons">admin_panel_settings</span>
+                        管理员
+                    </span>
+                }
+                @if (Model.UserStatusData.IsAppLogin)
+                {
+                    <span class="badge">
+                        <span class="material-icons">phone_iphone</span>
+                        客户端登录
+                    </span>
+                }
+                <span class="badge">
+                    <span class="material-icons">account_circle</span>
+                    ID: @Model.Id
                 </span>
             </div>
         </div>
@@ -71,6 +86,16 @@
             </div>
             <div class="stat-info">
                 距离下一级还需 @(Model.NextLevelExp - Model.Exp)
+            </div>
+        </div>
+
+        <div class="stat-card">
+            <div class="stat-icon">
+                <span class="material-icons">extension</span>
+            </div>
+            <div class="stat-content">
+                <span class="stat-value">@(UserManager.GetUserPublishedStoreItemCount(Model.Id))</span>
+                <span class="stat-label">已发布模组</span>
             </div>
         </div>
     </div>

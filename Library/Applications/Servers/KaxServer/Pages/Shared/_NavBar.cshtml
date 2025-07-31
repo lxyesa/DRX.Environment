@@ -46,7 +46,7 @@
                 @if (Model.CurrentUser != null)
                 {
                     <li class="nav-item">
-                        <a class="nav-link nav-link--streamer" asp-area="" asp-page="/Account/Logout">@Model.CurrentUser.UserName</a>
+                        <a class="nav-link nav-link--streamer" asp-area="" asp-page="/Account/Profile">@Model.CurrentUser.Username</a>
                     </li>
                 }
                 else

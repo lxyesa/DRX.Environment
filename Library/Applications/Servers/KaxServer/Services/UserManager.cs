@@ -2,61 +2,62 @@ using System;
 using System.IO;
 using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
-using Drx.Sdk.Network.Sqlite;
+using Drx.Sdk.Network.DataBase.Sqlite;
 using DRX.Framework;
 using KaxServer.Models;
 using Microsoft.AspNetCore.Http;
 using Drx.Sdk.Shared.Cryptography;
+using Drx.Sdk.Network.Socket;
 
 namespace KaxServer.Services;
 
+/// <summary>
+/// 用户管理器，负责用户注册、登录、信息获取、状态变更等核心操作。
+/// 提供统一的用户数据访问与业务逻辑入口。
+/// </summary>
+public static class UserManager
+{
     /// <summary>
-    /// 用户管理器，负责用户注册、登录、信息获取、状态变更等核心操作。
-    /// 提供统一的用户数据访问与业务逻辑入口。
+    /// 用户数据库文件路径（绝对路径）
     /// </summary>
-    public static class UserManager
+    private static readonly string DbPath;
+
+    /// <summary>
+    /// 用户数据表操作对象（SqliteUnified 封装）
+    /// </summary>
+    public static SqliteUnified<UserData> UserSql;
+
+    /// <summary>
+    /// 登录延迟（毫秒），用于防止暴力破解
+    /// </summary>
+    private const int LOGIN_DELAY_MS = 1000; // 登录延迟1秒
+
+    /// <summary>
+    /// 注册延迟（毫秒），用于防止批量注册
+    /// </summary>
+    private const int REGISTER_DELAY_MS = 1500; // 注册延迟1.5秒
+
+    /// <summary>
+    /// 静态构造函数。初始化用户数据库路径和SqliteUnified实例。
+    /// </summary>
+    static UserManager()
     {
-        /// <summary>
-        /// 用户数据库文件路径（绝对路径）
-        /// </summary>
-        private static readonly string DbPath;
+        // 获取应用根目录
+        var baseDirectory = AppDomain.CurrentDomain.BaseDirectory;
+        // 数据目录
+        var dataDirectory = Path.Combine(baseDirectory, "data");
 
-        /// <summary>
-        /// 用户数据表操作对象（SqliteUnified 封装）
-        /// </summary>
-        public static SqliteUnified<UserData> UserSql;
-
-        /// <summary>
-        /// 登录延迟（毫秒），用于防止暴力破解
-        /// </summary>
-        private const int LOGIN_DELAY_MS = 1000; // 登录延迟1秒
-
-        /// <summary>
-        /// 注册延迟（毫秒），用于防止批量注册
-        /// </summary>
-        private const int REGISTER_DELAY_MS = 1500; // 注册延迟1.5秒
-
-        /// <summary>
-        /// 静态构造函数。初始化用户数据库路径和SqliteUnified实例。
-        /// </summary>
-        static UserManager()
+        // 若目录不存在则自动创建
+        if (!Directory.Exists(dataDirectory))
         {
-            // 获取应用根目录
-            var baseDirectory = AppDomain.CurrentDomain.BaseDirectory;
-            // 数据目录
-            var dataDirectory = Path.Combine(baseDirectory, "data");
-
-            // 若目录不存在则自动创建
-            if (!Directory.Exists(dataDirectory))
-            {
-                Directory.CreateDirectory(dataDirectory);
-            }
-
-            // 拼接数据库文件路径
-            DbPath = Path.Combine(dataDirectory, "user.db");
-            // 初始化用户数据表操作对象
-            UserSql = new SqliteUnified<UserData>(DbPath);
+            Directory.CreateDirectory(dataDirectory);
         }
+
+        // 拼接数据库文件路径
+        DbPath = Path.Combine(dataDirectory, "user.db");
+        // 初始化用户数据表操作对象
+        UserSql = new SqliteUnified<UserData>(DbPath);
+    }
 
     /// <summary>
     /// 用户注册结果模型
@@ -285,12 +286,30 @@ namespace KaxServer.Services;
     /// 该方法首先通过用户名查询用户，若未找到则尝试通过邮箱查询。
     /// 验证密码成功后，会生成新的AppToken并更新用户登录状态。
     /// </remarks>
-    public static async Task<UserData> LoginAppAsync(string userNameOrEmail, string password)
+    public static async Task<CommandResult?> LoginAppAsync(string userNameOrEmail, string password)
     {
         var userDataList = await UserSql.QueryAsync("Username", userNameOrEmail);
         if (userDataList?.Count > 0)
         {
             var userData = userDataList[0];
+            if (IsAppLogin(userData))
+            {
+                Logger.Warn($"用户 {userData.Username} 已经通过 AppToken 登录，无法重复登录。");
+                return new CommandResult
+                {
+                    StatusCode = SocketStatusCode.Failure_General,
+                    Message = "用户已通过 AppToken 登录，无法重复登录"
+                };
+            }
+            if (IsUserBanned(userData))
+            {
+                Logger.Warn($"用户 {userData.Username} 已被封禁，无法登录。");
+                return new CommandResult
+                {
+                    StatusCode = SocketStatusCode.Failure_General,
+                    Message = "用户已被封禁，无法登录"
+                };
+            }
             var passwordHash = SHA256.ComputeHashString(password);
             if (userData.PasswordHash == passwordHash)
             {
@@ -298,7 +317,12 @@ namespace KaxServer.Services;
                 uData.UserStatusData.IsAppLogin = true;
                 uData.UserStatusData.AppToken = Guid.NewGuid().ToString();
                 await UserSql.UpdateAsync(uData);
-                return uData;
+                return new CommandResult
+                {
+                    StatusCode = SocketStatusCode.Success_General,
+                    Message = "登录成功",
+                    Data = uData
+                };
             }
         }
         else
@@ -307,6 +331,11 @@ namespace KaxServer.Services;
             if (userDataList?.Count > 0)
             {
                 var userData = userDataList[0];
+                if (IsAppLogin(userData))
+                {
+                    Logger.Warn($"用户 {userData.Username} 已经通过 AppToken 登录，无法重复登录。");
+                    return null;
+                }
                 var passwordHash = SHA256.ComputeHashString(password);
                 if (userData.PasswordHash == passwordHash)
                 {
@@ -314,11 +343,50 @@ namespace KaxServer.Services;
                     uData.UserStatusData.IsAppLogin = true;
                     uData.UserStatusData.AppToken = Guid.NewGuid().ToString();
                     await UserSql.UpdateAsync(uData);
-                    return uData;
+                    return new CommandResult
+                    {
+                        StatusCode = SocketStatusCode.Success_General,
+                        Message = "登录成功",
+                        Data = uData
+                    };
                 }
             }
         }
         return null;
+    }
+
+    private static bool IsUserBanned(UserData user)
+    {
+        if (user == null)
+            return false;
+        return user.UserStatusData.IsBanned;
+    }
+    private static bool IsAppLogin(UserData user)
+    {
+        if (user == null)
+            return false;
+        return user.UserStatusData.IsAppLogin && !string.IsNullOrEmpty(user.UserStatusData.AppToken);
+    }
+    public static async Task<UserData> GetUserByIdAsync(int userId)
+    {
+        if (userId <= 0)
+            return null;
+        var userList = await UserSql.QueryAsync("Id", userId.ToString());
+        return userList?.Count > 0 ? userList[0] : null;
+    }
+    public static async Task<UserData> GetUserByAppTokenAsync(string appToken)
+    {
+        if (string.IsNullOrEmpty(appToken))
+            return null;
+        var userList = await UserSql.QueryAsync("AppToken", appToken);
+        return userList?.Count > 0 ? userList[0] : null;
+    }
+    public static async Task<UserData> GetUserByUsernameAsync(string username)
+    {
+        if (string.IsNullOrEmpty(username))
+            return null;
+        var userList = await UserSql.QueryAsync("Username", username);
+        return userList?.Count > 0 ? userList[0] : null;
     }
 
     /// <summary>
@@ -406,7 +474,7 @@ namespace KaxServer.Services;
     /// <param name="user">用户对象</param>
     /// <param name="amount">金币变动值（可正可负）</param>
     /// <returns>操作成功返回true，否则返回false</returns>
-    public static async Task<bool> DoDelta(UserData user, int amount)
+    public static async Task<bool> DeltaCoins(UserData user, int amount)
     {
         if (user == null)
             return false;
@@ -425,14 +493,6 @@ namespace KaxServer.Services;
     {
         return await UserSql.GetAllAsync();
     }
-    /// <summary>
-    /// 根据用户ID获取用户信息
-    /// </summary>
-    public static async Task<UserData?> GetUserByIdAsync(int userId)
-    {
-        var users = await GetAllUsersAsync();
-        return users.FirstOrDefault(u => u.Id == userId);
-    }
 
     /// <summary>
     /// 更新用户信息到数据库。
@@ -447,17 +507,22 @@ namespace KaxServer.Services;
         return true;
     }
 
-   /// <summary>
-   /// 保存或更新用户所有字段（含嵌套设置/状态）。
-   /// </summary>
-   /// <param name="user">用户对象</param>
-   /// <returns>操作成功返回true，否则返回false</returns>
-   public static async Task<bool> SaveOrUpdateUserAsync(UserData user)
-   {
-       if (user == null)
-           return false;
-       // 直接更新所有字段，包含 UserSettingData、UserStatusData
-       await UserSql.UpdateAsync(user);
-       return true;
-   }
+    /// <summary>
+    /// 保存或更新用户所有字段（含嵌套设置/状态）。
+    /// </summary>
+    /// <param name="user">用户对象</param>
+    /// <returns>操作成功返回true，否则返回false</returns>
+    public static async Task<bool> SaveOrUpdateUserAsync(UserData user)
+    {
+        if (user == null)
+            return false;
+        // 直接更新所有字段，包含 UserSettingData、UserStatusData
+        await UserSql.UpdateAsync(user);
+        return true;
+    }
+   
+    public static int GetUserPublishedStoreItemCount(int userId)
+    {
+        return StoreManager.GetAllStoreItemsAsync().Result.Count(s => s.OwnerId == userId);
+    }
 }

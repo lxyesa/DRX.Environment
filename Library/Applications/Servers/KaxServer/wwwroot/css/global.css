@@ -852,7 +852,7 @@ input:checked+.toggle-slider:before {
     display: flex;
     align-items: center;
     gap: 1rem;
-    padding: 1rem;
+    padding: 0.5rem;
     background: rgba(255, 255, 255, 0.03);
     border-radius: var(--border-radius-md);
     text-decoration: none;
@@ -947,6 +947,70 @@ input[disabled].input-forbidden {
     opacity: 1 !important;
 }
 
+/* 侧边栏通用样式 - 可复用于ModStore/Profile等 */
+.side-nav {
+    background: var(--surface-color, #fff);
+    border-radius: var(--border-radius-lg, 16px);
+    border: 1px solid var(--border-color, #e0e0e0);
+    padding: 1.5rem 0.5rem;
+    width: 220px;
+    min-width: 180px;
+    height: fit-content;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+}
+.side-nav-inner ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+.side-nav-item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem 1rem;
+    cursor: pointer;
+    border-radius: var(--border-radius-md, 8px);
+    margin-bottom: 0;
+    transition: all var(--transition-speed, 0.2s) ease;
+    color: var(--secondary-color, #666);
+    font-size: 1rem;
+    text-decoration: none;
+}
+.side-nav-item .material-icons {
+    font-size: 1.25rem;
+}
+.side-nav-item:hover {
+    background: rgba(124, 77, 255, 0.1);
+    color: var(--primary-color, #222);
+}
+.side-nav-item.active {
+    background: var(--accent-color, #7c4dff);
+    color: #fff;
+    font-weight: 600;
+}
+@media (max-width: 768px) {
+    .side-nav {
+        min-width: unset;
+    }
+}
+/* 兼容原modstore布局 */
+.modstore-layout {
+    display: flex;
+    gap: 2rem;
+    padding: 2rem 0;
+}
+.modstore-content {
+    flex: 1;
+}
+.modstore-view {
+    display: none;
+}
+.modstore-view.active {
+    display: block;
+}
 /* 统一 Profile Section 风格 */
 .profile-section {
     background: var(--surface-color);

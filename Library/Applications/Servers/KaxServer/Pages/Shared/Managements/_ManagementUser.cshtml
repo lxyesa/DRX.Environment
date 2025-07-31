@@ -19,7 +19,7 @@
     var httpContext = HttpContextAccessor?.HttpContext;
     var currentUser = httpContext != null ? UserManager.GetCurrentUserAsync(httpContext).Result : null;
     var isAdmin = currentUser?.UserStatusData.IsAdmin ?? false;
-    
+
     var users = isAdmin ? GetAllUsers() : new List<UserData>();
 }
 
@@ -69,7 +69,7 @@
         transition: all 0.25s ease-out;
         border: 1px solid rgba(255, 255, 255, 0.1);
         box-shadow: 0 0 15px rgba(124, 77, 255, 0.3),
-                    inset 0 0 5px rgba(255, 255, 255, 0.2);
+            inset 0 0 5px rgba(255, 255, 255, 0.2);
         letter-spacing: 0.5px;
         text-transform: uppercase;
         font-size: 0.875rem;
@@ -79,8 +79,14 @@
     .access-denied-actions .btn-primary:hover {
         transform: translateY(-2px) scale(1.02);
         box-shadow: 0 0 25px rgba(124, 77, 255, 0.5),
-                    inset 0 0 8px rgba(255, 255, 255, 0.25);
+            inset 0 0 8px rgba(255, 255, 255, 0.25);
         border-color: rgba(255, 255, 255, 0.2);
+    }
+
+    .user-edit-container {
+        margin-top: 2rem;
+        padding-top: 1rem;
+        border-top: 1px solid var(--border-color);
     }
 </style>
 
@@ -108,12 +114,26 @@
     }
     else
     {
-        <div style="display: flex; flex-wrap: wrap; row-gap: 0.5rem; column-gap: 1.5rem;">
+        <div style="display: flex; flex-wrap: wrap; row-gap: 0.5rem; column-gap: 0.5rem;">
             @if (users != null && users.Count > 0)
             {
                 foreach (var user in users)
                 {
-                    <clickable-card title="@user.Username" description="UID:@user.Id" forward-data-userid="@user.Id"></clickable-card>
+                    <form class="select-user-form" method="post" action="?handler=SelectUser">
+                        <input type="hidden" name="userId" value="@user.Id" />
+                        <button type="submit" style="all:unset; cursor:pointer;">
+                            <div class="clickable-card">
+                                <i class="card-icon fa fa-user"></i>
+                                <div class="card-info">
+                                    <h4>@user.Username</h4>
+                                    <p>UID:@user.Id</p>
+                                </div>
+                                <div class="card-footer">
+                                    <i class="fa fa-chevron-right"></i>
+                                </div>
+                            </div>
+                        </button>
+                    </form>
                 }
             }
             else
@@ -121,31 +141,56 @@
                 <div class="section-empty">暂无用户数据</div>
             }
         </div>
+
+
+        <div class="user-edit-container">
+            <h2 class="section-title-main">
+                <span class="material-icons" style="vertical-align: middle;">manage_accounts</span>
+                编辑用户信息
+            </h2>
+            <div id="management-user-edit-container">
+                <div style="text-align: center;">
+                    <p>请选择用户一个用户</p>
+                </div>
+            </div>
+        </div>
     }
 </div>
-<script>
 
-</script>
 <script>
-document.addEventListener('DOMContentLoaded', function() {
-    // 兼容动态渲染的 clickable-card
-    function bindClickableCard() {
-        document.querySelectorAll('.clickable-card').forEach(function(card) {
-            // 防止重复绑定
-            if (!card._alertBinded) {
-                card.addEventListener('click', function() {
-                    // 获取用户ID
-                    var userId = card.getAttribute('data-userid') || card.getAttribute('forward-data-userid');
-                    // 发送消息给父页面切换到编辑视图，并传递用户ID
-                    window.parent.postMessage({ view: 'management-user-edit', userId: userId }, '*');
-                });
-                card._alertBinded = true;
-            }
+// 监听所有 select-user-form 的提交，使用 AJAX 方式调用 /select-user
+document.addEventListener('DOMContentLoaded', function () {
+    document.querySelectorAll('.select-user-form').forEach(function (form) {
+        form.addEventListener('submit', function (e) {
+            e.preventDefault();
+            var formData = new FormData(form);
+            fetch(form.action, {
+                method: 'POST',
+                body: formData,
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'RequestVerificationToken': document.querySelector('input[name="__RequestVerificationToken"]')?.value || ''
+                }
+            })
+            .then(function (response) {
+                if (!response.ok) throw new Error('网络错误');
+                return response.text();
+            })
+            .then(function (html) {
+                // 你可以根据实际需求替换下面的选择器和刷新逻辑
+                // 例如将返回的部分视图插入到某个容器中
+                var container = document.getElementById('management-user-edit-container');
+                if (container) {
+                    container.innerHTML = html;
+                } else {
+                    // 若找不到容器，可弹窗或控制台输出
+                    console.log('返回内容:', html);
+                }
+            })
+            .catch(function (err) {
+                alert('请求失败: ' + err.message);
+            });
         });
-    }
-    bindClickableCard();
-    // 监听 DOM 变化（如有异步渲染可用）
-    const observer = new MutationObserver(bindClickableCard);
-    observer.observe(document.body, { childList: true, subtree: true });
+    });
 });
 </script>

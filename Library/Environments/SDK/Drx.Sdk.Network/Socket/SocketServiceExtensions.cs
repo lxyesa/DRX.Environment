@@ -9,6 +9,7 @@ using Drx.Sdk.Network.Security;
 using Drx.Sdk.Network.Socket.Middleware;
 using Drx.Sdk.Network.Socket.Services;
 using System.Linq;
+using System.Text.Json;
 
 namespace Drx.Sdk.Network.Socket
 {
@@ -19,7 +20,7 @@ namespace Drx.Sdk.Network.Socket
             var builder = new SocketServerBuilder(services);
             services.AddSingleton(builder);
             services.AddSingleton(provider => provider.GetRequiredService<SocketServerBuilder>().CommandHandlers);
-            
+
             // Automatically register the command handling service
             services.AddSingleton<CommandHandlingService>();
 
@@ -27,22 +28,21 @@ namespace Drx.Sdk.Network.Socket
             {
                 var logger = provider.GetRequiredService<ILogger<SocketServerService>>();
                 var env = provider.GetRequiredService<IHostEnvironment>();
-                var sessionManager = provider.GetRequiredService<SessionManager>();
                 var serviceBuilder = provider.GetRequiredService<SocketServerBuilder>();
 
                 var socketServices = serviceBuilder.ServiceTypes
                     .Select(type => provider.GetRequiredService(type) as ISocketService)
+                    .Where(s => s != null)
+                    .Cast<ISocketService>()
                     .ToList();
-                
+
                 // Ensure CommandHandlingService is present and is first, so it runs before other custom receive hooks
                 var commandService = provider.GetRequiredService<CommandHandlingService>();
                 socketServices.Remove(commandService);
                 socketServices.Insert(0, commandService);
 
                 return new SocketServerService(
-                    logger, 
-                    env, 
-                    sessionManager, 
+                    env,
                     provider,
                     serviceBuilder.ConnectionMiddlewares,
                     serviceBuilder.MessageMiddlewares,
@@ -53,4 +53,4 @@ namespace Drx.Sdk.Network.Socket
             return builder;
         }
     }
-} 
+}

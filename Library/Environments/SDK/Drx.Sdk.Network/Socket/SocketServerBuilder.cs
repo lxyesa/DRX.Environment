@@ -30,6 +30,12 @@ namespace Drx.Sdk.Network.Socket
             return this;
         }
 
+        public SocketServerBuilder OnClientDisconnected(Action<SocketServerService, DrxTcpClient> handler)
+        {
+            _services.AddSingleton(new ClientDisconnectedMiddleware(handler));
+            return this;
+        }
+        
         public SocketServerBuilder OnClientConnected(ConnectionMiddleware handler)
         {
             ConnectionMiddlewares.Add(handler);
@@ -59,6 +65,31 @@ namespace Drx.Sdk.Network.Socket
         {
             _services.AddSingleton<IPacketIntegrityProvider, T>();
             return this;
+        }
+
+        /// <summary>
+        /// 注册一个定时器，每隔 time 秒执行一次 handler。
+        /// </summary>
+        /// <param name="time">定时间隔（秒）</param>
+        /// <param name="handler">定时回调，参数为 SocketServerService</param>
+        public SocketServerBuilder RegisterTimer(int time, Action<SocketServerService> handler)
+        {
+            // 将定时器注册到 DI 容器，实际启动应在 SocketServerService 内实现
+            _services.AddSingleton(new TimerRegistration
+            {
+                IntervalSeconds = time,
+                Handler = handler
+            });
+            return this;
+        }
+
+        /// <summary>
+        /// 定时器注册信息
+        /// </summary>
+        public class TimerRegistration
+        {
+            public int IntervalSeconds { get; set; }
+            public Action<SocketServerService> Handler { get; set; }
         }
     }
 } 

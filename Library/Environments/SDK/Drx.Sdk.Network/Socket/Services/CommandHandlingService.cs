@@ -2,8 +2,10 @@ using System;
 using System.Collections.Generic;
 using System.Net.Sockets;
 using System.Text;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using DRX.Framework;
 using Microsoft.Extensions.Logging;
 
 namespace Drx.Sdk.Network.Socket.Services
@@ -25,36 +27,82 @@ namespace Drx.Sdk.Network.Socket.Services
         public override async Task OnServerReceiveAsync(SocketServerService server, DrxTcpClient client, ReadOnlyMemory<byte> data, CancellationToken cancellationToken)
         {
             string rawMessage = Encoding.UTF8.GetString(data.Span);
-
-            if (!rawMessage.StartsWith("-"))
+            // 判断是否为JSON格式命令
+            if (string.IsNullOrWhiteSpace(rawMessage) || !rawMessage.TrimStart().StartsWith("{"))
             {
-                return; // Not a command, ignore.
+                Logger.Warn($"[socket] Received non-JSON command from {client.Client.RemoteEndPoint}: {rawMessage}");
+                return; // 非JSON命令，忽略
             }
 
-            _logger.LogInformation("Processing command from {clientEndpoint}: {message}", client.Client.RemoteEndPoint, rawMessage);
-
-            var commandAndArgs = rawMessage.Substring(1).Split(new[] { ' ' }, 2);
-            var command = commandAndArgs[0].ToLower();
-            var argsString = commandAndArgs.Length > 1 ? commandAndArgs[1] : string.Empty;
-
-            string[] args = argsString.Split('|');
-
-            if (_commandHandlers.TryGetValue(command, out var handler))
+            try
             {
-                try
+                var json = System.Text.Json.JsonDocument.Parse(rawMessage);
+                if (!json.RootElement.TryGetProperty("command", out var commandProp))
                 {
-                    await handler(server, client, args, rawMessage);
+                    return; // 没有command字段，不处理
                 }
-                catch (Exception ex)
+                var command = commandProp.GetString()?.ToLower();
+                if (string.IsNullOrWhiteSpace(command))
                 {
-                    _logger.LogError(ex, "An error occurred while executing command '{command}' for client {clientEndpoint}.", command, client.Client.RemoteEndPoint);
-                    await server.SendResponseAsync(client, SocketStatusCode.Error_InternalServerError, cancellationToken, "Command execution failed.");
+                    return;
+                }
+
+                // 解析参数
+                List<string> argsList = new List<string>();
+                if (json.RootElement.TryGetProperty("args", out var argsProp) && argsProp.ValueKind == System.Text.Json.JsonValueKind.Array)
+                {
+                    foreach (var item in argsProp.EnumerateArray())
+                    {
+                        // 支持基本类型和对象，统一转为字符串
+                        switch (item.ValueKind)
+                        {
+                            case System.Text.Json.JsonValueKind.String:
+                                var str = item.GetString();
+                                argsList.Add(str ?? string.Empty);
+                                break;
+                            case System.Text.Json.JsonValueKind.Number:
+                                argsList.Add(item.GetRawText());
+                                break;
+                            case System.Text.Json.JsonValueKind.True:
+                            case System.Text.Json.JsonValueKind.False:
+                                argsList.Add(item.GetRawText());
+                                break;
+                            default:
+                                // 对象或数组，序列化为json字符串
+                                argsList.Add(item.GetRawText());
+                                break;
+                        }
+                    }
+                }
+                var args = argsList.ToArray();
+
+                if (_commandHandlers.TryGetValue(command, out var handler))
+                {
+                    try
+                    {
+                        await handler(server, client, args, rawMessage);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "An error occurred while executing command '{command}' for client {clientEndpoint}.", command, client.Client.RemoteEndPoint);
+                        await server.SendResponseAsync(client, SocketStatusCode.Error_InternalServerError, cancellationToken, "Command execution failed.");
+                    }
+                }
+                else
+                {
+                    _logger.LogWarning("Unknown command '{command}' received from {clientEndpoint}.", command, client.Client.RemoteEndPoint);
+                    var resp = new {
+                        command = command,
+                        message = $"Unknown command: {command}",
+                        state_code = (int)SocketStatusCode.Error_UnknownCommand
+                    };
+                    await server.SendResponseAsync(client, SocketStatusCode.Error_UnknownCommand, cancellationToken, resp);
                 }
             }
-            else
+            catch (System.Text.Json.JsonException)
             {
-                _logger.LogWarning("Unknown command '{command}' received from {clientEndpoint}.", command, client.Client.RemoteEndPoint);
-                await server.SendResponseAsync(client, SocketStatusCode.Error_UnknownCommand, cancellationToken, command);
+                // 非法JSON，忽略
+                return;
             }
         }
     }

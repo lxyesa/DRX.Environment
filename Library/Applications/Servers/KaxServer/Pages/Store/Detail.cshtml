@@ -1,0 +1,173 @@
+
+@page
+@model DetailModel
+@{
+    var item = Model.StoreItem;
+}
+
+<div class="mod-detail-container">
+    <div class="mod-detail-header">
+        <img class="mod-detail-image" src="@(string.IsNullOrWhiteSpace(item.Image) ? "https://upload.wikimedia.org/wikipedia/zh/9/94/Genshin_Impact.jpg" : item.Image)" alt="Mod图片" />
+        <div class="mod-detail-info">
+            <h1>@item.Title</h1>
+            <div style="display:flex;align-items:center;gap:1.2rem;font-size:1.1rem;color:var(--secondary-color);margin-bottom:0.5rem;">
+                <span><span class="material-icons" style="vertical-align:middle;font-size:1.1em;">download</span> @item.DownloadCount</span>
+                <span><span class="material-icons" style="vertical-align:middle;font-size:1.1em;">star</span> @item.Rating</span>
+            </div>
+            <p style="color:var(--secondary-color);font-size:1.05rem;">@item.Description</p>
+        </div>
+    </div>
+    <div class="mod-detail-content">
+        <h2>详细介绍</h2>
+        <div style="margin:0.8rem;color:#ddd;font-size:1.05rem;white-space:pre-line;">@item.StoreItemDetails?.Content
+        </div>
+    </div>
+    
+    <div class="mod-price-list">
+    @foreach (var price in item.StoreItemPrices)
+    {
+        <div class="steam-buy-bar">
+            <div class="steam-buy-title">购买 @price.Title</div>
+            <div class="steam-buy-actions">
+                <div class="steam-buy-combo">
+                    <span class="steam-buy-price">
+                        <span class="material-icons" style="font-size:1.1em;vertical-align:middle;margin-right:0.15em;margin-top:0.1em;">monetization_on</span>@price.Price
+                    </span>
+                    <button class="steam-buy-btn">购买</button>
+                </div>
+            </div>
+        </div>
+    }
+    </div>
+
+@functions {
+    public string GetDurationUnitText(StoreItemDurationUnit unit)
+    {
+        return unit switch
+        {
+            StoreItemDurationUnit.Day => "天",
+            StoreItemDurationUnit.Week => "周",
+            StoreItemDurationUnit.Month => "月",
+            StoreItemDurationUnit.Year => "年",
+            _ => ""
+        };
+    }
+}
+</div>
+
+<style>
+    .mod-detail-container {
+        max-width: 900px;
+        margin: 2.5rem auto 2rem auto;
+        background: var(--bg-color);
+        border-radius: 18px;
+        box-shadow: var(--card-shadow);
+        padding: 2.5rem 2.5rem 2rem 2.5rem;
+        color: #fff;
+    }
+    .mod-detail-header {
+        display: flex;
+        gap: 2.5rem;
+        align-items: stretch;
+        margin-bottom: 2.2rem;
+    }
+    .mod-detail-image {
+        width: 180px;
+        height: 180px;
+        object-fit: cover;
+        border-radius: 16px;
+        border: 1.5px solid #333;
+        background: #232323;
+    }
+    .mod-detail-info {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        justify-content: flex-start;
+    }
+    .mod-detail-info h1 {
+        font-size: 2.1rem;
+        font-weight: 700;
+        margin: 0 0 0.7rem 0;
+        color: #fff;
+    }
+    .mod-detail-content {
+        margin-top: 1.5rem;
+        padding: 1.5rem 1.2rem 1.2rem 1.2rem;
+        background: #23242a;
+        border-radius: 12px;
+    }
+
+
+
+
+    .steam-buy-bar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        background: linear-gradient(90deg, #3a4a56 80%, #232c34 100%);
+        border-radius: 7px;
+        margin: 1.2rem 0 0.7rem 0;
+        padding: 0.7rem 1.2rem 0.7rem 1.2rem;
+        box-shadow: 0 2px 8px 0 rgba(0,0,0,0.10);
+        min-height: 48px;
+    }
+    .steam-buy-title {
+        color: #e6f0fa;
+        font-size: 1.18rem;
+        font-weight: 500;
+        letter-spacing: 0.01em;
+        flex: 1;
+        margin-right: 1.2rem;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .steam-buy-actions {
+        display: flex;
+        align-items: center;
+    }
+    .steam-buy-combo {
+        display: flex;
+        align-items: stretch;
+        border-radius: 4px;
+        overflow: hidden;
+        box-shadow: 0 1px 4px 0 rgba(80,120,80,0.10);
+    }
+    .steam-buy-price {
+        background: #111;
+        color: #fff;
+        font-size: 1.08rem;
+        font-weight: 600;
+        border-radius: 4px 0 0 4px;
+        padding: 0.45rem 1.1rem 0.45rem 1.1rem;
+        min-width: 70px;
+        text-align: center;
+        display: flex;
+        align-items: center;
+    }
+    .steam-buy-btn {
+        background: linear-gradient(90deg, #7ed321 0%, #5fa813 100%);
+        color: #fff;
+        font-size: 1.08rem;
+        font-weight: 700;
+        border: none;
+        border-radius: 0 4px 4px 0;
+        padding: 0.45rem 1.3rem;
+        cursor: pointer;
+        transition: background 0.15s, box-shadow 0.15s;
+        display: flex;
+        align-items: center;
+    }
+    .steam-buy-btn:hover {
+        background: linear-gradient(90deg, #8be82a 0%, #6fcf1a 100%);
+        color: #fff;
+    }
+
+    .mod-detail-content h2 {
+        font-size: 1.3rem;
+        font-weight: 600;
+        margin: 0.8rem;
+        color: #fff;
+    }
+</style>

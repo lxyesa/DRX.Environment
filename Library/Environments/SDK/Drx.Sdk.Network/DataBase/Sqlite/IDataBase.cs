@@ -1,6 +1,6 @@
 using System;
 
-namespace Drx.Sdk.Network.Sqlite
+namespace Drx.Sdk.Network.DataBase.Sqlite
 {
     /// <summary>
     /// 表示数据库主表实体的基础接口

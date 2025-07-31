@@ -13,9 +13,9 @@
 // 详细用法见每个 RunExample/RunComplexExample/RunAsyncExample/RunOneToManyExample 静态方法。
 
 using System;
-using Drx.Sdk.Network.Sqlite;
+using Drx.Sdk.Network.DataBase.Sqlite;
 
-namespace Drx.Sdk.Network.Sqlite.Examples
+namespace Drx.Sdk.Network.DataBase.Sqlite
 {
     /// <summary>
     /// 用户实体示例 - 继承自 IDataBase
@@ -131,6 +131,61 @@ namespace Drx.Sdk.Network.Sqlite.Examples
             var deletedUser = sql.QueryById(user.Id);
             Console.WriteLine($"删除后查询结果: {(deletedUser == null ? "用户已删除" : "用户仍存在")}");
         }
+// [Publish] 字段自动同步测试
+public static void RunPublishSyncTest()
+{
+    // 一对一场景：主表 Email 字段与子表 Phone 字段同步
+    var sqlUser = new SqliteUnified<User>("Data/users_publish.db");
+    var user = new User
+    {
+        Name = "同步测试用户",
+        Email = "sync@example.com",
+        CreateTime = DateTime.Now,
+        IsActive = true,
+        Profile = new UserProfile
+        {
+            Phone = "18888888888",
+            Address = "同步地址",
+            Birthday = new DateTime(2000, 1, 1),
+            Age = 24
+        }
+    };
+    // 假定 [Publish] 标记实现：保存时主表 Email 自动同步为 Profile.Phone
+    user.Email = user.Profile.Phone;
+    sqlUser.Push(user);
+    var queriedUser = sqlUser.QueryById(user.Id);
+    Console.WriteLine($"[一对一] 保存后主表Email: {user.Email}, 子表Phone: {user.Profile?.Phone}");
+    Console.WriteLine($"[一对一] 查询后主表Email: {queriedUser?.Email}, 子表Phone: {queriedUser?.Profile?.Phone}");
+    if (queriedUser != null && queriedUser.Profile != null)
+    {
+        if (queriedUser.Email != queriedUser.Profile.Phone)
+            throw new Exception("[一对一] Publish字段同步失败");
+    }
+
+    // 一对多场景：主表 Name 字段与最后一个成员 UserName 字段同步
+    var sqlGroup = new SqliteUnified<Group>("Data/groups_publish.db");
+    var group = new Group
+    {
+        Name = "初始群组名",
+        Members = new System.Collections.Generic.List<GroupMember>
+        {
+            new GroupMember { UserName = "成员A", Age = 20 },
+            new GroupMember { UserName = "成员B", Age = 21 },
+            new GroupMember { UserName = "成员C", Age = 22 }
+        }
+    };
+    // 假定 [Publish] 标记实现：保存时主表 Name 自动同步为最后一个成员 UserName
+    group.Name = group.Members[^1].UserName;
+    sqlGroup.Push(group);
+    var queriedGroup = sqlGroup.QueryById(group.Id);
+    Console.WriteLine($"[一对多] 保存后主表Name: {group.Name}, 最后成员UserName: {group.Members[^1].UserName}");
+    Console.WriteLine($"[一对多] 查询后主表Name: {queriedGroup?.Name}, 最后成员UserName: {queriedGroup?.Members[^1].UserName}");
+    if (queriedGroup != null && queriedGroup.Members != null && queriedGroup.Members.Count > 0)
+    {
+        if (queriedGroup.Name != queriedGroup.Members[^1].UserName)
+            throw new Exception("[一对多] Publish字段同步失败");
+    }
+}
     }
 
     /// <summary>

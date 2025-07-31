@@ -1,0 +1,111 @@
+@page "/mods"
+@model KaxServer.Pages.Store.ModStoreModel
+@{
+    ViewData["Title"] = "Mod商店";
+}
+
+<div class="container">
+    <div class="modstore-layout">
+        <!-- 侧边导航栏 -->
+        <nav class="side-nav">
+            <div class="side-nav-inner">
+                <ul>
+                    <li>
+                        <a href="#market" class="side-nav-item" id="nav-market" data-view="market">
+                            <span class="material-icons">storefront</span>
+                            市场
+                        </a>
+                    </li>
+                    <li>
+                        <a href="#library" class="side-nav-item" id="nav-library" data-view="library">
+                            <span class="material-icons">library_books</span>
+                            库
+                        </a>
+                    </li>
+                    <li>
+                        <a href="#settings" class="side-nav-item" id="nav-settings" data-view="settings">
+                            <span class="material-icons">settings</span>
+                            设置
+                        </a>
+                    </li>
+                </ul>
+            </div>
+        </nav>
+
+        <!-- 内容区域 -->
+        <div class="modstore-content">
+            <div class="modstore-view" id="market">
+                <!-- 市场内容占位 -->
+                <partial name="_ModStoreMarket" />
+            </div>
+            <div class="modstore-view" id="library">
+                <!-- 库内容占位 -->
+                <partial name="_ModStoreLibrary" />
+            </div>
+            <div class="modstore-view" id="settings">
+                <!-- 设置内容占位 -->
+                <partial name="_ModStoreSettings" />
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 样式已迁移至 global.css，结构保持不变 -->
+
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const navItems = document.querySelectorAll('.side-nav-item');
+        const views = document.querySelectorAll('.modstore-view');
+
+        function switchView(targetView) {
+            views.forEach(view => view.classList.remove('active'));
+            const target = document.getElementById(targetView);
+            if (target) target.classList.add('active');
+
+            navItems.forEach(nav => nav.classList.remove('active'));
+            navItems.forEach(nav => {
+                if (nav.getAttribute('data-view') === targetView) {
+                    nav.classList.add('active');
+                }
+            });
+
+            // 更新URL参数
+            const url = new URL(window.location);
+            url.searchParams.set('view', targetView);
+            window.history.replaceState({}, '', url);
+        }
+
+        navItems.forEach(item => {
+            item.addEventListener('click', function (e) {
+                e.preventDefault();
+                const targetView = this.getAttribute('data-view');
+                switchView(targetView);
+            });
+        });
+
+        // 页面加载时根据URL参数显示对应视图
+        const params = new URLSearchParams(window.location.search);
+        const viewParam = params.get('view');
+        if (viewParam && document.getElementById(viewParam)) {
+            switchView(viewParam);
+        } else {
+            const firstActive = document.querySelector('.modstore-view.active');
+            if (!firstActive && views.length > 0) {
+                views[0].classList.add('active');
+            }
+        }
+
+        // 支持跨iframe消息切换
+        window.addEventListener('message', function (e) {
+            if (e.data && e.data.view) {
+                if (typeof switchView === 'function') {
+                    switchView(e.data.view);
+                } else {
+                    views.forEach(view => view.classList.remove('active'));
+                    const target = document.getElementById(e.data.view);
+                    if (target) target.classList.add('active');
+                }
+            }
+        });
+    });
+</script>

@@ -1,5 +1,6 @@
 using System;
-using Drx.Sdk.Network.Sqlite;
+using Drx.Sdk.Network.DataBase.Sqlite;
+using KaxServer.Services;
 
 namespace KaxServer.Models;
 
@@ -17,18 +18,9 @@ public class UserData : IDataBase
     public int Id { get; set; }
 
     /// <summary>
-    /// 用户名（唯一，支持中文/英文/数字）
-    /// </summary>
-    public string UserName { get; set; }
-
-    /// <summary>
     /// Username属性，与UserName同步，兼容性用途
     /// </summary>
-    public string Username
-    {
-        get => UserName;
-        set => UserName = value;
-    }
+    public string Username { get; set; }
 
     /// <summary>
     /// 密码哈希（存储加密后的密码，严禁明文）
@@ -60,6 +52,8 @@ public class UserData : IDataBase
     /// </summary>
     public int NextLevelExp { get; set; } = 100;
 
+    public string AppToken { get; set; } = string.Empty;
+
     /// <summary>
     /// 用户设置数据（包含订阅、改名等）
     /// </summary>
@@ -69,6 +63,8 @@ public class UserData : IDataBase
     /// 用户状态数据（包含登录、权限等）
     /// </summary>
     public UserStatusData UserStatusData { get; set; } = new UserStatusData();
+
+    public List<int> PublishedStoreItemIds { get; set; } = new List<int>();
 }
 
 /// <summary>
@@ -138,5 +134,6 @@ public class UserStatusData : IDataTable
     /// <summary>是否为网页登录状态</summary>
     public bool IsWebLogin { get; set; } = false;
     /// <summary>应用登录令牌</summary>
+    [Publish]
     public string AppToken { get; set; } = string.Empty;
 }

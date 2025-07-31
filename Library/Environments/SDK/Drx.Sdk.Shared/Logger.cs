@@ -1,41 +1,65 @@
+using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
 using System.Windows.Controls;
 using System.Windows.Documents;
 using System.Windows.Media;
+using System;
 
 namespace DRX.Framework;
 
 public static class Logger
 {
-    private static readonly object _lockObj = new();
+    private static readonly ConcurrentQueue<LogEntry> _queue = new();
+    private static readonly CancellationTokenSource _cts = new();
+    private static readonly Task _worker;
     private static readonly StringBuilder SharedBuilder = new(128);
+
+    private static readonly IReadOnlyDictionary<LogLevel, ConsoleColor> ConsoleColors = new Dictionary<LogLevel, ConsoleColor>
+    {
+        [LogLevel.Dbug] = ConsoleColor.Gray,
+        [LogLevel.Info] = ConsoleColor.DarkGreen,
+        [LogLevel.Warn] = ConsoleColor.Yellow,
+        [LogLevel.Fail] = ConsoleColor.Red,
+        [LogLevel.Fatal] = ConsoleColor.DarkRed
+    };
+
+    private static readonly IReadOnlyDictionary<LogLevel, SolidColorBrush> WpfBrushes = new Dictionary<LogLevel, SolidColorBrush>
+    {
+        [LogLevel.Dbug] = new SolidColorBrush(Colors.Gray),
+        [LogLevel.Info] = new SolidColorBrush(Colors.Green),
+        [LogLevel.Warn] = new SolidColorBrush(Colors.Yellow),
+        [LogLevel.Fail] = new SolidColorBrush(Colors.Red),
+        [LogLevel.Fatal] = new SolidColorBrush(Colors.DarkRed)
+    };
+
     private const string DateTimeFormat = "yyyy/MM/dd HH:mm:ss";
 
-    private static TextBox? _boundTextBox;
-    private static TextBlock? _boundTextBlock;
-    private static RichTextBox? _boundRichTextBox;
+    private static WeakReference<TextBox>? _boundTextBox;
+    private static WeakReference<TextBlock>? _boundTextBlock;
+    private static WeakReference<RichTextBox>? _boundRichTextBox;
 
-    /* P/Invoke 声明 */
     [DllImport("kernel32.dll")]
     private static extern bool AllocConsole();
 
     [DllImport("kernel32.dll")]
     private static extern bool FreeConsole();
 
-    /* 静态构造函数 */
     static Logger()
     {
 #if DEBUG
         AllocConsole();
 #endif
+        _worker = Task.Run(ProcessQueueAsync);
     }
 
-    // 绑定方法
     public static void Bind(TextBox textBox)
     {
-        _boundTextBox = textBox;
+        _boundTextBox = new WeakReference<TextBox>(textBox);
         _boundTextBlock = null;
         _boundRichTextBox = null;
     }
@@ -43,7 +67,7 @@ public static class Logger
     public static void Bind(TextBlock textBlock)
     {
         _boundTextBox = null;
-        _boundTextBlock = textBlock;
+        _boundTextBlock = new WeakReference<TextBlock>(textBlock);
         _boundRichTextBox = null;
     }
 
@@ -51,152 +75,181 @@ public static class Logger
     {
         _boundTextBox = null;
         _boundTextBlock = null;
-        _boundRichTextBox = richTextBox;
+        _boundRichTextBox = new WeakReference<RichTextBox>(richTextBox);
     }
 
-    // 保持原有方法签名以兼容现有代码
-    public static void Log(string header, string message)
+    public static void Unbind()
     {
-        LogInternal(LogLevel.Info, header, message);
+        _boundTextBox = null;
+        _boundTextBlock = null;
+        _boundRichTextBox = null;
     }
 
-    // 新增重载方法
-    public static void Log(LogLevel level, string header, string message)
+    public static void Log(string header, string message, [CallerLineNumber] int lineNumber = 0, [CallerFilePath] string filePath = "")
     {
-        LogInternal(level, header, message);
+        var className = GetShortClassName(filePath);
+        Enqueue(LogLevel.Info, header, message, className, lineNumber);
     }
 
-    // 新增 Error 方法
-    public static void Error(string message)
+    public static void Log(LogLevel level, string header, string message, [CallerLineNumber] int lineNumber = 0, [CallerFilePath] string filePath = "")
     {
-        var callerInfo = GetCallerInfo();
-        LogInternal(LogLevel.Error, callerInfo, message);
+        var className = GetShortClassName(filePath);
+        Enqueue(level, header, message, className, lineNumber);
     }
 
-    // 新增 Debug 方法
-    public static void Debug(string message)
+    public static void Error(string message, [CallerLineNumber] int lineNumber = 0, [CallerFilePath] string filePath = "")
     {
-        var callerInfo = GetCallerInfo();
-        LogInternal(LogLevel.Debug, callerInfo, message);
+        var className = GetShortClassName(filePath);
+        Enqueue(LogLevel.Fail, className, message, className, lineNumber);
     }
 
-    public static void Warring(string message)
+    public static void Debug(string message, [CallerLineNumber] int lineNumber = 0, [CallerFilePath] string filePath = "")
     {
-        var callerInfo = GetCallerInfo();
-        LogInternal(LogLevel.Warning, callerInfo, message);
+        var className = GetShortClassName(filePath);
+        Enqueue(LogLevel.Dbug, className, message, className, lineNumber);
     }
 
-    public static void Info(string message)
+    public static void Warn(string message, [CallerLineNumber] int lineNumber = 0, [CallerFilePath] string filePath = "")
     {
-        var callerInfo = GetCallerInfo();
-        LogInternal(LogLevel.Info, callerInfo, message);
+        var className = GetShortClassName(filePath);
+        Enqueue(LogLevel.Warn, className, message, className, lineNumber);
     }
 
-    private static string GetCallerInfo()
+    public static void Info(string message, [CallerLineNumber] int lineNumber = 0, [CallerFilePath] string filePath = "")
     {
-        var stackTrace = new StackTrace();
-        // 跳过 GetCallerInfo 和 Error/Debug/Warning 等包装方法
-        var frame = stackTrace.GetFrame(2);
-        var method = frame?.GetMethod();
-        var className = method?.DeclaringType?.FullName ?? "UnknownClass";
-        return className;
+        var className = GetShortClassName(filePath);
+        Enqueue(LogLevel.Info, className, message, className, lineNumber);
     }
 
-    private static void LogInternal(LogLevel level, string header, string message)
+    private static string GetShortClassName(string filePath)
+    {
+        if (string.IsNullOrEmpty(filePath)) return "UnknownClass";
+        var name = System.IO.Path.GetFileNameWithoutExtension(filePath);
+        return name;
+    }
+
+    private static void Enqueue(LogLevel level, string header, string message, string className, int lineNumber)
     {
         if (string.IsNullOrEmpty(message)) return;
-
-        lock (_lockObj)
+        _queue.Enqueue(new LogEntry
         {
-            try
+            Level = level,
+            Header = header,
+            Message = message,
+            ClassName = className,
+            LineNumber = lineNumber,
+            Time = DateTime.Now
+        });
+    }
+
+    private static async Task ProcessQueueAsync()
+    {
+        while (!_cts.IsCancellationRequested)
+        {
+            if (_queue.IsEmpty)
             {
-                var levelString = level.ToString().ToLower();
-                var firstLine = $"{levelString}: {header}[0]";
-                var indentedMessage = $"      {message}";
-
-                // 控制台输出
-                if (_boundTextBox == null && _boundTextBlock == null && _boundRichTextBox == null)
-                {
-                    Console.OutputEncoding = Encoding.UTF8;
-                    var originalColor = Console.ForegroundColor;
-
-                    Console.ForegroundColor = GetLogLevelColor(level);
-                    Console.Write($"{levelString}:");
-
-                    Console.ForegroundColor = originalColor;
-                    Console.WriteLine($" {header}[0]");
-                    Console.WriteLine(indentedMessage);
-                    return;
-                }
-
-                // WPF控件输出
-                System.Windows.Application.Current.Dispatcher.Invoke(() =>
-                {
-                    if (_boundTextBox != null)
-                    {
-                        _boundTextBox.AppendText(firstLine + Environment.NewLine);
-                        _boundTextBox.AppendText(indentedMessage + Environment.NewLine);
-                        _boundTextBox.ScrollToEnd();
-                    }
-                    else if (_boundTextBlock != null)
-                    {
-                        _boundTextBlock.Text += firstLine + Environment.NewLine;
-                        _boundTextBlock.Text += indentedMessage + Environment.NewLine;
-                    }
-                    else if (_boundRichTextBox != null)
-                    {
-                        var paragraph = new Paragraph();
-                        
-                        var levelRun = new Run($"{levelString}:")
-                        {
-                            Foreground = GetWpfLogLevelBrush(level)
-                        };
-                        
-                        var restOfLineRun = new Run($" {header}[0]{Environment.NewLine}{indentedMessage}")
-                        {
-                            Foreground = new SolidColorBrush(Colors.White)
-                        };
-
-                        paragraph.Inlines.Add(levelRun);
-                        paragraph.Inlines.Add(restOfLineRun);
-                        _boundRichTextBox.Document.Blocks.Add(paragraph);
-                        _boundRichTextBox.ScrollToEnd();
-                    }
-                });
+                await Task.Delay(50);
+                continue;
             }
-            catch (Exception)
+
+            var batch = new List<LogEntry>(32);
+            while (_queue.TryDequeue(out var entry))
             {
-                Console.WriteLine($"[{DateTime.Now:yyyy/MM/dd HH:mm:ss}] [ERROR] 日志系统异常: {header} - {message}");
+                batch.Add(entry);
+                if (batch.Count >= 32) break;
+            }
+
+            foreach (var log in batch)
+            {
+                try
+                {
+                    WriteLog(log);
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[{DateTime.Now:yyyy/MM/dd HH:mm:ss}] [ERROR] 日志系统异常: {ex.Message}");
+                }
             }
         }
     }
 
-    private static ConsoleColor GetLogLevelColor(LogLevel level) => level switch
+    private static void WriteLog(LogEntry log)
     {
-        LogLevel.Debug => ConsoleColor.Gray,
-        LogLevel.Info => ConsoleColor.Green,
-        LogLevel.Warning => ConsoleColor.Yellow,
-        LogLevel.Error => ConsoleColor.Red,
-        LogLevel.Fatal => ConsoleColor.DarkRed,
-        _ => ConsoleColor.White
-    };
+        SharedBuilder.Clear();
+        SharedBuilder.Append('[')
+            .Append(log.Time.ToString(DateTimeFormat))
+            .Append("][")
+            .Append(log.ClassName)
+            .Append(':')
+            .Append(log.LineNumber)
+            .Append("][")
+            .Append(log.Level.ToString().ToUpper())
+            .Append(']')
+            .Append(log.Message);
 
-    private static SolidColorBrush GetWpfLogLevelBrush(LogLevel level) => level switch
-    {
-        LogLevel.Debug => new SolidColorBrush(Colors.Gray),
-        LogLevel.Info => new SolidColorBrush(Colors.Green),
-        LogLevel.Warning => new SolidColorBrush(Colors.Yellow),
-        LogLevel.Error => new SolidColorBrush(Colors.Red),
-        LogLevel.Fatal => new SolidColorBrush(Colors.DarkRed),
-        _ => new SolidColorBrush(Colors.White)
-    };
+        var formatted = SharedBuilder.ToString();
+
+        // 控件未绑定则输出到控制台
+        if ((_boundTextBox == null || !_boundTextBox.TryGetTarget(out var tb)) &&
+            (_boundTextBlock == null || !_boundTextBlock.TryGetTarget(out var tblock)) &&
+            (_boundRichTextBox == null || !_boundRichTextBox.TryGetTarget(out var rtb)))
+        {
+            var originalColor = Console.ForegroundColor;
+            Console.ForegroundColor = ConsoleColors.TryGetValue(log.Level, out var cc) ? cc : ConsoleColor.White;
+            Console.WriteLine(formatted);
+            Console.ForegroundColor = originalColor;
+            return;
+        }
+
+        // WPF控件异步写入
+        System.Windows.Application.Current.Dispatcher.InvokeAsync(() =>
+        {
+            if (_boundTextBox != null && _boundTextBox.TryGetTarget(out var textBox))
+            {
+                var prevColor = textBox.Foreground;
+                textBox.Foreground = WpfBrushes.TryGetValue(log.Level, out var brush) ? brush : Brushes.White;
+                textBox.AppendText(formatted + Environment.NewLine);
+                textBox.Foreground = prevColor;
+                textBox.ScrollToEnd();
+            }
+            else if (_boundTextBlock != null && _boundTextBlock.TryGetTarget(out var textBlock))
+            {
+                var run = new Run(formatted + Environment.NewLine)
+                {
+                    Foreground = WpfBrushes.TryGetValue(log.Level, out var brush) ? brush : Brushes.White
+                };
+                textBlock.Inlines.Add(run);
+            }
+            else if (_boundRichTextBox != null && _boundRichTextBox.TryGetTarget(out var richTextBox))
+            {
+                var paragraph = new Paragraph();
+                var run = new Run(formatted)
+                {
+                    Foreground = WpfBrushes.TryGetValue(log.Level, out var brush) ? brush : Brushes.White
+                };
+                paragraph.Inlines.Add(run);
+                richTextBox.Document.Blocks.Add(paragraph);
+                richTextBox.ScrollToEnd();
+            }
+        });
+    }
 }
 
 public enum LogLevel
 {
-    Debug,
+    Dbug,
     Info,
-    Warning,
-    Error,
+    Warn,
+    Fail,
     Fatal
+}
+
+internal struct LogEntry
+{
+    public LogLevel Level;
+    public string Header;
+    public string Message;
+    public string ClassName;
+    public int LineNumber;
+    public DateTime Time;
 }

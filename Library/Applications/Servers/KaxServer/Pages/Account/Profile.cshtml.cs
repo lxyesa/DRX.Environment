@@ -18,7 +18,7 @@ namespace KaxServer.Pages.Account
         /// </summary>
         [BindProperty]
         public UserData? CurrentUser { get; set; }
-        
+
         /// <summary>
         /// 处理 GET 请求，加载当前用户信息。
         /// </summary>
@@ -27,17 +27,17 @@ namespace KaxServer.Pages.Account
         {
             // 获取当前用户数据（依赖 UserManager，通常从 Session 或 Cookie 中获取用户标识）
             CurrentUser = await UserManager.GetCurrentUserAsync(HttpContext);
-        
+
             // 如果用户未登录，重定向到登录页面，防止未授权访问
             if (CurrentUser == null)
             {
                 return RedirectToPage("/Account/Login");
             }
-        
+
             // 用户已登录，正常返回页面
             return Page();
         }
-        
+
         /// <summary>
         /// 处理用户资料保存请求（POST），包括用户名、邮箱、订阅设置等。
         /// </summary>
@@ -51,7 +51,7 @@ namespace KaxServer.Pages.Account
                 // 未登录则重定向到登录页
                 return RedirectToPage("/Account/Login");
             }
-        
+
             // 获取表单中的用户名
             var usernameValue = Request.Form["username"].FirstOrDefault();
             if (!string.IsNullOrEmpty(usernameValue))
@@ -64,36 +64,36 @@ namespace KaxServer.Pages.Account
                     CurrentUser.UserSettingData.LastChangeNameTime = DateTime.UtcNow;
                     // 设置下次可改名时间（30天后）
                     CurrentUser.UserSettingData.NextChangeNameTime = DateTime.UtcNow.AddDays(30);
-        
+
                     // 同步更新 Session 中的用户名，确保后续请求一致性
                     HttpContext.Session.SetString("Username", CurrentUser.Username);
                 }
             }
             // 更新邮箱，若未填写则设为空字符串
             CurrentUser.Email = Request.Form["email"].FirstOrDefault() ?? string.Empty;
-        
+
             // 处理新闻订阅选项，若未勾选则设为 false
             if (Request.Form.ContainsKey("newsSubscription"))
                 CurrentUser.UserSettingData.NewsSubscription = Request.Form["newsSubscription"] == "on";
             else
                 CurrentUser.UserSettingData.NewsSubscription = false;
-        
+
             // 处理市场营销订阅选项，若未勾选则设为 false
             if (Request.Form.ContainsKey("marketingSubscription"))
                 CurrentUser.UserSettingData.MarketingSubscription = Request.Form["marketingSubscription"] == "on";
             else
                 CurrentUser.UserSettingData.MarketingSubscription = false;
-        
+
             // 调用 UserManager 更新用户数据，涉及数据库操作
             var result = await UserManager.UpdateUserAsync(CurrentUser);
-        
+
             // 更新失败，添加模型错误并返回当前页面
             if (!result)
             {
                 ModelState.AddModelError(string.Empty, "更新用户数据失败，请稍后重试");
                 return Page();
             }
-        
+
             // 保存成功后重新获取最新用户数据，确保页面内容实时同步
             CurrentUser = await UserManager.GetCurrentUserAsync(HttpContext);
             return Page();
@@ -109,35 +109,53 @@ namespace KaxServer.Pages.Account
             // 获取表单中的用户ID，通常由管理员操作
             var userIdStr = Request.Form["userId"].FirstOrDefault();
             if (!int.TryParse(userIdStr, out int userId))
-                // 用户ID无效，直接返回 400 错误
                 return BadRequest("用户ID无效");
 
             // 根据用户ID获取用户对象，依赖 UserManager
             var user = await UserManager.GetUserByIdAsync(userId);
             if (user == null)
-                // 用户不存在，返回 404
                 return NotFound("用户不存在");
 
-            // 以下为字段批量更新，注意防止空值覆盖
+            // 基本信息
             user.Username = Request.Form["UserName"].FirstOrDefault() ?? user.Username;
             user.Email = Request.Form["Email"].FirstOrDefault() ?? user.Email;
-            // 管理员权限字段，字符串 "true" 代表赋予管理员权限
-            user.UserStatusData.IsAdmin = Request.Form["IsAdmin"] == "true";
-            // 等级、金币、经验等数值字段，解析失败则保持原值
             if (int.TryParse(Request.Form["Level"], out int level)) user.Level = level;
             if (int.TryParse(Request.Form["Coins"], out int coins)) user.Coins = coins;
             if (int.TryParse(Request.Form["Exp"], out int exp)) user.Exp = exp;
-            
+
+            // 用户设置数据
+            var us = user.UserSettingData;
+            if (us != null)
+            {
+                us.EmailNotifications = Request.Form["UserSettingData.EmailNotifications"] == "on";
+                us.NewsSubscription = Request.Form["UserSettingData.NewsSubscription"] == "on";
+                us.MarketingSubscription = Request.Form["UserSettingData.MarketingSubscription"] == "on";
+                if (DateTime.TryParse(Request.Form["UserSettingData.LastChangeNameTime"], out var lastChange))
+                    us.LastChangeNameTime = lastChange;
+                if (DateTime.TryParse(Request.Form["UserSettingData.NextChangeNameTime"], out var nextChange))
+                    us.NextChangeNameTime = nextChange;
+            }
+
+            // 用户状态数据
+            var status = user.UserStatusData;
+            if (status != null)
+            {
+                status.IsAdmin = Request.Form["IsAdmin"] == "true";
+                status.IsBanned = Request.Form["UserStatusData.IsBanned"] == "on";
+                status.IsAppLogin = Request.Form["UserStatusData.IsAppLogin"] == "on";
+                status.IsWebLogin = Request.Form["UserStatusData.IsWebLogin"] == "on";
+                status.AppToken = Request.Form["UserStatusData.AppToken"].FirstOrDefault() ?? status.AppToken;
+            }
+
             // 更新用户数据，涉及数据库操作
             var result = await UserManager.UpdateUserAsync(user);
             if (!result)
             {
-                // 更新失败，添加模型错误并返回当前页面
                 ModelState.AddModelError(string.Empty, "用户信息保存失败");
                 return Page();
             }
-            // 返回部分视图，便于前端 AJAX 局部刷新，无需整页跳转
-            return Partial("Shared/Managements/_ManagementUserEdit", user);
+            // 保存成功后重定向到管理视图
+            return Redirect("/Account/Profile?view=management");
         }
 
         /// <summary>
@@ -170,6 +188,36 @@ namespace KaxServer.Pages.Account
                 // 普通请求则重定向到登录页面
                 return RedirectToPage("/Account/Login");
             }
+        }
+
+                /// <summary>
+        /// 正在编辑的用户数据，页面绑定属性。
+        /// </summary>
+        [BindProperty]
+        public UserData? EditingUser { get; set; }
+
+        /// <summary>
+        /// 选择用户进行编辑
+        /// </summary>
+        public async Task<IActionResult> OnPostSelectUserAsync()
+        {
+            // 获取表单中的用户ID
+            var userIdStr = Request.Form["userId"].FirstOrDefault();
+            if (!int.TryParse(userIdStr, out int userId))
+                // 用户ID无效，直接返回 400 错误
+                return BadRequest("用户ID无效");
+
+            // 根据用户ID获取用户对象
+            var user = await UserManager.GetUserByIdAsync(userId);
+            if (user == null)
+                // 用户不存在，返回 404
+                return NotFound("用户不存在");
+
+            // 将选中的用户数据赋值给 EditingUser
+            EditingUser = user;
+
+            // 返回部分视图，便于前端 AJAX 局部刷新，无需整页跳转
+            return Partial("Shared/Managements/_ManagementUserEdit", EditingUser);
         }
     }
 }
