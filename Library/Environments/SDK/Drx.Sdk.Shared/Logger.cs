@@ -9,6 +9,7 @@ using System.Windows.Controls;
 using System.Windows.Documents;
 using System.Windows.Media;
 using System;
+using System.IO;
 
 namespace DRX.Framework;
 
@@ -18,6 +19,8 @@ public static class Logger
     private static readonly CancellationTokenSource _cts = new();
     private static readonly Task _worker;
     private static readonly StringBuilder SharedBuilder = new(128);
+
+    // 文件日志相关已移除
 
     private static readonly IReadOnlyDictionary<LogLevel, ConsoleColor> ConsoleColors = new Dictionary<LogLevel, ConsoleColor>
     {
@@ -55,6 +58,7 @@ public static class Logger
         AllocConsole();
 #endif
         _worker = Task.Run(ProcessQueueAsync);
+        ConsoleInterceptor.Initialize();
     }
 
     public static void Bind(TextBox textBox)
@@ -233,23 +237,107 @@ public static class Logger
             }
         });
     }
-}
 
-public enum LogLevel
-{
-    Dbug,
-    Info,
-    Warn,
-    Fail,
-    Fatal
-}
-
-internal struct LogEntry
-{
-    public LogLevel Level;
-    public string Header;
-    public string Message;
-    public string ClassName;
-    public int LineNumber;
-    public DateTime Time;
-}
+        // LoggerFileTextWriter 已移除，日志文件写入由 WriteLog 控制
+    }
+    
+    // 控制台输出拦截器：将所有 Console.Out/Error 输出同步写入日志文件
+    public sealed class ConsoleInterceptor : TextWriter
+    {
+        private readonly TextWriter _originalWriter;
+        private readonly StreamWriter _logWriter;
+        private readonly object _lock = new();
+        public override Encoding Encoding => Encoding.UTF8;
+    
+        public ConsoleInterceptor(TextWriter originalWriter, string logFilePath)
+        {
+            _originalWriter = originalWriter;
+            _logWriter = new StreamWriter(new FileStream(logFilePath, FileMode.Append, FileAccess.Write, FileShare.ReadWrite))
+            {
+                AutoFlush = true
+            };
+        }
+    
+        public override void Write(char value)
+        {
+            lock (_lock)
+            {
+                _originalWriter.Write(value);
+                _logWriter.Write(value);
+            }
+        }
+    
+        public override void Write(string? value)
+        {
+            lock (_lock)
+            {
+                _originalWriter.Write(value);
+                _logWriter.Write(value);
+            }
+        }
+    
+        public override void WriteLine(string? value)
+        {
+            lock (_lock)
+            {
+                _originalWriter.WriteLine(value);
+                _logWriter.WriteLine(value);
+            }
+        }
+    
+        public override void Flush()
+        {
+            lock (_lock)
+            {
+                _originalWriter.Flush();
+                _logWriter.Flush();
+            }
+        }
+    
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                lock (_lock)
+                {
+                    _logWriter.Dispose();
+                }
+            }
+            base.Dispose(disposing);
+        }
+    
+        // 静态方法：初始化拦截器，重定向 Console.Out/Error
+        public static void Initialize()
+        {
+            var rootDir = AppDomain.CurrentDomain.BaseDirectory;
+            var logsDir = Path.Combine(rootDir, "logs");
+            Directory.CreateDirectory(logsDir);
+            var timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss_fff");
+            var logFilePath = Path.Combine(logsDir, $"{timestamp}.txt");
+    
+            var interceptorOut = new ConsoleInterceptor(Console.Out, logFilePath);
+            var interceptorErr = new ConsoleInterceptor(Console.Error, logFilePath);
+    
+            Console.SetOut(interceptorOut);
+            Console.SetError(interceptorErr);
+        }
+    }
+    
+    public enum LogLevel
+    {
+        Dbug,
+        Info,
+        Warn,
+        Fail,
+        Fatal
+    }
+    
+    internal struct LogEntry
+    {
+        public LogLevel Level;
+        public string Header;
+        public string Message;
+        public string ClassName;
+        public int LineNumber;
+        public DateTime Time;
+    }

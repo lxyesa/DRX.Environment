@@ -294,20 +294,20 @@ public static class UserManager
             var userData = userDataList[0];
             if (IsAppLogin(userData))
             {
-                Logger.Warn($"用户 {userData.Username} 已经通过 AppToken 登录，无法重复登录。");
+                Logger.Warn($"User {userData.Username} Has Already Logged In With AppToken, Cannot Login Again.");
                 return new CommandResult
                 {
                     StatusCode = SocketStatusCode.Failure_General,
-                    Message = "用户已通过 AppToken 登录，无法重复登录"
+                    Message = "You are already logged in with AppToken."
                 };
             }
             if (IsUserBanned(userData))
             {
-                Logger.Warn($"用户 {userData.Username} 已被封禁，无法登录。");
+                Logger.Warn($"User {userData.Username} Trying To Login But Is Banned.");
                 return new CommandResult
                 {
                     StatusCode = SocketStatusCode.Failure_General,
-                    Message = "用户已被封禁，无法登录"
+                    Message = "Your account has been banned, please contact support."
                 };
             }
             var passwordHash = SHA256.ComputeHashString(password);
@@ -320,7 +320,7 @@ public static class UserManager
                 return new CommandResult
                 {
                     StatusCode = SocketStatusCode.Success_General,
-                    Message = "登录成功",
+                    Message = "Login Successful",
                     Data = uData
                 };
             }
@@ -333,8 +333,12 @@ public static class UserManager
                 var userData = userDataList[0];
                 if (IsAppLogin(userData))
                 {
-                    Logger.Warn($"用户 {userData.Username} 已经通过 AppToken 登录，无法重复登录。");
-                    return null;
+                    Logger.Warn($"User {userData.Username} Has Already Logged In With AppToken, Cannot Login Again.");
+                    return new CommandResult
+                    {
+                        StatusCode = SocketStatusCode.Failure_General,
+                        Message = "You are already logged in with AppToken."
+                    };
                 }
                 var passwordHash = SHA256.ComputeHashString(password);
                 if (userData.PasswordHash == passwordHash)
@@ -346,13 +350,36 @@ public static class UserManager
                     return new CommandResult
                     {
                         StatusCode = SocketStatusCode.Success_General,
-                        Message = "登录成功",
+                        Message = "Login Successful",
                         Data = uData
                     };
                 }
             }
         }
-        return null;
+        return new CommandResult
+        {
+            StatusCode = SocketStatusCode.Failure_General,
+            Message = "Error: Unknown Error, please try again later, or contact support."
+        };
+    }
+
+    public static async Task<bool> KickUserAsync(UserData user)
+    {
+        if (user == null)
+        {
+            Logger.Error("无法踢出空用户。");
+            return false;
+        }
+        if (IsAppLogin(user))
+        {
+            user.UserStatusData.IsAppLogin = false;
+            user.UserStatusData.AppToken = string.Empty;
+            await UserSql.UpdateAsync(user);
+            Logger.Info($"用户 {user.Username} 已被踢出应用登录。");
+            return true;
+        }
+        Logger.Warn($"用户 {user.Username} 当前未处于应用登录状态，无法踢出。");
+        return false;
     }
 
     private static bool IsUserBanned(UserData user)
@@ -520,7 +547,7 @@ public static class UserManager
         await UserSql.UpdateAsync(user);
         return true;
     }
-   
+
     public static int GetUserPublishedStoreItemCount(int userId)
     {
         return StoreManager.GetAllStoreItemsAsync().Result.Count(s => s.OwnerId == userId);

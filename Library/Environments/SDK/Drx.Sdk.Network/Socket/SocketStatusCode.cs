@@ -14,7 +14,8 @@ namespace Drx.Sdk.Network.Socket
         Failure_SessionConflict = 0x20000004,         // 验证失败：找到了多个冲突的用户会话。
         Failure_UserAlreadyLoggedIn = 0x20000005,      // 验证失败：用户已登录。
         Failure_InvalidCredentials = 0x20000006,       // 验证失败：提供的凭证（例如，用户名/密码）无效。
-
+        Failure_InvalidArguments = 0x20000007,        // 验证失败：请求中的一个或多个参数格式无效。
+        
         // 成功代码 (0x21000000 - 0x21FFFFFF) - 表示请求已成功处理。
         Success_General = 0x21000000,               // 通用成功。客户端应将此视为一个肯定性、非特定的响应。
         Success_Verified = 0x21000001,                // 验证成功：机械码匹配成功。
@@ -29,4 +30,5 @@ namespace Drx.Sdk.Network.Socket
         // 服务器错误代码 (0x23000000 - 0x23FFFFFF) - 表示服务器在处理有效请求时遇到了内部问题。
         Error_InternalServerError = 0x23000000,       // 错误：服务器在处理请求时遇到意外的内部错误。
     }
+
 } 

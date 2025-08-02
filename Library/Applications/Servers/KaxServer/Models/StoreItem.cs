@@ -29,7 +29,7 @@ public class StoreItemPrice : IDataTable    // 商品的价格
     public int ParentId { get; set; }
     public string TableName => "StoreItemPrice";
     public string Title { get; set; } // 价格标题
-    public decimal Price { get; set; }  // 价格，这里是原价
+    public float Price { get; set; }  // 价格，这里是原价
     public float Rebate { get; set; } // 折扣率，0-1之间
     public float Duration { get; set; } // 时长
     public StoreItemDurationUnit DurationUnit { get; set; } // 时长单位

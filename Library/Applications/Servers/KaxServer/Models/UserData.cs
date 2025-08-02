@@ -52,6 +52,9 @@ public class UserData : IDataBase
     /// </summary>
     public int NextLevelExp { get; set; } = 100;
 
+    /// <summary>
+    /// 用户Token
+    /// </summary>
     public string AppToken { get; set; } = string.Empty;
 
     /// <summary>
@@ -64,7 +67,12 @@ public class UserData : IDataBase
     /// </summary>
     public UserStatusData UserStatusData { get; set; } = new UserStatusData();
 
+    /// <summary>
+    /// 用户已发布的商品ID列表
+    /// </summary>
     public List<int> PublishedStoreItemIds { get; set; } = new List<int>();
+
+    public List<UserBuyedStoreItem> BuyedStoreItems { get; set; } = new List<UserBuyedStoreItem>();
 }
 
 /// <summary>
@@ -136,4 +144,15 @@ public class UserStatusData : IDataTable
     /// <summary>应用登录令牌</summary>
     [Publish]
     public string AppToken { get; set; } = string.Empty;
+}
+
+public class UserBuyedStoreItem : IDataTable
+{
+    public int Id { get; set; }
+    public int ParentId { get; set; } // UserData的ID
+    public string TableName => "UserBuyedStoreItem";
+    public int StoreItemId { get; set; } // 商品ID
+    public DateTime BuyTime { get; set; } = DateTime.Now; // 购买时间
+    public DateTime ExpireTime { get; set; } = DateTime.MaxValue; // 过期时间，默认永不过期
+    public bool IsExpired => ExpireTime < DateTime.Now; // 是否过期
 }

@@ -1,0 +1,718 @@
+@* 控制台前端结构与样式，深色极简风格，风格变量与 global.css 保持一致 *@
+<div class="profile-section">
+    <h2 class="section-title-main">
+        <span class="material-icons" style="vertical-align: middle;">code</span>
+        控制台
+    </h2>
+    <p class="section-desc-main">
+        这里是服务器控制台，您可以查看服务器日志、执行命令等。请注意，某些操作可能需要管理员权限。
+    </p>
+    <div class="console-container">
+        <div class="console-output" id="consoleOutput">
+            @* 日志内容区域，实际内容由后端/JS注入 *@
+        </div>
+        <div class="console-load-more" id="loadMoreContainer" style="display: none;">
+            <button class="console-load-btn" id="loadMoreBtn">加载更多历史消息</button>
+        </div>
+        <form id="consoleForm" autocomplete="off">
+            <div class="console-input-area">
+                <div style="position: relative; width: 100%;">
+                    <input class="console-input" type="text" id="consoleInput" placeholder="输入命令..." autocomplete="off"/>
+                    <div class="command-completion-panel" id="commandCompletionPanel" style="display: none;">
+                        <div class="completion-list" id="completionList"></div>
+                    </div>
+                </div>
+                <button class="console-load-btn" id="executeCommandBtn" type="submit">
+                    <span style="font-size: 24px;" class="material-icons">send</span>
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<style>
+.console-output {
+    background: var(--input-bg, #0f1419);
+    color: var(--primary-color, #e6e6e6);
+    font-family: 'JetBrains Mono', 'Fira Mono', 'Consolas', monospace;
+    font-size: 14px;
+    line-height: 1.6;
+    padding: 20px;
+    border-radius: var(--radius, 6px);
+    min-height: 300px;
+    max-height: 500px;
+    overflow-y: auto;
+    border: 1px solid var(--border-color, #2a2f3a);
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-color, #2a2f3a) var(--input-bg, #0f1419);
+}
+
+.console-output::-webkit-scrollbar {
+    width: 6px;
+}
+
+.console-output::-webkit-scrollbar-track {
+    background: var(--input-bg, #0f1419);
+}
+
+.console-output::-webkit-scrollbar-thumb {
+    background: var(--border-color, #2a2f3a);
+    border-radius: 3px;
+}
+
+.console-line {
+    margin-bottom: 4px;
+    word-break: break-all;
+    white-space: pre-wrap;
+    transition: color 0.2s;
+}
+
+.console-info {
+    color: var(--primary-color, #e6e6e6);
+}
+
+.console-warn {
+    color: var(--secondary-color, #f5c542);
+}
+
+.console-error {
+    color: var(--error-color, #ff4b4b);
+}
+
+.console-dbug {
+    color: var(--text-muted, #6b7280);
+    font-style: italic;
+}
+
+.console-input-area {
+    margin-top: 16px;
+    display: flex;
+}
+
+.console-input {
+    width: 94%;
+    background: var(--input-bg, #0f1419);
+    color: var(--primary-color, #e6e6e6);
+    border: 1px solid var(--border-color, #2a2f3a);
+    border-radius: var(--radius, 6px);
+    padding: 12px 16px;
+    margin-right: 5px;
+    font-family: 'JetBrains Mono', 'Fira Mono', 'Consolas', monospace;
+    font-size: 14px;
+    outline: none;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.console-input:focus {
+    border-color: var(--accent-color, #3b82f6);
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
+}
+
+.console-input:disabled {
+    background: var(--input-bg, #0f1419);
+    color: var(--text-muted, #6b7280);
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
+.console-load-more {
+    text-align: center;
+    margin: 16px 0;
+}
+
+.console-load-btn {
+    background: var(--surface-color, #1a1d29);
+    color: var(--primary-color, #e6e6e6);
+    border: 1px solid var(--border-color, #2a2f3a);
+    border-radius: var(--radius, 6px);
+    padding: 8px 16px;
+    font-family: inherit;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.2s;
+    min-height: 36px;
+}
+
+.console-load-btn:hover:not(:disabled) {
+    background: var(--border-color, #2a2f3a);
+    border-color: var(--accent-color, #3b82f6);
+    transform: translateY(-1px);
+}
+
+.console-load-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
+}
+
+.console-load-btn:active:not(:disabled) {
+    transform: translateY(0);
+}
+
+/* 命令补全样式 */
+.command-completion-panel {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: var(--surface-color, #1a1d29);
+    border: 1px solid var(--border-color, #2a2f3a);
+    border-radius: var(--radius, 6px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    max-height: 300px;
+    overflow-y: auto;
+    z-index: 1000;
+    margin-top: 4px;
+}
+
+.completion-list {
+    padding: 4px 0;
+}
+
+.completion-item {
+    display: flex;
+    align-items: center;
+    padding: 8px 12px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+    border-bottom: 1px solid var(--border-color, #2a2f3a);
+}
+
+.completion-item:last-child {
+    border-bottom: none;
+}
+
+.completion-item:hover {
+    background: var(--border-color, #2a2f3a);
+}
+
+.completion-item.selected {
+    background: var(--accent-color, #3b82f6);
+    color: white;
+}
+
+.completion-icon {
+    margin-right: 8px;
+    font-size: 16px;
+    color: var(--accent-color, #3b82f6);
+}
+
+.completion-item.selected .completion-icon {
+    color: white;
+}
+
+.completion-text {
+    font-family: 'JetBrains Mono', 'Fira Mono', 'Consolas', monospace;
+    font-size: 13px;
+    font-weight: 500;
+    margin-right: 8px;
+}
+
+.completion-description {
+    font-size: 12px;
+    color: var(--text-muted, #6b7280);
+    margin-left: auto;
+}
+
+.completion-item.selected .completion-description {
+    color: rgba(255, 255, 255, 0.8);
+}
+
+.completion-type {
+    font-size: 10px;
+    padding: 2px 6px;
+    border-radius: 3px;
+    background: var(--border-color, #2a2f3a);
+    color: var(--text-muted, #6b7280);
+    margin-left: 8px;
+}
+
+.completion-item.selected .completion-type {
+    background: rgba(255, 255, 255, 0.2);
+    color: white;
+}
+</style>
+
+<script>
+(function() {
+    // 日志加载器
+    const logLoader = {
+        fileName: null,
+        totalLines: 0,
+        loadedLines: 0,
+        isLoading: false,
+        hasMore: true,
+        
+        // 初始化
+        async init() {
+            await this.getLatestLogFile();
+            if (this.fileName) {
+                await this.loadInitialLogs();
+                this.bindEvents();
+            }
+        },
+        
+        // 获取最新的日志文件
+        async getLatestLogFile() {
+            try {
+                const response = await fetch('/api/log/latest');
+                if (response.ok) {
+                    const data = await response.json();
+                    this.fileName = data.fileName;
+                } else {
+                    const errorData = await response.json().catch(() => ({}));
+                    console.error('获取日志文件失败:', response.statusText, errorData.message || '');
+                    showError(`获取日志文件失败: ${errorData.message || response.statusText}`);
+                }
+            } catch (error) {
+                console.error('获取日志文件时出错:', error);
+                showError(`获取日志文件时出错: ${error.message}`);
+            }
+        },
+        
+        // 加载初始日志（最后250行）
+        async loadInitialLogs() {
+            if (!this.fileName || this.isLoading) return;
+            
+            this.isLoading = true;
+            const consoleOutput = document.getElementById('consoleOutput');
+            
+            try {
+                // 先显示加载中状态
+                consoleOutput.innerHTML = '<div class="console-line console-info">[INFO] 正在加载日志...</div>';
+                
+                const response = await fetch(`/api/log/lines?fileName=${encodeURIComponent(this.fileName)}&startLine=-250&count=250`);
+                if (response.ok) {
+                    const data = await response.json();
+                    this.totalLines = data.totalLines;
+                    this.loadedLines = data.endLine - data.startLine;
+                    
+                    // 显示文件大小提示
+                    showFileSizeInfo(this.totalLines);
+                    
+                    // 清空并显示日志内容
+                    consoleOutput.innerHTML = '';
+                    this.appendLines(data.lines, false);
+                    
+                    // 更新加载更多按钮状态
+                    this.updateLoadMoreButton();
+                } else {
+                    const errorData = await response.json().catch(() => ({}));
+                    consoleOutput.innerHTML = `<div class="console-line console-error">[ERROR] 加载日志失败: ${errorData.message || response.statusText}</div>`;
+                }
+            } catch (error) {
+                consoleOutput.innerHTML = `<div class="console-line console-error">[ERROR] 加载日志时出错: ${error.message}</div>`;
+                console.error('加载日志时出错:', error);
+            } finally {
+                this.isLoading = false;
+            }
+        },
+        
+        // 加载更多日志
+        async loadMoreLogs() {
+            if (!this.fileName || this.isLoading || !this.hasMore) return;
+            
+            this.isLoading = true;
+            const consoleOutput = document.getElementById('consoleOutput');
+            const loadMoreBtn = document.getElementById('loadMoreBtn');
+            
+            try {
+                // 禁用按钮
+                loadMoreBtn.disabled = true;
+                loadMoreBtn.textContent = '加载中...';
+                
+                // 计算要加载的行数
+                const startLine = Math.max(0, this.totalLines - this.loadedLines - 250);
+                const count = Math.min(250, this.totalLines - this.loadedLines);
+                
+                const response = await fetch(`/api/log/lines?fileName=${encodeURIComponent(this.fileName)}&startLine=${startLine}&count=${count}`);
+                if (response.ok) {
+                    const data = await response.json();
+                    this.loadedLines += data.lines.length;
+                    
+                    // 在顶部插入新内容
+                    this.appendLines(data.lines, true);
+                    
+                    // 更新是否有更多内容
+                    this.hasMore = data.startLine > 0;
+                    
+                    // 更新加载更多按钮状态
+                    this.updateLoadMoreButton();
+                } else {
+                    const errorData = await response.json().catch(() => ({}));
+                    console.error('加载更多日志失败:', response.statusText, errorData.message || '');
+                    showError(`加载更多日志失败: ${errorData.message || response.statusText}`);
+                }
+            } catch (error) {
+                console.error('加载更多日志时出错:', error);
+                showError(`加载更多日志时出错: ${error.message}`);
+            } finally {
+                this.isLoading = false;
+                loadMoreBtn.disabled = false;
+                loadMoreBtn.textContent = '加载更多历史消息';
+            }
+        },
+        
+        // 添加行到控制台
+        appendLines(lines, prepend) {
+            const consoleOutput = document.getElementById('consoleOutput');
+            if (!consoleOutput) return;
+            
+            const fragment = document.createDocumentFragment();
+            
+            lines.forEach(line => {
+                const lineElement = document.createElement('div');
+                
+                // 解析日志级别
+                const logLevelMatch = line.match(/\[\d{4}\/\d{2}\/\d{2} \d{2}:\d{2}:\d{2}\]\[[^:]+\:\d+\]\[(DBUG|INFO|WARN|FAIL|FATAL)\]/);
+                let logLevel = 'INFO'; // 默认级别
+                
+                if (logLevelMatch && logLevelMatch[1]) {
+                    logLevel = logLevelMatch[1];
+                }
+                
+                // 根据日志级别设置CSS类
+                const levelClass = this.getLogLevelClass(logLevel);
+                lineElement.className = `console-line ${levelClass}`;
+                
+                // 转义HTML防止XSS，但保留格式
+                const escapedLine = line
+                    .replace(/&/g, '&')
+                    .replace(/</g, '<')
+                    .replace(/>/g, '>');
+                lineElement.innerHTML = escapedLine;
+                
+                fragment.appendChild(lineElement);
+            });
+            
+            if (prepend) {
+                // 在顶部插入
+                consoleOutput.insertBefore(fragment, consoleOutput.firstChild);
+            } else {
+                // 在底部追加
+                consoleOutput.appendChild(fragment);
+                // 追加后自动滚动到底部
+                consoleOutput.scrollTop = consoleOutput.scrollHeight;
+            }
+        },
+        
+        // 根据日志级别获取对应的CSS类
+        getLogLevelClass(level) {
+            switch (level.toUpperCase()) {
+                case 'DBUG':
+                    return 'console-dbug';
+                case 'INFO':
+                    return 'console-info';
+                case 'WARN':
+                    return 'console-warn';
+                case 'FAIL':
+                    return 'console-error';
+                case 'FATAL':
+                    return 'console-error';
+                default:
+                    return 'console-info';
+            }
+        },
+        
+        // 更新加载更多按钮状态
+        updateLoadMoreButton() {
+            const loadMoreContainer = document.getElementById('loadMoreContainer');
+            const loadMoreBtn = document.getElementById('loadMoreBtn');
+            
+            if (this.hasMore && this.totalLines > 100) {
+                loadMoreContainer.style.display = 'block';
+            } else {
+                loadMoreContainer.style.display = 'none';
+            }
+        },
+        
+        // 绑定事件
+        bindEvents() {
+            const loadMoreBtn = document.getElementById('loadMoreBtn');
+            const consoleOutput = document.getElementById('consoleOutput');
+            
+            // 加载更多按钮点击事件
+            loadMoreBtn.addEventListener('click', () => {
+                this.loadMoreLogs();
+            });
+            
+            // 滚动事件，实现滚动加载
+            let scrollTimeout;
+            consoleOutput.addEventListener('scroll', () => {
+                if (scrollTimeout) {
+                    clearTimeout(scrollTimeout);
+                }
+                
+                scrollTimeout = setTimeout(() => {
+                    // 检查是否滚动到顶部
+                    if (consoleOutput.scrollTop === 0 && this.hasMore) {
+                        this.loadMoreLogs();
+                    }
+                }, 100);
+            });
+        }
+    };
+    
+    // 命令补全器
+    const commandCompleter = {
+        suggestions: [],
+        selectedIndex: -1,
+        isVisible: false,
+        debounceTimer: null,
+        
+        init() {
+            this.bindEvents();
+        },
+        
+        bindEvents() {
+            const input = document.getElementById('consoleInput');
+            const panel = document.getElementById('commandCompletionPanel');
+            
+            // 输入事件
+            input.addEventListener('input', (e) => {
+                this.handleInput(e.target.value);
+            });
+            
+            // 键盘事件
+            input.addEventListener('keydown', (e) => {
+                this.handleKeydown(e);
+            });
+            
+            // 点击外部关闭
+            document.addEventListener('click', (e) => {
+                if (!panel.contains(e.target) && e.target !== input) {
+                    this.hide();
+                }
+            });
+        },
+        
+        async handleInput(value) {
+            // 防抖处理
+            clearTimeout(this.debounceTimer);
+            this.debounceTimer = setTimeout(async () => {
+                await this.fetchSuggestions(value);
+            }, 150);
+        },
+        
+        async fetchSuggestions(input) {
+            if (!input || !input.startsWith('/')) {
+                this.hide();
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/api/commandcompletion/suggestions?input=${encodeURIComponent(input)}`);
+                if (response.ok) {
+                    const data = await response.json();
+                    this.suggestions = data.suggestions || [];
+                    this.selectedIndex = -1;
+                    
+                    if (this.suggestions.length > 0) {
+                        this.show();
+                        this.render();
+                    } else {
+                        this.hide();
+                    }
+                }
+            } catch (error) {
+                console.error('获取命令补全建议失败:', error);
+                this.hide();
+            }
+        },
+        
+        render() {
+            const list = document.getElementById('completionList');
+            list.innerHTML = '';
+            
+            this.suggestions.forEach((suggestion, index) => {
+                const item = document.createElement('div');
+                item.className = `completion-item ${index === this.selectedIndex ? 'selected' : ''}`;
+                item.innerHTML = `
+                    <span class="completion-icon">${this.getIcon(suggestion.type)}</span>
+                    <span class="completion-text">${suggestion.text}</span>
+                    <span class="completion-type">${suggestion.type}</span>
+                    <span class="completion-description">${suggestion.description}</span>
+                `;
+                
+                item.addEventListener('click', () => {
+                    this.selectSuggestion(index);
+                });
+                
+                list.appendChild(item);
+            });
+        },
+        
+        getIcon(type) {
+            switch (type) {
+                case 'command': return '⚡';
+                case 'subcommand': return '▸';
+                case 'branchcommand': return '▹';
+                default: return '•';
+            }
+        },
+        
+        handleKeydown(e) {
+            if (!this.isVisible || this.suggestions.length === 0) return;
+            
+            switch (e.key) {
+                case 'ArrowDown':
+                    e.preventDefault();
+                    this.selectedIndex = (this.selectedIndex + 1) % this.suggestions.length;
+                    this.render();
+                    break;
+                    
+                case 'ArrowUp':
+                    e.preventDefault();
+                    this.selectedIndex = this.selectedIndex <= 0 ? this.suggestions.length - 1 : this.selectedIndex - 1;
+                    this.render();
+                    break;
+                    
+                case 'Enter':
+                    e.preventDefault();
+                    if (this.selectedIndex >= 0) {
+                        this.selectSuggestion(this.selectedIndex);
+                    }
+                    break;
+                    
+                case 'Escape':
+                    e.preventDefault();
+                    this.hide();
+                    break;
+                    
+                case 'Tab':
+                    e.preventDefault();
+                    if (this.selectedIndex >= 0) {
+                        this.selectSuggestion(this.selectedIndex);
+                    } else if (this.suggestions.length > 0) {
+                        this.selectSuggestion(0);
+                    }
+                    break;
+            }
+        },
+        
+        selectSuggestion(index) {
+            if (index < 0 || index >= this.suggestions.length) return;
+            
+            const suggestion = this.suggestions[index];
+            const input = document.getElementById('consoleInput');
+            input.value = suggestion.text;
+            input.focus();
+            
+            this.hide();
+            
+            // 触发input事件以继续补全
+            setTimeout(() => {
+                input.dispatchEvent(new Event('input'));
+            }, 0);
+        },
+        
+        show() {
+            const panel = document.getElementById('commandCompletionPanel');
+            panel.style.display = 'block';
+            this.isVisible = true;
+        },
+        
+        hide() {
+            const panel = document.getElementById('commandCompletionPanel');
+            panel.style.display = 'none';
+            this.isVisible = false;
+            this.suggestions = [];
+            this.selectedIndex = -1;
+        }
+    };
+    
+    // 页面加载完成后初始化日志加载器和命令补全器
+    document.addEventListener('DOMContentLoaded', () => {
+        logLoader.init();
+        commandCompleter.init();
+
+        const form = document.getElementById('consoleForm');
+        const input = document.getElementById('consoleInput');
+        const output = document.getElementById('consoleOutput');
+
+        form.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const command = input.value.trim();
+            if (!command) return;
+            
+            // 隐藏补全面板
+            commandCompleter.hide();
+            
+            input.disabled = true;
+        
+            // 显示加载动画
+            const spinner = document.createElement('div');
+            spinner.id = 'console-spinner';
+            spinner.innerHTML = `
+                <span style="display:inline-block;vertical-align:middle;">
+                    <svg width="28" height="28" viewBox="0 0 50 50">
+                        <circle cx="25" cy="25" r="20" fill="none" stroke="#3b82f6" stroke-width="5" stroke-linecap="round" stroke-dasharray="90 150" stroke-dashoffset="0">
+                            <animateTransform attributeName="transform" type="rotate" from="0 25 25" to="360 25 25" dur="1s" repeatCount="indefinite"/>
+                        </circle>
+                    </svg>
+                </span>
+                <span style="margin-left:8px;">正在执行命令，请稍候...</span>
+            `;
+            output.appendChild(spinner);
+            output.scrollTop = output.scrollHeight;
+            // 保证动画插入后持续滚动到底部
+            let spinnerScrollInterval = setInterval(() => {
+                output.scrollTop = output.scrollHeight;
+            }, 100);
+        
+            try {
+                await fetch('/api/log/execute', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ command })
+                });
+                // 等待至少2秒
+                await new Promise(resolve => setTimeout(resolve, 500));
+                // 局部刷新日志区域
+                await logLoader.loadInitialLogs();
+                // 日志刷新后自动滚动到底部
+                output.scrollTop = output.scrollHeight;
+            } catch (err) {
+                const line = document.createElement('div');
+                line.className = 'console-line console-error';
+                line.textContent = `[ERROR] 网络错误: ${err.message}`;
+                output.appendChild(line);
+                output.scrollTop = output.scrollHeight;
+            } finally {
+                // 移除加载动画
+                const spinnerEl = document.getElementById('console-spinner');
+                if (spinnerEl) spinnerEl.remove();
+                // 停止动画期间的滚动
+                if (typeof spinnerScrollInterval !== 'undefined') {
+                    clearInterval(spinnerScrollInterval);
+                }
+            }
+            input.value = '';
+            input.disabled = false;
+            input.focus();
+        });
+    });
+})();
+
+// 添加显示错误信息的方法
+function showError(message) {
+    const consoleOutput = document.getElementById('consoleOutput');
+    const errorElement = document.createElement('div');
+    errorElement.className = 'console-line console-error';
+    errorElement.textContent = `[ERROR] ${message}`;
+    consoleOutput.appendChild(errorElement);
+    // 滚动到底部显示错误
+    consoleOutput.scrollTop = consoleOutput.scrollHeight;
+}
+
+// 添加显示文件大小信息的方法
+function showFileSizeInfo(totalLines) {
+    const consoleOutput = document.getElementById('consoleOutput');
+    const infoElement = document.createElement('div');
+    infoElement.className = 'console-line console-info';
+    // 估算文件大小：假设每行平均80字符
+    const estimatedSize = Math.round((totalLines * 80) / 1024);
+    infoElement.textContent = `[INFO] 日志文件约 ${estimatedSize} KB，共 ${totalLines} 行`;
+    consoleOutput.appendChild(infoElement);
+}
+</script>

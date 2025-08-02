@@ -5,7 +5,13 @@ using Drx.Sdk.Network.Extensions;
 using Drx.Sdk.Network.Socket;
 using System.Runtime.Intrinsics.Arm;
 using Drx.Sdk.Network.Security;
+using DRX.Framework;
+using Drx.Sdk.Shared.ConsoleCommand;
 
+#if DEBUG
+Logger.Debug("KAX Server 正在以调试模式运行");
+Logger.Debug("请注意，调试模式下可能会有额外的日志输出和性能开销");
+#endif
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
@@ -52,10 +58,12 @@ if (!app.Environment.IsDevelopment())
 app.UseHttpsRedirection();
 app.UseStaticFiles();
 app.UseRouting();
-var console = app.UseConsoleCommandProcessor();
-CommandHandler.Registers(console); // 注册命令
-
+app.MapControllers();
 app.UseAuthorization();
 app.UseDRXSession();
 app.MapRazorPages();
+
+// 注册命令控制器
+new ConsoleCommandProcessor();
+
 app.Run();

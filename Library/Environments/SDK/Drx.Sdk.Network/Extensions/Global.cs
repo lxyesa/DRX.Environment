@@ -96,17 +96,6 @@ public static class Global
         app.UseSession();
         return app;
     }
-
-    /// <summary>
-    /// 启动后台线程监听控制台输入，返回 ConsoleCommandProcessor 实例
-    /// </summary>
-    public static ConsoleCommandProcessor UseConsoleCommandProcessor(this IApplicationBuilder app)
-    {
-        var processor = new ConsoleCommandProcessor();
-        processor.Start();
-        return processor;
-    }
-
     /// <summary>
     /// 从 JSON 字符串数组中提取指定字段的值。
     /// </summary>

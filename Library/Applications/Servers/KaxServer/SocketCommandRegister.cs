@@ -13,6 +13,14 @@ public class SocketCommandRegister
         {
             var psw = args.GetJsonField("password") ?? string.Empty;
             var usn = args.GetJsonField("username") ?? string.Empty;
+            var (mission_id, timestamp, timestamp_now) = ExtractMissionData(args, rawMessage);
+
+            // 如果args里面没有username或password，则去rawMessage中获取
+            if (string.IsNullOrEmpty(usn) || string.IsNullOrEmpty(psw))
+            {
+                usn = rawMessage.GetJsonProperty<string>("username") ?? string.Empty;
+                psw = rawMessage.GetJsonProperty<string>("password") ?? string.Empty;
+            }
 
             CommandResult? commandResult = await UserManager.LoginAppAsync(usn, psw);
             var uData = commandResult?.Data as UserData;
@@ -33,13 +41,22 @@ public class SocketCommandRegister
             await client.PushMap("user", "last_heartbeat", DateTime.Now.ToString());
             await client.PushMap("user", "user_id", uData.Id);
 
-            await server.SendResponseAsync(client, SocketStatusCode.Success_General, CancellationToken.None, new { command = "login", message = "登录成功", user_token = token });
+            await server.SendResponseAsync(client,
+                SocketStatusCode.Success_General,
+                CancellationToken.None,
+                new { command = "login", message = "Login Success", user_id = uData.Id, user_token = token,
+                      mission_id, timestamp = timestamp_now});
         });
 
         socket.RegisterCommand("heartbeat", async (server, client, args, rawMessage) =>
         {
+            var (mission_id, timestamp, timestamp_now) = ExtractMissionData(args, rawMessage);
+            
             await UpdateHeartbeat(client);
-            await server.SendResponseAsync(client, SocketStatusCode.Success_General, CancellationToken.None, new { command = "heartbeat", message = "心跳成功" });
+            await server.SendResponseAsync(client,
+                SocketStatusCode.Success_General,
+                CancellationToken.None,
+                new { command = "heartbeat", message = "Heartbeat Success", mission_id, timestamp = timestamp_now });
         });
 
         socket.RegisterCommand("getuid", async (server, client, args, rawMessage) =>
@@ -53,14 +70,14 @@ public class SocketCommandRegister
                     client,
                     SocketStatusCode.Failure_InvalidCredentials,
                     CancellationToken.None,
-                    new { command = "getuid", message = "无效的用户令牌" });
+                    new { command = "getuid", message = "User not found or token invalid" });
                 return;
             }
             await server.SendResponseAsync(
                 client,
                 SocketStatusCode.Success_General,
                 CancellationToken.None,
-                new { command = "getuid", message = "获取用户ID成功", user_id = user.Id });
+                new { command = "getuid", message = "Get User ID Success", user_id = user.Id, user_token = user_token.Result });
         });
 
         socket.RegisterTimer(60 * 5, async server =>
@@ -107,5 +124,22 @@ public class SocketCommandRegister
                 server.DisconnectClient(client);
             }
         }
+    }
+
+    private static (string mission_id, string timestamp, string timestamp_now) ExtractMissionData(dynamic args, dynamic rawMessage)
+    {
+        var mission_id = args.GetJsonField("mission_id") ?? string.Empty;
+        var timestamp = args.GetJsonField("timestamp") ?? string.Empty;
+
+        // 如果args里面没有mission_id或timestamp，则去rawMessage中获取
+        if (string.IsNullOrEmpty(mission_id) || string.IsNullOrEmpty(timestamp))
+        {
+            mission_id = rawMessage.GetJsonProperty<string>("mission_id") ?? string.Empty;
+            timestamp = rawMessage.GetJsonProperty<string>("timestamp") ?? string.Empty;
+        }
+
+        var timestamp_now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds().ToString();
+        
+        return (mission_id, timestamp, timestamp_now);
     }
 }

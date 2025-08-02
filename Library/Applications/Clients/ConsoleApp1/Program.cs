@@ -11,6 +11,11 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using System.Diagnostics;
 
+// 初始化日志拦截器，并输出调试信息
+DRX.Framework.ConsoleInterceptor.Initialize();
+Console.WriteLine("Current Directory: " + Environment.CurrentDirectory);
+Console.WriteLine("Base Directory: " + AppDomain.CurrentDomain.BaseDirectory);
+
 // 检测目录下是否存在名为：qdrant.exe 的文件
 if (!File.Exists("qdrant.exe"))
 {

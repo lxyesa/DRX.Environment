@@ -328,7 +328,7 @@ namespace Drx.Sdk.Network.Socket.Services
             /// <param name="key">键</param>
             /// <param name="value">值</param>
             /// <returns>是否成功获取</returns>
-            public bool TryGetValue(string key, out object value)
+            public bool TryGetValue(string key, out object? value)
             {
                 return _dataMap.TryGetValue(key, out value);
             }

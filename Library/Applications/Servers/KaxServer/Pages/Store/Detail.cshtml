@@ -33,7 +33,35 @@
                     <span class="steam-buy-price">
                         <span class="material-icons" style="font-size:1.1em;vertical-align:middle;margin-right:0.15em;margin-top:0.1em;">monetization_on</span>@price.Price
                     </span>
-                    <button class="steam-buy-btn">购买</button>
+                    @{
+                        var priceIdx = item.StoreItemPrices.IndexOf(price);
+                        var isOwned = Model.OwnStatus != null && Model.OwnStatus.Count > priceIdx && Model.OwnStatus[priceIdx];
+                        var isBalanceError = ViewData.ModelState.Values.SelectMany(v => v.Errors).Any(e => e.ErrorMessage.Contains("余额不足"));
+                    }
+                    <form method="post" asp-page-handler="Buy">
+                        <input type="hidden" name="itemId" value="@item.Id" />
+                        <input type="hidden" name="priceIndex" value="@priceIdx" />
+                        @if (isOwned)
+                        {
+                            <input type="hidden" name="disabled" value="true" />
+                        }
+                        <button type="submit"
+                                class="btn-primary @(isBalanceError ? "buy-error" : "")"
+                                @(isOwned ? "disabled=\"disabled\"" : "")>
+                            @(isOwned ? "已拥有" : (isBalanceError ? "余额不足" : "购买"))
+                        </button>
+                        @if (isBalanceError)
+                        {
+                            <script>
+                                setTimeout(function() {
+                                    document.querySelectorAll('.steam-buy-btn.buy-error').forEach(function(btn){
+                                        btn.classList.remove('buy-error');
+                                        btn.innerText = '购买';
+                                    });
+                                }, 3000);
+                            </script>
+                        }
+                    </form>
                 </div>
             </div>
         </div>
@@ -94,22 +122,20 @@
     .mod-detail-content {
         margin-top: 1.5rem;
         padding: 1.5rem 1.2rem 1.2rem 1.2rem;
-        background: #23242a;
-        border-radius: 12px;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 8px;
     }
-
-
-
 
     .steam-buy-bar {
         display: flex;
         align-items: center;
         justify-content: space-between;
-        background: linear-gradient(90deg, #3a4a56 80%, #232c34 100%);
-        border-radius: 7px;
+        border-radius: 8px;
         margin: 1.2rem 0 0.7rem 0;
         padding: 0.7rem 1.2rem 0.7rem 1.2rem;
-        box-shadow: 0 2px 8px 0 rgba(0,0,0,0.10);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        background: rgba(255, 255, 255, 0.05);
         min-height: 48px;
     }
     .steam-buy-title {
@@ -127,37 +153,42 @@
         display: flex;
         align-items: center;
     }
+
     .steam-buy-combo {
         display: flex;
-        align-items: stretch;
+        align-items: center;
         border-radius: 4px;
-        overflow: hidden;
-        box-shadow: 0 1px 4px 0 rgba(80,120,80,0.10);
+        flex-direction: row;
+        flex-wrap: nowrap;
+        align-content: center;
+        justify-content: center;
     }
     .steam-buy-price {
-        background: #111;
+        background: #201f1f;
         color: #fff;
         font-size: 1.08rem;
         font-weight: 600;
-        border-radius: 4px 0 0 4px;
-        padding: 0.45rem 1.1rem 0.45rem 1.1rem;
-        min-width: 70px;
+        padding: 0.5rem 1.8rem;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        width: auto;
         text-align: center;
         display: flex;
         align-items: center;
+        margin-right: 5px;
+        border-radius: 8px;
+        height: 30px;
     }
-    .steam-buy-btn {
-        background: linear-gradient(90deg, #7ed321 0%, #5fa813 100%);
-        color: #fff;
-        font-size: 1.08rem;
-        font-weight: 700;
-        border: none;
-        border-radius: 0 4px 4px 0;
-        padding: 0.45rem 1.3rem;
-        cursor: pointer;
-        transition: background 0.15s, box-shadow 0.15s;
-        display: flex;
-        align-items: center;
+    .btn-primary{
+        border-radius: 8px;
+    }
+
+    .steam-buy-btn.buy-error {
+        background: linear-gradient(90deg, #ff3b3b 0%, #d32f2f 100%) !important;
+        color: #fff !important;
+        box-shadow: 0 0 6px #ff3b3b;
+    }
+    .steam-buy-btn.buy-error:hover {
+        background: linear-gradient(90deg, #ff5b5b 0%, #e64a19 100%) !important;
     }
     .steam-buy-btn:hover {
         background: linear-gradient(90deg, #8be82a 0%, #6fcf1a 100%);

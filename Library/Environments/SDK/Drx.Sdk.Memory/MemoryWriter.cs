@@ -1,12 +1,10 @@
 using System;
 using System.Diagnostics;
 using System.Threading.Tasks;
-using Drx.Sdk.Script.Attributes;
 using Drx.Sdk.Native;
 
 namespace Drx.Sdk.Memory;
 
-[ScriptClass("MemoryWriter")]
 public class MemoryWriter
 {
     /// <summary>

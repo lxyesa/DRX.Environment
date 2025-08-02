@@ -89,12 +89,15 @@ namespace KaxServer.Pages.Account
                     }
                 
                     // 设置持久化Cookie
-                    HttpContext.Response.Cookies.Append("UserId", result.User.Id.ToString(), options);
-                    HttpContext.Response.Cookies.Append("Username", result.User.Username, options);
+                    if (result.User != null)
+                    {
+                        HttpContext.Response.Cookies.Append("UserId", result.User.Id.ToString(), options);
+                        HttpContext.Response.Cookies.Append("Username", result.User.Username, options);
                 
-                    // 同时也存储在Session中
-                    HttpContext.Session.SetInt32("UserId", result.User.Id);
-                    HttpContext.Session.SetString("Username", result.User.Username);
+                        // 同时也存储在Session中
+                        HttpContext.Session.SetInt32("UserId", result.User.Id);
+                        HttpContext.Session.SetString("Username", result.User.Username);
+                    }
                 
                     // 将returnUrl保存到TempData中，以便在LoginSuccess页面使用
                     TempData["ReturnUrl"] = returnUrl;
