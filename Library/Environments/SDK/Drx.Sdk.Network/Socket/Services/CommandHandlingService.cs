@@ -6,7 +6,6 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using DRX.Framework;
-using Microsoft.Extensions.Logging;
 
 namespace Drx.Sdk.Network.Socket.Services
 {
@@ -15,12 +14,10 @@ namespace Drx.Sdk.Network.Socket.Services
     /// </summary>
     public class CommandHandlingService : SocketServiceBase
     {
-        private readonly ILogger<CommandHandlingService> _logger;
         private readonly Dictionary<string, CommandHandler> _commandHandlers;
 
-        public CommandHandlingService(ILogger<CommandHandlingService> logger, Dictionary<string, CommandHandler> commandHandlers)
+        public CommandHandlingService(Dictionary<string, CommandHandler> commandHandlers)
         {
-            _logger = logger;
             _commandHandlers = commandHandlers;
         }
 
@@ -84,13 +81,13 @@ namespace Drx.Sdk.Network.Socket.Services
                     }
                     catch (Exception ex)
                     {
-                        _logger.LogError(ex, "An error occurred while executing command '{command}' for client {clientEndpoint}.", command, client.Client.RemoteEndPoint);
+                        Logger.Error($"An error occurred while executing command '{command}' for client {client.Client.RemoteEndPoint}. ex={ex.Message}");
                         await server.SendResponseAsync(client, SocketStatusCode.Error_InternalServerError, cancellationToken, "Command execution failed.");
                     }
                 }
                 else
                 {
-                    _logger.LogWarning("Unknown command '{command}' received from {clientEndpoint}.", command, client.Client.RemoteEndPoint);
+                    Logger.Warn($"Unknown command '{command}' received from {client.Client.RemoteEndPoint}.");
                     var resp = new {
                         command = command,
                         message = $"Unknown command: {command}",

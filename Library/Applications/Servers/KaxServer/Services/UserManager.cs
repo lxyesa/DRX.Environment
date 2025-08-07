@@ -8,6 +8,7 @@ using KaxServer.Models;
 using Microsoft.AspNetCore.Http;
 using Drx.Sdk.Shared.Cryptography;
 using Drx.Sdk.Network.Socket;
+using Drx.Sdk.Shared.JavaScript;
 
 namespace KaxServer.Services;
 
@@ -15,6 +16,7 @@ namespace KaxServer.Services;
 /// 用户管理器，负责用户注册、登录、信息获取、状态变更等核心操作。
 /// 提供统一的用户数据访问与业务逻辑入口。
 /// </summary>
+[ScriptExport("UserManager", ScriptExportType.StaticClass)]
 public static class UserManager
 {
     /// <summary>
@@ -135,6 +137,7 @@ public static class UserManager
     /// <param name="verificationService">验证码服务实例</param>
     /// <returns>注册结果，包含是否成功、消息和用户信息</returns>
     /// <exception cref="Exception">数据库写入或未知异常</exception>
+    [ScriptExport]
     public static async Task<RegisterResult> Register(string userName, string password, string email, string verificationCode, EmailVerificationCode verificationService)
     {
         Logger.Info($"用户注册请求: {userName} ({email})");
@@ -212,6 +215,7 @@ public static class UserManager
     /// 该方法会依次检查：1)输入是否为空 2)用户名是否存在 3)邮箱是否存在 4)密码是否正确
     /// 所有失败情况都会添加延迟(LOGIN_DELAY_MS)后返回
     /// </remarks>
+    [ScriptExport]
     public static async Task<LoginResult> LoginWebAsync(string userNameOrEmail, string password)
     {
         try
@@ -286,6 +290,7 @@ public static class UserManager
     /// 该方法首先通过用户名查询用户，若未找到则尝试通过邮箱查询。
     /// 验证密码成功后，会生成新的AppToken并更新用户登录状态。
     /// </remarks>
+    [ScriptExport]
     public static async Task<CommandResult?> LoginAppAsync(string userNameOrEmail, string password)
     {
         var userDataList = await UserSql.QueryAsync("Username", userNameOrEmail);
@@ -382,6 +387,32 @@ public static class UserManager
         return false;
     }
 
+    public static async Task<bool> BanUserAsync(UserData user)
+    {
+        if (user == null)
+        {
+            Logger.Error("无法封禁空用户。");
+            return false;
+        }
+        user.UserStatusData.IsBanned = true;
+        await UserSql.UpdateAsync(user);
+        Logger.Info($"用户 {user.Username} 已被封禁。");
+        return true;
+    }
+
+    public static async Task<bool> UnbanUserAsync(UserData user)
+    {
+        if (user == null)
+        {
+            Logger.Error("无法解除封禁空用户。");
+            return false;
+        }
+        user.UserStatusData.IsBanned = false;
+        await UserSql.UpdateAsync(user);
+        Logger.Info($"用户 {user.Username} 已被解除封禁。");
+        return true;
+    }
+
     private static bool IsUserBanned(UserData user)
     {
         if (user == null)
@@ -394,6 +425,7 @@ public static class UserManager
             return false;
         return user.UserStatusData.IsAppLogin && !string.IsNullOrEmpty(user.UserStatusData.AppToken);
     }
+    [ScriptExport]
     public static async Task<UserData> GetUserByIdAsync(int userId)
     {
         if (userId <= 0)
@@ -408,6 +440,7 @@ public static class UserManager
         var userList = await UserSql.QueryAsync("AppToken", appToken);
         return userList?.Count > 0 ? userList[0] : null;
     }
+    [ScriptExport]
     public static async Task<UserData> GetUserByUsernameAsync(string username)
     {
         if (string.IsNullOrEmpty(username))

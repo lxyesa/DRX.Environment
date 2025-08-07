@@ -5,6 +5,17 @@
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
         <RootNamespace>Drx.Sdk.Network</RootNamespace>
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    </PropertyGroup>
+
+    <!-- Release 开启 NativeAOT，Debug 关闭 -->
+    <PropertyGroup Condition="'$(Configuration)'=='Release'">
+        <PublishAot>true</PublishAot>
+    </PropertyGroup>
+
+    <PropertyGroup Condition="'$(Configuration)'=='Debug'">
+        <PublishAot>false</PublishAot>
+        <TrimMode>partial</TrimMode>
     </PropertyGroup>
 
   <ItemGroup>

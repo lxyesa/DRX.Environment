@@ -7,8 +7,63 @@
     <p class="section-desc-main">
         这里是服务器控制台，您可以查看服务器日志、执行命令等。请注意，某些操作可能需要管理员权限。
     </p>
+    <div class="console-tools">
+        <div class="tools-left">
+            <button class="tool-btn" id="btnClear" title="清屏">
+                <span class="material-icons">cleaning_services</span>
+                <span class="tool-text">清屏</span>
+            </button>
+
+            <label class="toggle">
+                <input type="checkbox" id="chkAutoScroll">
+                <span class="toggle-ui"></span>
+                <span class="toggle-text">自动滚动</span>
+            </label>
+
+            <div class="select-wrap">
+                <span class="material-icons">filter_alt</span>
+                <select id="selLevel">
+                    <option value="ALL">ALL</option>
+                    <option value="DBUG">DBUG</option>
+                    <option value="INFO">INFO</option>
+                    <option value="WARN">WARN</option>
+                    <option value="ERROR">ERROR</option>
+                </select>
+            </div>
+
+            <div class="search-wrap">
+                <span class="material-icons">search</span>
+                <input id="txtKeyword" type="text" placeholder="关键词过滤（前端本地）" />
+                <button class="tool-btn small" id="btnClearKeyword" title="清除关键词">
+                    <span class="material-icons">close</span>
+                </button>
+            </div>
+        </div>
+
+        <div class="tools-right">
+            <div class="quick-commands" id="quickCommands">
+                <button class="tool-btn small quick" data-cmd="help"><span class="material-icons">help</span><span class="tool-text">help</span></button>
+                <button class="tool-btn small quick" data-cmd="status"><span class="material-icons">info</span><span class="tool-text">status</span></button>
+                <button class="tool-btn small quick" data-cmd="restart"><span class="material-icons">restart_alt</span><span class="tool-text">restart</span></button>
+                <button class="tool-btn small quick" data-cmd="gc collect"><span class="material-icons">delete_sweep</span><span class="tool-text">gc</span></button>
+                <button class="tool-btn small quick" data-cmd="tail -n 200"><span class="material-icons">dataset</span><span class="tool-text">tail200</span></button>
+                <button class="tool-btn small quick" data-cmd="cls"><span class="material-icons">clear_all</span><span class="tool-text">cls</span></button>
+            </div>
+
+            <div class="history-wrap">
+                <span class="material-icons">history</span>
+                <select id="selHistory">
+                    <option value="">历史命令</option>
+                </select>
+                <button class="tool-btn small" id="btnClearHistory" title="清除历史">
+                    <span class="material-icons">delete</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
     <div class="console-container">
-        <div class="console-output" id="consoleOutput">
+        <div class="console-output" id="consoleOutput" data-autoscroll="true">
             @* 日志内容区域，实际内容由后端/JS注入 *@
         </div>
         <div class="console-load-more" id="loadMoreContainer" style="display: none;">
@@ -17,7 +72,8 @@
         <form id="consoleForm" autocomplete="off">
             <div class="console-input-area">
                 <div style="position: relative; width: 100%;">
-                    <input class="console-input" type="text" id="consoleInput" placeholder="输入命令..." autocomplete="off"/>
+                    <input class="console-input" type="text" id="consoleInput" placeholder="输入命令..."
+                        autocomplete="off" />
                     <div class="command-completion-panel" id="commandCompletionPanel" style="display: none;">
                         <div class="completion-list" id="completionList"></div>
                     </div>
@@ -31,619 +87,680 @@
 </div>
 
 <style>
-.console-output {
-    background: var(--input-bg, #0f1419);
-    color: var(--primary-color, #e6e6e6);
-    font-family: 'JetBrains Mono', 'Fira Mono', 'Consolas', monospace;
-    font-size: 14px;
-    line-height: 1.6;
-    padding: 20px;
-    border-radius: var(--radius, 6px);
-    min-height: 300px;
-    max-height: 500px;
-    overflow-y: auto;
-    border: 1px solid var(--border-color, #2a2f3a);
-    scrollbar-width: thin;
-    scrollbar-color: var(--border-color, #2a2f3a) var(--input-bg, #0f1419);
-}
+    /* 布局与密度优化 */
+    .console-tools {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px 12px;
+        align-items: center;
+        justify-content: space-between;
+        margin: 10px 0 14px 0;
+        padding: 10px 12px;
+        background: var(--surface-color, #141824);
+        border: 1px solid var(--border-color, #252a36);
+        border-radius: var(--radius, 10px);
+        box-shadow: 0 4px 16px rgba(0,0,0,.25);
+        backdrop-filter: saturate(120%) blur(2px);
+    }
 
-.console-output::-webkit-scrollbar {
-    width: 6px;
-}
+    .tools-left, .tools-right { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 
-.console-output::-webkit-scrollbar-track {
-    background: var(--input-bg, #0f1419);
-}
+    /* 统一按钮风格 */
+    .tool-btn {
+        display: inline-flex; align-items: center; gap: 6px;
+        background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(0,0,0,0.08));
+        color: var(--primary-color, #e6e6e6);
+        border: 1px solid var(--border-color, #2a2f3a);
+        border-radius: 8px; padding: 6px 10px; font-size: 12px;
+        cursor: pointer; transition: transform .15s ease, box-shadow .2s, border-color .2s, background .2s;
+        min-height: 32px; line-height: 1; position: relative;
+    }
+    .tool-btn.small { padding: 4px 8px; min-height: 28px; }
+    .tool-btn:hover { border-color: var(--accent-color, #3b82f6); box-shadow: 0 2px 10px rgba(59,130,246,.18); transform: translateY(-1px); }
+    .tool-btn:active { transform: translateY(0); box-shadow: 0 1px 6px rgba(0,0,0,.25); }
+    .tool-btn:focus-visible { outline: 2px solid rgba(59,130,246,.45); outline-offset: 2px; }
+    .tool-text { font-weight: 600; letter-spacing: .2px; }
 
-.console-output::-webkit-scrollbar-thumb {
-    background: var(--border-color, #2a2f3a);
-    border-radius: 3px;
-}
+    /* 切换开关 */
+    .toggle { display: inline-flex; align-items: center; gap: 8px; color: var(--primary-color, #e6e6e6); user-select: none; cursor: pointer; }
+    .toggle input { display: none; }
+    .toggle .toggle-ui { width: 40px; height: 22px; border-radius: 11px; background: #232838; position: relative; transition: all .2s; border: 1px solid var(--border-color, #2a2f3a); }
+    .toggle .toggle-ui::after { content: ""; position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 50%; background: var(--primary-color, #e6e6e6); transition: all .2s; box-shadow: 0 1px 3px rgba(0,0,0,.35); }
+    .toggle input:checked + .toggle-ui { background: linear-gradient(90deg, #3b82f6, #8b5cf6); border-color: transparent; }
+    .toggle input:checked + .toggle-ui::after { left: 20px; background: #fff; }
+    .toggle-text { font-size: 12px; opacity: .9; }
 
-.console-line {
-    margin-bottom: 4px;
-    word-break: break-all;
-    white-space: pre-wrap;
-    transition: color 0.2s;
-}
+    /* 选择与历史容器 */
+    .select-wrap, .history-wrap, .search-wrap {
+        display: inline-flex; align-items: center; gap: 6px;
+        background: var(--surface-color, #141824);
+        border: 1px solid var(--border-color, #252a36);
+        border-radius: 8px; padding: 4px 8px; height: 32px;
+    }
+    .select-wrap select, .history-wrap select {
+        background: transparent; color: var(--primary-color, #e6e6e6);
+        border: none; outline: none; height: 24px; font-size: 12px;
+    }
+    .search-wrap input { background: transparent; color: var(--primary-color, #e6e6e6); border: none; outline: none; height: 22px; font-size: 12px; width: 180px; }
 
-.console-info {
-    color: var(--primary-color, #e6e6e6);
-}
+    /* 快捷命令按钮尺寸微调 */
+    .quick-commands .tool-btn.quick .material-icons { font-size: 16px; }
+    .quick-commands .tool-btn.quick .tool-text { font-size: 12px; }
 
-.console-warn {
-    color: var(--secondary-color, #f5c542);
-}
+    /* 控制台输出 */
+    .console-output {
+        background: radial-gradient(120% 120% at 10% 10%, rgba(59,130,246,.05), transparent 60%), var(--input-bg, #0b0f15);
+        color: var(--primary-color, #e6e6e6);
+        font-family: 'JetBrains Mono', 'Fira Mono', 'Consolas', monospace;
+        font-size: 13.5px; line-height: 1.7; padding: 16px 16px 20px 16px;
+        border-radius: 10px; min-height: 320px; max-height: 520px; overflow-y: auto;
+        border: 1px solid var(--border-color, #252a36);
+        scrollbar-width: thin; scrollbar-color: #2a2f3a #0b0f15;
+    }
+    .console-output::-webkit-scrollbar { width: 8px; }
+    .console-output::-webkit-scrollbar-thumb { background: #2a2f3a; border-radius: 6px; }
 
-.console-error {
-    color: var(--error-color, #ff4b4b);
-}
+    .console-line { margin: 0 0 6px 0; word-break: break-word; white-space: pre-wrap; transition: color .2s, background .2s; padding: 0 4px; border-left: 3px solid transparent; }
+    .console-info  { color: #e6e6e6; }
+    .console-warn  { color: #f5c542; background: rgba(245,197,66,.06); border-left-color: #f5c54233; }
+    .console-error { color: #ff6b6b; background: rgba(255,75,75,.06); border-left-color: #ff4b4b33; }
+    .console-dbug  { color: #8b95a8; font-style: italic; }
 
-.console-dbug {
-    color: var(--text-muted, #6b7280);
-    font-style: italic;
-}
+    .console-input-area { margin-top: 14px; display: flex; gap: 10px; align-items: center; }
+    .console-input { flex: 1; background: rgba(17,22,30,.9); color: var(--primary-color, #e6e6e6); border: 1px solid var(--border-color, #2a2f3a); border-radius: 10px; padding: 12px 14px; font-family: 'JetBrains Mono','Fira Mono','Consolas',monospace; font-size: 14px; outline: none; height: 40px; transition: border-color .2s, box-shadow .2s, background .2s; }
+    .console-input:focus { border-color: var(--accent-color, #3b82f6); box-shadow: 0 0 0 3px rgba(59,130,246,.12); background: rgba(17,22,30,1); }
+    .console-input:disabled { color: #7b8596; cursor: not-allowed; opacity: .7; }
 
-.console-input-area {
-    margin-top: 16px;
-    display: flex;
-}
+    .console-submit-btn,.console-load-btn { background: linear-gradient(180deg, rgba(255,255,255,.04), rgba(0,0,0,.12)); color: var(--primary-color,#e6e6e6); border: 1px solid var(--border-color,#2a2f3a); border-radius: 10px; padding: 10px 14px; font-family: inherit; font-size: 13px; cursor: pointer; transition: all .2s; min-height: 40px; display: inline-flex; align-items: center; justify-content: center; }
+    .console-load-btn:hover:not(:disabled) { background: rgba(59,130,246,.08); border-color: var(--accent-color,#3b82f6); transform: translateY(-1px); }
+    .console-load-btn:disabled { opacity: .55; cursor: not-allowed; }
 
-.console-input {
-    width: 94%;
-    background: var(--input-bg, #0f1419);
-    color: var(--primary-color, #e6e6e6);
-    border: 1px solid var(--border-color, #2a2f3a);
-    border-radius: var(--radius, 6px);
-    padding: 12px 16px;
-    margin-right: 5px;
-    font-family: 'JetBrains Mono', 'Fira Mono', 'Consolas', monospace;
-    font-size: 14px;
-    outline: none;
-    transition: border-color 0.2s, box-shadow 0.2s;
-}
+    .console-load-more { text-align: center; margin: 12px 0; }
 
-.console-input:focus {
-    border-color: var(--accent-color, #3b82f6);
-    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
-}
+    /* 命令补全面板 */
+    .command-completion-panel {
+        position: absolute; top: calc(100% + 6px); left: 0; right: 0;
+        background: #141824; border: 1px solid #252a36; border-radius: 10px;
+        box-shadow: 0 10px 24px rgba(0,0,0,.35);
+        max-height: 320px; overflow-y: auto; z-index: 1000; margin-top: 0;
+        scrollbar-width: thin; scrollbar-color: #2a2f3a #141824;
+    }
+    .command-completion-panel::-webkit-scrollbar { width: 8px; }
+    .command-completion-panel::-webkit-scrollbar-thumb { background: #2a2f3a; border-radius: 6px; }
 
-.console-input:disabled {
-    background: var(--input-bg, #0f1419);
-    color: var(--text-muted, #6b7280);
-    cursor: not-allowed;
-    opacity: 0.6;
-}
+    .completion-list { padding: 4px 0; }
+    .completion-item { display: flex; align-items: center; gap: 8px; padding: 8px 12px; cursor: pointer; transition: background-color .15s ease, color .15s ease; border-bottom: 1px solid rgba(37,42,54,.7); }
+    .completion-item:last-child { border-bottom: none; }
+    .completion-item:hover { background: rgba(59,130,246,.08); }
+    .completion-item.selected { background: linear-gradient(90deg, rgba(59,130,246,.28), rgba(139,92,246,.28)); color: #fff; }
 
-.console-load-more {
-    text-align: center;
-    margin: 16px 0;
-}
+    .completion-icon { margin-right: 2px; font-size: 16px; color: var(--accent-color, #3b82f6); }
+    .completion-item.selected .completion-icon { color: #fff; }
+    .completion-text { font-family: 'JetBrains Mono','Fira Mono','Consolas',monospace; font-size: 13px; font-weight: 600; }
+    .completion-description { font-size: 12px; color: #8b95a8; margin-left: auto; }
+    .completion-item.selected .completion-description { color: #e9ecf1; }
+    .completion-type { font-size: 10px; padding: 2px 6px; border-radius: 4px; background: #202532; color: #8b95a8; margin-left: 4px; }
+    .completion-item.selected .completion-type { background: rgba(255,255,255,.25); color: #fff; }
 
-.console-load-btn {
-    background: var(--surface-color, #1a1d29);
-    color: var(--primary-color, #e6e6e6);
-    border: 1px solid var(--border-color, #2a2f3a);
-    border-radius: var(--radius, 6px);
-    padding: 8px 16px;
-    font-family: inherit;
-    font-size: 13px;
-    cursor: pointer;
-    transition: all 0.2s;
-    min-height: 36px;
-}
-
-.console-load-btn:hover:not(:disabled) {
-    background: var(--border-color, #2a2f3a);
-    border-color: var(--accent-color, #3b82f6);
-    transform: translateY(-1px);
-}
-
-.console-load-btn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-    transform: none;
-}
-
-.console-load-btn:active:not(:disabled) {
-    transform: translateY(0);
-}
-
-/* 命令补全样式 */
-.command-completion-panel {
-    position: absolute;
-    top: 100%;
-    left: 0;
-    right: 0;
-    background: var(--surface-color, #1a1d29);
-    border: 1px solid var(--border-color, #2a2f3a);
-    border-radius: var(--radius, 6px);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-    max-height: 300px;
-    overflow-y: auto;
-    z-index: 1000;
-    margin-top: 4px;
-}
-
-.completion-list {
-    padding: 4px 0;
-}
-
-.completion-item {
-    display: flex;
-    align-items: center;
-    padding: 8px 12px;
-    cursor: pointer;
-    transition: background-color 0.2s;
-    border-bottom: 1px solid var(--border-color, #2a2f3a);
-}
-
-.completion-item:last-child {
-    border-bottom: none;
-}
-
-.completion-item:hover {
-    background: var(--border-color, #2a2f3a);
-}
-
-.completion-item.selected {
-    background: var(--accent-color, #3b82f6);
-    color: white;
-}
-
-.completion-icon {
-    margin-right: 8px;
-    font-size: 16px;
-    color: var(--accent-color, #3b82f6);
-}
-
-.completion-item.selected .completion-icon {
-    color: white;
-}
-
-.completion-text {
-    font-family: 'JetBrains Mono', 'Fira Mono', 'Consolas', monospace;
-    font-size: 13px;
-    font-weight: 500;
-    margin-right: 8px;
-}
-
-.completion-description {
-    font-size: 12px;
-    color: var(--text-muted, #6b7280);
-    margin-left: auto;
-}
-
-.completion-item.selected .completion-description {
-    color: rgba(255, 255, 255, 0.8);
-}
-
-.completion-type {
-    font-size: 10px;
-    padding: 2px 6px;
-    border-radius: 3px;
-    background: var(--border-color, #2a2f3a);
-    color: var(--text-muted, #6b7280);
-    margin-left: 8px;
-}
-
-.completion-item.selected .completion-type {
-    background: rgba(255, 255, 255, 0.2);
-    color: white;
-}
+    /* 响应式调整 */
+    @@media (max-width: 980px) {
+        .console-tools { gap: 8px; }
+        .search-wrap input { width: 140px; }
+        .console-output { max-height: 480px; }
+    }
+    @@media (max-width: 720px) {
+        .console-tools { flex-direction: column; align-items: stretch; }
+        .tools-left, .tools-right { justify-content: space-between; }
+        .search-wrap { flex: 1; }
+        .search-wrap input { width: 100%; }
+    }
 </style>
 
 <script>
-(function() {
-    // 日志加载器
-    const logLoader = {
-        fileName: null,
-        totalLines: 0,
-        loadedLines: 0,
-        isLoading: false,
-        hasMore: true,
-        
-        // 初始化
-        async init() {
-            await this.getLatestLogFile();
-            if (this.fileName) {
-                await this.loadInitialLogs();
-                this.bindEvents();
-            }
-        },
-        
-        // 获取最新的日志文件
-        async getLatestLogFile() {
-            try {
-                const response = await fetch('/api/log/latest');
-                if (response.ok) {
-                    const data = await response.json();
-                    this.fileName = data.fileName;
-                } else {
-                    const errorData = await response.json().catch(() => ({}));
-                    console.error('获取日志文件失败:', response.statusText, errorData.message || '');
-                    showError(`获取日志文件失败: ${errorData.message || response.statusText}`);
+    (function () {
+        // 日志加载器
+        const logLoader = {
+            fileName: null,
+            totalLines: 0,
+            loadedLines: 0,
+            isLoading: false,
+            hasMore: true,
+
+            // 初始化
+            async init() {
+                await this.getLatestLogFile();
+                if (this.fileName) {
+                    await this.loadInitialLogs();
+                    this.bindEvents();
                 }
-            } catch (error) {
-                console.error('获取日志文件时出错:', error);
-                showError(`获取日志文件时出错: ${error.message}`);
-            }
-        },
-        
-        // 加载初始日志（最后250行）
-        async loadInitialLogs() {
-            if (!this.fileName || this.isLoading) return;
-            
-            this.isLoading = true;
-            const consoleOutput = document.getElementById('consoleOutput');
-            
-            try {
-                // 先显示加载中状态
-                consoleOutput.innerHTML = '<div class="console-line console-info">[INFO] 正在加载日志...</div>';
-                
-                const response = await fetch(`/api/log/lines?fileName=${encodeURIComponent(this.fileName)}&startLine=-250&count=250`);
-                if (response.ok) {
-                    const data = await response.json();
-                    this.totalLines = data.totalLines;
-                    this.loadedLines = data.endLine - data.startLine;
-                    
-                    // 显示文件大小提示
-                    showFileSizeInfo(this.totalLines);
-                    
-                    // 清空并显示日志内容
-                    consoleOutput.innerHTML = '';
-                    this.appendLines(data.lines, false);
-                    
-                    // 更新加载更多按钮状态
-                    this.updateLoadMoreButton();
-                } else {
-                    const errorData = await response.json().catch(() => ({}));
-                    consoleOutput.innerHTML = `<div class="console-line console-error">[ERROR] 加载日志失败: ${errorData.message || response.statusText}</div>`;
-                }
-            } catch (error) {
-                consoleOutput.innerHTML = `<div class="console-line console-error">[ERROR] 加载日志时出错: ${error.message}</div>`;
-                console.error('加载日志时出错:', error);
-            } finally {
-                this.isLoading = false;
-            }
-        },
-        
-        // 加载更多日志
-        async loadMoreLogs() {
-            if (!this.fileName || this.isLoading || !this.hasMore) return;
-            
-            this.isLoading = true;
-            const consoleOutput = document.getElementById('consoleOutput');
-            const loadMoreBtn = document.getElementById('loadMoreBtn');
-            
-            try {
-                // 禁用按钮
-                loadMoreBtn.disabled = true;
-                loadMoreBtn.textContent = '加载中...';
-                
-                // 计算要加载的行数
-                const startLine = Math.max(0, this.totalLines - this.loadedLines - 250);
-                const count = Math.min(250, this.totalLines - this.loadedLines);
-                
-                const response = await fetch(`/api/log/lines?fileName=${encodeURIComponent(this.fileName)}&startLine=${startLine}&count=${count}`);
-                if (response.ok) {
-                    const data = await response.json();
-                    this.loadedLines += data.lines.length;
-                    
-                    // 在顶部插入新内容
-                    this.appendLines(data.lines, true);
-                    
-                    // 更新是否有更多内容
-                    this.hasMore = data.startLine > 0;
-                    
-                    // 更新加载更多按钮状态
-                    this.updateLoadMoreButton();
-                } else {
-                    const errorData = await response.json().catch(() => ({}));
-                    console.error('加载更多日志失败:', response.statusText, errorData.message || '');
-                    showError(`加载更多日志失败: ${errorData.message || response.statusText}`);
-                }
-            } catch (error) {
-                console.error('加载更多日志时出错:', error);
-                showError(`加载更多日志时出错: ${error.message}`);
-            } finally {
-                this.isLoading = false;
-                loadMoreBtn.disabled = false;
-                loadMoreBtn.textContent = '加载更多历史消息';
-            }
-        },
-        
-        // 添加行到控制台
-        appendLines(lines, prepend) {
-            const consoleOutput = document.getElementById('consoleOutput');
-            if (!consoleOutput) return;
-            
-            const fragment = document.createDocumentFragment();
-            
-            lines.forEach(line => {
-                const lineElement = document.createElement('div');
-                
-                // 解析日志级别
-                const logLevelMatch = line.match(/\[\d{4}\/\d{2}\/\d{2} \d{2}:\d{2}:\d{2}\]\[[^:]+\:\d+\]\[(DBUG|INFO|WARN|FAIL|FATAL)\]/);
-                let logLevel = 'INFO'; // 默认级别
-                
-                if (logLevelMatch && logLevelMatch[1]) {
-                    logLevel = logLevelMatch[1];
-                }
-                
-                // 根据日志级别设置CSS类
-                const levelClass = this.getLogLevelClass(logLevel);
-                lineElement.className = `console-line ${levelClass}`;
-                
-                // 转义HTML防止XSS，但保留格式
-                const escapedLine = line
-                    .replace(/&/g, '&')
-                    .replace(/</g, '<')
-                    .replace(/>/g, '>');
-                lineElement.innerHTML = escapedLine;
-                
-                fragment.appendChild(lineElement);
-            });
-            
-            if (prepend) {
-                // 在顶部插入
-                consoleOutput.insertBefore(fragment, consoleOutput.firstChild);
-            } else {
-                // 在底部追加
-                consoleOutput.appendChild(fragment);
-                // 追加后自动滚动到底部
-                consoleOutput.scrollTop = consoleOutput.scrollHeight;
-            }
-        },
-        
-        // 根据日志级别获取对应的CSS类
-        getLogLevelClass(level) {
-            switch (level.toUpperCase()) {
-                case 'DBUG':
-                    return 'console-dbug';
-                case 'INFO':
-                    return 'console-info';
-                case 'WARN':
-                    return 'console-warn';
-                case 'FAIL':
-                    return 'console-error';
-                case 'FATAL':
-                    return 'console-error';
-                default:
-                    return 'console-info';
-            }
-        },
-        
-        // 更新加载更多按钮状态
-        updateLoadMoreButton() {
-            const loadMoreContainer = document.getElementById('loadMoreContainer');
-            const loadMoreBtn = document.getElementById('loadMoreBtn');
-            
-            if (this.hasMore && this.totalLines > 100) {
-                loadMoreContainer.style.display = 'block';
-            } else {
-                loadMoreContainer.style.display = 'none';
-            }
-        },
-        
-        // 绑定事件
-        bindEvents() {
-            const loadMoreBtn = document.getElementById('loadMoreBtn');
-            const consoleOutput = document.getElementById('consoleOutput');
-            
-            // 加载更多按钮点击事件
-            loadMoreBtn.addEventListener('click', () => {
-                this.loadMoreLogs();
-            });
-            
-            // 滚动事件，实现滚动加载
-            let scrollTimeout;
-            consoleOutput.addEventListener('scroll', () => {
-                if (scrollTimeout) {
-                    clearTimeout(scrollTimeout);
-                }
-                
-                scrollTimeout = setTimeout(() => {
-                    // 检查是否滚动到顶部
-                    if (consoleOutput.scrollTop === 0 && this.hasMore) {
-                        this.loadMoreLogs();
+            },
+
+            // 获取最新的日志文件
+            async getLatestLogFile() {
+                try {
+                    const response = await fetch('/api/log/latest');
+                    if (response.ok) {
+                        const data = await response.json();
+                        this.fileName = data.fileName;
+                    } else {
+                        const errorData = await response.json().catch(() => ({}));
+                        console.error('获取日志文件失败:', response.statusText, errorData.message || '');
+                        showError(`获取日志文件失败: ${errorData.message || response.statusText}`);
                     }
-                }, 100);
-            });
-        }
-    };
-    
-    // 命令补全器
-    const commandCompleter = {
-        suggestions: [],
-        selectedIndex: -1,
-        isVisible: false,
-        debounceTimer: null,
-        
-        init() {
-            this.bindEvents();
-        },
-        
-        bindEvents() {
-            const input = document.getElementById('consoleInput');
-            const panel = document.getElementById('commandCompletionPanel');
-            
-            // 输入事件
-            input.addEventListener('input', (e) => {
-                this.handleInput(e.target.value);
-            });
-            
-            // 键盘事件
-            input.addEventListener('keydown', (e) => {
-                this.handleKeydown(e);
-            });
-            
-            // 点击外部关闭
-            document.addEventListener('click', (e) => {
-                if (!panel.contains(e.target) && e.target !== input) {
-                    this.hide();
+                } catch (error) {
+                    console.error('获取日志文件时出错:', error);
+                    showError(`获取日志文件时出错: ${error.message}`);
                 }
-            });
-        },
-        
-        async handleInput(value) {
-            // 防抖处理
-            clearTimeout(this.debounceTimer);
-            this.debounceTimer = setTimeout(async () => {
-                await this.fetchSuggestions(value);
-            }, 150);
-        },
-        
-        async fetchSuggestions(input) {
-            if (!input || !input.startsWith('/')) {
-                this.hide();
-                return;
+            },
+
+            // 加载初始日志（最后250行）
+            async loadInitialLogs() {
+                if (!this.fileName || this.isLoading) return;
+
+                this.isLoading = true;
+                const consoleOutput = document.getElementById('consoleOutput');
+
+                try {
+                    // 先显示加载中状态
+                    consoleOutput.innerHTML = '<div class="console-line console-info">[INFO] 正在加载日志...</div>';
+
+                    const response = await fetch(`/api/log/lines?fileName=${encodeURIComponent(this.fileName)}&startLine=-250&count=250`);
+                    if (response.ok) {
+                        const data = await response.json();
+                        this.totalLines = data.totalLines;
+                        this.loadedLines = data.endLine - data.startLine;
+
+                        // 显示文件大小提示
+                        showFileSizeInfo(this.totalLines);
+
+                        // 清空并显示日志内容
+                        consoleOutput.innerHTML = '';
+                        this.appendLines(data.lines, false);
+
+                        // 更新加载更多按钮状态
+                        this.updateLoadMoreButton();
+                    } else {
+                        const errorData = await response.json().catch(() => ({}));
+                        consoleOutput.innerHTML = `<div class="console-line console-error">[ERROR] 加载日志失败: ${errorData.message || response.statusText}</div>`;
+                    }
+                } catch (error) {
+                    consoleOutput.innerHTML = `<div class="console-line console-error">[ERROR] 加载日志时出错: ${error.message}</div>`;
+                    console.error('加载日志时出错:', error);
+                } finally {
+                    this.isLoading = false;
+                }
+            },
+
+            // 加载更多日志
+            async loadMoreLogs() {
+                if (!this.fileName || this.isLoading || !this.hasMore) return;
+
+                this.isLoading = true;
+                const consoleOutput = document.getElementById('consoleOutput');
+                const loadMoreBtn = document.getElementById('loadMoreBtn');
+
+                try {
+                    // 禁用按钮
+                    loadMoreBtn.disabled = true;
+                    loadMoreBtn.textContent = '加载中...';
+
+                    // 计算要加载的行数
+                    const startLine = Math.max(0, this.totalLines - this.loadedLines - 250);
+                    const count = Math.min(250, this.totalLines - this.loadedLines);
+
+                    const response = await fetch(`/api/log/lines?fileName=${encodeURIComponent(this.fileName)}&startLine=${startLine}&count=${count}`);
+                    if (response.ok) {
+                        const data = await response.json();
+                        this.loadedLines += data.lines.length;
+
+                        // 在顶部插入新内容
+                        this.appendLines(data.lines, true);
+
+                        // 更新是否有更多内容
+                        this.hasMore = data.startLine > 0;
+
+                        // 更新加载更多按钮状态
+                        this.updateLoadMoreButton();
+                    } else {
+                        const errorData = await response.json().catch(() => ({}));
+                        console.error('加载更多日志失败:', response.statusText, errorData.message || '');
+                        showError(`加载更多日志失败: ${errorData.message || response.statusText}`);
+                    }
+                } catch (error) {
+                    console.error('加载更多日志时出错:', error);
+                    showError(`加载更多日志时出错: ${error.message}`);
+                } finally {
+                    this.isLoading = false;
+                    loadMoreBtn.disabled = false;
+                    loadMoreBtn.textContent = '加载更多历史消息';
+                }
+            },
+
+            // 添加行到控制台
+            appendLines(lines, prepend) {
+                const consoleOutput = document.getElementById('consoleOutput');
+                if (!consoleOutput) return;
+
+                const fragment = document.createDocumentFragment();
+
+                lines.forEach(line => {
+                    const lineElement = document.createElement('div');
+
+                    // 解析日志级别
+                    const logLevelMatch = line.match(/\[\d{4}\/\d{2}\/\d{2} \d{2}:\d{2}:\d{2}\]\[[^:]+\:\d+\]\[(DBUG|INFO|WARN|FAIL|FATAL)\]/);
+                    let logLevel = 'INFO'; // 默认级别
+
+                    if (logLevelMatch && logLevelMatch[1]) {
+                        logLevel = logLevelMatch[1];
+                    }
+
+                    // 根据日志级别设置CSS类
+                    const levelClass = this.getLogLevelClass(logLevel);
+                    lineElement.className = `console-line ${levelClass}`;
+
+                    // 转义HTML防止XSS，但保留格式
+                    const escapedLine = line
+                        .replace(/&/g, '&')
+                        .replace(/</g, '<')
+                        .replace(/>/g, '>');
+                    lineElement.innerHTML = escapedLine;
+
+                    fragment.appendChild(lineElement);
+                });
+
+                if (prepend) {
+                    // 在顶部插入
+                    consoleOutput.insertBefore(fragment, consoleOutput.firstChild);
+                } else {
+                    // 在底部追加
+                    consoleOutput.appendChild(fragment);
+                    // 追加后自动滚动到底部
+                    consoleOutput.scrollTop = consoleOutput.scrollHeight;
+                }
+            },
+
+            // 根据日志级别获取对应的CSS类
+            getLogLevelClass(level) {
+                switch (level.toUpperCase()) {
+                    case 'DBUG':
+                        return 'console-dbug';
+                    case 'INFO':
+                        return 'console-info';
+                    case 'WARN':
+                        return 'console-warn';
+                    case 'FAIL':
+                        return 'console-error';
+                    case 'FATAL':
+                        return 'console-error';
+                    default:
+                        return 'console-info';
+                }
+            },
+
+            // 更新加载更多按钮状态
+            updateLoadMoreButton() {
+                const loadMoreContainer = document.getElementById('loadMoreContainer');
+                const loadMoreBtn = document.getElementById('loadMoreBtn');
+
+                if (this.hasMore && this.totalLines > 100) {
+                    loadMoreContainer.style.display = 'block';
+                } else {
+                    loadMoreContainer.style.display = 'none';
+                }
+            },
+
+            // 绑定事件
+            bindEvents() {
+                const loadMoreBtn = document.getElementById('loadMoreBtn');
+                const consoleOutput = document.getElementById('consoleOutput');
+
+                // 加载更多按钮点击事件
+                loadMoreBtn.addEventListener('click', () => {
+                    this.loadMoreLogs();
+                });
+
+                // 滚动事件，实现滚动加载
+                let scrollTimeout;
+                consoleOutput.addEventListener('scroll', () => {
+                    if (scrollTimeout) {
+                        clearTimeout(scrollTimeout);
+                    }
+
+                    scrollTimeout = setTimeout(() => {
+                        // 检查是否滚动到顶部
+                        if (consoleOutput.scrollTop === 0 && this.hasMore) {
+                            this.loadMoreLogs();
+                        }
+                    }, 100);
+                });
             }
-            
-            try {
-                const response = await fetch(`/api/commandcompletion/suggestions?input=${encodeURIComponent(input)}`);
-                if (response.ok) {
-                    const data = await response.json();
-                    this.suggestions = data.suggestions || [];
-                    this.selectedIndex = -1;
-                    
-                    if (this.suggestions.length > 0) {
-                        this.show();
+        };
+
+        // 命令补全器
+        const commandCompleter = {
+            suggestions: [],
+            selectedIndex: -1,
+            isVisible: false,
+            debounceTimer: null,
+            currentContext: null,
+
+            init() {
+                this.bindEvents();
+            },
+
+            bindEvents() {
+                const input = document.getElementById('consoleInput');
+                const panel = document.getElementById('commandCompletionPanel');
+
+                // 输入事件
+                input.addEventListener('input', (e) => {
+                    this.handleInput(e.target.value, e.target.selectionStart);
+                });
+
+                // 键盘事件
+                input.addEventListener('keydown', (e) => {
+                    this.handleKeydown(e);
+                });
+
+                // 点击外部关闭
+                document.addEventListener('click', (e) => {
+                    if (!panel.contains(e.target) && e.target !== input) {
+                        this.hide();
+                    }
+                });
+
+                // 光标位置改变时重新计算补全
+                input.addEventListener('click', () => {
+                    if (input.value) {
+                        this.handleInput(input.value, input.selectionStart);
+                    }
+                });
+            },
+
+            async handleInput(value, cursorPosition) {
+                // 防抖处理
+                clearTimeout(this.debounceTimer);
+                this.debounceTimer = setTimeout(async () => {
+                    await this.fetchSmartSuggestions(value, cursorPosition || value.length);
+                }, 150);
+            },
+
+            async fetchSmartSuggestions(input, cursorPosition) {
+                if (!input.trim()) {
+                    this.hide();
+                    return;
+                }
+
+                try {
+                    console.log('[补全] 发起智能补全请求，输入:', input, '光标位置:', cursorPosition);
+                    const response = await fetch('/api/CommandCompletion/suggest', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            input: input,
+                            cursorPosition: cursorPosition
+                        })
+                    });
+
+                    if (!response.ok) {
+                        console.error('获取补全建议失败:', response.statusText);
+                        this.hide();
+                        return;
+                    }
+
+                    const suggestions = await response.json();
+                    console.log('[补全] 获取到补全建议:', suggestions);
+
+                    if (suggestions && suggestions.length > 0) {
+                        this.suggestions = suggestions;
+                        this.selectedIndex = 0;
                         this.render();
+                        this.show();
                     } else {
                         this.hide();
                     }
-                }
-            } catch (error) {
-                console.error('获取命令补全建议失败:', error);
-                this.hide();
-            }
-        },
-        
-        render() {
-            const list = document.getElementById('completionList');
-            list.innerHTML = '';
-            
-            this.suggestions.forEach((suggestion, index) => {
-                const item = document.createElement('div');
-                item.className = `completion-item ${index === this.selectedIndex ? 'selected' : ''}`;
-                item.innerHTML = `
-                    <span class="completion-icon">${this.getIcon(suggestion.type)}</span>
-                    <span class="completion-text">${suggestion.text}</span>
-                    <span class="completion-type">${suggestion.type}</span>
-                    <span class="completion-description">${suggestion.description}</span>
-                `;
-                
-                item.addEventListener('click', () => {
-                    this.selectSuggestion(index);
-                });
-                
-                list.appendChild(item);
-            });
-        },
-        
-        getIcon(type) {
-            switch (type) {
-                case 'command': return '⚡';
-                case 'subcommand': return '▸';
-                case 'branchcommand': return '▹';
-                default: return '•';
-            }
-        },
-        
-        handleKeydown(e) {
-            if (!this.isVisible || this.suggestions.length === 0) return;
-            
-            switch (e.key) {
-                case 'ArrowDown':
-                    e.preventDefault();
-                    this.selectedIndex = (this.selectedIndex + 1) % this.suggestions.length;
-                    this.render();
-                    break;
-                    
-                case 'ArrowUp':
-                    e.preventDefault();
-                    this.selectedIndex = this.selectedIndex <= 0 ? this.suggestions.length - 1 : this.selectedIndex - 1;
-                    this.render();
-                    break;
-                    
-                case 'Enter':
-                    e.preventDefault();
-                    if (this.selectedIndex >= 0) {
-                        this.selectSuggestion(this.selectedIndex);
-                    }
-                    break;
-                    
-                case 'Escape':
-                    e.preventDefault();
+                } catch (error) {
+                    console.error('获取补全建议时出错:', error);
                     this.hide();
-                    break;
-                    
-                case 'Tab':
-                    e.preventDefault();
-                    if (this.selectedIndex >= 0) {
-                        this.selectSuggestion(this.selectedIndex);
-                    } else if (this.suggestions.length > 0) {
-                        this.selectSuggestion(0);
+                }
+            },
+
+            render() {
+                const list = document.getElementById('completionList');
+                list.innerHTML = '';
+                let selectedItemEl = null;
+                this.suggestions.forEach((suggestion, index) => {
+                    const item = document.createElement('div');
+                    item.className = `completion-item ${index === this.selectedIndex ? 'selected' : ''}`;
+
+                    const icon = document.createElement('span');
+                    icon.className = 'completion-icon material-icons';
+                    // 替换为通用Material Icons
+                    let iconName = 'code';
+                    switch (suggestion.type) {
+                        case 'class': iconName = 'folder'; break;
+                        case 'method': iconName = 'functions'; break;
+                        case 'property': iconName = 'tune'; break;
+                        case 'field': iconName = 'view_column'; break;
+                        case 'parameter': iconName = 'label'; break;
+                        default: iconName = 'code'; break;
                     }
-                    break;
+                    icon.textContent = iconName;
+
+                    const text = document.createElement('span');
+                    text.className = 'completion-text';
+                    text.textContent = suggestion.text;
+
+                    const description = document.createElement('span');
+                    description.className = 'completion-description';
+                    description.textContent = suggestion.description || '';
+
+                    const type = document.createElement('span');
+                    type.className = 'completion-type';
+                    type.textContent = suggestion.type;
+
+                    item.appendChild(icon);
+                    item.appendChild(text);
+                    item.appendChild(description);
+                    item.appendChild(type);
+
+                    item.addEventListener('click', () => {
+                        this.selectSuggestion(index);
+                    });
+
+                    if (index === this.selectedIndex) {
+                        selectedItemEl = item;
+                    }
+                    list.appendChild(item);
+                });
+                // 保证选中项可见
+                if (selectedItemEl) {
+                    // 滚动到选中项
+                    selectedItemEl.scrollIntoView({ block: 'nearest', behavior: 'auto' });
+                }
+            },
+
+            getIcon(type) {
+                switch (type) {
+                    case 'class': return 'class';
+                    case 'method': return 'function_variant';
+                    case 'property': return 'tune';
+                    case 'field': return 'storage';
+                    case 'parameter': return 'label';
+                    default: return 'code';
+                }
+            },
+
+            handleKeydown(e) {
+                if (!this.isVisible || this.suggestions.length === 0) {
+                    return;
+                }
+
+                switch (e.key) {
+                    case 'ArrowDown':
+                        e.preventDefault();
+                        this.selectedIndex = Math.min(this.selectedIndex + 1, this.suggestions.length - 1);
+                        this.render();
+                        break;
+
+                    case 'ArrowUp':
+                        e.preventDefault();
+                        this.selectedIndex = Math.max(this.selectedIndex - 1, 0);
+                        this.render();
+                        break;
+
+                    case 'Enter':
+                    case 'Tab':
+                        e.preventDefault();
+                        this.selectSuggestion(this.selectedIndex);
+                        break;
+
+                    case 'Escape':
+                        e.preventDefault();
+                        this.hide();
+                        break;
+                }
+            },
+
+            selectSuggestion(index) {
+                if (index < 0 || index >= this.suggestions.length) return;
+
+                const suggestion = this.suggestions[index];
+                const input = document.getElementById('consoleInput');
+                const cursorPos = input.selectionStart;
+                const inputValue = input.value;
+
+                // 智能插入文本
+                const newValue = this.insertSuggestion(inputValue, cursorPos, suggestion);
+                input.value = newValue.text;
+                input.setSelectionRange(newValue.cursorPos, newValue.cursorPos);
+                input.focus();
+
+                this.hide();
+
+                // 如果是方法且有参数，继续显示参数提示
+                if (suggestion.type === 'method' && suggestion.hasParameters) {
+                    setTimeout(() => {
+                        this.handleInput(input.value, input.selectionStart);
+                    }, 50);
+                }
+                // 如果选择了类名且后面跟了点号，继续显示成员补全
+                else if (suggestion.type === 'class' && input.value.charAt(newValue.cursorPos) === '.') {
+                    setTimeout(() => {
+                        input.setSelectionRange(newValue.cursorPos + 1, newValue.cursorPos + 1);
+                        this.handleInput(input.value, newValue.cursorPos + 1);
+                    }, 50);
+                }
+                // 其他情况也尝试触发补全，以支持连续补全
+                else {
+                    setTimeout(() => {
+                        this.handleInput(input.value, input.selectionStart);
+                    }, 100);
+                }
+            },
+
+            insertSuggestion(inputValue, cursorPos, suggestion) {
+                const beforeCursor = inputValue.substring(0, cursorPos);
+                const afterCursor = inputValue.substring(cursorPos);
+
+                // 找到需要替换的部分
+                let replaceStart = cursorPos;
+
+                // 检查是否在方法调用的参数中
+                const lastOpenParen = beforeCursor.lastIndexOf('(');
+                const lastCloseParen = beforeCursor.lastIndexOf(')');
+
+                if (lastOpenParen > lastCloseParen) {
+                    // 在方法调用参数中
+                    const paramPart = beforeCursor.substring(lastOpenParen + 1);
+                    const currentParamMatch = paramPart.match(/[^,]*$/); // 获取当前参数
+
+                    if (currentParamMatch) {
+                        const currentParam = currentParamMatch[0].trim();
+
+                        if (suggestion.type === 'class') {
+                            // 参数中的类名补全：查找当前参数中的单词开始
+                            const match = currentParam.match(/[a-zA-Z_][a-zA-Z0-9_]*$/);
+                            if (match) {
+                                replaceStart = cursorPos - match[0].length;
+                            }
+                        } else if (suggestion.type === 'method' || suggestion.type === 'property' || suggestion.type === 'field') {
+                            // 参数中的成员补全：查找点号后的部分
+                            const dotIndex = currentParam.lastIndexOf('.');
+                            if (dotIndex >= 0) {
+                                // 计算在整个输入中的实际位置
+                                const paramStartPos = lastOpenParen + 1 + paramPart.length - currentParam.length;
+                                replaceStart = paramStartPos + dotIndex + 1;
+                            }
+                        }
+                    }
+                } else {
+                    // 不在方法调用参数中，使用原有逻辑
+                    if (suggestion.type === 'class') {
+                        // 类名补全：查找当前单词的开始
+                        const match = beforeCursor.match(/[a-zA-Z_][a-zA-Z0-9_]*$/);
+                        if (match) {
+                            replaceStart = cursorPos - match[0].length;
+                        }
+                    } else if (suggestion.type === 'method' || suggestion.type === 'property' || suggestion.type === 'field') {
+                        // 成员补全：查找点号后的部分
+                        const dotIndex = beforeCursor.lastIndexOf('.');
+                        if (dotIndex >= 0) {
+                            replaceStart = dotIndex + 1;
+                        }
+                    }
+                }
+
+                const insertText = suggestion.insertText || suggestion.text;
+                const newText = inputValue.substring(0, replaceStart) + insertText + afterCursor;
+                const newCursorPos = replaceStart + insertText.length;
+
+                return {
+                    text: newText,
+                    cursorPos: newCursorPos
+                };
+            },
+
+            show() {
+                const panel = document.getElementById('commandCompletionPanel');
+                panel.style.display = 'block';
+                this.isVisible = true;
+            },
+
+            hide() {
+                const panel = document.getElementById('commandCompletionPanel');
+                panel.style.display = 'none';
+                this.isVisible = false;
+                this.suggestions = [];
+                this.selectedIndex = -1;
             }
-        },
-        
-        selectSuggestion(index) {
-            if (index < 0 || index >= this.suggestions.length) return;
-            
-            const suggestion = this.suggestions[index];
+        };
+
+        // 页面加载完成后初始化日志加载器和命令补全器
+        document.addEventListener('DOMContentLoaded', () => {
+            logLoader.init();
+            commandCompleter.init();
+
+            const form = document.getElementById('consoleForm');
             const input = document.getElementById('consoleInput');
-            input.value = suggestion.text;
-            input.focus();
-            
-            this.hide();
-            
-            // 触发input事件以继续补全
-            setTimeout(() => {
-                input.dispatchEvent(new Event('input'));
-            }, 0);
-        },
-        
-        show() {
-            const panel = document.getElementById('commandCompletionPanel');
-            panel.style.display = 'block';
-            this.isVisible = true;
-        },
-        
-        hide() {
-            const panel = document.getElementById('commandCompletionPanel');
-            panel.style.display = 'none';
-            this.isVisible = false;
-            this.suggestions = [];
-            this.selectedIndex = -1;
-        }
-    };
-    
-    // 页面加载完成后初始化日志加载器和命令补全器
-    document.addEventListener('DOMContentLoaded', () => {
-        logLoader.init();
-        commandCompleter.init();
+            const output = document.getElementById('consoleOutput');
 
-        const form = document.getElementById('consoleForm');
-        const input = document.getElementById('consoleInput');
-        const output = document.getElementById('consoleOutput');
+            form.addEventListener('submit', async function (e) {
+                e.preventDefault();
+                const command = input.value.trim();
+                if (!command) return;
 
-        form.addEventListener('submit', async function(e) {
-            e.preventDefault();
-            const command = input.value.trim();
-            if (!command) return;
-            
-            // 隐藏补全面板
-            commandCompleter.hide();
-            
-            input.disabled = true;
-        
-            // 显示加载动画
-            const spinner = document.createElement('div');
-            spinner.id = 'console-spinner';
-            spinner.innerHTML = `
+                // 隐藏补全面板
+                commandCompleter.hide();
+
+                input.disabled = true;
+
+                // 显示加载动画
+                const spinner = document.createElement('div');
+                spinner.id = 'console-spinner';
+                spinner.innerHTML = `
                 <span style="display:inline-block;vertical-align:middle;">
                     <svg width="28" height="28" viewBox="0 0 50 50">
                         <circle cx="25" cy="25" r="20" fill="none" stroke="#3b82f6" stroke-width="5" stroke-linecap="round" stroke-dasharray="90 150" stroke-dashoffset="0">
@@ -653,66 +770,66 @@
                 </span>
                 <span style="margin-left:8px;">正在执行命令，请稍候...</span>
             `;
-            output.appendChild(spinner);
-            output.scrollTop = output.scrollHeight;
-            // 保证动画插入后持续滚动到底部
-            let spinnerScrollInterval = setInterval(() => {
+                output.appendChild(spinner);
                 output.scrollTop = output.scrollHeight;
-            }, 100);
-        
-            try {
-                await fetch('/api/log/execute', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ command })
-                });
-                // 等待至少2秒
-                await new Promise(resolve => setTimeout(resolve, 500));
-                // 局部刷新日志区域
-                await logLoader.loadInitialLogs();
-                // 日志刷新后自动滚动到底部
-                output.scrollTop = output.scrollHeight;
-            } catch (err) {
-                const line = document.createElement('div');
-                line.className = 'console-line console-error';
-                line.textContent = `[ERROR] 网络错误: ${err.message}`;
-                output.appendChild(line);
-                output.scrollTop = output.scrollHeight;
-            } finally {
-                // 移除加载动画
-                const spinnerEl = document.getElementById('console-spinner');
-                if (spinnerEl) spinnerEl.remove();
-                // 停止动画期间的滚动
-                if (typeof spinnerScrollInterval !== 'undefined') {
-                    clearInterval(spinnerScrollInterval);
+                // 保证动画插入后持续滚动到底部
+                let spinnerScrollInterval = setInterval(() => {
+                    output.scrollTop = output.scrollHeight;
+                }, 100);
+
+                try {
+                    await fetch('/api/log/execute', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ command })
+                    });
+                    // 等待至少2秒
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                    // 局部刷新日志区域
+                    await logLoader.loadInitialLogs();
+                    // 日志刷新后自动滚动到底部
+                    output.scrollTop = output.scrollHeight;
+                } catch (err) {
+                    const line = document.createElement('div');
+                    line.className = 'console-line console-error';
+                    line.textContent = `[ERROR] 网络错误: ${err.message}`;
+                    output.appendChild(line);
+                    output.scrollTop = output.scrollHeight;
+                } finally {
+                    // 移除加载动画
+                    const spinnerEl = document.getElementById('console-spinner');
+                    if (spinnerEl) spinnerEl.remove();
+                    // 停止动画期间的滚动
+                    if (typeof spinnerScrollInterval !== 'undefined') {
+                        clearInterval(spinnerScrollInterval);
+                    }
                 }
-            }
-            input.value = '';
-            input.disabled = false;
-            input.focus();
+                input.value = '';
+                input.disabled = false;
+                input.focus();
+            });
         });
-    });
-})();
+    })();
 
-// 添加显示错误信息的方法
-function showError(message) {
-    const consoleOutput = document.getElementById('consoleOutput');
-    const errorElement = document.createElement('div');
-    errorElement.className = 'console-line console-error';
-    errorElement.textContent = `[ERROR] ${message}`;
-    consoleOutput.appendChild(errorElement);
-    // 滚动到底部显示错误
-    consoleOutput.scrollTop = consoleOutput.scrollHeight;
-}
+    // 添加显示错误信息的方法
+    function showError(message) {
+        const consoleOutput = document.getElementById('consoleOutput');
+        const errorElement = document.createElement('div');
+        errorElement.className = 'console-line console-error';
+        errorElement.textContent = `[ERROR] ${message}`;
+        consoleOutput.appendChild(errorElement);
+        // 滚动到底部显示错误
+        consoleOutput.scrollTop = consoleOutput.scrollHeight;
+    }
 
-// 添加显示文件大小信息的方法
-function showFileSizeInfo(totalLines) {
-    const consoleOutput = document.getElementById('consoleOutput');
-    const infoElement = document.createElement('div');
-    infoElement.className = 'console-line console-info';
-    // 估算文件大小：假设每行平均80字符
-    const estimatedSize = Math.round((totalLines * 80) / 1024);
-    infoElement.textContent = `[INFO] 日志文件约 ${estimatedSize} KB，共 ${totalLines} 行`;
-    consoleOutput.appendChild(infoElement);
-}
+    // 添加显示文件大小信息的方法
+    function showFileSizeInfo(totalLines) {
+        const consoleOutput = document.getElementById('consoleOutput');
+        const infoElement = document.createElement('div');
+        infoElement.className = 'console-line console-info';
+        // 估算文件大小：假设每行平均80字符
+        const estimatedSize = Math.round((totalLines * 80) / 1024);
+        infoElement.textContent = `[INFO] 日志文件约 ${estimatedSize} KB，共 ${totalLines} 行`;
+        consoleOutput.appendChild(infoElement);
+    }
 </script>

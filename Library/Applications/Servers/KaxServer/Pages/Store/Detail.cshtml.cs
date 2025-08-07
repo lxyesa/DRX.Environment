@@ -1,76 +1,20 @@
-
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Mvc.RazorPages;
-using KaxServer.Services;
-using System.Threading.Tasks;
-using System.Linq;
 using KaxServer.Models;
+using KaxServer.Services;
+using Microsoft.AspNetCore.Mvc.RazorPages;
 
-public class DetailModel : PageModel
+namespace KaxServer.Pages.Store
 {
-    [BindProperty(SupportsGet = true)]
-    public int id { get; set; }
-
-    public UserData CurrentUser { get; set; }
-
-    public StoreItem StoreItem { get; set; }
-
-    // 每个价格项是否已拥有
-    public List<bool> OwnStatus { get; set; } = new List<bool>();
-
-    public async Task<IActionResult> OnGetAsync()
+    // 修复命名空间与类型缺失：提供与 Razor @model 对应的 PageModel
+    public class DetailModel : PageModel
     {
-        CurrentUser = await UserManager.GetCurrentUserAsync(HttpContext);
-        if (id <= 0)
-        {
-            return NotFound();
-        }
-        var item = await StoreManager.StoreItemSqlite.QueryByIdAsync(id);
-        if (item == null)
-        {
-            return NotFound();
-        }
-        StoreItem = item;
-        OwnStatus = item.StoreItemPrices.Select(_ =>
-            CurrentUser?.BuyedStoreItems.Any(b =>
-                b.StoreItemId == item.Id && !b.IsExpired
-            ) ?? false
-        ).ToList();
-        return Page();
-    }
+        public int Id { get; set; }
+        public UserData CurrentUser { get; set; } // 当前用户信息
 
-    public async Task<IActionResult> OnPostBuyAsync(int itemId, int priceIndex)
-    {
-        CurrentUser = await UserManager.GetCurrentUserAsync(HttpContext);
-        var storeItem = await StoreManager.StoreItemSqlite.QueryByIdAsync(itemId);
-        if (storeItem == null)
+        public void OnGet(int id)
         {
-            return NotFound();
-        }
-        StoreItem = storeItem;
-        if (CurrentUser == null)
-        {
-            return Unauthorized();
-        }
-
-        // 禁止已拥有再次购买
-        bool alreadyOwned = CurrentUser.BuyedStoreItems.Any(b => b.StoreItemId == itemId && !b.IsExpired);
-        OwnStatus = storeItem.StoreItemPrices.Select(_ => alreadyOwned).ToList();
-        if (alreadyOwned)
-        {
-            ModelState.AddModelError("", "已拥有该商品，无需重复购买");
-            return Page();
-        }
-
-        var result = await StoreManager.BuyItemAsync(CurrentUser, itemId, priceIndex);
-        if (result.Success)
-        {
-            return RedirectToPage(new { id = itemId });
-        }
-        else
-        {
-            ModelState.AddModelError("", result.Message ?? "未知错误");
-            return Page();
+            Id = id;
+            CurrentUser = UserManager.GetCurrentUserAsync(HttpContext).Result;
+            // 前端脚本基于 QueryString /api/store/items/{id} 获取并渲染
         }
     }
 }

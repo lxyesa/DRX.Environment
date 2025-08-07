@@ -1,50 +1,57 @@
 using System;
+using System.Collections.Generic;
 using Drx.Sdk.Network.DataBase.Sqlite;
+using Drx.Sdk.Shared.JavaScript;
 using KaxServer.Services;
 
 namespace KaxServer.Models;
 
 /// <summary>
-/// 用户数据模型，包含基础信息、设置与状态
-/// </summary>
-/// <summary>
 /// 用户数据模型，包含基础信息、设置与状态。用于数据库持久化与业务逻辑处理。
 /// </summary>
+[ScriptExport("UserData", ScriptExportType.Class)]
 public class UserData : IDataBase
 {
     /// <summary>
     /// 用户唯一ID（主键，自动生成）
     /// </summary>
+    [ScriptExport]
     public int Id { get; set; }
 
     /// <summary>
     /// Username属性，与UserName同步，兼容性用途
     /// </summary>
+    [ScriptExport]
     public string Username { get; set; }
 
     /// <summary>
     /// 密码哈希（存储加密后的密码，严禁明文）
     /// </summary>
+    [ScriptExport]
     public string PasswordHash { get; set; }
 
     /// <summary>
     /// 邮箱（唯一，用户找回密码等场景使用）
     /// </summary>
+    [ScriptExport]
     public string Email { get; set; }
 
     /// <summary>
     /// 金币（虚拟货币，参与商城、奖励等）
     /// </summary>
+    [ScriptExport]
     public int Coins { get; set; } = 0;
 
     /// <summary>
     /// 等级（成长体系，影响权限与奖励）
     /// </summary>
+    [ScriptExport]
     public int Level { get; set; } = 0;
 
     /// <summary>
     /// 当前经验值（升级所需）
     /// </summary>
+    [ScriptExport]
     public int Exp { get; set; } = 0;
 
     /// <summary>

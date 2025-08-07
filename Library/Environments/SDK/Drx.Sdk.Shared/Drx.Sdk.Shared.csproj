@@ -4,7 +4,10 @@
     <TargetFramework>net9.0-windows</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <UseWPF>true</UseWPF>
+    <PublishAot>true</PublishAot>
   </PropertyGroup>
-
+  
+  <ItemGroup>
+    <PackageReference Include="NLua" Version="1.7.4" />
+  </ItemGroup>
 </Project>

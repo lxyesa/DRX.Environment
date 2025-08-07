@@ -2,10 +2,16 @@ using Drx.Sdk.Network.DataBase.Sqlite;
 using DRX.Framework;
 using KaxServer.Models;
 using KaxServer.Services;
+using System.Collections.Concurrent;
+using System.Security.Cryptography;
 
 public static class StoreManager
 {
     public static readonly SqliteUnified<StoreItem> StoreItemSqlite;
+
+    // 一次性令牌（内存，10分钟过期，首次验证即销毁）
+    private static readonly ConcurrentDictionary<string, (int UserId, int ItemId, DateTime Expire, string OrderId)> PurchaseTokens
+        = new();
 
     static StoreManager()
     {
@@ -51,7 +57,7 @@ public static class StoreManager
         }
         catch (Exception ex)
         {
-            Logger.Error($"创建商品时发生错误: {ex.ToString()}");
+            Logger.Error($"创建商品时发生错误: {ex}");
             return false;
         }
     }
@@ -77,7 +83,7 @@ public static class StoreManager
         }
         catch (Exception ex)
         {
-            Logger.Error($"更新商品时发生错误: {ex.ToString()}");
+            Logger.Error($"更新商品时发生错误: {ex}");
             return false;
         }
     }
@@ -91,7 +97,7 @@ public static class StoreManager
         }
         catch (Exception ex)
         {
-            Logger.Error($"删除商品时发生错误: {ex.ToString()}");
+            Logger.Error($"删除商品时发生错误: {ex}");
             return false;
         }
     }
@@ -105,9 +111,45 @@ public static class StoreManager
         }
         catch (Exception ex)
         {
-            Logger.Error($"清空商品时发生错误: {ex.ToString()}");
+            Logger.Error($"清空商品时发生错误: {ex}");
             return false;
         }
+    }
+
+    // 生成一次性令牌
+    private static string GenerateToken()
+    {
+        Span<byte> bytes = stackalloc byte[32];
+        RandomNumberGenerator.Fill(bytes);
+        return Convert.ToBase64String(bytes).TrimEnd('=').Replace('+', '-').Replace('/', '_');
+    }
+
+    // 清理过期令牌（轻量级，惰性清理）
+    private static void SweepExpiredTokens()
+    {
+        var now = DateTime.UtcNow;
+        foreach (var kv in PurchaseTokens)
+        {
+            if (kv.Value.Expire <= now)
+            {
+                PurchaseTokens.TryRemove(kv.Key, out _);
+            }
+        }
+    }
+
+    // 验证并销毁令牌
+    public static bool ConsumePurchaseToken(string token, out int userId, out int itemId, out string orderId)
+    {
+        userId = 0; itemId = 0; orderId = string.Empty;
+        SweepExpiredTokens();
+        if (string.IsNullOrWhiteSpace(token)) return false;
+        if (!PurchaseTokens.TryRemove(token, out var payload)) return false;
+        if (payload.Expire <= DateTime.UtcNow) return false;
+
+        userId = payload.UserId;
+        itemId = payload.ItemId;
+        orderId = payload.OrderId;
+        return true;
     }
 
     public static async Task<BuyResult> BuyItemAsync(UserData user, int itemId, int priceIndex = 0)
@@ -182,12 +224,19 @@ public static class StoreManager
         Logger.Info($"用户 {user.Id} 购买商品 {itemId} 成功，扣除金额: {price}");
         Logger.Info($"现在用户 {user.Id} 拥有的商品数量: {user.BuyedStoreItems.Count}");
 
+        // 生成一次性令牌（10分钟）
+        var token = GenerateToken();
+        var orderId = itemId.ToString(); // 若后续有真实订单ID，这里替换
+        PurchaseTokens[token] = (user.Id, itemId, DateTime.UtcNow.AddMinutes(10), orderId);
+
         return new BuyResult
         {
             Success = true,
             Message = "购买成功",
             ItemId = itemId,
-            UserId = user.Id
+            UserId = user.Id,
+            Token = token,
+            OrderId = orderId
         };
     }
 }

@@ -238,104 +238,144 @@ namespace Drx.Sdk.Network.Socket
             return Task.CompletedTask;
         }
 
-        #region 发包收包方法 - 完全兼容 SocketServerService.cs
+        #region 发包收包方法 - 新版握手协议
 
         /// <summary>
-        /// 新版异步发送数据包，支持临时响应回调与超时注销，无需全局事件。
+        /// 新版异步发送数据包：先发送握手包头 {"packetSize":int}（可加密）-> 等待服务端 {"message_request":bool,...} -> 再发送JSON包体。
         /// </summary>
-        /// <param name="data">要发送的数据</param>
-        /// <param name="onResponse">本次请求的响应回调</param>
-        /// <param name="timeout">超时时间</param>
+        /// <param name="data">要发送的数据（对象将序列化为 JSON，string 原样按 UTF8）</param>
+        /// <param name="onResponse">收到服务端后续业务层响应时的回调（可空）</param>
+        /// <param name="timeout">握手/消息队列等待超时时间，默认30s</param>
         /// <param name="token">取消令牌</param>
-        /// <returns>发送任务</returns>
         public async Task SendPacketAsync(
             object data,
             Action<DrxTcpClient, byte[]>? onResponse,
             TimeSpan timeout,
             CancellationToken token = default)
         {
+            // 统一转换为字节后转调字节重载，避免在 AOT 环境使用反射序列化
+            if (data is null)
+                throw new ArgumentNullException(nameof(data), "SendPacketAsync data cannot be null");
+
+            byte[] payload;
+            if (data is byte[] b) payload = b;
+            else if (data is string s) payload = Encoding.UTF8.GetBytes(s);
+            else
+            {
+                // 尽量避免 System.Text.Json 在 AOT 的反射路径，这里只在必要时序列化匿名/POCO。
+                // 如果你的环境禁用了反射，请优先在调用侧传入 string/byte[]。
+                var json = System.Text.Json.JsonSerializer.Serialize(data);
+                payload = Encoding.UTF8.GetBytes(json);
+            }
+
+            await SendPacketAsync(payload, onResponse, timeout, token);
+        }
+
+        /// <summary>
+        /// 新增重载：纯字节直发（遵循握手头 + 包体协议），不做任何对象序列化。
+        /// 调用侧若已构造好 UTF-8 JSON 或任意二进制，直接传入 payload。
+        /// </summary>
+        public async Task SendPacketAsync(
+            byte[] payload,
+            Action<DrxTcpClient, byte[]>? onResponse,
+            TimeSpan timeout,
+            CancellationToken token = default)
+        {
+            if (payload == null) throw new ArgumentNullException(nameof(payload));
             if (!Connected)
             {
                 _logger?.LogWarning("Cannot send packet to a disconnected client.");
                 return;
             }
 
-            // 数据序列化
-            byte[] messageBytes = null;
-            if (data is byte[] bytes)
-            {
-                messageBytes = bytes;
-            }
-            else if (data is string str)
-            {
-                messageBytes = Encoding.UTF8.GetBytes(str);
-            }
-            else if (data != null)
-            {
-                var json = System.Text.Json.JsonSerializer.Serialize(data);
-                messageBytes = Encoding.UTF8.GetBytes(json);
-            }
-            else
-            {
-                throw new ArgumentNullException(nameof(data), "SendPacketAsync data cannot be null");
-            }
-
-            // 组包：4字节长度+内容
-            byte[] lengthHeader = BitConverter.GetBytes(messageBytes.Length);
-            byte[] sendBuffer = new byte[lengthHeader.Length + messageBytes.Length];
-            Array.Copy(lengthHeader, 0, sendBuffer, 0, lengthHeader.Length);
-            Array.Copy(messageBytes, 0, sendBuffer, lengthHeader.Length, messageBytes.Length);
-
-            // 触发发送前事件（原始包格式）
-            OnDataSent?.Invoke(this, sendBuffer);
-
-            // 加密/签名（对整个包进行）
-            if (_packetEncryptor != null)
-            {
-                sendBuffer = _packetEncryptor.Encrypt(sendBuffer);
-            }
-            else if (_packetIntegrityProvider != null)
-            {
-                sendBuffer = _packetIntegrityProvider.Protect(sendBuffer);
-            }
-
             var stream = GetStream();
-            await stream.WriteAsync(sendBuffer, 0, sendBuffer.Length, token);
 
-            // 临时响应回调注册与超时处理
-            var tcs = new TaskCompletionSource<byte[]>(TaskCreationOptions.RunContinuationsAsynchronously);
-            Action<DrxTcpClient, byte[]> handler = (client, resp) =>
-            {
-                tcs.TrySetResult(resp);
-            };
-            OnDataReceived += handler;
-
-            using var cts = CancellationTokenSource.CreateLinkedTokenSource(token);
-            cts.CancelAfter(timeout);
-
+            // 1) 握手头：{"packetSize":int}
+            string headerJson;
             try
             {
-                var completedTask = await Task.WhenAny(tcs.Task, Task.Delay(timeout, cts.Token));
-                if (completedTask == tcs.Task && !cts.IsCancellationRequested)
-                {
-                    // 收到响应，触发回调
-                    var resp = await tcs.Task;
-                    onResponse?.Invoke(this, resp);
-                }
-                // 超时则自动注销，不触发回调
+                headerJson = $"{{\"packetSize\":{payload.Length}}}";
             }
-            finally
+            catch
             {
-                OnDataReceived -= handler;
+                headerJson = "{\"packetSize\":0}";
+            }
+            var headerBytes = Encoding.UTF8.GetBytes(headerJson);
+
+            OnDataSent?.Invoke(this, headerBytes);
+
+            byte[] toSendHeader = headerBytes;
+            if (_packetEncryptor != null)
+                toSendHeader = _packetEncryptor.Encrypt(toSendHeader);
+            else if (_packetIntegrityProvider != null)
+                toSendHeader = _packetIntegrityProvider.Protect(toSendHeader);
+
+            await stream.WriteAsync(toSendHeader, 0, toSendHeader.Length, token);
+
+            // 2) 等待 { "message_request": true } 回包
+            var handshakeResp = await ReceiveSingleJsonAsync(timeout, token);
+            if (handshakeResp == null)
+            {
+                _logger?.LogWarning("Handshake response timeout.");
+                return;
+            }
+
+            bool allow = false;
+            try
+            {
+                var doc = System.Text.Json.JsonDocument.Parse(handshakeResp);
+                if (doc.RootElement.TryGetProperty("message_request", out var mr))
+                    allow = mr.GetBoolean();
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogWarning(ex, "Invalid handshake response format.");
+            }
+            if (!allow)
+            {
+                _logger?.LogWarning("Server rejected message during handshake.");
+                return;
+            }
+
+            // 3) 发送包体
+            var bodyBytes = payload;
+            OnDataSent?.Invoke(this, bodyBytes);
+
+            if (_packetEncryptor != null)
+                bodyBytes = _packetEncryptor.Encrypt(bodyBytes);
+            else if (_packetIntegrityProvider != null)
+                bodyBytes = _packetIntegrityProvider.Protect(bodyBytes);
+
+            await stream.WriteAsync(bodyBytes, 0, bodyBytes.Length, token);
+
+            // 4) 等待业务响应（可选）
+            if (onResponse != null)
+            {
+                var tcs = new TaskCompletionSource<byte[]>(TaskCreationOptions.RunContinuationsAsynchronously);
+                Action<DrxTcpClient, byte[]> handler = (client, resp) => tcs.TrySetResult(resp);
+                OnDataReceived += handler;
+
+                using var cts = CancellationTokenSource.CreateLinkedTokenSource(token);
+                cts.CancelAfter(timeout);
+                try
+                {
+                    var completedTask = await Task.WhenAny(tcs.Task, Task.Delay(timeout, cts.Token));
+                    if (completedTask == tcs.Task && !cts.IsCancellationRequested)
+                    {
+                        var resp = await tcs.Task;
+                        onResponse?.Invoke(this, resp);
+                    }
+                }
+                finally
+                {
+                    OnDataReceived -= handler;
+                }
             }
         }
 
         /// <summary>
-        /// 发送字符串消息
+        /// 发送字符串消息（使用新版握手协议）
         /// </summary>
-        /// <param name="message">要发送的字符串消息</param>
-        /// <param name="token">取消令牌</param>
-        /// <returns>发送任务</returns>
         public async Task SendMessageAsync(string message, CancellationToken token = default)
         {
             var messageBytes = Encoding.UTF8.GetBytes(message);
@@ -343,18 +383,13 @@ namespace Drx.Sdk.Network.Socket
         }
 
         /// <summary>
-        /// 发送响应，与 SocketServerService.SendResponseAsync 相同的格式
+        /// 发送响应（沿用原有格式拼接，但走新版握手协议）
         /// </summary>
-        /// <param name="code">状态码</param>
-        /// <param name="token">取消令牌</param>
-        /// <param name="args">附加参数</param>
-        /// <returns>发送任务</returns>
         public async Task SendResponseAsync(SocketStatusCode code, CancellationToken token = default, params object[] args)
         {
             string rawMessage;
             if (args.Length == 1 && args[0] != null && args[0].GetType().IsClass && !(args[0] is string))
             {
-                // 如果只传了一个对象且不是字符串，则序列化为JSON，并自动加入状态码
                 var obj = args[0];
                 var dict = new Dictionary<string, object>();
                 foreach (var prop in obj.GetType().GetProperties())
@@ -367,7 +402,6 @@ namespace Drx.Sdk.Network.Socket
             }
             else
             {
-                // 兼容旧模式，code+参数用|分隔
                 var messageParts = new List<string> { ((int)code).ToString() };
                 messageParts.AddRange(args.Select(a => a?.ToString() ?? string.Empty));
                 rawMessage = string.Join("|", messageParts);
@@ -377,15 +411,13 @@ namespace Drx.Sdk.Network.Socket
         }
 
         /// <summary>
-        /// 开始接收数据包，使用与 SocketServerService 相同的协议解析（支持粘包处理）
+        /// 开始接收：不再按4字节长度拆包；改为“整个读取到的块 -> 解密/验签 -> 直接作为一条消息触发”
+        /// 服务端会控制握手与业务的分帧；客户端这里只负责把收到的明文字节上抛。
         /// </summary>
-        /// <param name="token">取消令牌</param>
-        /// <returns>接收任务</returns>
         public async Task StartReceivingAsync(CancellationToken token = default)
         {
             try
             {
-                // 标志已启动接收（用于手动调用时也能防止重复）
                 if (Interlocked.CompareExchange(ref _receivingStarted, 1, 0) == 0 && token == default)
                 {
                     _autoReceiveCts = new CancellationTokenSource();
@@ -400,14 +432,29 @@ namespace Drx.Sdk.Network.Socket
                     while (!token.IsCancellationRequested && Connected &&
                            (bytesRead = await stream.ReadAsync(buffer, 0, buffer.Length, token)) != 0)
                     {
-                        lock (_receiveBufferLock)
+                        var chunk = buffer.AsSpan(0, bytesRead).ToArray();
+
+                        if (_packetEncryptor != null)
                         {
-                            // 累积收到的数据
-                            _receiveBuffer.AddRange(buffer.AsSpan(0, bytesRead).ToArray());
+                            chunk = _packetEncryptor.Decrypt(chunk);
+                            if (chunk == null)
+                            {
+                                _logger?.LogWarning("Failed to decrypt received data.");
+                                continue;
+                            }
+                        }
+                        else if (_packetIntegrityProvider != null)
+                        {
+                            chunk = _packetIntegrityProvider.Unprotect(chunk);
+                            if (chunk == null)
+                            {
+                                _logger?.LogWarning("Packet integrity check failed. Tampered packet suspected.");
+                                continue;
+                            }
                         }
 
-                        // 处理粘包 - 完全兼容C++的包头+包体粘包处理（小端字节序）
-                        await ProcessReceiveBuffer(token);
+                        // 直接上抛一条消息块
+                        OnDataReceived?.Invoke(this, chunk);
                     }
                 }
             }
@@ -428,89 +475,48 @@ namespace Drx.Sdk.Network.Socket
         }
 
         /// <summary>
-        /// 处理接收缓冲区中的数据包
+        /// 等待一条 JSON 文本回复（用于握手回包）。在超时内从 OnDataReceived 管道上消费一帧并尝试解析为 JSON 字符串。
         /// </summary>
-        /// <param name="token">取消令牌</param>
-        /// <returns>处理任务</returns>
-        private Task ProcessReceiveBuffer(CancellationToken token)
+        private async Task<string?> ReceiveSingleJsonAsync(TimeSpan timeout, CancellationToken token)
         {
-            while (true)
+            var tcs = new TaskCompletionSource<byte[]>(TaskCreationOptions.RunContinuationsAsynchronously);
+            Action<DrxTcpClient, byte[]> handler = (client, data) =>
             {
-                byte[] receivedData;
-                lock (_receiveBufferLock)
-                {
-                    if (_receiveBuffer.Count == 0)
-                        break;
-                    receivedData = _receiveBuffer.ToArray();
-                    _receiveBuffer.Clear();
-                }
+                tcs.TrySetResult(data);
+            };
+            OnDataReceived += handler;
 
-                // 解密/验签（对整个包流处理）
-                if (_packetEncryptor != null)
-                {
-                    _logger?.LogTrace("Decrypting received data...");
-                    receivedData = _packetEncryptor.Decrypt(receivedData);
-                    if (receivedData == null)
-                    {
-                        _logger?.LogWarning("Failed to decrypt received data.");
-                        continue;
-                    }
-                }
-                else if (_packetIntegrityProvider != null)
-                {
-                    _logger?.LogTrace("Verifying packet integrity...");
-                    receivedData = _packetIntegrityProvider.Unprotect(receivedData);
-                    if (receivedData == null)
-                    {
-                        _logger?.LogWarning("Packet integrity check failed. Tampered packet suspected.");
-                        continue;
-                    }
-                }
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(token);
+            cts.CancelAfter(timeout);
 
-                int offset = 0;
-                while (offset + 4 <= receivedData.Length)
+            try
+            {
+                var completedTask = await Task.WhenAny(tcs.Task, Task.Delay(timeout, cts.Token));
+                if (completedTask != tcs.Task || cts.IsCancellationRequested)
                 {
-                    int packetLength = BitConverter.ToInt32(receivedData, offset);
-                    if (packetLength < 0 || packetLength > 100 * 1024 * 1024)
-                    {
-                        _logger?.LogWarning("Invalid packet length {len}, skipping.", packetLength);
-                        break;
-                    }
-                    if (offset + 4 + packetLength > receivedData.Length)
-                    {
-                        // 剩余数据不足一个包，放回缓冲区
-                        lock (_receiveBufferLock)
-                        {
-                            _receiveBuffer.AddRange(receivedData.Skip(offset).ToArray());
-                        }
-                        break;
-                    }
-                    byte[] packBytes = new byte[packetLength];
-                    Array.Copy(receivedData, offset + 4, packBytes, 0, packetLength);
-                    offset += 4 + packetLength;
-
-                    _logger?.LogInformation("[Debug] Received packet: {str}", Encoding.UTF8.GetString(packBytes));
-                    OnDataReceived?.Invoke(this, packBytes);
+                    return null;
                 }
+                var bytes = await tcs.Task;
+                return Encoding.UTF8.GetString(bytes);
             }
-            return Task.CompletedTask;
+            finally
+            {
+                OnDataReceived -= handler;
+            }
         }
 
         /// <summary>
-        /// 同步方式处理一个数据包
+        /// 同步方式等待一条上抛消息（保持 API 兼容，默认30s）
         /// </summary>
-        /// <param name="maxWaitTime">最大等待时间</param>
-        /// <returns>接收到的数据包，如果超时则返回null</returns>
         public Task<byte[]?> ReceivePacketAsync(TimeSpan maxWaitTime = default)
         {
             if (maxWaitTime == default)
-                maxWaitTime = TimeSpan.FromSeconds(30); // 默认30秒超时
+                maxWaitTime = TimeSpan.FromSeconds(30);
 
             byte[] result = null;
             var completed = false;
             var resetEvent = new ManualResetEventSlim(false);
 
-            // 临时订阅事件
             Action<DrxTcpClient, byte[]> handler = (client, data) =>
             {
                 if (!completed)
@@ -525,17 +531,12 @@ namespace Drx.Sdk.Network.Socket
 
             try
             {
-                // 启动接收任务
                 var receiveTask = StartReceivingAsync();
-
-                // 等待数据到达或超时
                 var waitCompleted = resetEvent.Wait(maxWaitTime);
-
                 if (!waitCompleted)
                 {
                     _logger?.LogWarning("ReceivePacketAsync timed out after {timeout}", maxWaitTime);
                 }
-
                 return Task.FromResult(result);
             }
             finally

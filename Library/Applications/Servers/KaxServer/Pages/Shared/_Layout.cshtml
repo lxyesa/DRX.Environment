@@ -8,9 +8,103 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>@ViewData["Title"] - KaxServer</title>
     <link rel="stylesheet" href="~/css/global.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/css/global-loading.css" asp-append-version="true" />
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
     @await RenderSectionAsync("Styles", required: false)
-</head>
+
+    <style>
+      :root{
+        --msg-bg: #0b0f14;
+        --msg-surface: #0f141a;
+        --msg-surface-2:#0c1116;
+        --msg-text:#e8edf2;
+        --msg-muted:#95a3b3;
+        --msg-primary:#4cc9f0;
+        --msg-success:#21c793;
+        --msg-warning:#ffb020;
+        --msg-error:#ff5c6e;
+        --msg-info:#4cc9f0;
+      }
+      /* 全局 MessageTip（前缀 gt-，作用于全站） */
+      .gt-message-tip{
+        --accent: var(--msg-info);
+        position:relative;
+        display:flex; align-items:flex-start; gap:12px;
+        background: var(--msg-surface-2);
+        border: 1px solid rgba(255,255,255,.10);
+        border-left: 3px solid color-mix(in oklab, var(--accent), #000 10%);
+        border-radius: 10px;
+        padding:12px;
+        max-width:560px;
+        color: var(--msg-text);
+        animation: gt-tip-in .18s ease-out both;
+      }
+      @@keyframes gt-tip-in{ from{opacity:0; transform:translateY(6px)} to{opacity:1; transform:translateY(0)} }
+
+      .gt-tip-accent{
+        flex:0 0 auto; width:32px; height:32px; border-radius:8px;
+        background: color-mix(in oklab, var(--accent), #0b0f14 25%);
+        display:grid; place-items:center; color:#fff;
+      }
+      .gt-tip-accent svg{ display:block }
+
+      .gt-tip-content{ flex:1; min-width:0 }
+      .gt-tip-title{ margin:0 0 2px 0; font-weight:800; font-size:14px }
+      .gt-tip-desc{ margin:0; color:var(--msg-muted) }
+
+      .gt-tip-actions{ display:flex; gap:8px; margin-top:10px; flex-wrap:wrap }
+      .gt-tip-btn{
+        appearance:none; border: 1px solid rgba(255,255,255,.12);
+        background: transparent; color: var(--msg-text);
+        padding:8px 10px; border-radius: 10px; font-size:12px; font-weight:700; cursor:pointer;
+        transition: background .15s ease, border .15s ease;
+      }
+      .gt-tip-btn:hover{ background: rgba(255,255,255,.06) }
+      .gt-tip-btn.primary{ background: var(--accent); color:#041218; border-color: transparent; }
+
+      .gt-tip-close{
+        appearance:none; background:none; border:none; color: var(--msg-muted);
+        cursor:pointer; padding:6px; border-radius:8px; align-self:flex-start;
+        transition: background .15s ease, color .15s ease;
+      }
+      .gt-tip-close:hover{ background: rgba(255,255,255,.06); color: var(--msg-text) }
+
+      .gt-tip-progress{
+        height:3px; width:100%; background: rgba(255,255,255,.08);
+        border-radius:999px; margin-top:10px; overflow:hidden;
+      }
+      .gt-tip-progress > i{
+        display:block; height:100%; width:0%;
+        background: var(--accent);
+        transition: width .1s linear;
+      }
+
+      .gt-timer{ position:absolute; top:-6px; right:-6px; width:26px; height:26px; display:grid; place-items:center; }
+      .gt-timer canvas{ width:26px; height:26px; display:block }
+      .gt-timer span{
+        position:absolute; font-size:10px; font-weight:800; color:#061018;
+        background:#c6f0ff; border-radius:999px; padding:1px 4px; transform: translateY(1px);
+      }
+
+      /* 栈容器固定在页面内，默认右上角 */
+      .gt-tip-layer{
+        position: fixed;
+        inset: 16px 16px auto auto; /* top-right */
+        pointer-events: none;
+        z-index: 2147483000; /* 高于一般浮层 */
+        display:flex; flex-direction:column; gap:10px; align-items:flex-end; justify-content:flex-start;
+      }
+      .gt-tip-layer[data-pos="top-left"]{ inset:16px auto auto 16px; align-items:flex-start; }
+      .gt-tip-layer[data-pos="bottom-right"]{ inset:auto 16px 16px auto; justify-content:flex-end; }
+      .gt-tip-layer[data-pos="bottom-left"]{ inset:auto auto 16px 16px; align-items:flex-start; justify-content:flex-end; }
+      .gt-tip-layer > .gt-message-tip{ pointer-events:auto }
+
+      .gt-message-tip[data-type="success"]{ --accent: var(--msg-success) }
+      .gt-message-tip[data-type="warning"]{ --accent: var(--msg-warning) }
+      .gt-message-tip[data-type="error"]  { --accent: var(--msg-error) }
+      .gt-message-tip[data-type="info"]   { --accent: var(--msg-info) }
+    </style>
+  </head>
 <body>
     <header>
         <partial name="_NavBar" />
@@ -23,8 +117,21 @@
     <footer class="footer">
         @await Html.PartialAsync("_Footer")
     </footer>
-
+  
+    @* <!-- 全局加载遮罩容器（无障碍/品牌化增强，风格与 global.css 统一） -->
+    <div id="global-loading-overlay" class="global-loading-overlay" aria-hidden="true" role="status" aria-live="polite">
+        <div class="global-loading-container" role="presentation">
+            <div class="global-loading-spinner" aria-label="加载中" aria-live="off"></div>
+            <div class="global-loading-text">正在加载…</div>
+        </div>
+    </div> *@
+  
+    <!-- 全局 MessageTip 栈容器（默认右上角，可通过 data-pos 改为 top-left/bottom-right/bottom-left） -->
+    <div id="gt-tip-layer" class="gt-tip-layer" data-pos="top-right" aria-live="polite"></div>
+  
     @await RenderSectionAsync("Scripts", required: false)
+  
+    <script src="~/js/global-loading.js" asp-append-version="true"></script>
 
     <svg style="position:absolute; width:0; height:0;">
             <feTurbulence type="fractalNoise" baseFrequency="0.7" numOctaves="1" result="map"/>
@@ -81,5 +188,214 @@
             }
         });
     </script>
-</body>
+
+    <script type="module">
+      // 全局 MessageTip 实现（导出 window.pushTip / window.clearTips）
+      const gtBus = document.createElement('span');
+      const gtLayer = document.getElementById('gt-tip-layer');
+
+      function gtGlyph(type, accent = '#4cc9f0') {
+        const d = {
+          success: 'M6 12.5 10 16.5 18 6.5',
+          warning: 'M12 7v5m0 4v.01',
+          error: 'M8.5 8.5 15.5 15.5 M15.5 8.5 8.5 15.5',
+          info: 'M12 8.2v.01 M12 11v5'
+        }[type] || 'M12 8.2v.01 M12 11v5';
+        return `
+        <svg viewBox="0 0 24 24" width="18" height="18" xmlns="http://www.w3.org/2000/svg">
+          <rect x="1.5" y="1.5" width="21" height="21" rx="6" fill="none" stroke="rgba(255,255,255,.15)"/>
+          <path d="${d}" fill="none" stroke="${accent}" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>`;
+      }
+
+      function gtDrawRing(canvas, progress, color = '#4cc9f0') {
+        const ctx = canvas.getContext('2d');
+        const dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+        const size = 26;
+        canvas.width = size * dpr;
+        canvas.height = size * dpr;
+        ctx.setTransform(dpr,0,0,dpr,0,0);
+        ctx.clearRect(0,0,size,size);
+        const cx = size/2, cy = size/2, r = 9.5;
+
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, 0, Math.PI*2);
+        ctx.strokeStyle = 'rgba(255,255,255,.18)';
+        ctx.lineWidth = 3;
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, -Math.PI/2, -Math.PI/2 + Math.PI*2*progress);
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 3;
+        ctx.lineCap = 'round';
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.arc(cx, cy, 5.2, 0, Math.PI*2);
+        ctx.fillStyle = '#c6f0ff';
+        ctx.globalAlpha = .9;
+        ctx.fill();
+        ctx.globalAlpha = 1;
+      }
+
+      let gtId = 0;
+      function createTip({ type='info', title='标题', description='', duration=5000, showProgress=true, primaryText='', secondaryText='' } = {}) {
+        const tip = document.createElement('div');
+        tip.className = 'gt-message-tip';
+        tip.dataset.type = type;
+        tip.setAttribute('role', 'status');
+        tip.setAttribute('aria-live', 'polite');
+
+        const accent = getComputedStyle(tip).getPropertyValue('--accent').trim() || '#4cc9f0';
+
+        const accentBox = document.createElement('div');
+        accentBox.className = 'gt-tip-accent';
+        accentBox.innerHTML = gtGlyph(type, accent);
+
+        const content = document.createElement('div');
+        content.className = 'gt-tip-content';
+
+        const titleEl = document.createElement('h4');
+        titleEl.className = 'gt-tip-title';
+        titleEl.textContent = title;
+
+        const descEl = document.createElement('p');
+        descEl.className = 'gt-tip-desc';
+        descEl.textContent = description;
+
+        const actions = document.createElement('div');
+        actions.className = 'gt-tip-actions';
+
+        const id = ++gtId;
+
+        if (primaryText) {
+          const b = document.createElement('button');
+          b.className = 'gt-tip-btn primary';
+          b.type = 'button';
+          b.textContent = primaryText;
+          b.addEventListener('click', () => gtBus.dispatchEvent(new CustomEvent('gt:tip:primary', { detail: { id, type } })));
+          actions.appendChild(b);
+        }
+        if (secondaryText) {
+          const b = document.createElement('button');
+          b.className = 'gt-tip-btn';
+          b.type = 'button';
+          b.textContent = secondaryText;
+          b.addEventListener('click', () => gtBus.dispatchEvent(new CustomEvent('gt:tip:secondary', { detail: { id, type } })));
+          actions.appendChild(b);
+        }
+
+        const progress = document.createElement('div');
+        progress.className = 'gt-tip-progress';
+        const bar = document.createElement('i');
+        progress.appendChild(bar);
+
+        const close = document.createElement('button');
+        close.className = 'gt-tip-close';
+        close.setAttribute('aria-label', '关闭');
+        close.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7 17 17M17 7 7 17"/></svg>';
+
+        const timerWrap = document.createElement('div');
+        timerWrap.className = 'gt-timer';
+        const canvas = document.createElement('canvas');
+        const timeLeft = document.createElement('span');
+        timerWrap.append(canvas, timeLeft);
+
+        tip.dataset.id = String(id);
+
+        content.append(titleEl);
+        if (description) content.append(descEl);
+        if (primaryText || secondaryText) content.append(actions);
+        if (showProgress) content.append(progress);
+
+        tip.append(accentBox, content, close, timerWrap);
+
+        let start = performance.now();
+        let remaining = Math.max(0, Number(duration) || 0);
+        let running = remaining > 0;
+        let raf = 0;
+
+        function update(now) {
+          if (!running) return;
+          const elapsed = now - start;
+          const ratio = Math.min(1, elapsed / remaining);
+          bar.style.width = `${ratio*100}%`;
+          gtDrawRing(canvas, 1 - ratio, accent);
+          timeLeft.textContent = Math.max(0, Math.ceil((remaining - elapsed)/1000)).toString();
+          if (elapsed >= remaining) dismiss();
+          else raf = requestAnimationFrame(update);
+        }
+
+        function startTimer() {
+          if (!running || remaining <= 0) {
+            gtDrawRing(canvas, 0, accent);
+            timeLeft.textContent = '';
+            return;
+          }
+          cancelAnimationFrame(raf);
+          start = performance.now();
+          raf = requestAnimationFrame(update);
+        }
+
+        function pauseTimer() {
+          if (!running) return;
+          cancelAnimationFrame(raf);
+          const now = performance.now();
+          remaining = Math.max(0, remaining - (now - start));
+        }
+
+        function dismiss() {
+          cancelAnimationFrame(raf);
+          tip.animate(
+            [{opacity:1, transform:'translateY(0)'},{opacity:0, transform:'translateY(-6px)'}],
+            { duration:160, easing:'ease', fill:'forwards' }
+          ).addEventListener('finish', () => tip.remove());
+        }
+
+        tip.addEventListener('mouseenter', pauseTimer);
+        tip.addEventListener('mouseleave', startTimer);
+        close.addEventListener('click', () => dismiss());
+        tip.addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.stopPropagation(); dismiss(); } });
+
+        gtDrawRing(canvas, 1, accent);
+        if (remaining > 0) startTimer();
+
+        return { element: tip, dismiss, id };
+      }
+
+      function pushTip(options) {
+        const { element } = createTip(options);
+        gtLayer.prepend(element);
+        element.tabIndex = 0;
+        element.focus({ preventScroll:true });
+        const limit = 5;
+        const items = [...gtLayer.querySelectorAll('.gt-message-tip')];
+        if (items.length > limit) items.slice(limit).forEach(n => n.remove());
+        return element;
+      }
+      function clearTips(){ [...gtLayer.querySelectorAll('.gt-message-tip')].forEach(el => el.remove()) }
+
+      // 暴露到全局
+      window.pushTip = pushTip;
+      window.clearTips = clearTips;
+
+      // Esc 关闭最新消息
+      window.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+          const latest = gtLayer.querySelector('.gt-message-tip');
+          latest?.querySelector('.gt-tip-close')?.click();
+        }
+      });
+
+      // 首条欢迎消息（可移除）
+      pushTip({
+        type: 'success',
+        title: '全局 MessageTip 已启用',
+        description: '现在可在任意页面脚本中调用 window.pushTip(...)。',
+        duration: 2600,
+        showProgress: true
+      });
+    </script>
+  </body>
 </html>

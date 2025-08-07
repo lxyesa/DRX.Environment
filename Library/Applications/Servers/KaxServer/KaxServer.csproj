@@ -5,11 +5,57 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <PreserveCompilationContext>true</PreserveCompilationContext>
     <StaticWebAssetsEnabled>true</StaticWebAssetsEnabled>
+    <PublishSingleFile>true</PublishSingleFile>
+    <SelfContained>false</SelfContained>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <PublishTrimmed>false</PublishTrimmed>
+    <EnableCompressionInSingleFile>false</EnableCompressionInSingleFile>
+    <DebugType>None</DebugType>
+    <DebugSymbols>false</DebugSymbols>
   </PropertyGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\..\..\Environments\SDK\Drx.Sdk.Network\Drx.Sdk.Network.csproj" />
+    <ProjectReference Include="..\..\..\Environments\SDK\Drx.Sdk.Shared.JavaScript\Drx.Sdk.Shared.JavaScript.csproj" />
   </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Razor.RuntimeCompilation" Version="9.0.0" />
+  </ItemGroup>
+
+  <!-- 构建/发布时将 Pages 内容复制到外置目录 D:\ExternalViews\KaxServer\Pages -->
+  <Target Name="CopyPagesToExternalFolder" AfterTargets="Build">
+    <PropertyGroup>
+      <ExternalViewsRoot>$(ExternalViewsRoot)</ExternalViewsRoot>
+      <ExternalViewsRoot Condition="'$(ExternalViewsRoot)' == ''">D:\ExternalViews\KaxServer</ExternalViewsRoot>
+    </PropertyGroup>
+    <ItemGroup>
+      <PagesToCopy Include="Pages\**\*.cshtml" />
+    </ItemGroup>
+    <Message Text="Copying Razor Pages to $(ExternalViewsRoot)\Pages" Importance="high" />
+    <Copy SourceFiles="@(PagesToCopy)" DestinationFiles="@(PagesToCopy->'$(ExternalViewsRoot)\%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
+  </Target>
+
+  <Target Name="CopyPagesToExternalFolderOnPublish" AfterTargets="Publish">
+    <PropertyGroup>
+      <ExternalViewsRoot>$(ExternalViewsRoot)</ExternalViewsRoot>
+      <ExternalViewsRoot Condition="'$(ExternalViewsRoot)' == ''">D:\ExternalViews\KaxServer</ExternalViewsRoot>
+    </PropertyGroup>
+    <ItemGroup>
+      <PagesToCopyPublish Include="Pages\**\*.cshtml" />
+    </ItemGroup>
+    <Message Text="Copying Razor Pages (Publish) to $(ExternalViewsRoot)\Pages" Importance="high" />
+    <Copy SourceFiles="@(PagesToCopyPublish)" DestinationFiles="@(PagesToCopyPublish->'$(ExternalViewsRoot)\%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
+  </Target>
+
+  <!-- 追加：发布到 publish 输出目录中（bin\*\publish），镜像 Pages 结构 -->
+  <Target Name="CopyPagesIntoPublishDir" AfterTargets="Publish">
+    <ItemGroup>
+      <PagesToPublish Include="Pages\**\*.cshtml" />
+    </ItemGroup>
+    <Message Text="Copying Razor Pages into publish output: $(PublishDir)Pages" Importance="high" />
+    <Copy SourceFiles="@(PagesToPublish)" DestinationFiles="@(PagesToPublish->'$(PublishDir)%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
+  </Target>
 
   <ItemGroup>
     <Content Update="wwwroot\**\*">
@@ -21,6 +67,10 @@
     <None Update="wwwroot\**\*">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="Socket\" />
   </ItemGroup>
 
 </Project>

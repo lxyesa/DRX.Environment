@@ -1,204 +1,539 @@
-
 @page
-@model DetailModel
+@model KaxServer.Pages.Store.DetailModel
 @{
-    var item = Model.StoreItem;
+  Layout = "_Layout";
+  ViewData["Title"] = "商品详情";
 }
+<section class="store-detail container">
+  <style>
+    .store-detail {
+      --sd-surface: var(--surface-color, #11111a);
+      --sd-text: var(--primary-color, #eaeafd);
+      --sd-muted: var(--secondary-color, #bfbfe9);
+      --sd-accent: var(--accent-color, #7c4dff);
+      --sd-border: rgba(255, 255, 255, .08);
+      --sd-radius: 14px;
+      color: var(--sd-text);
+      padding: 16px 0 28px;
+    }
 
-<div class="mod-detail-container">
-    <div class="mod-detail-header">
-        <img class="mod-detail-image" src="@(string.IsNullOrWhiteSpace(item.Image) ? "https://upload.wikimedia.org/wikipedia/zh/9/94/Genshin_Impact.jpg" : item.Image)" alt="Mod图片" />
-        <div class="mod-detail-info">
-            <h1>@item.Title</h1>
-            <div style="display:flex;align-items:center;gap:1.2rem;font-size:1.1rem;color:var(--secondary-color);margin-bottom:0.5rem;">
-                <span><span class="material-icons" style="vertical-align:middle;font-size:1.1em;">download</span> @item.DownloadCount</span>
-                <span><span class="material-icons" style="vertical-align:middle;font-size:1.1em;">star</span> @item.Rating</span>
+    .sd-breadcrumb {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 6px 0 14px;
+      color: var(--sd-muted);
+      font-size: .92rem;
+    }
+
+    .sd-breadcrumb a {
+      color: var(--sd-text);
+      text-decoration: none;
+    }
+
+    .sd-breadcrumb a:hover {
+      text-decoration: underline;
+    }
+
+    .sd-wrap {
+      display: grid;
+      gap: 16px;
+      grid-template-columns: 1.2fr 1fr;
+    }
+
+    @@media (max-width: 980px) {
+      .sd-wrap {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .sd-card {
+      background: linear-gradient(180deg, color-mix(in oklab, var(--sd-surface) 92%, black 8%), color-mix(in oklab, var(--sd-surface) 96%, black 4%));
+      border: 1px solid var(--sd-border);
+      border-radius: var(--sd-radius);
+      box-shadow: none;
+      \n overflow: hidden;
+    }
+
+    .sd-media {
+      aspect-ratio: 16/9;
+      width: 100%;
+      background: #0e0c18;
+      position: relative;
+    }
+
+    .sd-media img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
+    .sd-tagbar {
+      position: absolute;
+      left: 10px;
+      top: 10px;
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .sd-badge {
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-weight: 800;
+      font-size: .78rem;
+      background: linear-gradient(180deg, color-mix(in oklab, var(--sd-accent) 90%, transparent), color-mix(in oklab, var(--sd-accent) 65%, transparent));
+      color: white;
+      border: 1px solid color-mix(in oklab, var(--sd-accent) 70%, transparent);
+      box-shadow: 0 6px 18px color-mix(in oklab, var(--sd-accent) 25%, transparent);
+    }
+
+    .sd-body {
+      padding: 14px 14px 12px;
+    }
+
+    .sd-title {
+      margin: 0;
+      font-size: 1.35rem;
+      font-weight: 900;
+      letter-spacing: .3px;
+    }
+
+    .sd-sub {
+      margin: 6px 0 0;
+      color: var(--sd-muted);
+    }
+
+    .sd-meta {
+      display: flex;
+      gap: 14px;
+      color: var(--sd-muted);
+      font-size: .9rem;
+      margin-top: 10px;
+    }
+
+    .sd-meta span {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .sd-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: radial-gradient(circle at 30% 30%, white 8%, rgba(255, 255, 255, .6) 15%, var(--sd-accent) 40%, color-mix(in oklab, var(--sd-accent) 20%, transparent) 70%, transparent 72%);
+      box-shadow: 0 0 10px color-mix(in oklab, var(--sd-accent) 80%, transparent), 0 0 18px color-mix(in oklab, var(--sd-accent) 50%, transparent);
+    }
+
+    .sd-side {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .sd-panel {
+      padding: 14px;
+    }
+
+    .sd-price-line {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .sd-price-main {
+      font-size: 1.4rem;
+      font-weight: 900;
+      color: color-mix(in oklab, var(--sd-accent) 85%, white 10%);
+    }
+
+    .sd-price-sub {
+      color: var(--sd-muted);
+    }
+
+    .sd-price-table {
+      margin-top: 10px;
+      display: grid;
+      gap: 8px;
+    }
+
+    .sd-price-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 10px 12px;
+      border: 1px solid var(--sd-border);
+      border-radius: 10px;
+      background: linear-gradient(180deg, color-mix(in oklab, var(--sd-surface) 90%, black 10%), color-mix(in oklab, var(--sd-surface) 96%, black 4%));
+      cursor: pointer;
+      transition: border-color .15s ease, background .15s ease, transform .06s ease;
+    }
+
+    .sd-price-item:hover {
+      border-color: color-mix(in oklab, var(--sd-accent) 45%, var(--sd-border));
+      transform: translateY(-1px);
+    }
+
+    .sd-price-item.active {
+      border-color: color-mix(in oklab, var(--sd-accent) 60%, var(--sd-border));
+      box-shadow: 0 0 0 6px color-mix(in oklab, var(--sd-accent) 18%, transparent) inset;
+    }
+
+    .sd-actions {
+      display: flex;
+      gap: 10px;
+      margin-top: 12px;
+    }
+
+    .sd-btn {
+      appearance: none;
+      border: 1px solid var(--sd-border);
+      color: var(--sd-text);
+      background: transparent;
+      border-radius: 10px;
+      padding: 10px 14px;
+      font-weight: 800;
+      cursor: pointer;
+      transition: transform .12s ease, border-color .15s ease, filter .12s ease;
+    }
+
+    .sd-btn:hover {
+      transform: translateY(-1px);
+      border-color: color-mix(in oklab, var(--sd-accent) 45%, var(--sd-border));
+    }
+
+    .sd-btn:active {
+      transform: scale(.98);
+    }
+
+    .sd-btn--primary {
+      background: linear-gradient(180deg, color-mix(in oklab, var(--sd-accent) 85%, transparent), color-mix(in oklab, var(--sd-accent) 65%, transparent));
+      border-color: color-mix(in oklab, var(--sd-accent) 70%, transparent);
+      color: white;
+      box-shadow: 0 10px 20px color-mix(in oklab, var(--sd-accent) 25%, transparent);
+    }
+
+    .sd-desc {
+      white-space: pre-wrap;
+      color: var(--sd-text);
+      line-height: 1.55;
+    }
+
+    .sd-html {
+      color: var(--sd-text);
+      line-height: 1.6;
+    }
+
+    .sd-muted {
+      color: var(--sd-muted);
+    }
+
+    .sd-empty,
+    .sd-error,
+    .sd-loading {
+      margin: 18px 0;
+      color: var(--sd-muted);
+      text-align: center;
+    }
+
+    .sd-kv {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px 14px;
+      margin-top: 10px;
+    }
+
+    .sd-kv .it {
+      background: rgba(255, 255, 255, .03);
+      border: 1px solid var(--sd-border);
+      border-radius: 8px;
+      padding: 6px 10px;
+    }
+
+    .sd-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 6px;
+    }
+
+    .sd-chip {
+      border: 1px solid color-mix(in oklab, var(--sd-border), transparent 20%);
+      color: var(--sd-muted);
+      padding: 4px 8px;
+      border-radius: 999px;
+    }
+
+    .sd-back {
+      margin-right: auto;
+    }
+  </style>
+
+  <nav class="sd-breadcrumb">
+    <a class="sd-back" href="/Store/ModStore">&#8592; 返回市场</a>
+    <span>/</span>
+    <span>详情</span>
+  </nav>
+
+  <div id="sd-loading" class="sd-loading">加载中…</div>
+  <div id="sd-error" class="sd-error" hidden>加载失败，请稍后重试。</div>
+  <div id="sd-empty" class="sd-empty" hidden>未找到该商品。</div>
+
+  <div id="sd-wrap" class="sd-wrap" hidden>
+    <article class="sd-card">
+      <div class="sd-media">
+        <div class="sd-tagbar" id="sd-tags"></div>
+        <img id="sd-image" alt="商品图片" />
+      </div>
+      <div class="sd-body">
+        <h1 id="sd-title" class="sd-title">-</h1>
+        <div id="sd-sub" class="sd-sub sd-muted">-</div>
+        <div class="sd-meta">
+          <span><span class="sd-dot" aria-hidden="true"></span><span id="sd-rating">评分: -</span></span>
+          <span><span class="sd-dot" aria-hidden="true"></span><span id="sd-downloads">下载: -</span></span>
+          <span><span class="sd-dot" aria-hidden="true"></span><span id="sd-owner">作者: -</span></span>
+        </div>
+      </div>
+    </article>
+
+    <aside class="sd-side">
+      <section class="sd-card sd-panel" aria-labelledby="sd-buy-title">
+        <h2 id="sd-buy-title" style="margin:0 0 8px;font-size:1.05rem;">购买</h2>
+        <div class="sd-price-line">
+          <div class="sd-price-main" id="sd-price-main">-</div>
+          <div class="sd-price-sub" id="sd-price-sub">选择一个定价方案</div>
+        </div>
+        <div id="sd-price-table" class="sd-price-table"></div>
+        <div class="sd-actions">
+          <button type="button" class="sd-btn sd-back" onclick="history.back()">返回</button>
+          <button type="button" id="sd-buy" class="sd-btn sd-btn--primary">立即购买</button>
+        </div>
+        <div id="sd-buy-msg" class="sd-muted" style="margin-top:8px;"></div>
+      </section>
+
+      <section class="sd-card sd-panel" aria-labelledby="sd-info-title">
+        <h2 id="sd-info-title" style="margin:0 0 8px;font-size:1.05rem;">基础信息</h2>
+        <div class="sd-kv">
+          <div class="it">ID：<span id="sd-id">-</span></div>
+          <div class="it">时长：<span id="sd-duration">-</span></div>
+          <div class="it">折扣：<span id="sd-rebate">-</span></div>
+        </div>
+        <div class="sd-tags" id="sd-tagchips"></div>
+      </section>
+
+      <section class="sd-card sd-panel" aria-labelledby="sd-desc-title">
+        <h2 id="sd-desc-title" style="margin:0 0 8px;font-size:1.05rem;">描述</h2>
+        <div id="sd-desc" class="sd-desc">-</div>
+      </section>
+
+      <section class="sd-card sd-panel" aria-labelledby="sd-detail-title">
+        <h2 id="sd-detail-title" style="margin:0 0 8px;font-size:1.05rem;">详情</h2>
+        <div id="sd-detail" class="sd-html">-</div>
+      </section>
+    </aside>
+  </div>
+
+  <script>
+    (() => {
+      const qs = new URLSearchParams(location.search);
+      const id = parseInt(qs.get("id") || "@Model.Id");
+      const loading = document.getElementById('sd-loading');
+      const errorEl = document.getElementById('sd-error');
+      const emptyEl = document.getElementById('sd-empty');
+      const wrap = document.getElementById('sd-wrap');
+
+      const img = document.getElementById('sd-image');
+      const title = document.getElementById('sd-title');
+      const sub = document.getElementById('sd-sub');
+      const rating = document.getElementById('sd-rating');
+      const downloads = document.getElementById('sd-downloads');
+      const owner = document.getElementById('sd-owner');
+      const tagsBar = document.getElementById('sd-tags');
+      const tagchips = document.getElementById('sd-tagchips');
+
+      const priceMain = document.getElementById('sd-price-main');
+      const priceSub = document.getElementById('sd-price-sub');
+      const priceTable = document.getElementById('sd-price-table');
+      const buyBtn = document.getElementById('sd-buy');
+      const buyMsg = document.getElementById('sd-buy-msg');
+
+      const kId = document.getElementById('sd-id');
+      const kDur = document.getElementById('sd-duration');
+      const kReb = document.getElementById('sd-rebate');
+
+      const desc = document.getElementById('sd-desc');
+      const detail = document.getElementById('sd-detail');
+
+      if (!Number.isFinite(id) || id <= 0) {
+        loading.hidden = true;
+        emptyEl.hidden = false;
+        return;
+      }
+
+      let selectedPriceIndex = 0;
+      let currentItem = null;
+
+      function fmtPrice(p) { return (p ?? 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 }); }
+      function unitText(u) {
+        switch ((u ?? "").toString()) {
+          case "0":
+          case "Day": return "天";
+          case "1":
+          case "Week": return "周";
+          case "2":
+          case "Month": return "月";
+          case "3":
+          case "Year": return "年";
+          default: return "周期";
+        }
+      }
+
+      function renderPrices(item) {
+        priceTable.innerHTML = "";
+        const list = Array.isArray(item?.storeItemPrices) ? item.storeItemPrices : [];
+        if (!list.length) {
+          priceMain.textContent = "-";
+          priceSub.textContent = "暂无定价";
+          buyBtn.disabled = true;
+          return;
+        }
+        buyBtn.disabled = false;
+        list.forEach((p, i) => {
+          const real = (p.price ?? 0) * (p.rebate ?? 1);
+          const el = document.createElement('div');
+          el.className = "sd-price-item" + (i === selectedPriceIndex ? " active" : "");
+          el.innerHTML = `
+            <div style="display:flex;flex-direction:column;gap:2px">
+              <div style="font-weight:800">${p.title ?? "方案"}</div>
+              <div class="sd-muted">${p.duration ?? 0}${unitText(p.durationUnit)} · 折扣 ${(p.rebate ?? 1) * 100}%</div>
             </div>
-            <p style="color:var(--secondary-color);font-size:1.05rem;">@item.Description</p>
-        </div>
-    </div>
-    <div class="mod-detail-content">
-        <h2>详细介绍</h2>
-        <div style="margin:0.8rem;color:#ddd;font-size:1.05rem;white-space:pre-line;">@item.StoreItemDetails?.Content
-        </div>
-    </div>
-    
-    <div class="mod-price-list">
-    @foreach (var price in item.StoreItemPrices)
-    {
-        <div class="steam-buy-bar">
-            <div class="steam-buy-title">购买 @price.Title</div>
-            <div class="steam-buy-actions">
-                <div class="steam-buy-combo">
-                    <span class="steam-buy-price">
-                        <span class="material-icons" style="font-size:1.1em;vertical-align:middle;margin-right:0.15em;margin-top:0.1em;">monetization_on</span>@price.Price
-                    </span>
-                    @{
-                        var priceIdx = item.StoreItemPrices.IndexOf(price);
-                        var isOwned = Model.OwnStatus != null && Model.OwnStatus.Count > priceIdx && Model.OwnStatus[priceIdx];
-                        var isBalanceError = ViewData.ModelState.Values.SelectMany(v => v.Errors).Any(e => e.ErrorMessage.Contains("余额不足"));
-                    }
-                    <form method="post" asp-page-handler="Buy">
-                        <input type="hidden" name="itemId" value="@item.Id" />
-                        <input type="hidden" name="priceIndex" value="@priceIdx" />
-                        @if (isOwned)
-                        {
-                            <input type="hidden" name="disabled" value="true" />
-                        }
-                        <button type="submit"
-                                class="btn-primary @(isBalanceError ? "buy-error" : "")"
-                                @(isOwned ? "disabled=\"disabled\"" : "")>
-                            @(isOwned ? "已拥有" : (isBalanceError ? "余额不足" : "购买"))
-                        </button>
-                        @if (isBalanceError)
-                        {
-                            <script>
-                                setTimeout(function() {
-                                    document.querySelectorAll('.steam-buy-btn.buy-error').forEach(function(btn){
-                                        btn.classList.remove('buy-error');
-                                        btn.innerText = '购买';
-                                    });
-                                }, 3000);
-                            </script>
-                        }
-                    </form>
-                </div>
-            </div>
-        </div>
-    }
-    </div>
+            <div style="font-weight:900;color: color-mix(in oklab, var(--sd-accent) 80%, white 8%)">¥ ${fmtPrice(real)}</div>
+          `;
+          el.addEventListener('click', () => {
+            selectedPriceIndex = i;
+            document.querySelectorAll('.sd-price-item').forEach(n => n.classList.remove('active'));
+            el.classList.add('active');
+            priceMain.textContent = `¥ ${fmtPrice(real)}`;
+            priceSub.textContent = `${p.duration ?? 0}${unitText(p.durationUnit)} · 原价 ¥${fmtPrice(p.price ?? 0)}`;
+            kDur.textContent = `${p.duration ?? 0}${unitText(p.durationUnit)}`;
+            kReb.textContent = `${((p.rebate ?? 1) * 100).toFixed(0)}%`;
+          });
+          priceTable.appendChild(el);
+        });
+        // init main price
+        const sp = list[selectedPriceIndex];
+        const real = (sp.price ?? 0) * (sp.rebate ?? 1);
+        priceMain.textContent = `¥ ${fmtPrice(real)}`;
+        priceSub.textContent = `${sp.duration ?? 0}${unitText(sp.durationUnit)} · 原价 ¥${fmtPrice(sp.price ?? 0)}`;
+        kDur.textContent = `${sp.duration ?? 0}${unitText(sp.durationUnit)}`;
+        kReb.textContent = `${((sp.rebate ?? 1) * 100).toFixed(0)}%`;
+      }
 
-@functions {
-    public string GetDurationUnitText(StoreItemDurationUnit unit)
-    {
-        return unit switch
-        {
-            StoreItemDurationUnit.Day => "天",
-            StoreItemDurationUnit.Week => "周",
-            StoreItemDurationUnit.Month => "月",
-            StoreItemDurationUnit.Year => "年",
-            _ => ""
-        };
-    }
-}
-</div>
+      async function load() {
+        try {
+          loading.hidden = false;
+          errorEl.hidden = true; emptyEl.hidden = true; wrap.hidden = true;
+          const res = await fetch(`/api/Store/items/${id}`, { headers: { "Accept": "application/json" } });
+          if (!res.ok) {
+            loading.hidden = true;
+            emptyEl.hidden = res.status === 404;
+            errorEl.hidden = res.status === 404;
+            return;
+          }
+          const item = await res.json();
+          currentItem = item;
 
-<style>
-    .mod-detail-container {
-        max-width: 900px;
-        margin: 2.5rem auto 2rem auto;
-        background: var(--bg-color);
-        border-radius: 18px;
-        box-shadow: var(--card-shadow);
-        padding: 2.5rem 2.5rem 2rem 2.5rem;
-        color: #fff;
-    }
-    .mod-detail-header {
-        display: flex;
-        gap: 2.5rem;
-        align-items: stretch;
-        margin-bottom: 2.2rem;
-    }
-    .mod-detail-image {
-        width: 180px;
-        height: 180px;
-        object-fit: cover;
-        border-radius: 16px;
-        border: 1.5px solid #333;
-        background: #232323;
-    }
-    .mod-detail-info {
-        flex: 1;
-        display: flex;
-        flex-direction: column;
-        justify-content: flex-start;
-    }
-    .mod-detail-info h1 {
-        font-size: 2.1rem;
-        font-weight: 700;
-        margin: 0 0 0.7rem 0;
-        color: #fff;
-    }
-    .mod-detail-content {
-        margin-top: 1.5rem;
-        padding: 1.5rem 1.2rem 1.2rem 1.2rem;
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        background: rgba(255, 255, 255, 0.05);
-        border-radius: 8px;
-    }
+          // 主图改为自动生成占位图（即使后端无图片也不会出错）\r\n          (function(){\r\n            function genThumb(seedText){\r\n              const w=1200,h=675; // 16:9\r\n              const c=document.createElement('canvas'); c.width=w; c.height=h; const ctx=c.getContext('2d');\r\n              const hue = (Math.abs((seedText||'Item').split('').reduce((a,ch)=&gt;a+ch.charCodeAt(0),0)) % 360);\r\n              const g = ctx.createLinearGradient(0,0,w,h);\r\n              g.addColorStop(0, `oklch(35% 0.16 ${hue})`);\r\n              g.addColorStop(.6, `oklch(28% 0.12 ${(hue+30)%360})`);\r\n              g.addColorStop(1, '#0e0c18');\r\n              ctx.fillStyle=g; ctx.fillRect(0,0,w,h);\r\n              for(let i=0;i&lt;4;i++){\r\n                const rg = ctx.createRadialGradient(100+Math.random()*(w-200), 80+Math.random()*(h-160), 10+Math.random()*30, 200+Math.random()*(w-200), 100+Math.random()*(h-100), 200+Math.random()*180);\r\n                rg.addColorStop(0, `rgba(255,255,255,${Math.random()*.25+.15})`);\r\n                rg.addColorStop(1, 'rgba(255,255,255,0)');\r\n                ctx.fillStyle=rg; ctx.globalCompositeOperation='screen';\r\n                ctx.beginPath(); ctx.arc(100+Math.random()*(w-200), 80+Math.random()*(h-160), 120+Math.random()*120, 0, Math.PI*2); ctx.fill();\r\n              }\r\n              ctx.globalCompositeOperation='source-over';\r\n              ctx.font='700 84px ui-sans-serif, system-ui, -apple-system'; ctx.fillStyle='rgba(255,255,255,.92)';\r\n              ctx.shadowColor='rgba(124,77,255,.45)'; ctx.shadowBlur=12;\r\n              const name = (seedText||'商品');\r\n              const lines = name.length&gt;10 ? [name.slice(0,10), name.slice(10, 20)] : [name];\r\n              lines.forEach((line,i)=&gt; ctx.fillText(line, 48, h - 180 + i*96));\r\n              ctx.shadowBlur=0; ctx.fillStyle='rgba(124,77,255,.6)'; ctx.fillRect(48, h-70, w-96, 8);\r\n              return c.toDataURL('image/png');\r\n            }\r\n            const seed = (item.title||item.name||`#${id}`);\r\n            img.src = genThumb(seed);\r\n          })();\r\n
+          // 标题与副标题
+          title.textContent = item.title ?? item.name ?? "未命名商品";
+          const brand = item.ownerId ? `#${item.ownerId}` : "-";
+          sub.textContent = `${brand} · ID ${item.id ?? item.itemId ?? id}`;
 
-    .steam-buy-bar {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        border-radius: 8px;
-        margin: 1.2rem 0 0.7rem 0;
-        padding: 0.7rem 1.2rem 0.7rem 1.2rem;
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        background: rgba(255, 255, 255, 0.05);
-        min-height: 48px;
-    }
-    .steam-buy-title {
-        color: #e6f0fa;
-        font-size: 1.18rem;
-        font-weight: 500;
-        letter-spacing: 0.01em;
-        flex: 1;
-        margin-right: 1.2rem;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-    }
-    .steam-buy-actions {
-        display: flex;
-        align-items: center;
-    }
+          // 元信息
+          rating.textContent = `评分: ${item.rating ?? "-"}`;
+          downloads.textContent = `下载: ${item.downloadCount ?? "-"}`;
+          owner.textContent = `作者: ${item.ownerId ?? "-"}`;
 
-    .steam-buy-combo {
-        display: flex;
-        align-items: center;
-        border-radius: 4px;
-        flex-direction: row;
-        flex-wrap: nowrap;
-        align-content: center;
-        justify-content: center;
-    }
-    .steam-buy-price {
-        background: #201f1f;
-        color: #fff;
-        font-size: 1.08rem;
-        font-weight: 600;
-        padding: 0.5rem 1.8rem;
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        width: auto;
-        text-align: center;
-        display: flex;
-        align-items: center;
-        margin-right: 5px;
-        border-radius: 8px;
-        height: 30px;
-    }
-    .btn-primary{
-        border-radius: 8px;
-    }
+          // 标签
+          tagsBar.innerHTML = "";
+          tagchips.innerHTML = "";
+          const tags = Array.isArray(item.tags) ? item.tags : [];
+          tags.forEach(t => {
+            const tag = typeof t === "string" ? t : (t?.tag ?? "");
+            if (!tag) return;
+            const b = document.createElement('span');
+            b.className = "sd-badge"; b.textContent = tag;
+            tagsBar.appendChild(b);
 
-    .steam-buy-btn.buy-error {
-        background: linear-gradient(90deg, #ff3b3b 0%, #d32f2f 100%) !important;
-        color: #fff !important;
-        box-shadow: 0 0 6px #ff3b3b;
-    }
-    .steam-buy-btn.buy-error:hover {
-        background: linear-gradient(90deg, #ff5b5b 0%, #e64a19 100%) !important;
-    }
-    .steam-buy-btn:hover {
-        background: linear-gradient(90deg, #8be82a 0%, #6fcf1a 100%);
-        color: #fff;
-    }
+            const c = document.createElement('span');
+            c.className = "sd-chip"; c.textContent = tag;
+            tagchips.appendChild(c);
+          });
 
-    .mod-detail-content h2 {
-        font-size: 1.3rem;
-        font-weight: 600;
-        margin: 0.8rem;
-        color: #fff;
-    }
-</style>
+          // KV
+          kId.textContent = item.id ?? item.itemId ?? id;
+
+          // 描述与详情
+          desc.textContent = (item.description ?? "").toString();
+          const html = (item.storeItemDetails?.content ?? "").toString();
+          detail.innerHTML = html; // 注意：来源受信任（后台写入），若需要可做白名单净化
+
+          // 价格表
+          renderPrices(item);
+
+          loading.hidden = true; wrap.hidden = false;
+        } catch (e) {
+          console.error(e);
+          loading.hidden = true;
+          errorEl.hidden = false;
+        }
+      }
+
+      buyBtn.addEventListener('click', async () => {
+        if (!currentItem) { return; }
+        buyBtn.disabled = true;
+        buyMsg.textContent = "提交中…";
+        try {
+          const iid = currentItem.id ?? currentItem.itemId ?? id;
+          const res = await fetch(`/api/Store/items/${iid}/buy?priceIndex=${selectedPriceIndex}`, {
+            method: "POST",
+            headers: { "Accept": "application/json", "Content-Type": "application/json" }
+          });
+          const data = await res.json().catch(() => null);
+          if (!res.ok) {
+            const msg = (data && (data.message || data.Message)) || `购买失败(HTTP ${res.status})`;
+            window.pushTip?.({ type: 'error', title: '购买失败', description: msg, duration: 3000, showProgress: true });
+            buyMsg.textContent = '';
+            buyBtn.disabled = false;
+            return;
+          }
+          // 期望后端返回 { token, orderId }，token 一次性使用，10 分钟有效
+          const token = data?.token || data?.Token;
+          const oid = data?.orderId || data?.OrderId || data?.id || data?.orderID || String(iid);
+          if (!token) {
+            window.pushTip?.({ type: 'error', title: '购买失败', description: '未获取到访问令牌', duration: 3000, showProgress: true });
+            buyMsg.textContent = '';
+            buyBtn.disabled = false;
+            return;
+          }
+          window.pushTip?.({ type: 'success', title: '购买成功', description: '正在跳转确认页…', duration: 1200, showProgress: true });
+          buyMsg.textContent = '';
+          setTimeout(() => {
+            // 将一次性 token 作为查询串带到购买完成页
+            location.replace(`/Store/PurchaseSuccess/${encodeURIComponent(oid)}?token=${encodeURIComponent(token)}`);
+          }, 400);
+        } catch (err) {
+          console.error(err);
+          buyMsg.textContent = "购买失败，请稍后重试";
+          buyBtn.disabled = false;
+        }
+      });
+
+      load();
+    })();
+  </script>
+</section>

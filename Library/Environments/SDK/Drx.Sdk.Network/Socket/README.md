@@ -48,9 +48,9 @@ SocketStatusCode
 客户端错误（0x22000000 - 0x22FFFFFF）：如未知命令、缺少参数、参数无效等。
 服务器错误（0x23000000 - 0x23FFFFFF）：如内部错误等。
 3. 使用方式
-依赖注入注册
+依赖注入注册（ASP.NET Core）
 
-在 Startup.cs 或 DI 配置中调用：
+在 Startup.cs 或 Program.cs 中调用：
 
 services.AddSocketService()
     .RegisterCommand("login", MyLoginHandler)
@@ -59,9 +59,6 @@ services.AddSocketService()
     .AddService<MyCustomSocketService>()
     .WithEncryption<MyEncryptor>(); // 或 .WithIntegrityCheck<MyIntegrityProvider>()
 
-csharp
-
-
 启动服务
 
 Socket 服务作为 IHostedService 自动启动，无需手动管理生命周期。
@@ -69,6 +66,28 @@ Socket 服务作为 IHostedService 自动启动，无需手动管理生命周期
 命令注册
 
 通过 RegisterCommand 注册命令及处理逻辑，支持参数解析与原始消息访问。
+
+独立模式（无 IServiceCollection/IHostedService）
+
+// 1) 以独立模式构建（不依赖 Microsoft.Extensions.*）
+var builder = new SocketServerBuilder();
+builder
+    .RegisterCommand("login", async (server, client, args, raw) => { /* … */ })
+    .OnClientConnected(async ctx => { /* 连接中间件 … */ })
+    .UseMessageMiddleware(async ctx => { /* 消息中间件 … */ })
+    .AddService<MyCustomSocketService>()   // 需实现 ISocketService
+    .WithIntegrityCheck<MyIntegrityProvider>(); // 或 .WithEncryption<MyEncryptor>()
+
+// 2) 运行器启动与停止
+var runner = new SocketServerRunner(builder, new Hosting.SocketHostOptions { Port = 8463 });
+await runner.StartAsync();
+// … 运行中 …
+await runner.StopAsync();
+
+说明
+- 独立模式不依赖 Microsoft.Extensions.*，适用于控制台/服务/游戏等非 ASP 应用。
+- 加密与完整性互斥，二者只能择一，均未配置时为明文协议。
+- 端口默认 8463，可通过 SocketHostOptions 配置。
 
 4. 扩展点说明
 中间件

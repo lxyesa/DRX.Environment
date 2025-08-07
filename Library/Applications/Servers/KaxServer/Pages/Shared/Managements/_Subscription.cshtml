@@ -1,0 +1,296 @@
+@* 
+使用方式（示例，仅结构引用，不含业务逻辑）：
+@await Html.PartialAsync("Shared/Managements/_Subscription")
+
+TODO：
+- 接入实际订单列表数据源与订阅计划管理 API
+- 将“前往订单中心”按钮路由替换为真实订单中心地址
+- 与用户中心 Tab/路由联动激活逻辑（若有）
+*@
+
+<div class="subscription-card">
+    <div class="subscription-card__header">
+        <h2 class="subscription-card__title">
+            <span class="material-icons subscription-card__title-icon">subscriptions</span>
+            管理订阅
+        </h2>
+        <p class="subscription-card__desc">
+            在此查看与管理您的订阅计划、支付方式与续费设置。—（占位文案）
+        </p>
+    </div>
+
+    <div class="subscription-card__content">
+        <div class="subscription-orders">
+            <div class="subscription-orders__head">
+                <h3 class="subscription-orders__title">
+                    <span class="material-icons subscription-orders__title-icon">receipt_long</span>
+                    订单管理
+                </h3>
+                <p class="subscription-orders__desc">管理并查看与订阅相关的订单记录。—（占位文案）</p>
+            </div>
+
+            <div class="subscription-orders__table-wrapper">
+                <table class="subscription-orders__table">
+                    <thead>
+                        <tr>
+                            <th>订单号</th>
+                            <th>商品</th>
+                            <th>金额</th>
+                            <th>状态</th>
+                            <th>下单时间</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><a href="#">#2025-0803-0001</a></td>
+                            <td><a href="#">高级订阅（月度）</a></td>
+                            <td>¥ 18.00</td>
+                            <td><span class="status-badge status-badge--paid">已支付</span></td>
+                            <td>2025-08-03 12:01</td>
+                            <td>
+                                <a class="link-action" href="#">查看</a>
+                                <span class="sep">|</span>
+                                <a class="link-action" href="#">发票</a>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td><a href="#">#2025-0731-0012</a></td>
+                            <td><a href="#">高级订阅（年度）</a></td>
+                            <td>¥ 168.00</td>
+                            <td><span class="status-badge status-badge--refunded">已退款</span></td>
+                            <td>2025-07-31 09:21</td>
+                            <td>
+                                <a class="link-action" href="#">查看</a>
+                                <span class="sep">|</span>
+                                <a class="link-action" href="#">帮助</a>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td><a href="#">#2025-0726-0007</a></td>
+                            <td><a href="#">基础订阅（月度）</a></td>
+                            <td>¥ 9.90</td>
+                            <td><span class="status-badge status-badge--pending">待支付</span></td>
+                            <td>2025-07-26 17:44</td>
+                            <td>
+                                <a class="link-action" href="#">查看</a>
+                                <span class="sep">|</span>
+                                <a class="link-action" href="#">去支付</a>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td><a href="#">#2025-0720-0033</a></td>
+                            <td><a href="#">团队订阅（月度）</a></td>
+                            <td>¥ 69.00</td>
+                            <td><span class="status-badge status-badge--paid">已支付</span></td>
+                            <td>2025-07-20 10:08</td>
+                            <td>
+                                <a class="link-action" href="#">查看</a>
+                                <span class="sep">|</span>
+                                <a class="link-action" href="#">发票</a>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="subscription-orders__actions">
+                <a href="/" class="btn-primary btn-lg subscription-orders__goto">前往订单中心</a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+/* 视觉风格：复用 LoginSuccess.cshtml 的卡片与动画风格理念，并保持与项目 CSS 变量一致 */
+/* 容器作用域，避免全局污染 */
+.subscription-card {
+    background: var(--surface-color, var(--background-color, #111));
+    border: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
+    border-radius: var(--border-radius-lg, 12px);
+    box-shadow: 0 4px 6px rgba(0,0,0,0.08);
+    overflow: hidden;
+    animation: subscription-fadeInUp 0.5s ease-out;
+}
+
+.subscription-card__header {
+    padding: 1.5rem 1.5rem 0.25rem 1.5rem;
+}
+
+.subscription-card__title {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin: 0 0 0.25rem 0;
+    color: var(--primary-color);
+    font-weight: 600;
+    font-size: 1.25rem;
+    animation: subscription-fadeInUp 0.5s ease-out;
+}
+
+.subscription-card__title-icon {
+    font-size: 1.4rem;
+    color: var(--accent-color);
+}
+
+.subscription-card__desc {
+    color: var(--secondary-color);
+    margin: 0 0 1rem 0;
+    animation: subscription-fadeInUp 0.5s ease-out 0.05s both;
+}
+
+.subscription-card__content {
+    padding: 0 1.5rem 1.5rem 1.5rem;
+}
+
+/* 订单管理块 */
+.subscription-orders {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
+    border-radius: var(--border-radius-md, 10px);
+    padding: 1rem;
+    animation: subscription-scaleIn 0.5s ease-out;
+}
+
+.subscription-orders__head {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 0.25rem;
+}
+
+.subscription-orders__title {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    margin: 0;
+    color: var(--primary-color);
+    font-size: 1.05rem;
+    font-weight: 600;
+}
+
+.subscription-orders__title-icon {
+    font-size: 1.2rem;
+    color: var(--accent-color);
+}
+
+.subscription-orders__desc {
+    margin: 0 0 0 0.25rem;
+    color: var(--secondary-color);
+    font-size: 0.95rem;
+}
+
+/* 表格 */
+.subscription-orders__table-wrapper {
+    overflow: auto;
+    margin-top: 0.75rem;
+    border-radius: var(--border-radius-sm, 8px);
+    border: 1px solid var(--border-color, rgba(255,255,255,0.08));
+}
+
+.subscription-orders__table {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 720px;
+    background: var(--surface-color, #141414);
+}
+
+.subscription-orders__table thead th {
+    text-align: left;
+    font-weight: 600;
+    padding: 0.75rem 1rem;
+    color: var(--primary-color);
+    background: rgba(124, 77, 255, 0.06);
+    position: sticky;
+    top: 0;
+}
+
+.subscription-orders__table tbody td {
+    padding: 0.75rem 1rem;
+    border-top: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
+    color: var(--secondary-color);
+}
+
+.subscription-orders__table a {
+    color: var(--accent-color);
+    text-decoration: none;
+    transition: color var(--transition-speed, 0.2s) ease;
+}
+
+.subscription-orders__table a:hover {
+    color: var(--accent-color-hover, #8c6dff);
+}
+
+/* 状态徽章 */
+.status-badge {
+    display: inline-block;
+    padding: 0.15rem 0.5rem;
+    border-radius: 999px;
+    font-size: 0.82rem;
+    line-height: 1.2;
+    border: 1px solid var(--border-color, rgba(255,255,255,0.12));
+}
+
+.status-badge--paid {
+    color: #42d392;
+    background: rgba(66, 211, 146, 0.12);
+    border-color: rgba(66, 211, 146, 0.35);
+}
+
+.status-badge--pending {
+    color: #f5c542;
+    background: rgba(245, 197, 66, 0.12);
+    border-color: rgba(245, 197, 66, 0.35);
+}
+
+.status-badge--refunded {
+    color: #5fb0ff;
+    background: rgba(95, 176, 255, 0.12);
+    border-color: rgba(95, 176, 255, 0.35);
+}
+
+/* 行为区 */
+.subscription-orders__actions {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 0.75rem;
+}
+
+.subscription-orders__goto {
+    animation: subscription-fadeInUp 0.5s ease-out 0.1s both;
+}
+
+/* 细节样式 */
+.link-action {
+    color: var(--accent-color);
+    text-decoration: none;
+    font-size: 0.92rem;
+}
+
+.link-action:hover {
+    color: var(--accent-color-hover, #8c6dff);
+}
+
+.sep {
+    margin: 0 0.4rem;
+    color: var(--border-color, rgba(255,255,255,0.2));
+}
+
+/* 动画：参考 LoginSuccess 的 scaleIn / fadeInUp 风格，命名防冲突 */
+@@keyframes subscription-scaleIn {
+    from { transform: scale(0.98); opacity: 0; }
+    to   { transform: scale(1); opacity: 1; }
+}
+
+@@keyframes subscription-fadeInUp {
+    from { transform: translateY(10px); opacity: 0; }
+    to   { transform: translateY(0); opacity: 1; }
+}
+
+/* 响应式 */
+@@media (max-width: 768px) {
+    .subscription-orders__desc {
+        display: none;
+    }
+}
+</style>

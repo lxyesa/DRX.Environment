@@ -1,230 +1,774 @@
-@using KaxServer.Services
-<div class="profile-section">
-    <h2 class="section-title-main">
-        <span class="material-icons" style="vertical-align: middle;">storefront</span>
-        Mod市场
-    </h2>
-    <p class="section-desc-main">探索、搜索和安装最新的Mod扩展</p>
+@* 模块：商城市场 网格（可嵌入共享视图） *@
+<section class="ms-market">
+  <div class="ms-market__wrap container">
+    <style>
+      /* 局部作用域：仅 .ms-market 内有效，避免污染全局与父布局 */
+      .ms-market {
+        /* 配色与尺寸（参考 global.css 风格：深色背景、柔和边框、圆角与阴影） */
+        --ms-surface: var(--surface-color, #11111a);
+        --ms-text: var(--primary-color, #eaeafd);
+        --ms-text-2: var(--secondary-color, #bfbfe9);
+        --ms-accent: var(--accent-color, #7c4dff);
+        --ms-accent-2: color-mix(in oklab, var(--ms-accent), white 15%);
+        --ms-accent-3: color-mix(in oklab, var(--ms-accent), white 30%);
+        --ms-border: var(--border-color, rgba(255, 255, 255, .08));
+        --ms-shadow: 0 10px 30px rgba(0, 0, 0, .35), 0 3px 10px rgba(0, 0, 0, .25);
+        --ms-radius: 12px;
+        --ms-muted: var(--ms-text-2);
+      }
 
-    <div class="settings-section">
-        <h3 class="section-title">搜索与筛选</h3>
-        <div class="form-group" style="max-width:440px;">
-            <form method="get">
-                <div class="input-wrapper">
-                    <span class="material-icons input-icon">search</span>
-                    <input type="text" name="searchTerm" class="form-control with-icon" placeholder="搜索Mod、作者或标签..." value="@searchTerm" />
-                    <button type="submit" class="btn-search-modern">
-                        <span class="material-icons" style="vertical-align:middle;font-size:1.2em;">search</span>
-                        搜索
-                    </button>
-                </div>
-            </form>
-    </div>
+      .ms-market .ms-market__wrap {
+        color: var(--ms-text);
+      }
 
-        @{
-            var allItems = StoreManager.GetAllStoreItemsAsync().Result;
-            var filteredItems = string.IsNullOrWhiteSpace(searchTerm)
-                ? allItems
-                : allItems.Where(item =>
-                    (item.Title?.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ?? false) ||
-                    (item.Description?.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ?? false)
-                ).ToList();
+      /* 顶部工具栏（不包含全局页头，只是模块内控件） */
+      .ms-market-toolbar {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 12px;
+        align-items: stretch;
+        margin: 8px 0 12px;
+      }
+
+      /* 小屏折两行，右侧操作下移 */
+      @@media (max-width: 640px) {
+        .ms-market-toolbar {
+          grid-template-columns: 1fr;
         }
-        @if (filteredItems.Count <= 0)
-        {
-            <h3>模组(0)</h3>
-            <div class="not-found">
-                <h4>什么都没有发现呢...</h4>
-            </div>
-        }
-        else
-        {
-            <h3>模组(@filteredItems.Count)</h3>
-            <div class="mod-item-container">
-                @foreach (var item in filteredItems)
-                {
-                    <a class="mod-item-card" href="/Store/Detail?id=@item.Id" style="text-decoration:none; color:inherit;">
-                        <div class="mod-item-card-header">
-                            <div class="mod-item-card-icon">
-                                <img src="@(string.IsNullOrWhiteSpace(item.Image) ? "https://upload.wikimedia.org/wikipedia/zh/9/94/Genshin_Impact.jpg" : item.Image)" alt="Mod图片">
-                            </div>
-                            <div class="mod-item-card-info">
-                                <h4 class="mod-item-card-title">@item.Title</h4>
-                                <div style="display: flex; gap: 0.0rem; align-items: center;">
-                                    <p>@item.DownloadCount</p>
-                                    <p class="material-icons" style="vertical-align: middle; font-size: 1.0rem; margin-left: 0.10rem; margin-top:0.1rem;">download</p>
-                                    <span style="border-left:0.1px solid #444444;height:15px;display:inline-block;margin:0 8px;"></span>
-                                    <p>@item.Rating</p>
-                                    <p class="material-icons" style="vertical-align: middle; font-size: 1.0rem; margin-left: 0.10rem; margin-top:0.0rem;">star</p>
-                                </div>
-                            </div>
-                            <div class="mod-item-card-price">
-                                <p>@item.StoreItemPrices[0].Price</p>
-                                <p class="material-icons" style="vertical-align: middle; font-size: 1.0rem; margin-left: 0.5rem; margin-top:0.12rem;">monetization_on</p>
-                            </div>
-                        </div>
-                        <p style="margin-top: -0.5rem; margin-bottom: 0.5rem ; margin-left: 1.1rem; color: var(--secondary-color); font-size: 0.8rem;">@item.Description</p>
-                    </a>
-                }
-            </div>
-        }
-</div>
-<script src="https://cdn.jsdelivr.net/npm/colorthief@2.3.2/dist/color-thief.umd.js"></script>
+      }
 
-@functions {
-    public string searchTerm => Context.Request.Query["searchTerm"].ToString();
-}
-    </div>
-</div>
-
-<style>
-    div > p{
-        margin: 0;
-    }
-    .not-found {
-        text-align: center;
-        padding: 2rem;
-        color: var(--secondary-color);
-    }
-    .mod-item-container {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 2rem;
-    }
-    .mod-item-card{
-        cursor: pointer;
-        width: 264px;
-        height: auto;
-        border-radius: 12px;
-        border: 1px solid var(--border-color);
-        background-color: var(--bg-color);
-        transition: all 0.2s ease;
-        display: flex;
-        flex-direction: column;
-        overflow: hidden;
-        box-shadow: var(--card-shadow);
-    }
-
-    .mod-item-card:hover{
-        transform: translateY(-2px);
-        border-color: #505050;
-    }
-
-    .mod-item-card-header{
-        display: flex;
-        margin: 1.0rem;
-    }
-    .mod-item-card-icon{
-        width: 55px;
-        height: 55px;
-        border-radius: 0.8rem;
-        background-color: #2c2c2c;
-        margin-right: 1.0rem;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        border: 1px solid #3a3b3c;
-    }
-    .mod-item-card-icon img{
-        border-radius: 8px;
-        width: 75%;
-        height: auto;
-        display: block;
-    }
-    .mod-item-card-info{
-        flex: 1;
-        display: flex;
-        flex-direction: column;
-        justify-content: center;
-    }
-    .mod-item-card-title{
-        font-size: 1.0rem;
-        font-weight: 600;
-        color: #ffffff;
-        margin: 0;
-    }
-    .mod-item-card-info{
-        font-size: 0.9rem;
-        color: var(--secondary-color);
-        margin: 0;
-    }
-    .mod-item-card-price{
-        display: flex;
-        gap: 0.0rem;
-        align-items: center;
-        justify-content: center;
-        height: 30px;
-        width: auto;
-        padding: 0.0rem 0.5rem;
-        background-color: #313131;
-        border-radius: 50rem;
-        border: 1px solid #3a3b3c;
-    }
-
-    .mod-item-card-img{
-        width: 100%;
-        height: auto;
-        display: block;
-    }
-
-
-    .btn-primary{
-        height: 1.8rem;
-        padding: 0.0rem 1.5rem;
-    }
-</style>
-<style>
-    .input-wrapper {
-        display: flex;
-        align-items: center;
+      /* 搜索容器（含输入、下拉建议、筛选触发） */
+      .ms-market-search {
         position: relative;
-        padding: 0;
-        background: none;
-        border-radius: 4px;
-        border: 1px solid var(--border-color, #444);
-        overflow: hidden;
-        height: 2.5rem;
-    }
-    .input-wrapper .input-icon {
+        min-width: 240px;
+        display: grid;
+        grid-template-columns: 1fr auto;
+        align-items: center;
+        background: color-mix(in oklab, var(--ms-surface) 96%, black 4%);
+        border: 1px solid var(--ms-border);
+        border-radius: 14px;
+        padding: 6px 8px 6px 36px; /* 为左侧icon预留 */
+        box-shadow:
+          0 1px 0 rgba(255, 255, 255, .04) inset,
+          0 4px 12px rgba(0, 0, 0, .18);
+        transition: border-color .15s ease, box-shadow .15s ease, background .15s ease;
+      }
+
+      .ms-market-search:focus-within {
+        border-color: color-mix(in oklab, var(--ms-accent) 55%, var(--ms-border));
+        box-shadow:
+          0 0 0 3px color-mix(in oklab, var(--ms-accent) 18%, transparent),
+          0 6px 18px rgba(0, 0, 0, .28);
+        background: color-mix(in oklab, var(--ms-surface) 92%, black 8%);
+      }
+
+      .ms-market-search input {
+        width: 100%;
+        height: 38px;
+        padding: 0 100px 0 4px;
+        border: 0;
+        background: transparent;
+        color: var(--ms-text);
+        outline: none;
+      }
+
+      .ms-market-search input::placeholder {
+        color: color-mix(in oklab, var(--ms-text-2) 85%, transparent);
+        opacity: 1;
+      }
+
+      .ms-market-search .ms-market-icon {
         position: absolute;
         left: 12px;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 18px;
+        height: 18px;
+        opacity: .85;
+        color: var(--ms-muted);
         pointer-events: none;
-        color: #888;
-        z-index: 2;
-    }
-    .input-wrapper input.with-icon {
-        padding-left: 2.2em;
-        border: none;
-        border-radius: 0;
-        flex: 1;
-        min-width: 0;
-        height: 100%;
+      }
+
+      .ms-market-search .ms-chipbar {
+        display: flex;
+        gap: 6px;
+        position: absolute;
+        right: 8px;
+      }
+
+      .ms-chip {
+        appearance: none;
+        border: 1px solid color-mix(in oklab, var(--ms-border), transparent 20%);
+        background: linear-gradient(180deg, color-mix(in oklab, var(--ms-surface) 80%, black 20%), color-mix(in oklab, var(--ms-surface) 70%, black 30%));
+        color: var(--ms-muted);
+        padding: 6px 10px;
+        border-radius: 999px;
+        cursor: pointer;
+        font-weight: 700;
+        transition: filter .15s ease, transform .06s ease, border-color .15s ease, color .15s ease;
+      }
+
+      .ms-chip:hover { filter: brightness(1.08); color: var(--ms-text); border-color: color-mix(in oklab, var(--ms-accent) 40%, var(--ms-border)); }
+      .ms-chip:active { transform: scale(0.98); }
+      .ms-chip.active {
+        color: var(--ms-text);
+        background: linear-gradient(180deg, color-mix(in oklab, var(--ms-accent) 25%, transparent), color-mix(in oklab, var(--ms-accent) 15%, transparent));
+        border-color: color-mix(in oklab, var(--ms-accent) 50%, transparent);
+        box-shadow: 0 0 0 6px color-mix(in oklab, var(--ms-accent) 20%, transparent) inset, 0 6px 14px color-mix(in oklab, var(--ms-accent) 25%, transparent);
+      }
+
+      /* 清除按钮（×） */
+      .ms-market-search .ms-clear-btn {
+        position: absolute;
+        right: 120px; /* 让位给chips */
+        top: 50%;
+        transform: translateY(-50%);
+        width: 28px;
+        height: 28px;
+        border-radius: 50%;
+        border: 1px solid color-mix(in oklab, var(--ms-border), transparent 20%);
         background: transparent;
-        color: #fff;
-        outline: none;
+        color: var(--ms-muted);
+        display: none; /* 默认隐藏，有内容时显示 */
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: background .15s ease, border-color .15s ease, color .15s ease, transform .06s ease;
+      }
+      .ms-market-search .ms-clear-btn:hover {
+        background: color-mix(in oklab, var(--ms-surface) 80%, black 20%);
+        border-color: color-mix(in oklab, var(--ms-accent) 40%, var(--ms-border));
+        color: var(--ms-text);
+      }
+      .ms-market-search .ms-clear-btn:active {
+        transform: translateY(-50%) scale(0.96);
+      }
+
+      /* 过滤中微指示器（右侧小点旋转） */
+      .ms-market-search .ms-busy-dot {
+        position: absolute;
+        right: 152px;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: radial-gradient(circle at 30% 30%, white 10%, rgba(255,255,255,.6) 18%, var(--ms-accent) 55%, color-mix(in oklab, var(--ms-accent) 35%, transparent) 75%, transparent 78%);
+        box-shadow: 0 0 10px color-mix(in oklab, var(--ms-accent) 70%, transparent);
+        display: none;
+      }
+      .ms-market-search .ms-busy-dot.is-on {
+        display: inline-block;
+        animation: msSpin .9s linear infinite;
+      }
+      @@keyframes msSpin {
+        from { transform: translateY(-50%) rotate(0deg); }
+        to   { transform: translateY(-50%) rotate(360deg); }
+      }
+
+      /* 智能建议面板 */
+      .ms-suggest {
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: calc(100% + 8px);
+        background: linear-gradient(180deg, color-mix(in oklab, var(--ms-surface) 92%, black 8%), color-mix(in oklab, var(--ms-surface) 96%, black 4%));
+        border: 1px solid color-mix(in oklab, var(--ms-border), transparent 10%);
+        border-radius: 12px;
+        box-shadow: var(--ms-shadow);
+        padding: 8px;
+        display: none;
+        z-index: 10;
+      }
+      .ms-suggest.show { display: block; }
+      .ms-suggest-group { padding: 4px 6px 8px; }
+      .ms-suggest-title { font-size: .78rem; color: var(--ms-muted); margin: 4px 6px 8px; }
+      .ms-suggest-list { display: grid; gap: 6px; }
+      .ms-suggest-item {
+        display: flex; justify-content: space-between; align-items: center;
+        padding: 8px 10px; border-radius: 10px; cursor: pointer;
+        border: 1px solid transparent;
+        transition: background .15s, border-color .15s;
+      }
+      .ms-suggest-item:hover { background: color-mix(in oklab, var(--ms-surface) 80%, black 20%); border-color: color-mix(in oklab, var(--ms-accent) 20%, var(--ms-border)); }
+      .ms-suggest-hint { color: var(--ms-muted); font-size: .78rem; }
+
+      .ms-market-density {
+        display: flex;
+        gap: 6px;
+        align-items: center;
+        padding: 4px;
+        border-radius: 999px;
+        background: linear-gradient(180deg, color-mix(in oklab, var(--ms-surface) 80%, black 20%), color-mix(in oklab, var(--ms-surface) 70%, black 30%));
+        border: 1px solid color-mix(in oklab, var(--ms-border), transparent 20%);
+      }
+
+      .ms-market-btn {
+        appearance: none;
+        border: 1px solid transparent;
+        padding: 6px 10px;
+        border-radius: 999px;
+        color: var(--ms-muted);
+        background: transparent;
+        cursor: pointer;
+        font-weight: 600;
+      }
+
+      .ms-market-btn.active {
+        color: var(--ms-text);
+        background: linear-gradient(180deg, color-mix(in oklab, var(--ms-accent) 25%, transparent), color-mix(in oklab, var(--ms-accent) 15%, transparent));
+        border-color: color-mix(in oklab, var(--ms-accent) 50%, transparent);
+        box-shadow: 0 0 0 6px color-mix(in oklab, var(--ms-accent) 20%, transparent) inset, 0 6px 14px color-mix(in oklab, var(--ms-accent) 25%, transparent);
+      }
+
+      /* 栅格 */
+      .ms-market-grid {
+        display: grid;
+        gap: 14px;
+        margin-top: 10px;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        transition: grid-template-columns .25s ease;
+      }
+
+      .ms-market-grid.cols-3 {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+
+      .ms-market-grid.cols-6 {
+        grid-template-columns: repeat(6, minmax(0, 1fr));
+      }
+
+      .ms-market-grid.cols-9 {
+        grid-template-columns: repeat(9, minmax(0, 1fr));
+      }
+
+      @@media
+      (max-width: 1200px) {
+        .ms-market-grid.cols-9 {
+          grid-template-columns: repeat(6, minmax(0, 1fr));
+        }
+      }
+
+      @@media
+      (max-width: 920px) {
+
+        .ms-market-grid.cols-9,
+        .ms-market-grid.cols-6 {
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+      }
+
+      @@media
+      (max-width: 640px) {
+
+        .ms-market-grid.cols-9,
+        .ms-market-grid.cols-6,
+        .ms-market-grid.cols-3 {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+      }
+
+      @@media
+      (max-width: 420px) {
+
+        .ms-market-grid.cols-9,
+        .ms-market-grid.cols-6,
+        .ms-market-grid.cols-3 {
+          grid-template-columns: repeat(1, minmax(0, 1fr));
+        }
+      }
+
+      /* 卡片 */
+      .ms-market-card {
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        border-radius: var(--ms-radius);
+        background: linear-gradient(180deg, color-mix(in oklab, var(--ms-surface) 90%, black 10%), color-mix(in oklab, var(--ms-surface) 95%, black 5%));
+        border: 1px solid var(--ms-border);
         box-shadow: none;
-    }
-    .btn-search-modern {
-        border-radius: 0px 4px 0px 0px;
-        height: 2.5rem;
-        padding: 0 1.5rem;
+        transition: transform .2s ease, border-color .2s ease;
+      }
+
+      .ms-market-card:hover {
+        transform: translateY(-4px);
+        border-color: color-mix(in oklab, var(--ms-accent) 35%, var(--ms-border));
+        box-shadow: none;
+      }
+
+      .ms-market-thumb {
+        aspect-ratio: 4/3;
+        width: 100%;
+        position: relative;
+        overflow: hidden;
+        background: radial-gradient(60% 80% at 70% 30%, color-mix(in oklab, var(--ms-accent) 35%, transparent), transparent 60%), linear-gradient(145deg, color-mix(in oklab, var(--ms-surface), black 10%), color-mix(in oklab, var(--ms-market-surface), black 25%));
+      }
+
+      .ms-market-thumb canvas,
+      .ms-market-thumb img {
+        width: 100%;
+        height: 100%;
+        display: block;
+        object-fit: cover;
+      }
+
+      .ms-market-badge {
+        position: absolute;
+        top: 10px;
+        left: 10px;
+        padding: 4px 8px;
+        border-radius: 999px;
+        font-size: .75rem;
+        font-weight: 700;
+        background: linear-gradient(180deg, color-mix(in oklab, var(--ms-accent) 90%, transparent), color-mix(in oklab, var(--ms-market-accent) 70%, transparent));
+        color: white;
+        letter-spacing: .3px;
+        box-shadow: 0 4px 12px color-mix(in oklab, var(--ms-accent) 35%, transparent);
+      }
+
+      .ms-market-content {
+        padding: 12px;
+        display: flex;
+        gap: 10px;
+        align-items: flex-start;
+      }
+
+      .ms-market-title-line {
+        flex: 1 1 auto;
+        min-width: 0;
+      }
+
+      .ms-market-name {
         margin: 0;
+        font-size: .95rem;
+        font-weight: 700;
+        letter-spacing: .2px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .ms-market-sub {
+        margin: 2px 0 0 0;
+        color: var(--ms-muted);
+        font-size: .8rem;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .ms-market-price {
+        font-weight: 800;
+        color: var(--ms-accent-3);
+        text-shadow: 0 0 18px color-mix(in oklab, var(--ms-accent-3) 25%, transparent);
+      }
+
+      .ms-market-actions {
         display: flex;
         align-items: center;
-        gap: 0.4rem;
-        font-size: 1rem;
-        font-weight: 600;
-        background: linear-gradient(90deg, #4f8cff 0%, #6a5af9 100%);
-        color: #fff;
-        border: none;
-        box-shadow: 0 2px 12px 0 rgba(80,120,255,0.18), 0 1.5px 4px 0 rgba(80,80,80,0.10);
-        transition: all 0.18s cubic-bezier(.4,0,.2,1);
+        justify-content: space-between;
+        gap: 10px;
+        padding: 0 12px 12px;
+      }
+
+      .ms-market-btn--ghost {
+        appearance: none;
+        border: 1px solid var(--ms-border);
+        background: transparent;
+        color: var(--ms-text);
+        padding: 8px 12px;
+        border-radius: 10px;
         cursor: pointer;
-        outline: none;
-        position: relative;
-        z-index: 2;
-    }
-    .input-wrapper input.with-icon:focus {
-        background: rgba(255,255,255,0.04);
-    }
-</style>
+        font-weight: 700;
+        transition: transform .15s ease, background .15s ease, border-color .15s ease;
+      }
+
+      .ms-market-btn--ghost:hover {
+        transform: translateY(-1px);
+        border-color: color-mix(in oklab, var(--ms-accent) 50%, var(--ms-border));
+      }
+
+      .ms-market-btn--primary {
+        background: linear-gradient(180deg, color-mix(in oklab, var(--ms-accent) 85%, transparent), color-mix(in oklab, var(--ms-accent) 65%, transparent));
+        border: 1px solid color-mix(in oklab, var(--ms-accent) 70%, transparent);
+        color: white;
+        box-shadow: 0 10px 20px color-mix(in oklab, var(--ms-accent) 25%, transparent);
+      }
+
+      .ms-market-btn--primary:hover {
+        filter: brightness(1.06);
+      }
+
+      .ms-market-meta {
+        display: flex;
+        gap: 10px;
+        color: var(--ms-muted);
+        font-size: .78rem;
+        padding: 0 12px 12px;
+      }
+
+      .ms-market-meta span {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+      }
+
+      .ms-market-dot {
+        display: inline-block;
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: radial-gradient(circle at 30% 30%, white 8%, rgba(255, 255, 255, .6) 15%, var(--ms-accent) 40%, color-mix(in oklab, var(--ms-accent) 20%, transparent) 70%, transparent 72%);
+        box-shadow: 0 0 10px color-mix(in oklab, var(--ms-accent) 80%, transparent), 0 0 18px color-mix(in oklab, var(--ms-accent) 50%, transparent);
+      }
+
+      /* 空态 */
+      .ms-market-empty {
+        padding: 24px 0;
+        text-align: center;
+        color: var(--ms-muted);
+      }
+
+      /* 局部 Toast 宿主（若未创建由脚本动态创建），放在模块内避免全局遮挡 */
+    </style>
+
+    <div class="ms-market-toolbar" role="region" aria-label="市场工具栏">
+      <div class="ms-market-search" role="combobox" aria-expanded="false" aria-owns="ms-suggest" aria-haspopup="listbox">
+        <svg class="ms-market-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M21 21l-4.2-4.2M17 10.5A6.5 6.5 0 1 1 4 10.5a6.5 6.5 0 0 1 13 0Z" stroke="currentColor"
+            stroke-width="2" stroke-linecap="round" />
+        </svg>
+        <input id="ms-q" type="search" placeholder="搜索商品、品牌、类别或标签…"
+               autocomplete="off" aria-controls="ms-grid" aria-autocomplete="list" aria-activedescendant="" aria-label="搜索商品" />
+        <span class="ms-busy-dot" aria-hidden="true"></span>
+        <button type="button" class="ms-clear-btn" aria-label="清除搜索" title="清除">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" aria-hidden="true">
+            <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+        </button>
+        <div class="ms-chipbar" aria-label="快速筛选">
+          <button type="button" class="ms-chip" data-key="tag:新品">新品</button>
+          <button type="button" class="ms-chip" data-key="tag:热卖">热卖</button>
+        </div>
+        <div id="ms-suggest" class="ms-suggest" role="listbox" aria-label="搜索建议"></div>
+      </div>
+
+      <div class="ms-market-density" role="tablist" aria-label="每行卡片数量">
+        <button class="ms-market-btn active" data-cols="3" role="tab" aria-selected="true">3/行</button>
+        <button class="ms-market-btn" data-cols="6" role="tab" aria-selected="false">6/行</button>
+        <button class="ms-market-btn" data-cols="9" role="tab" aria-selected="false">9/行</button>
+      </div>
+    </div>
+
+    <section id="ms-grid" class="ms-market-grid cols-3" aria-live="polite"></section>
+    <div id="ms-empty" class="ms-market-empty" hidden>未找到匹配的商品，试试其他关键词。</div>
+
+
+    <script type="module">
+      // 改为从后端生成智能建议：按输入关键字实时查询
+      const rand = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
+
+      function generateThumbCanvas(seedText, accentHue = rand(260, 300)) {
+        // … 保持缩略图生成（仅用于视觉占位）
+        const w = 800, h = 600;
+        const c = document.createElement('canvas'); c.width = w; c.height = h; const ctx = c.getContext('2d');
+        const g = ctx.createLinearGradient(0, 0, w, h);
+        const a1 = `oklch(35% 0.16 ${accentHue})`; const a2 = `oklch(25% 0.10 ${accentHue + 30})`; const a3 = `#0e0c18`;
+        g.addColorStop(0, a1); g.addColorStop(0.6, a2); g.addColorStop(1, a3); ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
+        for (let i = 0; i < 4; i++) {
+          const rg = ctx.createRadialGradient(100 + Math.random()* (w-200), 80 + Math.random()* (h-160), 10 + Math.random()*30, 200 + Math.random()*(w-200), 100 + Math.random()*(h-100), 200 + Math.random()*180);
+          rg.addColorStop(0, `rgba(255,255,255,${Math.random() * .25 + .15})`); rg.addColorStop(1, 'rgba(255,255,255,0)');
+          ctx.fillStyle = rg; ctx.globalCompositeOperation = 'screen';
+          ctx.beginPath(); ctx.arc(100 + Math.random()*(w-200), 80 + Math.random()*(h-160), 120 + Math.random()*120, 0, Math.PI * 2); ctx.fill();
+        }
+        ctx.globalCompositeOperation = 'source-over';
+        const cols = 8, rows = 6; const cw = w / cols, ch = h / rows;
+        for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++) {
+          const cx = x * cw + cw / 2; const cy = y * ch + ch / 2; const r = Math.min(cw, ch) / 2 * (0.25 + Math.random() * 0.6);
+          ctx.save(); ctx.translate(cx, cy); ctx.rotate((x + y) * 0.12 + Math.random() * 0.6); ctx.beginPath();
+          const type = Math.floor(Math.random()*3); const alpha = 0.08 + Math.random() * 0.12;
+          if (type === 0) { ctx.fillStyle = `rgba(255,255,255,${alpha})`; ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.fill(); }
+          else if (type === 1) { ctx.strokeStyle = `rgba(255,255,255,${alpha + .05})`; ctx.lineWidth = 2; ctx.rect(-r, -r, r * 2, r * 2); ctx.stroke(); }
+          else { ctx.fillStyle = `rgba(124,77,255,${alpha + .05})`; ctx.beginPath(); for (let i = 0; i < 6; i++) { const ang = i / 6 * Math.PI * 2; const rr = r * (0.6 + 0.4 * Math.sin(i + x * .3 + y * .2)); ctx.lineTo(Math.cos(ang) * rr, Math.sin(ang) * rr); } ctx.closePath(); ctx.fill(); }
+          ctx.restore();
+        }
+        ctx.font = '700 64px ui-sans-serif, system-ui, -apple-system'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+        ctx.fillStyle = 'rgba(255,255,255,.92)'; ctx.shadowColor = 'rgba(124,77,255,.45)'; ctx.shadowBlur = 12;
+        const lines = seedText.length > 8 ? [seedText.slice(0, 8), seedText.slice(8)] : [seedText];
+        lines.forEach((line, i) => ctx.fillText(line, 40, h - 160 + i * 70));
+        ctx.shadowBlur = 0; ctx.fillStyle = 'rgba(124,77,255,.6)'; ctx.fillRect(40, h - 70, w - 80, 6);
+        return c;
+      }
+
+      // 智能建议：从后端 /api/store/items 拉取并做本地提取
+      async function updateSuggest(text) {
+        if (!suggest) return;
+        const q = (text || '').toLowerCase().trim();
+        if (!q) {
+          suggest.innerHTML = '';
+          suggest.classList.remove('show');
+          combo?.setAttribute('aria-expanded', 'false');
+          return;
+        }
+        try {
+          // 简单复用现有 items 接口：客户端提取 name/brand/category/tag 关键词
+          const res = await fetch('/api/store/items', { headers: { 'Accept': 'application/json' } });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const data = await res.json();
+          const names = new Set();
+          const brands = new Set();
+          const categories = new Set();
+          const tags = new Set();
+          (Array.isArray(data) ? data : []).forEach(x => {
+            const name = (x.name ?? x.title ?? '').toString();
+            const brand = (x.brand ?? x.ownerName ?? '').toString();
+            const category = (x.category ?? (x.description ? '描述' : '')).toString();
+            const tag = (x.tag ?? '').toString();
+            if (name.toLowerCase().includes(q)) names.add(name);
+            if (brand && brand.toLowerCase().includes(q)) brands.add(brand);
+            if (category && category.toLowerCase().includes(q)) categories.add(category);
+            if (tag && tag.toLowerCase().includes(q)) tags.add(tag);
+          });
+          const top = (set) => Array.from(set).slice(0, 6);
+          const mk = (title, items, prefix) => {
+            if (!items.length) return '';
+            const lis = items.map((x) => `<div class="ms-suggest-item" role="option" data-val="${prefix? `${prefix}:${x}`: x}"><span>${x}</span><span class="ms-suggest-hint">${prefix? `${prefix}:` : ''}${x}</span></div>`).join('');
+            return `<div class="ms-suggest-group"><div class="ms-suggest-title">${title}</div><div class="ms-suggest-list">${lis}</div></div>`;
+          };
+          const html =
+            mk('商品', top(names), '') +
+            mk('品牌', top(brands), 'brand') +
+            mk('类别', top(categories), 'category') +
+            mk('标签', top(tags), 'tag');
+          suggest.innerHTML = html || `<div class="ms-suggest-group"><div class="ms-suggest-title">提示</div><div class="ms-suggest-list"><div class="ms-suggest-item" data-val="${text}"><span>搜索</span><span class="ms-suggest-hint">${text}</span></div></div></div>`;
+          currentSuggestItems = Array.from(suggest.querySelectorAll('.ms-suggest-item'));
+          activeSuggestIndex = -1;
+          const show = text.length > 0 && currentSuggestItems.length > 0;
+          suggest.classList.toggle('show', show);
+          combo?.setAttribute('aria-expanded', show ? 'true' : 'false');
+        } catch (e) {
+          console.error('updateSuggest failed', e);
+          suggest.classList.remove('show');
+          combo?.setAttribute('aria-expanded', 'false');
+        }
+      }
+
+      // 后端数据
+      // products 数据容器（JSDoc 在 Razor 中会被 C# 解析，故移除避免“不存在名称 type”错误）
+      let products = [];
+
+      const gridEl = document.getElementById('ms-grid');
+      const emptyEl = document.getElementById('ms-empty');
+      const searchInput = document.getElementById('ms-q');
+      const clearBtn = document.querySelector('.ms-clear-btn');
+      const busyDot = document.querySelector('.ms-busy-dot');
+      const suggest = document.getElementById('ms-suggest');
+      const chipbar = document.querySelector('.ms-chipbar');
+      const combo = document.querySelector('.ms-market-search');
+      let typingTimer = 0;
+      let activeSuggestIndex = -1;
+      let currentSuggestItems = [];
+
+      function productCard(p) {
+        // 无价格描述
+        const card = document.createElement('article'); card.className = 'ms-market-card'; card.setAttribute('tabindex', '0'); card.setAttribute('aria-label', `${p.name ?? '未命名'}`);
+        const thumb = document.createElement('div'); thumb.className = 'ms-market-thumb'; const canvas = generateThumbCanvas(p.name ?? 'Item'); thumb.appendChild(canvas);
+        if (p.tag) { const badge = document.createElement('span'); badge.className = 'ms-market-badge'; badge.textContent = p.tag; thumb.appendChild(badge); }
+        const content = document.createElement('div'); content.className = 'ms-market-content';
+        const dot = document.createElement('span'); dot.className = 'ms-market-dot'; dot.setAttribute('aria-hidden', 'true');
+        const tl = document.createElement('div'); tl.className = 'ms-market-title-line';
+        const name = document.createElement('h3'); name.className = 'ms-market-name'; name.title = p.name ?? ''; name.textContent = p.name ?? '';
+        const sub = document.createElement('div'); sub.className = 'ms-market-sub'; sub.textContent = `${p.brand ?? '-'} · ${p.category ?? '-'}`; tl.append(name, sub);
+        // 按需求：不再显示商品价格
+        content.append(dot, tl);
+        // 移除“缺货系统”与库存展示，仅保留评分
+        const meta = document.createElement('div'); meta.className = 'ms-market-meta'; meta.innerHTML = `<span title="评分">⭐ ${p.rating ?? '-'}</span>`;
+        const actions = document.createElement('div'); actions.className = 'ms-market-actions';
+        const btnWish = document.createElement('button'); btnWish.className = 'ms-market-btn--ghost'; btnWish.textContent = '收藏';
+        const btnBuy = document.createElement('button'); btnBuy.className = 'ms-market-btn--primary ms-market-btn--ghost ms-icon-btn'; btnBuy.innerHTML = '<i class="i-info" aria-hidden="true"></i> 了解详细';
+        btnWish.addEventListener('click', (e) => { e.stopPropagation(); toast(`已收藏：${p.name ?? '商品'}`); });
+        // 改为跳转详情页
+        btnBuy.addEventListener('click', (e) => { e.stopPropagation(); window.location.href = `/Store/Detail?id=${encodeURIComponent(p.id)}`; });
+        actions.append(btnWish, btnBuy);
+        card.append(thumb, content, meta, actions);
+        return card;
+      }
+
+      function render(list) {
+        gridEl.innerHTML = '';
+        if (!list.length) { emptyEl.hidden = false; return; }
+        emptyEl.hidden = true; const fr = document.createDocumentFragment(); list.forEach(p => fr.appendChild(productCard(p))); gridEl.appendChild(fr);
+      }
+
+      function buildQueryTokens(q) {
+        // 支持 token：brand:xxx category:xxx tag:xxx
+        const tokens = [];
+        const rest = [];
+        q.split(/\s+/).forEach(t => {
+          const m = t.match(/^(brand|category|tag):(.*)$/i);
+          if (m) tokens.push({ k: m[1].toLowerCase(), v: m[2].toLowerCase() });
+          else if (t) rest.push(t.toLowerCase());
+        });
+        return { tokens, text: rest.join(' ') };
+      }
+
+      function applyFilter() {
+        const qRaw = searchInput.value.trim();
+        const { tokens, text } = buildQueryTokens(qRaw);
+        const filtered = products.filter(p => {
+          const base = `${p.name ?? ''} ${p.brand ?? ''} ${p.category ?? ''}`.toLowerCase().includes(text);
+          const ok = tokens.every(t => {
+            if (t.k === 'brand') return (p.brand ?? '').toLowerCase().includes(t.v);
+            if (t.k === 'category') return (p.category ?? '').toLowerCase().includes(t.v);
+            if (t.k === 'tag') return (p.tag ?? '').toLowerCase().includes(t.v);
+            return true;
+          });
+          return base && ok;
+        });
+        render(filtered);
+        busyDot && busyDot.classList.remove('is-on');
+        if (clearBtn) clearBtn.style.display = qRaw ? 'inline-flex' : 'none';
+        updateSuggest(text);
+      }
+
+      function setupDensity() {
+        const group = document.querySelector('.ms-market-density');
+        const buttons = Array.from(group.querySelectorAll('button'));
+        const setCols = (cols) => { gridEl.classList.remove('cols-3', 'cols-6', 'cols-9'); gridEl.classList.add(`cols-${cols}`); };
+        buttons.forEach(btn => {
+          btn.addEventListener('click', () => {
+            buttons.forEach(b => { b.classList.remove('active'); b.setAttribute('aria-selected', 'false'); });
+            btn.classList.add('active'); btn.setAttribute('aria-selected', 'true'); setCols(btn.dataset.cols);
+          });
+        });
+      }
+
+      // 轻量 Toast（保持不变）
+      let toastTimer = null;
+      function toast(msg) {
+        const hostRoot = document.querySelector('.ms-market');
+        let el = hostRoot.querySelector('#ms-market-toast');
+        if (!el) {
+          el = document.createElement('div'); el.id = 'ms-market-toast';
+          Object.assign(el.style, { position: 'fixed', left: '50%', bottom: '28px', transform: 'translateX(-50%)', background: 'linear-gradient(180deg, rgba(30,25,45,.95), rgba(20,16,32,.95))', border: '1px solid rgba(255,255,255,.12)', color: 'white', padding: '10px 14px', borderRadius: '12px', zIndex: 1000, boxShadow: '0 10px 24px rgba(0,0,0,.35), 0 0 0 4px rgba(124,77,255,.2) inset', maxWidth: '80%', textAlign: 'center', fontWeight: '700' });
+          hostRoot.appendChild(el);
+        }
+        el.textContent = msg; el.style.opacity = '1'; clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => { el.style.transition = 'opacity .4s'; el.style.opacity = '0'; }, 1400);
+      }
+
+      // 从后端加载
+      async function loadProducts() {
+        try {
+          busyDot && busyDot.classList.add('is-on');
+          const res = await fetch('/api/store/items', { headers: { 'Accept': 'application/json' } });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const data = await res.json();
+          // 字段映射：后端 StoreItem 可能为 Title/Description/OwnerId/ItemId 等
+          products = (Array.isArray(data) ? data : []).map((x) => ({
+            id: x.id ?? x.itemId ?? 0,
+            name: x.name ?? x.title ?? '未命名',
+            brand: x.brand ?? (x.ownerName ?? ''),
+            category: (x.category ?? x.description ?? ''),
+            price: (x.price ?? x.amount ?? 0).toString(),
+            tag: x.tag ?? null,
+            rating: x.rating ?? '-'
+            // 已移除库存字段依赖
+          }));
+          applyFilter(); // 首次渲染
+        } catch (err) {
+          console.error('Load store items failed:', err);
+          products = [];
+          applyFilter();
+          toast('加载商品失败');
+        } finally {
+          busyDot && busyDot.classList.remove('is-on');
+        }
+      }
+
+      // 初始化
+      setupDensity();
+      updateSuggest('');
+      // 绑定输入与交互
+      const triggerFilter = () => {
+        clearTimeout(typingTimer);
+        if (busyDot) busyDot.classList.add('is-on');
+        typingTimer = setTimeout(applyFilter, 120);
+      };
+      searchInput.addEventListener('input', () => {
+        if (clearBtn) clearBtn.style.display = searchInput.value ? 'inline-flex' : 'none';
+        triggerFilter();
+      });
+      chipbar?.addEventListener('click', (e) => {
+        const btn = e.target.closest('.ms-chip');
+        if (!btn) return;
+        const key = btn.dataset.key || '';
+        const has = searchInput.value.includes(key);
+        btn.classList.toggle('active', !has);
+        if (!has) {
+          searchInput.value = `${searchInput.value} ${key}`.trim();
+        } else {
+          searchInput.value = searchInput.value.replace(key, '').replace(/\s{2,}/g, ' ').trim();
+        }
+        triggerFilter();
+        searchInput.focus();
+      });
+      suggest?.addEventListener('mousedown', (e) => {
+        const it = e.target.closest('.ms-suggest-item');
+        if (!it) return;
+        e.preventDefault();
+        const val = it.dataset.val || '';
+        const { tokens, text } = buildQueryTokens(searchInput.value.trim());
+        const newText = text ? text.replace(/[^ ]*$/, '').trim() : '';
+        const final = [tokens.map(t => `${t.k}:${t.v}`).join(' '), newText, val].filter(Boolean).join(' ').trim();
+        searchInput.value = final;
+        suggest.classList.remove('show');
+        combo?.setAttribute('aria-expanded', 'false');
+        triggerFilter();
+      });
+      searchInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+          searchInput.value = '';
+          if (clearBtn) clearBtn.style.display = 'none';
+          suggest?.classList.remove('show');
+          combo?.setAttribute('aria-expanded', 'false');
+          triggerFilter();
+          return;
+        }
+        if (!suggest || !suggest.classList.contains('show')) return;
+        if (['ArrowDown', 'ArrowUp'].includes(e.key)) {
+          e.preventDefault();
+          if (!currentSuggestItems.length) return;
+          activeSuggestIndex = (activeSuggestIndex + (e.key === 'ArrowDown' ? 1 : -1) + currentSuggestItems.length) % currentSuggestItems.length;
+          currentSuggestItems.forEach((el, i) => el.classList.toggle('active', i === activeSuggestIndex));
+          const active = currentSuggestItems[activeSuggestIndex];
+          if (active) active.scrollIntoView({ block: 'nearest' });
+        } else if (e.key === 'Enter') {
+          if (activeSuggestIndex >= 0 && currentSuggestItems[activeSuggestIndex]) {
+            e.preventDefault();
+            currentSuggestItems[activeSuggestIndex].dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+          }
+        }
+      });
+      clearBtn?.addEventListener('click', () => {
+        searchInput.value = '';
+        clearBtn.style.display = 'none';
+        suggest?.classList.remove('show');
+        combo?.setAttribute('aria-expanded', 'false');
+        searchInput.focus();
+        triggerFilter();
+      });
+      gridEl.addEventListener('focusin', (e) => {
+        const card = e.target.closest('.ms-market-card');
+        if (card) card.style.boxShadow = '0 0 0 2px rgba(124,77,255,.6), 0 18px 40px rgba(0,0,0,.45)';
+      });
+      gridEl.addEventListener('focusout', (e) => {
+        const card = e.target.closest('.ms-market-card');
+        if (card) card.style.boxShadow = '';
+      });
+
+      // 启动加载
+      loadProducts();
+    </script>
+  </div>
+</section>

@@ -1,0 +1,345 @@
+@page "/Store/PurchaseSuccess/{orderId}"
+@model KaxServer.Pages.Store.PurchaseSuccessModel
+@{
+  Layout = "_Layout";
+  ViewData["Title"] = "购买完成";
+}
+<section class="store-detail container" id="ps-root" hidden>
+  <style>
+    .store-detail {
+      --sd-surface: var(--surface-color, #11111a);
+      --sd-text: var(--primary-color, #eaeafd);
+      --sd-muted: var(--secondary-color, #bfbfe9);
+      --sd-accent: var(--accent-color, #7c4dff);
+      --sd-border: rgba(255, 255, 255, .08);
+      --sd-radius: 14px;
+      color: var(--sd-text);
+      padding: 16px 0 28px;
+      min-height: calc(100vh - var(--nav-height, 60px));
+    }
+
+    .sd-breadcrumb {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 6px 0 14px;
+      color: var(--sd-muted);
+      font-size: .92rem;
+    }
+
+    .sd-breadcrumb a {
+      color: var(--sd-text);
+      text-decoration: none;
+    }
+
+    .sd-breadcrumb a:hover {
+      text-decoration: underline;
+    }
+
+    .sd-wrap {
+      display: grid;
+      gap: 16px;
+      grid-template-columns: 1.2fr 1fr;
+    }
+
+    @@media (max-width:980px) {
+      .sd-wrap {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .sd-card {
+      background: linear-gradient(180deg, color-mix(in oklab, var(--sd-surface) 92%, black 8%), color-mix(in oklab, var(--sd-surface) 96%, black 4%));
+      border: 1px solid var(--sd-border);
+      border-radius: var(--sd-radius);
+      overflow: hidden;
+    }
+
+    .sd-panel {
+      padding: 14px;
+    }
+
+    .sd-body {
+      padding: 14px 14px 12px;
+    }
+
+    .sd-title {
+      margin: 0;
+      font-size: 1.35rem;
+      font-weight: 900;
+      letter-spacing: .3px;
+      display: inline-flex;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .sd-sub {
+      margin: 6px 0 0;
+      color: var(--sd-muted);
+    }
+
+    .sd-side {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .sd-actions {
+      display: flex;
+      gap: 10px;
+      margin-top: 12px;
+      flex-wrap: wrap;
+    }
+
+    .sd-btn {
+      appearance: none;
+      border: 1px solid var(--sd-border);
+      color: var(--sd-text);
+      background: transparent;
+      border-radius: 10px;
+      padding: 10px 14px;
+      font-weight: 800;
+      cursor: pointer;
+      transition: transform .12s ease, border-color .15s ease, filter .12s ease, box-shadow .15s ease;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .sd-btn:hover {
+      transform: translateY(-1px);
+      border-color: color-mix(in oklab, var(--sd-accent) 45%, var(--sd-border));
+    }
+
+    .sd-btn:active {
+      transform: scale(.98);
+    }
+
+    .sd-btn--primary {
+      background: linear-gradient(180deg, color-mix(in oklab, var(--sd-accent) 85%, transparent), color-mix(in oklab, var(--sd-accent) 65%, transparent));
+      border-color: color-mix(in oklab, var(--sd-accent) 70%, transparent);
+      color: white;
+      box-shadow: 0 10px 20px color-mix(in oklab, var(--sd-accent) 25%, transparent);
+    }
+
+    .sd-badge {
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-weight: 800;
+      font-size: .78rem;
+      background: linear-gradient(180deg, color-mix(in oklab, var(--sd-accent) 90%, transparent), color-mix(in oklab, var(--sd-accent) 65%, transparent));
+      color: white;
+      border: 1px solid color-mix(in oklab, var(--sd-accent) 70%, transparent);
+      box-shadow: 0 6px 18px color-mix(in oklab, var(--sd-accent) 25%, transparent);
+    }
+
+    .sd-kv {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px 14px;
+      margin-top: 10px;
+    }
+
+    .sd-kv .it {
+      background: rgba(255, 255, 255, .03);
+      border: 1px solid var(--sd-border);
+      border-radius: 8px;
+      padding: 8px 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      min-height: 64px;
+    }
+
+    .sd-kv .label {
+      font-size: .86rem;
+      color: var(--sd-muted);
+    }
+
+    .sd-kv .value {
+      font-weight: 800;
+      color: var(--sd-text);
+      word-break: break-word;
+    }
+
+    .sd-hero {
+      position: relative;
+      aspect-ratio: 16/9;
+      background: #0e0c18;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .sd-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: radial-gradient(circle at 30% 30%, white 8%, rgba(255, 255, 255, .6) 15%, var(--sd-accent) 40%, color-mix(in oklab, var(--sd-accent) 20%, transparent) 70%, transparent 72%);
+      box-shadow: 0 0 10px color-mix(in oklab, var(--sd-accent) 80%, transparent), 0 0 18px color-mix(in oklab, var(--sd-accent) 50%, transparent);
+    }
+
+    .sd-success-icon {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 56px;
+      height: 56px;
+      border-radius: 50%;
+      border: 2px solid color-mix(in oklab, var(--sd-accent) 70%, transparent);
+      box-shadow: 0 8px 24px color-mix(in oklab, var(--sd-accent) 20%, transparent);
+    }
+
+    .sd-meta-line {
+      display: flex;
+      gap: 14px;
+      color: var(--sd-muted);
+      font-size: .9rem;
+      margin-top: 10px;
+      flex-wrap: wrap;
+    }
+  </style>
+
+  <nav class="sd-breadcrumb">
+    <a class="sd-back" href="/Store/ModStore">&#8592; 返回市场</a>
+    <span>/</span>
+    <span>购买完成</span>
+    <span id="ps-mini" class="sd-muted" style="margin-left:8px;"></span>
+  </nav>
+
+  <div class="sd-wrap">
+    <article class="sd-card">
+      <div class="sd-hero" aria-hidden="true">
+        <span class="sd-badge">购买成功</span>
+      </div>
+      <div class="sd-body">
+        <h1 class="sd-title">
+          <span class="sd-success-icon" aria-hidden="true">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" aria-label="success">
+              <circle cx="12" cy="12" r="10" stroke="currentColor" opacity=".28" />
+              <path d="M7 12l3 3 7-7" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                stroke-linejoin="round" />
+            </svg>
+          </span>
+          购买完成
+        </h1>
+        <div class="sd-sub">订单已创建，详情如下，请核对信息。</div>
+
+        <div class="sd-kv">
+          <div class="it">
+            <div class="label">商品名称</div>
+            <div class="value">@Model.DisplayOrDash(Model.Order?.ProductName)</div>
+          </div>
+          <div class="it">
+            <div class="label">订单号</div>
+            <div class="value">@Model.DisplayOrDash(Model.Order?.OrderId)</div>
+          </div>
+          <div class="it">
+            <div class="label">购买账号</div>
+            <div class="value">@Model.DisplayOrDash(Model.CurrentUser?.Username)</div>
+          </div>
+          <div class="it">
+            <div class="label">购买者邮箱</div>
+            <div class="value">@Model.DisplayOrDash(Model.CurrentUser?.Email)</div>
+          </div>
+          <div class="it">
+            <div class="label">购买时间</div>
+            <div class="value">@Model.DisplayOrDash(Model.Order?.PurchaseTime?.ToString("yyyy-MM-dd HH:mm:ss"))</div>
+          </div>
+          <div class="it" style="grid-column:1/-1">
+            <div class="label">商品描述</div>
+            <div class="value">@Model.DisplayOrDash(Model.Order?.ProductDescription)</div>
+          </div>
+          <div class="it">
+            <div class="label">订单状态</div>
+            <div class="value">@Model.DisplayOrDash(Model.Order?.Status)</div>
+          </div>
+        </div>
+
+        <div class="sd-meta-line" aria-hidden="true">
+          <span><span class="sd-dot"></span><span>请妥善保管订单信息</span></span>
+          <span><span class="sd-dot"></span><span>如需发票请联系支持</span></span>
+        </div>
+      </div>
+    </article>
+
+    <aside class="sd-side" id="ps-side" hidden>
+      <section class="sd-card sd-panel" aria-labelledby="sd-next-title">
+        <h2 id="sd-next-title" style="margin:0 0 8px;font-size:1.05rem;">后续操作</h2>
+        <div class="sd-actions">
+          <a class="sd-btn" href="@(Model.ProductDetailUrl ?? "/Store/ModStore")">返回商品页</a>
+          <a class="sd-btn sd-btn--primary" href="@(Model.MyOrdersUrl ?? "/")">查看我的订单</a>
+          @if (!string.IsNullOrWhiteSpace(Model.Order?.DeliveryUrl))
+          {
+            <a class="sd-btn"
+              style="border-color: color-mix(in oklab, var(--sd-accent) 40%, var(--sd-border)); color:white"
+              href="@Model.Order.DeliveryUrl" target="_blank" rel="noopener">下载 / 激活</a>
+          }
+        </div>
+      </section>
+
+      <section class="sd-card sd-panel" aria-labelledby="sd-help-title">
+        <h2 id="sd-help-title" style="margin:0 0 8px;font-size:1.05rem;">帮助</h2>
+        <div class="sd-sub">如遇支付或交付问题，请截图该页并联系支持。</div>
+      </section>
+    </aside>
+  </div>
+</section>
+
+<template id="ps-invalid">
+  <main class="card" role="main" aria-labelledby="t" style="max-width:560px;margin:16px auto;">
+    <h1 id="t">无效的令牌</h1>
+    <p>该页面无法通过直链访问或令牌已过期/已被使用。</p>
+    <div class="actions">
+      <a class="btn" href="/Store/ModStore">返回市场</a>
+      <a class="btn btn-primary" href="/">回到首页</a>
+    </div>
+  </main>
+</template>
+
+<script>
+  (function () {
+    const qs = new URLSearchParams(location.search);
+    const token = qs.get('token') || '';
+    const orderId = decodeURIComponent((location.pathname.split('/').pop() || '').trim());
+    const root = document.getElementById('ps-root');
+    const side = document.getElementById('ps-side');
+    const mini = document.getElementById('ps-mini');
+
+    async function verify() {
+      if (!token) {
+        renderInvalid();
+        return;
+      }
+      try {
+        const res = await fetch(`/api/Store/purchase/verify?token=${encodeURIComponent(token)}`, {
+          headers: { 'Accept': 'application/json' }
+        });
+        const data = await res.json().catch(() => null);
+        if (!res.ok) {
+          renderInvalid((data && (data.message || data.Message)) || '');
+          return;
+        }
+        // 验证成功：显示内容并补充 meta
+        mini.textContent = `订单号 ${orderId} · 用户 ${data?.userId ?? '-'}`;
+        root.hidden = false;
+        side.hidden = false;
+        // 令牌已在服务端消费并销毁，无需再次处理
+        history.replaceState(null, '', location.pathname); // 清除地址栏 token
+      } catch (e) {
+        console.error(e);
+        renderInvalid();
+      }
+    }
+
+    function renderInvalid(msg) {
+      document.body.innerHTML = '';
+      const tpl = document.getElementById('ps-invalid');
+      document.body.appendChild(tpl.content.cloneNode(true));
+      if (msg) console.warn('verify failed:', msg);
+    }
+
+    verify();
+  })();
+</script>

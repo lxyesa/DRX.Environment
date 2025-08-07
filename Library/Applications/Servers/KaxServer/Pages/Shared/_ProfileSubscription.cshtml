@@ -1,18 +1,244 @@
-@model KaxServer.Models.UserData
+@*
+使用方式（示例，仅结构引用，不含业务逻辑）：
+@await Html.PartialAsync("Shared/Managements/_Subscription")
+*@
 
 <div class="profile-section">
     <h2 class="section-title-main">
         <span class="material-icons" style="vertical-align: middle;">subscriptions</span>
-        订阅管理
+        管理订阅
     </h2>
-    <p class="section-desc-main">
-        在安全中心中高效管理和优化您的订阅，确保资源合规性与安全性，并实时监控潜在风险。
-    </p>
-    <!-- 订阅管理内容区域，后续可扩展为订阅列表、添加/移除订阅等功能 -->
-    <div class="subscription-list">
-        <div class="subscription-item empty">
-            暂无订阅数据。
+    <p class="section-desc-main">在此查看与管理您的订阅计划、支付方式与续费设置。—（占位文案）</p>
+
+    <div class="settings-section">
+        <h3 class="section-title">
+            <span class="material-icons" style="vertical-align: middle;">receipt_long</span>
+            订单管理
+        </h3>
+        <p class="setting-description">管理并查看与订阅相关的订单记录。—（占位文案）</p>
+
+        <div class="table-wrapper">
+            <table class="orders-table">
+                <thead>
+                    <tr>
+                        <th>订单号</th>
+                        <th>商品</th>
+                        <th>金额</th>
+                        <th>状态</th>
+                        <th>下单时间</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><a href="#">#2025-0803-0001</a></td>
+                        <td><a href="#">高级订阅（月度）</a></td>
+                        <td>¥ 18.00</td>
+                        <td class="col-status">
+                            <span class="status-chip status-badge status-badge--paid" title="已支付">
+                                <span class="material-icons status-chip__icon" aria-hidden="true">check_circle</span>
+                                <span class="status-chip__text">已支付</span>
+                            </span>
+                        </td>
+                        <td>2025-08-03 12:01</td>
+                        <td>
+                            <a class="link-action" href="#">查看</a>
+                            <span class="sep">|</span>
+                            <a class="link-action" href="#">发票</a>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td><a href="#">#2025-0731-0012</a></td>
+                        <td><a href="#">高级订阅（年度）</a></td>
+                        <td>¥ 168.00</td>
+                        <td class="col-status">
+                            <span class="status-chip status-badge status-badge--refunded" title="已退款">
+                                <span class="material-icons status-chip__icon" aria-hidden="true">restart_alt</span>
+                                <span class="status-chip__text">已退款</span>
+                            </span>
+                        </td>
+                        <td>2025-07-31 09:21</td>
+                        <td>
+                            <a class="link-action" href="#">查看</a>
+                            <span class="sep">|</span>
+                            <a class="link-action" href="#">帮助</a>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td><a href="#">#2025-0726-0007</a></td>
+                        <td><a href="#">基础订阅（月度）</a></td>
+                        <td>¥ 9.90</td>
+                        <td class="col-status">
+                            <span class="status-chip status-badge status-badge--pending" title="待支付">
+                                <span class="material-icons status-chip__icon" aria-hidden="true">hourglass_empty</span>
+                                <span class="status-chip__text">待支付</span>
+                            </span>
+                        </td>
+                        <td>2025-07-26 17:44</td>
+                        <td>
+                            <a class="link-action" href="#">查看</a>
+                            <span class="sep">|</span>
+                            <a class="link-action" href="#">去支付</a>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td><a href="#">#2025-0720-0033</a></td>
+                        <td><a href="#">团队订阅（月度）</a></td>
+                        <td>¥ 69.00</td>
+                        <td class="col-status">
+                            <span class="status-chip status-badge status-badge--paid" title="已支付">
+                                <span class="material-icons status-chip__icon" aria-hidden="true">check_circle</span>
+                                <span class="status-chip__text">已支付</span>
+                            </span>
+                        </td>
+                        <td>2025-07-20 10:08</td>
+                        <td>
+                            <a class="link-action" href="#">查看</a>
+                            <span class="sep">|</span>
+                            <a class="link-action" href="#">发票</a>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="form-actions">
+            <a href="/" class="btn-primary btn-lg">前往订单中心</a>
         </div>
     </div>
 </div>
 
+<style>
+/* 仅保留必要的局部样式，严格限定在 profile-section 内，避免全局污染 */
+.profile-section .table-wrapper {
+    overflow: auto;
+    border: 1px solid var(--border-color, rgba(255,255,255,0.08));
+    border-radius: var(--border-radius-sm, 8px);
+    margin-top: 0.75rem;
+}
+
+.profile-section .orders-table {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 720px;
+    background: var(--surface-color, #141414);
+}
+
+.profile-section .orders-table thead th {
+    text-align: left;
+    font-weight: 600;
+    padding: 0.75rem 1rem;
+    color: var(--primary-color);
+    background: rgba(124, 77, 255, 0.06);
+    position: sticky;
+    top: 0;
+    z-index: 1;
+}
+
+.profile-section .orders-table tbody td {
+    padding: 0.75rem 1rem;
+    border-top: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
+    color: var(--secondary-color);
+}
+
+/* 链接视觉与全局一致 */
+.profile-section .orders-table a,
+.profile-section .link-action {
+    color: var(--accent-color);
+    text-decoration: none;
+    transition: color var(--transition-speed, 0.2s) ease;
+}
+.profile-section .orders-table a:hover,
+.profile-section .link-action:hover {
+    color: var(--accent-color-hover, #8c6dff);
+}
+
+/* 分隔符颜色弱化 */
+.profile-section .sep {
+    margin: 0 0.4rem;
+    color: var(--border-color, rgba(255,255,255,0.2));
+}
+
+/* 状态徽章保持原有类名，但颜色与透明度遵循项目风格 */
+.profile-section .status-badge {
+    display: inline-block;
+    padding: 0.15rem 0.5rem;
+    border-radius: 999px;
+    font-size: 0.82rem;
+    line-height: 1.2;
+    border: 1px solid var(--border-color, rgba(255,255,255,0.12));
+}
+.profile-section .status-badge--paid {
+    color: #42d392;
+    background: rgba(66, 211, 146, 0.12);
+    border-color: rgba(66, 211, 146, 0.35);
+}
+.profile-section .status-badge--pending {
+    color: #f5c542;
+    background: rgba(245, 197, 66, 0.12);
+    border-color: rgba(245, 197, 66, 0.35);
+}
+.profile-section .status-badge--refunded {
+    color: #5fb0ff;
+    background: rgba(95, 176, 255, 0.12);
+    border-color: rgba(95, 176, 255, 0.35);
+}
+</style>
+<style>
+/* 局部响应式与状态列/徽章的紧凑布局优化，仅限 profile-section 作用域 */
+.profile-section .orders-table td.col-status {
+    white-space: nowrap;
+}
+
+.profile-section .status-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.15rem 0.5rem;
+    font-size: 0.82rem;
+    line-height: 1.2;
+    border-radius: 999px;
+    max-width: 100%;
+    white-space: nowrap;
+    vertical-align: middle;
+}
+
+.profile-section .status-chip__icon {
+    font-size: 1rem;
+    opacity: 0.9;
+    line-height: 1;
+    /* 继承 color 与不同状态保持协调 */
+}
+
+/* 调整不同状态下的对比度（与原色系保持一致，仅微调边框透明度以适配小体积） */
+.profile-section .status-badge--paid {
+    color: #42d392;
+    background: rgba(66, 211, 146, 0.12);
+    border-color: rgba(66, 211, 146, 0.38);
+}
+.profile-section .status-badge--pending {
+    color: #f5c542;
+    background: rgba(245, 197, 66, 0.12);
+    border-color: rgba(245, 197, 66, 0.40);
+}
+.profile-section .status-badge--refunded {
+    color: #5fb0ff;
+    background: rgba(95, 176, 255, 0.12);
+    border-color: rgba(95, 176, 255, 0.38);
+}
+
+
+@@media (max-width: 768px) {
+    .profile-section .orders-table td.col-status {
+        white-space: nowrap;
+    }
+    .profile-section .status-chip {
+        gap: 0.3rem;
+        padding: 0.12rem 0.42rem;
+        font-size: 0.79rem; /* 0.78~0.8 区间 */
+    }
+    .profile-section .status-chip__icon {
+        font-size: 0.95rem;
+    }
+}
+</style>

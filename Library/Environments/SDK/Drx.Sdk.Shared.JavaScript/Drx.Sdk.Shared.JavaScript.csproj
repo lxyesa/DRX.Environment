@@ -1,0 +1,19 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0-windows</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Drx.Sdk.Shared\Drx.Sdk.Shared.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.ClearScript.V8" Version="7.4.0" />
+    <PackageReference Include="Microsoft.ClearScript.Core" Version="7.4.0" />
+    <PackageReference Include="Microsoft.ClearScript" Version="7.4.0" />
+  </ItemGroup>
+
+</Project>

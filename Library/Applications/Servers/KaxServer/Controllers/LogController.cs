@@ -4,8 +4,8 @@ using System.Linq;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Drx.Sdk.Network.Extensions;
-using Drx.Sdk.Shared.ConsoleCommand;
 using Drx.Sdk.Network.Socket;
+using Drx.Sdk.Shared.JavaScript;
 
 namespace KaxServer.Controllers
 {
@@ -182,7 +182,7 @@ namespace KaxServer.Controllers
             try
             {
                 // 执行命令
-                var result = ConsoleCommandProcessor.ExecuteCommand(request.Command);
+                var result = JavaScript.ExecuteAsync(request.Command);
 
                 return Ok(new
                 {
