@@ -22,6 +22,9 @@ namespace Drx.Sdk.Network.Socket
     {
         private TcpListener _listener;
         private CancellationTokenSource _cancellationTokenSource;
+        // 可选的 UDP 监听（由 SocketHostOptions/UdpPort 决定是否创建）
+        private UdpClient? _udpClient;
+        private IPEndPoint? _udpLocalEndPoint;
 
         private readonly IServiceProvider? _serviceProviderOrNull;
         private readonly IPacketEncryptor? _packetEncryptor;
@@ -35,6 +38,7 @@ namespace Drx.Sdk.Network.Socket
 
         private readonly IEnumerable<SocketServerBuilder.TimerRegistration> _timersFromBuilder;
         private readonly int _port;
+        private readonly int _udpPort;
 
         // 每连接的状态机与消息缓冲
         private class ConnectionState
@@ -91,6 +95,7 @@ namespace Drx.Sdk.Network.Socket
             IPacketIntegrityProvider? integrityOrNull,
             IEnumerable<SocketServerBuilder.TimerRegistration> timers,
             int port = 8463,
+            int udpPort = 0,
             IServiceProvider? serviceProviderOrNull = null,
             string environmentName = "Production"
         )
@@ -102,6 +107,7 @@ namespace Drx.Sdk.Network.Socket
             _packetIntegrityProvider = integrityOrNull;
             _timersFromBuilder = timers ?? Array.Empty<SocketServerBuilder.TimerRegistration>();
             _port = port;
+            _udpPort = udpPort;
             _serviceProviderOrNull = serviceProviderOrNull;
             EnvironmentName = environmentName;
 
@@ -144,9 +150,139 @@ namespace Drx.Sdk.Network.Socket
                 }, token);
                 _timerTasks.Add(t);
             }
-
+            // 启动 TCP 监听
             Task.Run(() => ListenForClients(token), token);
+
+            // 如果在构造时传入了 udpPort，则启动 UDP 服务（保持与构造时传入的加密/完整性设置一致）
+            if (_udpPort > 0)
+            {
+                try
+                {
+                    _udpLocalEndPoint = new IPEndPoint(System.Net.IPAddress.Any, _udpPort);
+                    _udpClient = new UdpClient(_udpLocalEndPoint);
+                    // 启动后台接收循环
+                    _ = Task.Run(() => UdpReceiveLoopAsync(_udpClient, _udpLocalEndPoint, token), token);
+                    Logger.Info($"[udp] UDP 服务器已在端口 {_udpPort} 启动（由构造参数控制）。");
+                }
+                catch (Exception ex)
+                {
+                    Logger.Error($"[udp] 启动 UDP 监听失败: {ex}");
+                }
+            }
             return Task.CompletedTask;
+        }
+
+        private async Task UdpReceiveLoopAsync(UdpClient udpClient, IPEndPoint local, CancellationToken token)
+        {
+            try
+            {
+                while (!token.IsCancellationRequested)
+                {
+                    UdpReceiveResult res;
+                    try
+                    {
+                        res = await udpClient.ReceiveAsync().ConfigureAwait(false);
+                    }
+                    catch (ObjectDisposedException)
+                    {
+                        break;
+                    }
+                    catch (SocketException ex)
+                    {
+                        Logger.Error($"[udp] 接收异常: {ex}");
+                        await Task.Delay(500, token).ConfigureAwait(false);
+                        continue;
+                    }
+
+                    var remote = res.RemoteEndPoint;
+                    var raw = res.Buffer;
+
+                    // 解密/验签
+                    byte[]? payload = raw;
+                    if (_packetEncryptor != null)
+                    {
+                        payload = _packetEncryptor.Decrypt(raw);
+                        if (payload == null)
+                        {
+                            Logger.Warn($"[udp] 来自 {remote} 的包解密失败，忽略。");
+                            continue;
+                        }
+                    }
+                    else if (_packetIntegrityProvider != null)
+                    {
+                        payload = _packetIntegrityProvider.Unprotect(raw);
+                        if (payload == null)
+                        {
+                            Logger.Warn($"[udp] 来自 {remote} 的包完整性校验失败，忽略。");
+                            continue;
+                        }
+                    }
+
+                    _ = Task.Run(async () =>
+                    {
+                        try
+                        {
+                            // 先同步回调
+                            foreach (var svc in _socketServices)
+                            {
+                                try
+                                {
+                                    var resp = svc.OnUdpReceive(this, remote, payload);
+                                    if (resp != null && resp.Length > 0)
+                                    {
+                                        var toSend = resp;
+                                        if (_packetEncryptor != null) toSend = _packetEncryptor.Encrypt(toSend);
+                                        else if (_packetIntegrityProvider != null) toSend = _packetIntegrityProvider.Protect(toSend);
+                                        try { await udpClient.SendAsync(toSend, toSend.Length, remote).ConfigureAwait(false); } catch { }
+                                        return;
+                                    }
+                                }
+                                catch (Exception ex)
+                                {
+                                    Logger.Error($"[udp] 服务 {svc.GetType().Name} 的同步 OnUdpReceive 异常: {ex}");
+                                }
+                            }
+
+                            // 再异步回调
+                            foreach (var svc in _socketServices)
+                            {
+                                try
+                                {
+                                    var asyncResp = await svc.OnUdpReceiveAsync(this, remote, payload, token).ConfigureAwait(false);
+                                    if (asyncResp != null && asyncResp.Length > 0)
+                                    {
+                                        var toSend = asyncResp;
+                                        if (_packetEncryptor != null) toSend = _packetEncryptor.Encrypt(toSend);
+                                        else if (_packetIntegrityProvider != null) toSend = _packetIntegrityProvider.Protect(toSend);
+                                        try { await udpClient.SendAsync(toSend, toSend.Length, remote).ConfigureAwait(false); } catch { }
+                                        return;
+                                    }
+                                }
+                                catch (Exception ex)
+                                {
+                                    Logger.Error($"[udp] 服务 {svc.GetType().Name} 的异步 OnUdpReceiveAsync 异常: {ex}");
+                                }
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            Logger.Error($"[udp] 处理 UDP 包时发生未捕获异常: {ex}");
+                        }
+                    }, token);
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                Logger.Info("[udp] 接收循环取消。");
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"[udp] 接收循环未处理异常: {ex}");
+            }
+            finally
+            {
+                try { udpClient.Close(); } catch { }
+            }
         }
 
         private async Task ListenForClients(CancellationToken token)
@@ -479,6 +615,14 @@ namespace Drx.Sdk.Network.Socket
             _cancellationTokenSource?.Cancel();
             _listener?.Stop();
 
+            if (_udpClient != null)
+            {
+                try { _udpClient.Close(); } catch { }
+                try { _udpClient.Dispose(); } catch { }
+                _udpClient = null;
+                _udpLocalEndPoint = null;
+            }
+
             if (_timerTasks != null && _timerTasks.Count > 0)
             {
                 try
@@ -494,7 +638,19 @@ namespace Drx.Sdk.Network.Socket
         {
             _cancellationTokenSource?.Dispose();
             _listener?.Stop();
+
+            if (_udpClient != null)
+            {
+                try { _udpClient.Dispose(); } catch { }
+                _udpClient = null;
+                _udpLocalEndPoint = null;
+            }
         }
+
+        /// <summary>
+        /// 如果服务创建了 UDP 监听，该属性返回本地监听端点；否则返回 null。
+        /// </summary>
+        public IPEndPoint? UdpLocalEndPoint => _udpLocalEndPoint;
 
         public void DisconnectClient(DrxTcpClient client)
         {

@@ -16,11 +16,13 @@ namespace Drx.Sdk.Network.Socket.Services
         public virtual Task OnClientDisconnectAsync(SocketServerService server, DrxTcpClient client) => Task.CompletedTask;
         public virtual Task OnServerReceiveAsync(SocketServerService server, DrxTcpClient client, ReadOnlyMemory<byte> data, CancellationToken cancellationToken) => Task.CompletedTask;
         public virtual Task OnServerSendAsync(SocketServerService server, DrxTcpClient client, ReadOnlyMemory<byte> data, CancellationToken cancellationToken) => Task.CompletedTask;
-        
+
         public virtual void Execute() { }
         public virtual void OnClientConnect(SocketServerService server, DrxTcpClient client) { }
         public virtual void OnClientDisconnect(SocketServerService server, DrxTcpClient client) { }
         public virtual void OnServerReceive(SocketServerService server, DrxTcpClient client, ReadOnlyMemory<byte> data) { }
         public virtual void OnServerSend(SocketServerService server, DrxTcpClient client, ReadOnlyMemory<byte> data) { }
+        public virtual byte[]? OnUdpReceive(SocketServerService server, System.Net.IPEndPoint remote, ReadOnlyMemory<byte> data) => null;
+        public virtual Task<byte[]?> OnUdpReceiveAsync(SocketServerService server, System.Net.IPEndPoint remote, ReadOnlyMemory<byte> data, CancellationToken cancellationToken) => Task.FromResult<byte[]?>(null);
     }
-} 
+}

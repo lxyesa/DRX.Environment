@@ -1,22 +1,24 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
-    <PropertyGroup>
-        <TargetFramework>net9.0-windows</TargetFramework>
-        <ImplicitUsings>enable</ImplicitUsings>
-        <Nullable>enable</Nullable>
-        <RootNamespace>Drx.Sdk.Network</RootNamespace>
-        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    </PropertyGroup>
+  <PropertyGroup>
+    <TargetFramework>net9.0-windows</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>Drx.Sdk.Network</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
 
-    <!-- Release 开启 NativeAOT，Debug 关闭 -->
-    <PropertyGroup Condition="'$(Configuration)'=='Release'">
-        <PublishAot>true</PublishAot>
-    </PropertyGroup>
+  <!-- Release 开启 NativeAOT，Debug 关闭 -->
+  <PropertyGroup Condition="'$(Configuration)'=='Release'">
+    <PublishAot>true</PublishAot>
+    <!-- 为原生编译指定运行时标识符，避免 publish-aot 时出现 RuntimeIdentifier 缺失错误 -->
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+  </PropertyGroup>
 
-    <PropertyGroup Condition="'$(Configuration)'=='Debug'">
-        <PublishAot>false</PublishAot>
-        <TrimMode>partial</TrimMode>
-    </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)'=='Debug'">
+    <PublishAot>false</PublishAot>
+    <TrimMode>partial</TrimMode>
+  </PropertyGroup>
 
   <ItemGroup>
     <Folder Include="wwwroot\" />
@@ -28,22 +30,22 @@
     </Content>
   </ItemGroup>
 
-    <ItemGroup>
-      <ProjectReference Include="..\Drx.Sdk.Text\Drx.Sdk.Text.csproj" />
-      <ProjectReference Include="..\Drx.Sdk.Shared\Drx.Sdk.Shared.csproj" />
-    </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Drx.Sdk.Text\Drx.Sdk.Text.csproj" />
+    <ProjectReference Include="..\Drx.Sdk.Shared\Drx.Sdk.Shared.csproj" />
+  </ItemGroup>
 
-    <ItemGroup>
-      <PackageReference Include="Markdig" Version="0.41.3" />
-      <PackageReference Include="Microsoft.AspNetCore.Http" Version="2.3.0" />
-      <PackageReference Include="Microsoft.AspNetCore.JsonPatch" Version="9.0.6" />
-      <PackageReference Include="Microsoft.AspNetCore.Mvc.Core" Version="2.3.0" />
-      <PackageReference Include="Microsoft.AspNetCore.Routing" Version="2.3.0" />
-      <PackageReference Include="Microsoft.Data.Sqlite" Version="9.0.6" />
-      <PackageReference Include="SQLite" Version="3.13.0" />
-    </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Markdig" Version="0.41.3" />
+    <PackageReference Include="Microsoft.AspNetCore.Http" Version="2.3.0" />
+    <PackageReference Include="Microsoft.AspNetCore.JsonPatch" Version="9.0.6" />
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Core" Version="2.3.0" />
+    <PackageReference Include="Microsoft.AspNetCore.Routing" Version="2.3.0" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="9.0.6" />
+    <PackageReference Include="SQLite" Version="3.13.0" />
+  </ItemGroup>
 
-    <ItemGroup>
-      <FrameworkReference Include="Microsoft.AspNetCore.App" />
-    </ItemGroup>
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
 </Project>

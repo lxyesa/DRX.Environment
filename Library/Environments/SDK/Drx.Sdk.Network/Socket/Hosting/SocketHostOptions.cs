@@ -7,5 +7,7 @@ namespace Drx.Sdk.Network.Socket.Hosting
     {
         /// <summary>监听端口，默认 8463</summary>
         public int Port { get; set; } = 8463;
+        /// <summary>可选的 UDP 监听端口，默认 0 表示不启用 UDP</summary>
+        public int UdpPort { get; set; } = 0;
     }
 }

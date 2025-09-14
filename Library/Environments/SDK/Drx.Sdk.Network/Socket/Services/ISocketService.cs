@@ -37,6 +37,11 @@ namespace Drx.Sdk.Network.Socket.Services
         Task OnServerSendAsync(SocketServerService server, DrxTcpClient client, ReadOnlyMemory<byte> data, CancellationToken cancellationToken);
 
         /// <summary>
+        /// 异步触发：当 UDP 数据到达时调用，允许服务返回要发送回远端的字节（返回 null 表示不回复）。
+        /// </summary>
+        Task<byte[]?> OnUdpReceiveAsync(SocketServerService server, System.Net.IPEndPoint remote, ReadOnlyMemory<byte> data, CancellationToken cancellationToken);
+
+        /// <summary>
         /// Synchronously executes the main logic of the service. Called once at server startup.
         /// Avoid long-blocking operations here; prefer the async version for background tasks.
         /// </summary>
@@ -61,5 +66,10 @@ namespace Drx.Sdk.Network.Socket.Services
         /// Triggered synchronously when the server is about to send a message.
         /// </summary>
         void OnServerSend(SocketServerService server, DrxTcpClient client, ReadOnlyMemory<byte> data);
+
+        /// <summary>
+        /// 同步触发：当 UDP 数据到达时调用，同步返回响应字节或 null 表示不回复。
+        /// </summary>
+        byte[]? OnUdpReceive(SocketServerService server, System.Net.IPEndPoint remote, ReadOnlyMemory<byte> data);
     }
-} 
+}

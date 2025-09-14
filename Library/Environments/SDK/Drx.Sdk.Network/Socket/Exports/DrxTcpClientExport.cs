@@ -4,8 +4,6 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using System.Threading;
-using System.Threading.Tasks;
 using Drx.Sdk.Network.Security;
 using Drx.Sdk.Network.Socket;
 using DRX.Framework;
@@ -533,40 +531,5 @@ public static class DrxTcpClientExport
         s_pinnedHandle = GCHandle.Alloc(s_exportTable, GCHandleType.Pinned);
         s_tablePtr = s_pinnedHandle.AddrOfPinnedObject();
         return s_tablePtr;
-    }
-
-    // 稳定导出入口：返回函数指针表地址（nint 数组首指针）
-    // 目的：dumpbin /exports 能看到固定名 GetDrxTcpClientExports，原生侧通过该表获取所有函数指针
-    [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) }, EntryPoint = "GetDrxTcpClientExports")]
-    public static unsafe IntPtr GetDrxTcpClientExports()
-    {
-        // 收集所有导出函数的本机指针（按固定顺序）
-        static delegate* unmanaged[Cdecl]<IntPtr>                                 p_Create()               => &Create;
-        static delegate* unmanaged[Cdecl]<byte*, int, byte*, int, IntPtr>         p_CreateWithAes()        => &CreateWithAes;
-        static delegate* unmanaged[Cdecl]<IntPtr, byte*, int, int, bool>          p_Connect()              => &Connect;
-        static delegate* unmanaged[Cdecl]<IntPtr, byte*, int, byte*, int, void>   p_SetAesEncryptor()      => &SetAesEncryptor;
-        static delegate* unmanaged[Cdecl]<IntPtr, byte*, int, IntPtr, int, bool>  p_SendPacket()           => &SendPacket;
-        static delegate* unmanaged[Cdecl]<IntPtr, void>                           p_Disconnect()           => &Disconnect;
-        static delegate* unmanaged[Cdecl]<IntPtr, void>                           p_Destroy()              => &Destroy;
-    
-        static delegate* unmanaged[Cdecl]<byte*, int, IntPtr>                     p_JsonCreateFromBytes()  => &JsonCreateFromBytes;
-        static delegate* unmanaged[Cdecl]<IntPtr>                                 p_JsonCreate()           => &JsonCreate;
-        static delegate* unmanaged[Cdecl]<IntPtr, byte*, int, byte*, int, IntPtr> p_JsonPushString()       => &JsonPushString;
-        static delegate* unmanaged[Cdecl]<IntPtr, byte*, int, double, IntPtr>     p_JsonPushNumber()       => &JsonPushNumber;
-        static delegate* unmanaged[Cdecl]<IntPtr, byte*, int, byte, IntPtr>       p_JsonPushBoolean()      => &JsonPushBoolean;
-        static delegate* unmanaged[Cdecl]<IntPtr, byte*, int, IntPtr, IntPtr>     p_JsonPushCompound()     => &JsonPushCompound;
-        static delegate* unmanaged[Cdecl]<IntPtr, byte*, int, IntPtr, int, int>   p_JsonReadString()       => &JsonReadString;
-        static delegate* unmanaged[Cdecl]<IntPtr, byte*, int, byte*, byte>        p_JsonReadBoolean()      => &JsonReadBoolean;
-        static delegate* unmanaged[Cdecl]<IntPtr, byte*, int, byte*, double>      p_JsonReadNumber()       => &JsonReadNumber;
-        static delegate* unmanaged[Cdecl]<IntPtr, byte*, int, IntPtr>             p_JsonReadCompound()     => &JsonReadCompound;
-        static delegate* unmanaged[Cdecl]<IntPtr, IntPtr, int, int>               p_JsonSerialize()        => &JsonSerialize;
-        static delegate* unmanaged[Cdecl]<IntPtr, void>                           p_JsonDestroy()          => &JsonDestroy;
-    
-        // 索引更新说明：
-        // 0..6 为 TCP 客户端；其后 JSON：
-        // 7:JsonCreateFromBytes, 8:JsonCreate, 9:JsonPushString, 10:JsonPushNumber, 11:JsonPushBoolean,
-        // 12:JsonPushCompound, 13:JsonReadString, 14:JsonReadBoolean, 15:JsonReadNumber, 16:JsonReadCompound,
-        // 17:JsonSerialize, 18:JsonDestroy
-        return GetExportsPinnedPointer();
     }
 }

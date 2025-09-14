@@ -34,6 +34,16 @@ namespace Drx.Sdk.Network.Socket
             _resolver = resolver ?? new DefaultSocketComponentResolver();
         }
 
+        /// <summary>
+        /// 当前 Runner 使用的 Builder
+        /// </summary>
+        public SocketServerBuilder Builder => _builder;
+
+        /// <summary>
+        /// 当前运行时核心服务（StartAsync 后可用）
+        /// </summary>
+        public SocketServerService? Core => _core;
+
         public async Task StartAsync(CancellationToken cancellationToken = default)
         {
             _cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -64,7 +74,8 @@ namespace Drx.Sdk.Network.Socket
                 encryptor,
                 integrity,
                 _builder.TimerRegistrations,
-                port: _options.Port
+                port: _options.Port,
+                udpPort: _options.UdpPort
             );
 
             await _core.StartAsync(_cts.Token);

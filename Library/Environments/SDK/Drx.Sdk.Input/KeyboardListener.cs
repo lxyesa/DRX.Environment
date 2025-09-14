@@ -4,14 +4,10 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
-using Drx.Sdk.Script;
-using Drx.Sdk.Script.Attributes;
-using Drx.Sdk.Script.Interfaces;
 
 namespace Drx.Sdk.Input
 {
-    [ScriptClass("KeyboardListener")]
-    public class KeyboardListener : IDisposable, IScript
+    public class KeyboardListener : IDisposable
     {
         #region Win32 API
         [DllImport("user32.dll", SetLastError = true)]
@@ -258,24 +254,7 @@ namespace Drx.Sdk.Input
                                 // 改进的宏动作执行方式
                                 if (hotkey.Value != null)
                                 {
-                                    try
-                                    {
-                                        if (hotkey.Value.Target is Delegate)
-                                        {
-                                            // 处理 JavaScript/动态函数
-                                            await Task.Run(() => ((dynamic)hotkey.Value).DynamicInvoke());
-                                        }
-                                        else
-                                        {
-                                            // 处理普通 C# Action
-                                            await Task.Run(() => hotkey.Value());
-                                        }
-                                    }
-                                    catch (Microsoft.ClearScript.ScriptEngineException)
-                                    {
-                                        // 尝试直接调用
-                                        await Task.Run(() => ((dynamic)hotkey.Value)());
-                                    }
+                                    await Task.Run(() => hotkey.Value());
                                 }
 
                                 DebugLog($"宏 [{string.Join(", ", hotkey.Key.Keys)}] 执行完毕");

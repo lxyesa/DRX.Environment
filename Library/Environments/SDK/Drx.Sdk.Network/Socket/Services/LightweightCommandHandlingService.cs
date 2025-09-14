@@ -17,7 +17,7 @@ namespace Drx.Sdk.Network.Socket.Services
     /// - 解析成功后，按 builder.CommandHandlers 查找并调用对应处理器。
     /// - 未匹配到命令或解析失败时静默跳过，保持与“全部吞错、服务稳定优先”的策略一致。
     /// </summary>
-    public sealed class LightweightCommandHandlingService : ISocketService
+    public sealed class LightweightCommandHandlingService : SocketServiceBase
     {
         private readonly SocketServerBuilder _builder;
 
@@ -26,57 +26,69 @@ namespace Drx.Sdk.Network.Socket.Services
             _builder = builder ?? throw new ArgumentNullException(nameof(builder));
         }
 
-        public void Execute()
+        public override void Execute()
         {
             // 无需同步常驻任务
         }
 
-        public Task ExecuteAsync(CancellationToken token)
+        public override Task ExecuteAsync(CancellationToken token)
         {
             // 无需异步常驻任务
             return Task.CompletedTask;
         }
 
-        public void OnClientConnect(SocketServerService server, DrxTcpClient client)
+        public override void OnClientConnect(SocketServerService server, DrxTcpClient client)
         {
             // no-op
         }
 
-        public Task OnClientConnectAsync(SocketServerService server, DrxTcpClient client, CancellationToken token)
+        public override Task OnClientConnectAsync(SocketServerService server, DrxTcpClient client, CancellationToken token)
         {
             return Task.CompletedTask;
         }
 
-        public void OnClientDisconnect(SocketServerService server, DrxTcpClient client)
+        public override void OnClientDisconnect(SocketServerService server, DrxTcpClient client)
         {
             // no-op
         }
 
-        public Task OnClientDisconnectAsync(SocketServerService server, DrxTcpClient client)
+        public override Task OnClientDisconnectAsync(SocketServerService server, DrxTcpClient client)
         {
             return Task.CompletedTask;
         }
 
-        public void OnServerReceive(SocketServerService server, DrxTcpClient client, ReadOnlyMemory<byte> data)
+        public override void OnServerReceive(SocketServerService server, DrxTcpClient client, ReadOnlyMemory<byte> data)
         {
             // 留空：统一在异步钩子中处理，避免重复且便于未来异步扩展
         }
 
-        public Task OnServerReceiveAsync(SocketServerService server, DrxTcpClient client, ReadOnlyMemory<byte> data, CancellationToken token)
+        public override Task OnServerReceiveAsync(SocketServerService server, DrxTcpClient client, ReadOnlyMemory<byte> data, CancellationToken token)
         {
             // 将分发逻辑放在异步钩子，保留“ASYNC 有效”的扩展点
             TryDispatch(server, client, data.Span);
             return Task.CompletedTask;
         }
 
-        public void OnServerSend(SocketServerService server, DrxTcpClient client, ReadOnlyMemory<byte> data)
+        public override void OnServerSend(SocketServerService server, DrxTcpClient client, ReadOnlyMemory<byte> data)
         {
             // no-op
         }
 
-        public Task OnServerSendAsync(SocketServerService server, DrxTcpClient client, ReadOnlyMemory<byte> data, CancellationToken token)
+        public override Task OnServerSendAsync(SocketServerService server, DrxTcpClient client, ReadOnlyMemory<byte> data, CancellationToken token)
         {
             return Task.CompletedTask;
+        }
+
+        public override byte[]? OnUdpReceive(SocketServerService server, System.Net.IPEndPoint remote, ReadOnlyMemory<byte> data)
+        {
+            // 不干预 UDP 消息
+            return null;
+        }
+
+        public override Task<byte[]?> OnUdpReceiveAsync(SocketServerService server, System.Net.IPEndPoint remote, ReadOnlyMemory<byte> data, CancellationToken token)
+        {
+            // 异步默认不处理
+            return Task.FromResult<byte[]?>(null);
         }
 
         private void TryDispatch(SocketServerService server, DrxTcpClient client, ReadOnlySpan<byte> data)
