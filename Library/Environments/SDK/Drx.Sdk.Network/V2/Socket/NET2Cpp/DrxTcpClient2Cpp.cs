@@ -4,6 +4,8 @@ using System.Runtime.InteropServices;
 using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Collections.Generic;
+using Drx.Sdk.Network.V2.Socket.Handler;
 
 namespace Drx.Sdk.Network.V2.Socket.NET2Cpp;
 
@@ -17,6 +19,50 @@ public static class DrxTcpClient2Cpp
 {
 	private static readonly ConcurrentDictionary<IntPtr, Drx.Sdk.Network.V2.Socket.Client.DrxTcpClient> _clients = new();
 	private static long _nextId = 1;
+
+	[UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+	public delegate void NativeClientReceiveCallback(IntPtr clientPtr, IntPtr dataPtr);
+
+	// 存储客户端对应的本地 handler 字典（clientHandle -> (name -> handler)）
+	private static readonly ConcurrentDictionary<IntPtr, Dictionary<string, NativeClientHandler>> _nativeHandlers = new();
+
+	private class NativeClientHandler : IClientHandler
+	{
+		public int Priority { get; }
+		public int MaxPacketSize => 0;
+		private readonly NativeClientReceiveCallback _cb;
+		public NativeClientReceiveCallback Callback => _cb;
+
+		public NativeClientHandler(NativeClientReceiveCallback cb, int priority)
+		{
+			_cb = cb;
+			Priority = priority;
+		}
+
+		public bool OnClientReceiveAsync(byte[] data)
+		{
+			try
+			{
+				var payload = data ?? Array.Empty<byte>();
+				int len = payload.Length;
+				IntPtr ptr = Marshal.AllocCoTaskMem(4 + len);
+				Marshal.WriteInt32(ptr, len);
+				if (len > 0) Marshal.Copy(payload, 0, ptr + 4, len);
+				// clientPtr = IntPtr.Zero (no managed client), so pass zero
+				_cb(IntPtr.Zero, ptr);
+				try { Marshal.FreeCoTaskMem(ptr); } catch { }
+				return true;
+			}
+			catch { return false; }
+		}
+
+		public byte[] OnClientSendAsync(byte[] data) => data ?? Array.Empty<byte>();
+		public void OnClientConnected() { }
+		public void OnClientDisconnected() { }
+		public void OnClientDisconnectedCompleted() { }
+		public bool OnClientRawReceiveAsync(byte[] rawData, out byte[]? modifiedData) { modifiedData = rawData; return true; }
+		public bool OnClientRawSendAsync(byte[] rawData, out byte[]? modifiedData) { modifiedData = rawData; return true; }
+	}
 
 	private static byte[] ReadBytesWithLength(IntPtr ptr)
 	{
@@ -185,6 +231,77 @@ public static class DrxTcpClient2Cpp
 		{
 			return IntPtr.Zero;
 		}
+	}
+
+	// 注册/注销客户端接收回调（支持 name）
+	[UnmanagedCallersOnly(EntryPoint = "DrxTcpClient_RegisterReceiveCallback")]
+	public static int RegisterReceiveCallback(IntPtr clientHandle, IntPtr namePtr, IntPtr callbackPtr, int priority)
+	{
+		if (clientHandle == IntPtr.Zero || callbackPtr == IntPtr.Zero) return 0;
+		if (!_clients.TryGetValue(clientHandle, out var c)) return 0;
+		try
+		{
+			var cb = Marshal.GetDelegateForFunctionPointer<NativeClientReceiveCallback>(callbackPtr);
+			var h = new NativeClientHandler(cb, priority);
+			string name = string.Empty;
+			try { name = Marshal.PtrToStringUTF8(namePtr) ?? string.Empty; } catch { name = string.Empty; }
+			if (string.IsNullOrEmpty(name)) name = "native" + Guid.NewGuid().ToString("N");
+			c.RegisterHandler(name, h);
+			var dict = _nativeHandlers.GetOrAdd(clientHandle, _ => new Dictionary<string, NativeClientHandler>());
+			lock (dict) { dict[name] = h; }
+			return 1;
+		}
+		catch { return 0; }
+	}
+
+	[UnmanagedCallersOnly(EntryPoint = "DrxTcpClient_UnregisterReceiveCallback")]
+	public static int UnregisterReceiveCallback(IntPtr clientHandle, IntPtr namePtr, IntPtr callbackPtr)
+	{
+		if (clientHandle == IntPtr.Zero) return 0;
+		if (!_clients.TryGetValue(clientHandle, out var c)) return 0;
+		try
+		{
+			string name = string.Empty;
+			try { name = Marshal.PtrToStringUTF8(namePtr) ?? string.Empty; } catch { name = string.Empty; }
+			var cb = IntPtr.Zero;
+			if (callbackPtr != IntPtr.Zero) cb = callbackPtr;
+
+			if (_nativeHandlers.TryGetValue(clientHandle, out var dict))
+			{
+				lock (dict)
+				{
+					if (!string.IsNullOrEmpty(name))
+					{
+						if (dict.TryGetValue(name, out var h))
+						{
+							dict.Remove(name);
+							try { c.UnregisterHandler(name, h); } catch { }
+							return 1;
+						}
+						return 0;
+					}
+					if (cb != IntPtr.Zero)
+					{
+						var cbDel = Marshal.GetDelegateForFunctionPointer<NativeClientReceiveCallback>(cb);
+						string? foundKey = null;
+						NativeClientHandler? foundHandler = null;
+						foreach (var kv in dict)
+						{
+							var h = kv.Value;
+							if (h != null && h.Callback != null && Delegate.Equals(h.Callback, cbDel)) { foundKey = kv.Key; foundHandler = h; break; }
+						}
+						if (foundKey != null && foundHandler != null)
+						{
+							dict.Remove(foundKey);
+							try { c.UnregisterHandler(foundKey, foundHandler); } catch { }
+							return 1;
+						}
+					}
+				}
+			}
+			return 0;
+		}
+		catch { return 0; }
 	}
 
 	[UnmanagedCallersOnly(EntryPoint = "DrxTcpClient_FreeManagedHandle")]

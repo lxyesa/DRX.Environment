@@ -1,7 +1,10 @@
 using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using System.Runtime.CompilerServices;
+using Drx.Sdk.Network.V2.Socket.Client;
+using Drx.Sdk.Network.V2.Socket.Handler;
 
 namespace Drx.Sdk.Network.V2.Socket.NET2Cpp;
 
@@ -32,21 +35,63 @@ public static class DrxTcpServer2Cpp
         return handle;
     }
 
-    [UnmanagedCallersOnly(EntryPoint = "DrxTcpServer_Create")]
-    public static IntPtr Create()
+    // 本地回调的托管委托定义（C 调用约定）
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+    public delegate void NativeServerReceiveCallback(IntPtr clientPtr, IntPtr dataPtr);
+
+    // 存储服务器对应的本地 handler 字典（serverHandle -> (name -> handler)）
+    private static readonly ConcurrentDictionary<IntPtr, Dictionary<string, NativeServerHandler>> _nativeHandlers = new();
+
+    // 将本地回调封装为 IServerHandler
+    private class NativeServerHandler : IServerHandler
     {
-        try
+        public int Priority { get; }
+        public int MaxPacketSize => 0;
+        private readonly NativeServerReceiveCallback _cb;
+        public NativeServerReceiveCallback Callback => _cb;
+
+        public NativeServerHandler(NativeServerReceiveCallback cb, int priority)
         {
-            var srv = new Drx.Sdk.Network.V2.Socket.Server.DrxTcpServer();
-            var handle = ToHandle(srv);
-            _servers[handle] = srv;
-            return handle;
+            _cb = cb;
+            Priority = priority;
         }
-        catch
+
+        public bool OnServerReceiveAsync(byte[] data, DrxTcpClient client)
         {
-            return IntPtr.Zero;
+            try
+            {
+                // 将数据打包为 [len(4)] + payload，并传入本地回调
+                var payload = data ?? Array.Empty<byte>();
+                int len = payload.Length;
+                IntPtr ptr = Marshal.AllocCoTaskMem(4 + len);
+                Marshal.WriteInt32(ptr, len);
+                if (len > 0) Marshal.Copy(payload, 0, ptr + 4, len);
+
+                // 为 client 创建临时 GCHandle，传入指针，调用后立即释放
+                var gch = GCHandle.Alloc(client, GCHandleType.Normal);
+                try
+                {
+                    _cb(GCHandle.ToIntPtr(gch), ptr);
+                }
+                finally
+                {
+                    gch.Free();
+                    try { Marshal.FreeCoTaskMem(ptr); } catch { }
+                }
+                // 我们默认返回 true（表示可以发送回复），C++ 侧若需控制可扩展
+                return true;
+            }
+            catch { return false; }
         }
+
+        public byte[] OnServerSendAsync(byte[] data, DrxTcpClient client) => data ?? Array.Empty<byte>();
+        public void OnServerConnected() { }
+        public void OnServerDisconnecting(DrxTcpClient client) { }
+        public void OnServerDisconnected(DrxTcpClient client) { }
+        public bool OnServerRawReceiveAsync(byte[] rawData, DrxTcpClient client, out byte[]? modifiedData) { modifiedData = rawData; return true; }
+        public bool OnServerRawSendAsync(byte[] rawData, DrxTcpClient client, out byte[]? modifiedData) { modifiedData = rawData; return true; }
     }
+
 
     [UnmanagedCallersOnly(EntryPoint = "DrxTcpServer_Release")]
     public static void Release(IntPtr serverHandle)
@@ -109,7 +154,7 @@ public static class DrxTcpServer2Cpp
                 // 如果直接传入的是 TcpClient
                 if (target is System.Net.Sockets.TcpClient tcpDirect)
                 {
-                    return srv.PacketS2C(tcpDirect, data) ? 1 : 0;
+                    try { return srv.PacketS2C(tcpDirect.ToDrxClient(), data) ? 1 : 0; } catch { }
                 }
 
                 // 如果是 V2 的 DrxTcpClient（托管包装），尝试通过反射取得其私有字段 _tcp
@@ -122,7 +167,7 @@ public static class DrxTcpServer2Cpp
                         var tcpObj = field.GetValue(target) as System.Net.Sockets.TcpClient;
                         if (tcpObj != null)
                         {
-                            return srv.PacketS2C(tcpObj, data) ? 1 : 0;
+                            try { return srv.PacketS2C(tcpObj.ToDrxClient(), data) ? 1 : 0; } catch { }
                         }
                     }
                 }
@@ -179,5 +224,77 @@ public static class DrxTcpServer2Cpp
         {
             return 0;
         }
+    }
+
+    // 注册/注销本地接收回调
+    [UnmanagedCallersOnly(EntryPoint = "DrxTcpServer_RegisterReceiveCallback")]
+    public static int RegisterReceiveCallback(IntPtr serverHandle, IntPtr namePtr, IntPtr callbackPtr, int priority)
+    {
+        if (serverHandle == IntPtr.Zero || callbackPtr == IntPtr.Zero) return 0;
+        if (!_servers.TryGetValue(serverHandle, out var srv)) return 0;
+        try
+        {
+            var cb = Marshal.GetDelegateForFunctionPointer<NativeServerReceiveCallback>(callbackPtr);
+            var h = new NativeServerHandler(cb, priority);
+            // 读取 name，如果为空则生成唯一名字
+            string name = string.Empty;
+            try { name = Marshal.PtrToStringUTF8(namePtr) ?? string.Empty; } catch { name = string.Empty; }
+            if (string.IsNullOrEmpty(name)) name = "native" + Guid.NewGuid().ToString("N");
+            srv.RegisterHandler(name, h);
+            // 保存以便后续注销：按 serverHandle -> name 映射
+            var dict = _nativeHandlers.GetOrAdd(serverHandle, _ => new Dictionary<string, NativeServerHandler>());
+            lock (dict)
+            {
+                dict[name] = h;
+            }
+            return 1;
+        }
+        catch { return 0; }
+    }
+
+    [UnmanagedCallersOnly(EntryPoint = "DrxTcpServer_UnregisterReceiveCallback")]
+    public static int UnregisterReceiveCallback(IntPtr serverHandle, IntPtr namePtr, IntPtr callbackPtr)
+    {
+        if (serverHandle == IntPtr.Zero || callbackPtr == IntPtr.Zero) return 0;
+        if (!_servers.TryGetValue(serverHandle, out var srv)) return 0;
+        try
+        {
+            var cb = Marshal.GetDelegateForFunctionPointer<NativeServerReceiveCallback>(callbackPtr);
+            // 优先按提供的 name 注销（如果 namePtr 非空且能解析）
+            string name = string.Empty;
+            try { name = Marshal.PtrToStringUTF8(namePtr) ?? string.Empty; } catch { name = string.Empty; }
+            if (_nativeHandlers.TryGetValue(serverHandle, out var dict))
+            {
+                lock (dict)
+                {
+                    if (!string.IsNullOrEmpty(name))
+                    {
+                        if (dict.TryGetValue(name, out var h))
+                        {
+                            dict.Remove(name);
+                            try { srv.UnregisterHandler(name, h); } catch { }
+                            return 1;
+                        }
+                        return 0;
+                    }
+                    // 若未提供 name，则通过 delegate 匹配查找并移除第一个匹配项
+                    string? foundKey = null;
+                    NativeServerHandler? foundHandler = null;
+                    foreach (var kv in dict)
+                    {
+                        var h = kv.Value;
+                        if (h != null && h.Callback != null && Delegate.Equals(h.Callback, cb)) { foundKey = kv.Key; foundHandler = h; break; }
+                    }
+                    if (foundKey != null && foundHandler != null)
+                    {
+                        dict.Remove(foundKey);
+                        try { srv.UnregisterHandler(foundKey, foundHandler); } catch { }
+                        return 1;
+                    }
+                }
+            }
+            return 0;
+        }
+        catch { return 0; }
     }
 }

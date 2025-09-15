@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Net;
 using System.Net.Sockets;
+using Drx.Sdk.Network.V2.Socket.Client;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -14,13 +15,13 @@ namespace Drx.Sdk.Network.V2.Socket.Server;
 public class DrxTcpServer
 {
     private TcpListener? _listener;
-    private readonly List<TcpClient> _clients = new();
+    private readonly List<DrxTcpClient> _clients = new();
     private readonly object _sync = new();
     private readonly List<Drx.Sdk.Network.V2.Socket.Handler.IServerHandler> _handlers = new();
     private readonly Dictionary<string, object?> _tags = new();
-    private readonly Dictionary<TcpClient, string> _groups = new();
+    private readonly Dictionary<DrxTcpClient, string> _groups = new();
     // 消息列队与处理
-    private readonly System.Collections.Concurrent.BlockingCollection<(byte[] Payload, TcpClient Client)> _messageQueue;
+    private readonly System.Collections.Concurrent.BlockingCollection<(byte[] Payload, DrxTcpClient Client)> _messageQueue;
     private CancellationTokenSource? _queueCts;
     private Task? _queueTask;
     /// <summary>队列上限，默认 1000</summary>
@@ -28,8 +29,8 @@ public class DrxTcpServer
 
     public DrxTcpServer()
     {
-        _messageQueue = new System.Collections.Concurrent.BlockingCollection<(byte[] Payload, TcpClient Client)>(
-            new System.Collections.Concurrent.ConcurrentQueue<(byte[] Payload, TcpClient Client)>(), QueueCapacity);
+        _messageQueue = new System.Collections.Concurrent.BlockingCollection<(byte[] Payload, DrxTcpClient Client)>(
+            new System.Collections.Concurrent.ConcurrentQueue<(byte[] Payload, DrxTcpClient Client)>(), QueueCapacity);
     }
 
     private void ProcessQueue(CancellationToken token)
@@ -90,12 +91,7 @@ public class DrxTcpServer
     {
         _listener = new TcpListener(IPAddress.Any, port);
         _listener.Start();
-        // 启动接收循环与队列处理
         _queueCts = new CancellationTokenSource();
-        // 重建 BlockingCollection，使用当前 QueueCapacity
-        // 注意：BlockingCollection 的 boundedCapacity 在构造时设置，这里重置为当前值
-        // 先尝试替换内部字段（安全写法：创建新的实例并交换引用）
-        // 为简单起见，我们不替换已有实例以避免并发复杂性，只在开始时确保 capacity 值被设置为默认
         _queueTask = Task.Run(() => ProcessQueue(_queueCts.Token));
         _ = AcceptLoopAsync();
     }
@@ -128,37 +124,37 @@ public class DrxTcpServer
         get { lock (_sync) { return _clients.Count; } }
     }
 
-    public List<TcpClient> GetClients()
+    public List<DrxTcpClient> GetClients()
     {
-        lock (_sync) { return new List<TcpClient>(_clients); }
+        lock (_sync) { return new List<DrxTcpClient>(_clients); }
     }
 
-    public IPEndPoint? GetRemoteEndPoint(TcpClient client)
+    public IPEndPoint? GetRemoteEndPoint(DrxTcpClient client)
     {
         try { return client?.Client?.RemoteEndPoint as IPEndPoint; } catch { return null; }
     }
 
-    public IPEndPoint? GetLocalEndPoint(TcpClient client)
+    public IPEndPoint? GetLocalEndPoint(DrxTcpClient client)
     {
         try { return client?.Client?.LocalEndPoint as IPEndPoint; } catch { return null; }
     }
 
-    public void ForceDisconnect(TcpClient client)
+    public void ForceDisconnect(DrxTcpClient client)
     {
         try { client?.Close(); } catch { }
         lock (_sync) { _clients.Remove(client!); _groups.Remove(client!); }
     }
 
-    public void MoveToGroup(TcpClient client, string group)
+    public void MoveToGroup(DrxTcpClient client, string group)
     {
         lock (_sync) { _groups[client] = group ?? "default"; }
     }
 
-    public List<TcpClient> GetGroupClients(string group)
+    public List<DrxTcpClient> GetGroupClients(string group)
     {
         lock (_sync)
         {
-            var list = new List<TcpClient>();
+            var list = new List<DrxTcpClient>();
             foreach (var kv in _groups)
             {
                 if (kv.Value == group) list.Add(kv.Key);
@@ -167,7 +163,7 @@ public class DrxTcpServer
         }
     }
 
-    public string GetClientGroup(TcpClient client)
+    public string GetClientGroup(DrxTcpClient client)
     {
         lock (_sync) { return _groups.TryGetValue(client, out var g) ? g : "default"; }
     }
@@ -175,7 +171,7 @@ public class DrxTcpServer
     /// <summary>
     /// 发送数据到指定客户端（使用 Packetizer 打包）
     /// </summary>
-    public bool PacketS2C(TcpClient client, byte[] data, Action<bool>? callback = null, int timeout = 5000)
+    public bool PacketS2C(DrxTcpClient client, byte[] data, Action<bool>? callback = null, int timeout = 5000)
     {
         if (client == null || !client.Connected) return false;
         try
@@ -209,15 +205,17 @@ public class DrxTcpServer
         if (_listener == null) return;
         while (true)
         {
-            TcpClient client;
-            try { client = await _listener.AcceptTcpClientAsync(); }
+            System.Net.Sockets.Socket? socket = null;
+            try { socket = await _listener.AcceptSocketAsync(); }
             catch { break; }
+            if (socket == null) break;
+            var client = new DrxTcpClient(socket);
             lock (_sync) { _clients.Add(client); _groups[client] = "default"; }
             _ = HandleClientAsync(client);
         }
     }
 
-    private async Task HandleClientAsync(TcpClient client)
+    private async Task HandleClientAsync(DrxTcpClient client)
     {
         var stream = client.GetStream();
         var buf = new byte[8192];

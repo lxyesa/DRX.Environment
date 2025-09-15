@@ -3,13 +3,8 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using Drx.Sdk.Native;
-using Drx.Sdk.Script;
-using Drx.Sdk.Script.Attributes;
-using Drx.Sdk.Script.Interfaces;
 
 namespace Drx.Sdk.Memory;
-
-[ScriptClass("MemorySearcher")]
 public static class MemorySearcher
 {
     // 内存保护标志常量

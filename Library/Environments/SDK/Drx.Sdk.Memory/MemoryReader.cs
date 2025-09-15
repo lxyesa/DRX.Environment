@@ -1,6 +1,3 @@
-using Drx.Sdk.Script;
-using Drx.Sdk.Script.Attributes;
-using Drx.Sdk.Script.Interfaces;
 using Drx.Sdk.Native;
 using System;
 using System.Buffers;
@@ -11,7 +8,6 @@ using System.Text;
 
 namespace Drx.Sdk.Memory;
 
-[ScriptClass("MemoryReader")]
 public static class MemoryReader
 {
     // 使用ThreadStatic确保线程安全的共享缓冲区

@@ -46,4 +46,21 @@ public interface IClientHandler
     /// 连接断开后触发(在UDP模式下不可用)
     /// </summary>
     void OnClientDisconnectedCompleted();
+
+    /// <summary>
+    /// 接收到 Raw（解密与解包前）数据时触发（比 OnClientReceiveAsync 更底层）
+    /// </summary>
+    /// <param name="rawData">接收到的原始数据</param>
+    /// <param name="modifiedData">可修改该参数以改变后续处理的数据内容</param>
+    /// <returns>是否继续处理该数据（返回 false 则停止后续处理）</returns>
+    bool OnClientRawReceiveAsync(byte[] rawData, out byte[]? modifiedData);
+
+    /// <summary>
+    /// 发送 Raw（加密与打包前）数据时触发（比 OnClientSendAsync 更底层）
+    /// </summary>
+    /// <param name="rawData">待发送的原始数据</param>
+    /// <param name="modifiedData">可修改该参数以改变后续处理的数据内容</param>
+    /// <returns>是否继续发送该数据（返回 false 则取消发送）</returns>
+    bool OnClientRawSendAsync(byte[] rawData, out byte[]? modifiedData);
+
 }

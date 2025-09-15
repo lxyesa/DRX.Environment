@@ -1,14 +1,8 @@
 using System;
 using System.Runtime.InteropServices;
 using System.Text;
-using Drx.Sdk.Script;
-using Drx.Sdk.Script.Attributes;
-using Drx.Sdk.Script.Interfaces;
-
 namespace Drx.Sdk.Native;
-
-[ScriptClass("kernel32")]
-public class Kernel32 : IScript
+public class Kernel32
 {
     // =====================================================
     // Structs

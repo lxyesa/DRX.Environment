@@ -1,14 +1,11 @@
-﻿using Drx.Sdk.Script.Attributes;
-using Iced.Intel;
+﻿using Iced.Intel;
 using System;
 using System.Collections.Generic;
 using System.Text;
 using Decoder = Iced.Intel.Decoder;
 
 namespace Drx.Sdk.Memory
-{
-    [ScriptClass("Disassembler")]
-    public static class Disassembler
+{    public static class Disassembler
     {
         /// <summary>
         /// 反汇编指定内存地址处的指令

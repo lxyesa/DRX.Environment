@@ -1,5 +1,4 @@
-﻿using Drx.Sdk.Script.Attributes;
-using Drx.Sdk.Native;
+﻿using Drx.Sdk.Native;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -11,7 +10,6 @@ namespace Drx.Sdk.Memory
     /// <summary>
     /// 提供内存Hook功能的类，支持通过进程名创建和管理Hook实例
     /// </summary>
-    [ScriptClass("MemoryHook")]
     public class MemoryHook : IDisposable
     {
         private readonly IntPtr processHandle;

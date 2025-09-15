@@ -1,7 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System;
-using System.Collections.Generic;
 using System.Net.Sockets;
 using System.Threading;
 using System.Threading.Tasks;
@@ -9,21 +7,33 @@ using System.Threading.Tasks;
 namespace Drx.Sdk.Network.V2.Socket.Client;
 
 /// <summary>
-/// 简单的 V2 TCP 客户端实现，使用 Packetizer 打包/解包数据。
-/// 该实现保持精简，作为仓库中更完整实现的可替代实现。
+/// 简单的 V2 TCP 客户端实现，继承自 `TcpClient`。
+/// 目的是让服务器端能直接用接收到的 `Socket` 包装为 `DrxTcpClient` 实例。
+/// 保持原有公有 API（标签、分组、处理器、PacketC2SAsync）兼容。
 /// </summary>
-public class DrxTcpClient
+public class DrxTcpClient : TcpClient
 {
-    private TcpClient _tcp = new();
     private readonly object _sync = new();
     private readonly Dictionary<string, object?> _tags = new();
     private string _group = "default";
     private readonly List<Drx.Sdk.Network.V2.Socket.Handler.IClientHandler> _handlers = new();
 
-    public DrxTcpClient() { }
+    public DrxTcpClient() : base() { }
 
-    /// <summary>是否已连接</summary>
-    public bool Connected => _tcp?.Connected ?? false;
+    /// <summary>
+    /// 使用已连接的 Socket 构造客户端（服务器端接受后包装用）
+    /// </summary>
+    public DrxTcpClient(System.Net.Sockets.Socket socket) : base()
+    {
+        try
+        {
+            this.Client = socket;
+        }
+        catch { }
+    }
+
+    /// <summary>是否已连接（来自基类）</summary>
+    public new bool Connected => Client != null && Client.Connected;
 
     /// <summary>客户端分组</summary>
     public string Group => _group;
@@ -51,9 +61,9 @@ public class DrxTcpClient
     {
         try
         {
-            var connectTask = _tcp.ConnectAsync(ip, port);
+            var connectTask = base.ConnectAsync(ip, port);
             var completed = await Task.WhenAny(connectTask, Task.Delay(timeout));
-            return completed == connectTask && _tcp.Connected;
+            return completed == connectTask && Connected;
         }
         catch
         {
@@ -62,9 +72,9 @@ public class DrxTcpClient
     }
 
     /// <summary>关闭连接</summary>
-    public void Close()
+    public new void Close()
     {
-        try { _tcp?.Close(); } catch { }
+        try { base.Close(); } catch { }
     }
 
     public void RegisterHandler(string name, Drx.Sdk.Network.V2.Socket.Handler.IClientHandler handler)
@@ -93,7 +103,7 @@ public class DrxTcpClient
     public async Task PacketC2SAsync(byte[] data, Action<byte[]>? onResponse = null, int timeout = 5000)
     {
         if (!Connected) throw new InvalidOperationException("Not connected");
-        var stream = _tcp.GetStream();
+        var stream = GetStream();
 
         // 使用 Packetizer 打包并发送
         var packet = Drx.Sdk.Network.V2.Socket.Packet.Packetizer.Pack(data);

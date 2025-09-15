@@ -6,7 +6,6 @@ using iNKORE.UI.WPF.Modern.Controls;
 using System.Text;
 using System.Windows;
 using System.Windows.Controls;
-using Drx.Sdk.Resource.Utility;
 using MessageBox = iNKORE.UI.WPF.Modern.Controls.MessageBox;
 using Page = System.Windows.Controls.Page;
 
@@ -42,8 +41,7 @@ namespace DLTools.Module
                 default:
                     break;
             }
-            
-            ListenerProcessToggleSwitch.IsOn = GlobalSettings.Instance.AppListenerProcess;
+        
 
             // 设置游戏路径
             if (!string.IsNullOrEmpty(GlobalSettings.Instance.GamePath))
@@ -122,10 +120,6 @@ namespace DLTools.Module
 
             // 获取除去 exe 的路径
             var gameDir = Path.GetDirectoryName(filePath);
-            var success = ResourceManager.Unzip(
-                targetPath: gameDir,
-                resourceName: "Libs.zip"
-            );
 
             // 可以选择显示成功消息
             MessageBox.Show($"游戏路径已成功设置为：\n{filePath}", "设置成功");

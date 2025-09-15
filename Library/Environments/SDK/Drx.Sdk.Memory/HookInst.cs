@@ -1,5 +1,3 @@
-using Drx.Sdk.Script.Attributes;
-using Drx.Sdk.Script.Functions;
 using Drx.Sdk.Native;
 using System;
 using System.Collections.Generic;
@@ -11,7 +9,6 @@ namespace Drx.Sdk.Memory
     /// <summary>
     /// 表示一个Hook实例，提供Hook的激活、禁用和代码注入功能
     /// </summary>
-    [ScriptClass("HookInst")]
     public class HookInst : IDisposable
     {
         // 常量定义
@@ -1002,7 +999,6 @@ namespace Drx.Sdk.Memory
     /// <summary>
     /// 表示代码洞中的一条指令
     /// </summary>
-    [ScriptClass("CCI")]
     public class CodeCaveInstruction
     {
         public int Index { get; set; }          // 指令索引

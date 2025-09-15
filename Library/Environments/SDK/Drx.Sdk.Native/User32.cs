@@ -1,12 +1,9 @@
 using System;
 using System.Runtime.InteropServices;
-using Drx.Sdk.Script.Attributes;
-using Drx.Sdk.Script.Interfaces;
 
 namespace Drx.Sdk.Native;
 
-[ScriptClass("user32")]
-public class User32 : IScript
+public class User32
 {
     
     // =====================================================

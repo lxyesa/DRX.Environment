@@ -3,9 +3,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
-using Drx.Sdk.Script;
-using Drx.Sdk.Script.Attributes;
-using Drx.Sdk.Script.Interfaces;
 
 namespace Drx.Sdk.Input
 {
@@ -183,9 +180,8 @@ namespace Drx.Sdk.Input
         MOUSE_XBUTTON2_CLICK = 0x204,
         // 鼠标侧键2点击
     }
-
-    [ScriptClass("VirtualKeyCode")]
-    public class VKC : IScript
+    
+    public class VKC
     {
         public static uint LBUTTON => 0x01;
         public static uint RBUTTON => 0x02;
@@ -203,7 +199,7 @@ namespace Drx.Sdk.Input
         public static uint CAPITAL => 0x14;
         public static uint ESCAPE => 0x1B;
         public static uint SPACE => 0x20;
-        
+
         // 数字键
         public static uint KEY_0 => 0x30;
         public static uint KEY_1 => 0x31;
@@ -215,7 +211,7 @@ namespace Drx.Sdk.Input
         public static uint KEY_7 => 0x37;
         public static uint KEY_8 => 0x38;
         public static uint KEY_9 => 0x39;
-        
+
         // 字母键
         public static uint KEY_A => 0x41;
         public static uint KEY_B => 0x42;
@@ -243,7 +239,7 @@ namespace Drx.Sdk.Input
         public static uint KEY_X => 0x58;
         public static uint KEY_Y => 0x59;
         public static uint KEY_Z => 0x5A;
-        
+
         // 功能键
         public static uint F1 => 0x70;
         public static uint F2 => 0x71;
@@ -257,13 +253,13 @@ namespace Drx.Sdk.Input
         public static uint F10 => 0x79;
         public static uint F11 => 0x7A;
         public static uint F12 => 0x7B;
-        
+
         // 延迟键
         public static uint DELAY_1 => 0x100;
         public static uint DELAY_10 => 0x101;
         public static uint DELAY_100 => 0x102;
         public static uint DELAY_1000 => 0x103;
-        
+
         // 鼠标事件
         public static uint MOUSE_LEFT_CLICK => 0x200;
         public static uint MOUSE_RIGHT_CLICK => 0x201;

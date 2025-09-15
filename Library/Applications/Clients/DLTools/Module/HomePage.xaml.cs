@@ -1,9 +1,7 @@
 ﻿using System.Windows;
 using DLTools.Module.Contorls;
 using DLTools.Scripts;
-using Drx.Sdk.Events;
 using Drx.Sdk.Memory;
-using Drx.Sdk.Script.Functions;
 using iNKORE.UI.WPF.Modern.Controls;
 using Console = System.Console;
 using MessageBox = iNKORE.UI.WPF.Modern.Controls.MessageBox;
@@ -35,12 +33,8 @@ namespace DLTools.Module
         private HookInst? _unlimitedDurabilityHookInst;
         private HookInst? _autoDodgeTackleHookInst;
 
-        // 监听器
-        private ProcessListener? _pListener;
-
         public HomePage()
         {
-            InitializeComponent();
             Inst();
         }
 
@@ -49,12 +43,9 @@ namespace DLTools.Module
             try
             {
                 _hook = new MemoryHook("DyingLightGame");
-                Tip0Suss.IsOpen = true;
-                Main.IsEnabled = true;
             }
             catch
             {
-                Tip0Err.IsOpen = true;
                 Console.WriteLine("获取进程 DyingLightGame 失败，请检查是否启动游戏");
             }
             
@@ -63,49 +54,7 @@ namespace DLTools.Module
 
             if (!GlobalSettings.Instance.AppListenerProcess) return;
             {
-                _pListener = new ProcessListener("DyingLightGame");
                 Console.WriteLine($"[+] [Event] 监听器器已就绪。");
-
-                _pListener.ProcessStarted += (_, _) =>
-                {
-                    Dispatcher.Invoke(() =>
-                    {
-                        if (_hook == null)
-                        {
-                            _hook = new MemoryHook("DyingLightGame");
-                        }
-
-                        Tip0Err.IsOpen = false;
-                        Tip0Suss.IsOpen = true;
-                        Main.IsEnabled = true;
-                        
-                        Console.WriteLine($"[Event] 目标进程已启动。");
-                    });
-                };
-                _pListener.ProcessStopped += (_, _) =>
-                {
-                    Dispatcher.Invoke(() =>
-                    {
-                        _hook = null;
-                        _cloneItemBaseAddress = null;
-                        _safeAreaUseWeaponAddress = null;
-                        _crash12Address = null;
-                        _immuneExplosionDmgAddress = null;
-                        _crash5Address = null;
-                        _unlimitedDurabilityAddress = null;
-
-                        _safeAreaUseWeaponHookInst = null;
-                        _unlimitedDurabilityHookInst = null;
-
-                        Tip0Err.IsOpen = true;
-                        Tip0Suss.IsOpen = false;
-                        Main.IsEnabled = true;
-                        
-                        Console.WriteLine($"[Event] 目标进程已停止。");
-                    });
-                };
-
-                _pListener.Start();
             }
         }
 
@@ -145,9 +94,6 @@ namespace DLTools.Module
                             var patternStr = "48 8B F0 74 ** 48 8B 44 24 48";
                             _cloneItemBaseAddress = MemorySearcher.SearchInModule(
                                 "DyingLightGame", patternStr, "gamedll_x64_rwdi.dll");
-                            if (_cloneItemBaseAddress != null)
-                                Console.WriteLine(
-                                    "CloneItem BaseAddr: 0x" + Values.IntptrToHex(_cloneItemBaseAddress[0]));
                         });
                     }
 
@@ -180,9 +126,6 @@ namespace DLTools.Module
                             var patternStr = "48 8B F0 74 ** 48 8B 44 24 48";
                             _cloneItemBaseAddress = MemorySearcher.SearchInModule(
                                 "DyingLightGame", patternStr, "gamedll_x64_rwdi.dll");
-                            if (_cloneItemBaseAddress != null)
-                                Console.WriteLine(
-                                    "CloneItem BaseAddr: 0x" + Values.IntptrToHex(_cloneItemBaseAddress[0]));
                         });
                     }
 

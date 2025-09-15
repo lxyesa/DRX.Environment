@@ -58,38 +58,25 @@ class Program
     }
 
     // 回显处理器：收到数据就原样发送回去
-    class EchoHandler : IServerHandler
+    class EchoHandler : DefaultServerHandler
     {
         private readonly DrxTcpServer _server;
-        public int Priority => 0;
-        public int MaxPacketSize => 0;
 
         public EchoHandler(DrxTcpServer server)
         {
             _server = server;
         }
 
-        public bool OnServerReceiveAsync(byte[] data, System.Net.Sockets.TcpClient client)
+        public override bool OnServerReceiveAsync(byte[] data, Drx.Sdk.Network.V2.Socket.Client.DrxTcpClient client)
         {
             try
             {
                 var builder = new PacketBuilder();
-                builder.Add("echoed_data", data);
+                builder.Add("echoed_data", "abcdefg");
                 _server.PacketS2C(client, builder.Build());
             }
             catch { }
             return true;
         }
-
-        public byte[] OnServerSendAsync(byte[] data, System.Net.Sockets.TcpClient client)
-        {
-            return data;
-        }
-
-        public void OnServerConnected() { }
-
-        public void OnServerDisconnecting(System.Net.Sockets.TcpClient client) { }
-
-        public void OnServerDisconnected(System.Net.Sockets.TcpClient client) { }
     }
 }

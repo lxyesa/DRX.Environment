@@ -1,10 +1,8 @@
 ﻿using Drx.Sdk.Memory.Utils;
-using Drx.Sdk.Script.Attributes;
 using Keystone;
 
 namespace Drx.Sdk.Memory
 {
-    [ScriptClass("AssemblerHelper")]
     public class AssemblerHelper
     {
         /// <summary>

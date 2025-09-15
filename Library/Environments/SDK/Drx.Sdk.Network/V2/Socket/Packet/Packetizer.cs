@@ -70,6 +70,54 @@ public static class Packetizer
         return AesDecrypt(payload, aesKey, aesIV);
     }
 
+    /// <summary>
+    /// 尝试从打包格式中解析出 payload（不抛出异常，解析失败返回 false）。
+    /// 支持 `out var` 调用风格。
+    /// </summary>
+    /// <param name="packet">符合 <c>(length:payload)</c> 格式的字节数组。</param>
+    /// <param name="payload">解析出的 payload（当方法返回 true 时有效）。</param>
+    /// <returns>解析成功返回 true，否则返回 false。</returns>
+    public static bool TryUnpack(byte[] packet, out byte[]? payload)
+    {
+        payload = null;
+        try
+        {
+            if (packet == null) return false;
+            payload = UnwrapLength(packet);
+            return true;
+        }
+        catch
+        {
+            payload = null;
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// 尝试解包并使用 AES-CBC 解密，失败时返回 false（不会抛出异常），支持 `out var`。
+    /// </summary>
+    /// <param name="packet">符合打包格式且包含密文的字节数组。</param>
+    /// <param name="aesKey">用于解密的 AES 密钥。</param>
+    /// <param name="aesIV">用于解密的 AES 初始化向量。</param>
+    /// <param name="payload">解密后的明文字节（当方法返回 true 时有效）。</param>
+    /// <returns>解密并解析成功返回 true，否则返回 false。</returns>
+    public static bool TryUnpack(byte[] packet, byte[] aesKey, byte[] aesIV, out byte[]? payload)
+    {
+        payload = null;
+        try
+        {
+            if (aesKey == null || aesIV == null || packet == null) return false;
+            var inner = UnwrapLength(packet);
+            payload = AesDecrypt(inner, aesKey, aesIV);
+            return true;
+        }
+        catch
+        {
+            payload = null;
+            return false;
+        }
+    }
+
     private static byte[] WrapWithLength(byte[] payload)
     {
         var header = Encoding.UTF8.GetBytes("(" + payload.Length + ":");
