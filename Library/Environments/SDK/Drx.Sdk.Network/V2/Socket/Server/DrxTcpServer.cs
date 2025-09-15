@@ -177,7 +177,28 @@ public class DrxTcpServer
         try
         {
             var stream = client.GetStream();
-            var packet = Drx.Sdk.Network.V2.Socket.Packet.Packetizer.Pack(data);
+
+            // 在打包/加密之前触发 Raw 发送事件，允许 handler 修改或拦截发送
+            byte[] rawToSend = data;
+            bool proceed = true;
+            lock (_sync)
+            {
+                foreach (var h in _handlers)
+                {
+                    try
+                    {
+                        if (!h.OnServerRawSendAsync(rawToSend, client, out var outData))
+                        {
+                            proceed = false; break;
+                        }
+                        if (outData != null) rawToSend = outData;
+                    }
+                    catch { }
+                }
+            }
+            if (!proceed) { callback?.Invoke(false); return false; }
+
+            var packet = Drx.Sdk.Network.V2.Socket.Packet.Packetizer.Pack(rawToSend);
             stream.Write(packet, 0, packet.Length);
             callback?.Invoke(true);
             return true;
@@ -190,12 +211,33 @@ public class DrxTcpServer
     /// </summary>
     public void PacketS2AllC(byte[] data)
     {
-        var packet = Drx.Sdk.Network.V2.Socket.Packet.Packetizer.Pack(data);
         lock (_sync)
         {
             foreach (var c in _clients)
             {
-                try { c.GetStream().Write(packet, 0, packet.Length); } catch { }
+                try
+                {
+                    // 每个客户端在发送前都允许 handler 修改或拦截原始数据
+                    byte[] rawToSend = data;
+                    bool proceed = true;
+                    foreach (var h in _handlers)
+                    {
+                        try
+                        {
+                            if (!h.OnServerRawSendAsync(rawToSend, c, out var outData))
+                            {
+                                proceed = false; break;
+                            }
+                            if (outData != null) rawToSend = outData;
+                        }
+                        catch { }
+                    }
+                    if (!proceed) continue;
+
+                    var packet = Drx.Sdk.Network.V2.Socket.Packet.Packetizer.Pack(rawToSend);
+                    c.GetStream().Write(packet, 0, packet.Length);
+                }
+                catch { }
             }
         }
     }
@@ -229,7 +271,30 @@ public class DrxTcpServer
                 Array.Copy(buf, 0, raw, 0, read);
                 try
                 {
+                    // 先触发 Raw 接收事件，允许 handler 修改原始数据或中断处理
+                    bool proceed = true;
+                    lock (_sync)
+                    {
+                        foreach (var h in _handlers)
+                        {
+                            try
+                            {
+                                // 如果 handler 返回 false，则停止后续处理
+                                if (!h.OnServerRawReceiveAsync(raw, client, out var outData))
+                                {
+                                    proceed = false;
+                                    break;
+                                }
+                                if (outData != null) raw = outData; // 使用最后一个非空修改结果
+                            }
+                            catch { }
+                        }
+                    }
+
+                    if (!proceed) continue; // 中断本次循环，丢弃该数据
+
                     var payload = Drx.Sdk.Network.V2.Socket.Packet.Packetizer.Unpack(raw);
+
                     // 入队，由后台队列任务处理
                     try
                     {

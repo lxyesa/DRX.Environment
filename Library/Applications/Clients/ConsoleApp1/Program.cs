@@ -23,8 +23,6 @@ class Program
             .Add("data", new byte[] { 1, 2, 3, 4 })
             .Build();
 
-        builder.Dump();
-
         // 本地启动 V2 TCP Server 并注册一个回显 Handler
         var server = new DrxTcpServer();
         server.RegisterHandler("echo", new EchoHandler(server));
@@ -76,6 +74,13 @@ class Program
                 _server.PacketS2C(client, builder.Build());
             }
             catch { }
+            return true;
+        }
+
+        public override bool OnServerRawReceiveAsync(byte[] rawData, Drx.Sdk.Network.V2.Socket.Client.DrxTcpClient client, out byte[]? modifiedData)
+        {
+            Console.WriteLine("Server received raw data: " + Encoding.UTF8.GetString(rawData));
+            modifiedData = rawData;
             return true;
         }
     }

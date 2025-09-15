@@ -105,8 +105,27 @@ public class DrxTcpClient : TcpClient
         if (!Connected) throw new InvalidOperationException("Not connected");
         var stream = GetStream();
 
+        // 在打包/加密之前触发 Raw 发送事件，允许 handler 修改或拦截发送
+        byte[] rawToSend = data;
+        lock (_sync)
+        {
+            foreach (var h in _handlers)
+            {
+                try
+                {
+                    if (!h.OnClientRawSendAsync(rawToSend, out var outData))
+                    {
+                        // 取消发送
+                        return;
+                    }
+                    if (outData != null) rawToSend = outData;
+                }
+                catch { }
+            }
+        }
+
         // 使用 Packetizer 打包并发送
-        var packet = Drx.Sdk.Network.V2.Socket.Packet.Packetizer.Pack(data);
+        var packet = Drx.Sdk.Network.V2.Socket.Packet.Packetizer.Pack(rawToSend);
         await stream.WriteAsync(packet, 0, packet.Length);
 
         if (onResponse != null && timeout >= 0)
@@ -121,8 +140,32 @@ public class DrxTcpClient : TcpClient
                 {
                     var respRaw = new byte[bytes];
                     Array.Copy(buf, 0, respRaw, 0, bytes);
-                    var resp = Drx.Sdk.Network.V2.Socket.Packet.Packetizer.Unpack(respRaw);
-                    onResponse(resp);
+
+                    // 接收到 Raw（解包前）事件，允许 handler 修改或拦截响应
+                    byte[] processed = respRaw;
+                    lock (_sync)
+                    {
+                        foreach (var h in _handlers)
+                        {
+                            try
+                            {
+                                if (!h.OnClientRawReceiveAsync(processed, out var outData))
+                                {
+                                    // 中止后续处理（不调用 onResponse）
+                                    processed = Array.Empty<byte>();
+                                    break;
+                                }
+                                if (outData != null) processed = outData;
+                            }
+                            catch { }
+                        }
+                    }
+
+                    if (processed != null && processed.Length > 0)
+                    {
+                        var resp = Drx.Sdk.Network.V2.Socket.Packet.Packetizer.Unpack(processed);
+                        onResponse(resp);
+                    }
                 }
             }
             catch (OperationCanceledException) { }
