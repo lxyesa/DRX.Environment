@@ -9,18 +9,45 @@ using Drx.Sdk.Network.V2.Socket.Packet;
 using Drx.Sdk.Network.V2.Socket.Server;
 using Drx.Sdk.Network.V2.Socket.Client;
 using Drx.Sdk.Network.V2.Socket.Handler;
+using Drx.Sdk.Network.V2.Persistence.Sqlite.Test;
+using Drx.Sdk.Network.V2.Persistence.Sqlite;
+using Drx.Sdk.Shared.Serialization;
 
 // 使用 SocketHost 启动服务，并通过添加一个实现了 UDP 钩子的服务来处理 UDP 包
 class Program
 {
     static async Task Main(string[] args)
     {
-        PacketBuilder builder = new PacketBuilder();
-        var buf = builder
-            .Add("cmd", "echo")
-            .Add("id", 123)
-            .Add("flag", true)
-            .Add("data", new byte[] { 1, 2, 3, 4 })
+        Console.WriteLine("开始测试 SqlitePersistence 实现...");
+        Console.WriteLine("=" + new string('=', 50));
+
+        SqlitePersistence sqlite = new SqlitePersistence("test.db");
+        sqlite.CreateTable("TestTable");
+        sqlite.WriteString("TestTable", "key1", "value1");
+        sqlite.WriteInt32("TestTable", "key2", 42);
+        sqlite.WriteComposite("TestTable", "key3", (c) =>
+        {
+            c.Add("field1", "data1");
+            c.Add("field2", 12345);
+            c.Add("field3", true);
+            c.Add("field4", new byte[] { 10, 20, 30 });
+            return c;
+        });
+        Console.WriteLine("读取 key1: " + sqlite.ReadString("TestTable", "key1"));
+        Console.WriteLine("读取 key2: " + sqlite.ReadInt32("TestTable", "key2"));
+        var composite = sqlite.ReadComposite("TestTable", "key3");
+        Console.WriteLine("读取 key3.field1: " + composite?.Get<string>("field1"));
+        Console.WriteLine("读取 key3.field2: " + composite?.Get<int>("field2"));
+        Console.WriteLine("读取 key3.field3: " + composite?.Get<bool>("field3"));
+        Console.WriteLine("读取 key3.field4: " + BitConverter.ToString(composite?.Get<byte[]>("field4") ?? Array.Empty<byte>()));
+        sqlite.Dump();
+
+        var packet = new PacketBuilder2DSD()
+            .Add("success", true)
+            .Add("code", 200)
+            .Add("message", "操作成功")
+            .Add("data", new byte[] { 1, 2, 3, 4, 5 })
+            .Add("value", 3.14f)
             .Build();
 
         // 本地启动 V2 TCP Server 并注册一个回显 Handler
@@ -38,7 +65,7 @@ class Program
             if (!connected) return;
 
             // 发送数据并等待一次性响应
-            await client.PacketC2SAsync(buf, resp =>
+            await client.PacketC2SAsync(packet, resp =>
             {
                 try
                 {
@@ -69,18 +96,16 @@ class Program
         {
             try
             {
-                var builder = new PacketBuilder();
-                builder.Add("echoed_data", "abcdefg");
-                _server.PacketS2C(client, builder.Build());
+                var deserialized = DrxSerializationData.Deserialize(data);
+                deserialized.TryGetBool("success", out var success);
+                deserialized.TryGetInt("code", out var code);
+                deserialized.TryGetString("message", out var message);
+
+                Console.WriteLine($"Server received data: success={success}, code={code}, message={message}");
+
+                _server.PacketS2C(client, deserialized.Serialize());
             }
             catch { }
-            return true;
-        }
-
-        public override bool OnServerRawReceiveAsync(byte[] rawData, Drx.Sdk.Network.V2.Socket.Client.DrxTcpClient client, out byte[]? modifiedData)
-        {
-            Console.WriteLine("Server received raw data: " + Encoding.UTF8.GetString(rawData));
-            modifiedData = rawData;
             return true;
         }
     }
