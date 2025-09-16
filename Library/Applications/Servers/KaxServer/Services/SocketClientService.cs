@@ -1,6 +1,6 @@
 using Drx.Sdk.Network.Socket;
 using Drx.Sdk.Network.Socket.Services;
-using DRX.Framework;
+using Drx.Sdk.Shared;
 using KaxServer.Services;
 
 public class SocketClientService : SocketServiceBase

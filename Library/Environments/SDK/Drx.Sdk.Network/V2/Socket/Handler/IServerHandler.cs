@@ -66,4 +66,10 @@ public interface IServerHandler
     // 参数(输出): out byte[]? modifiedData - 可修改该参数以改变实际发送的数据内容
     // 返回值: bool - 是否继续发送该数据（返回 false 则不发送）
     bool OnServerRawSendAsync(byte[] rawData, DrxTcpClient client, out byte[]? modifiedData);
+
+    /// <summary>
+    /// 获取优先级
+    /// </summary>
+    /// <returns></returns>
+    int GetPriority();
 }

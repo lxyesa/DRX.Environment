@@ -11,7 +11,7 @@ using Drx.Sdk.Network.Security;
 using Drx.Sdk.Network.Socket.Middleware;
 using System.Collections.Concurrent;
 using Drx.Sdk.Network.Socket.Services;
-using DRX.Framework;
+using Drx.Sdk.Shared;
 
 namespace Drx.Sdk.Network.Socket
 {

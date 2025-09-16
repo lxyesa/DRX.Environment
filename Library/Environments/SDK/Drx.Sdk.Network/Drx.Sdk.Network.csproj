@@ -21,6 +21,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Folder Include="V2\Socket\NET2Cpp\" />
     <Folder Include="wwwroot\" />
   </ItemGroup>
 

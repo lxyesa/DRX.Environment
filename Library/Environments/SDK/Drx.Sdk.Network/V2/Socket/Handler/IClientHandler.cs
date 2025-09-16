@@ -63,4 +63,9 @@ public interface IClientHandler
     /// <returns>是否继续发送该数据（返回 false 则取消发送）</returns>
     bool OnClientRawSendAsync(byte[] rawData, out byte[]? modifiedData);
 
+    /// <summary>
+    /// 获取优先级
+    /// </summary>
+    /// <returns></returns>
+    int GetPriority();
 }

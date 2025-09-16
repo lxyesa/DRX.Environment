@@ -6,7 +6,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using Drx.Sdk.Network.Security;
 using Drx.Sdk.Network.Socket;
-using DRX.Framework;
+using Drx.Sdk.Shared;
 
 public static class DrxTcpClientExport
 {

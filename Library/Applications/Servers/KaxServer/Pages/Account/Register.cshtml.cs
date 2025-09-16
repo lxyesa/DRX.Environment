@@ -4,7 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using KaxServer.Services;
 using KaxServer.Models;
-using DRX.Framework;
+using Drx.Sdk.Shared;
 
 namespace KaxServer.Pages.Account
 {

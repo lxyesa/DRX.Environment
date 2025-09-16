@@ -42,4 +42,9 @@ public abstract class DefaultServerHandler : IServerHandler
         modifiedData = rawData;
         return true;
     }
+
+    public virtual int GetPriority()
+    {
+        return Priority;
+    }
 }

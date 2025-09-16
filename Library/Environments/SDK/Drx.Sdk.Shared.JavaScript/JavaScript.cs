@@ -1,7 +1,6 @@
 using System;
 using System.Threading.Tasks;
 using System.Linq;
-using DRX.Framework;
 
 namespace Drx.Sdk.Shared.JavaScript
 {

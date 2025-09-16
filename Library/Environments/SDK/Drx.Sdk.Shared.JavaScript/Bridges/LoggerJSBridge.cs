@@ -1,6 +1,5 @@
 // Copyright (c) DRX SDK
 using System;
-using DRX.Framework;
 using Drx.Sdk.Shared.JavaScript;
 
 namespace Drx.Sdk.Shared.JavaScript.Bridges

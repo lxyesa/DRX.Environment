@@ -2,7 +2,6 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
-using DRX.Framework;
 
 namespace Drx.Sdk.Shared.JavaScript
 {

@@ -14,7 +14,7 @@ namespace Drx.Sdk.Shared.Serialization
     /// 说明：实现了一个轻量级键值存储，支持基本类型与嵌套对象的序列化/反序列化。
     /// 当前为基础骨架，后续可以按设计文档扩展优化（字符串表、变长编码、数组等）。
     /// </summary>
-    public class DrxSerializationData
+    public class DrxSerializationData : System.Collections.IEnumerable
     {
         // 内部值类型标签
         /// <summary>
@@ -225,7 +225,7 @@ namespace Drx.Sdk.Shared.Serialization
         {
             _map = new Dictionary<string, DrxValue>(StringComparer.Ordinal);
         }
-
+ 
         /// <summary>
         /// 创建一个具有指定初始容量的 DrxSerializationData 实例。
         /// </summary>
@@ -233,6 +233,181 @@ namespace Drx.Sdk.Shared.Serialization
         public DrxSerializationData(int capacity)
         {
             _map = new Dictionary<string, DrxValue>(capacity, StringComparer.Ordinal);
+        }
+ 
+        // Internal helper that sets a DrxValue with proper locking (keeps existing SetX semantics untouched).
+        private void Put(string key, DrxValue v)
+        {
+            if (key is null) throw new ArgumentNullException(nameof(key));
+            _lock.EnterWriteLock();
+            try { _map[key] = v; }
+            finally { _lock.ExitWriteLock(); }
+        }
+ 
+        /// <summary>
+        /// 支持集合初始化器：Add(string key, object? value)
+        /// 将常见 CLR 类型映射到内部的 DrxValue 表示（优先使用现有 SetX 方法以保持语义一致性，例如字节数组会被复制）。
+        /// 不支持的类型将抛出 ArgumentException 以便尽早发现错误。
+        /// </summary>
+        /// <param name="key">键</param>
+        /// <param name="value">值（可为 null）</param>
+        public void Add(string key, object? value)
+        {
+            if (key is null) throw new ArgumentNullException(nameof(key));
+ 
+            // 常见类型映射（覆盖多数场景）
+            switch (value)
+            {
+                case null:
+                    // 使用 SetString(null) 代表 Null 类型，保持与 SetString 行为一致
+                    SetString(key, null);
+                    break;
+                case string s:
+                    SetString(key, s);
+                    break;
+                case bool b:
+                    SetBool(key, b);
+                    break;
+                case byte[] bytes:
+                    // 保持 SetBytes 的复制语义
+                    SetBytes(key, bytes);
+                    break;
+                case DrxValue dv:
+                    // 直接写入 DrxValue（不可变语义由 DrxValue 本身保证）
+                    Put(key, dv);
+                    break;
+                case DrxValue[] dva:
+                    SetArray(key, dva);
+                    break;
+                case DrxSerializationData obj:
+                    SetObject(key, obj);
+                    break;
+                case double d:
+                    SetDouble(key, d);
+                    break;
+                case float f:
+                    SetFloat(key, f);
+                    break;
+                case int i:
+                    SetInt(key, i);
+                    break;
+                case long l:
+                    SetInt(key, l);
+                    break;
+                case short sh:
+                    SetInt(key, sh);
+                    break;
+                case byte by:
+                    SetInt(key, by);
+                    break;
+                case uint ui:
+                    // 可能溢出，按 unchecked 转换；若超出 long.MaxValue 会产生负值，用户应避免极端值
+                    SetInt(key, unchecked((long)ui));
+                    break;
+                case ulong ul:
+                    // 可能溢出 -> 尝试在 checked 下转换以捕获异常
+                    try { SetInt(key, checked((long)ul)); } catch (OverflowException) { throw new ArgumentException("ulong value is too large to store as Int64", nameof(value)); }
+                    break;
+                case IEnumerable<DrxValue> seqDv:
+                    SetArray(key, System.Linq.Enumerable.ToArray(seqDv));
+                    break;
+                case IEnumerable<string> seqS:
+                    {
+                        var arr = System.Linq.Enumerable.ToArray(seqS);
+                        var va = new DrxValue[arr.Length];
+                        for (int i = 0; i < arr.Length; i++) va[i] = new DrxValue(arr[i]);
+                        SetArray(key, va);
+                        break;
+                    }
+                case IEnumerable<long> seqL:
+                    {
+                        var arr = System.Linq.Enumerable.ToArray(seqL);
+                        var va = new DrxValue[arr.Length];
+                        for (int i = 0; i < arr.Length; i++) va[i] = new DrxValue(arr[i]);
+                        SetArray(key, va);
+                        break;
+                    }
+                default:
+                    // 尝试将任意 IConvertible 数值转为 Int64 / Double（类型安全由 Convert 抛出的异常负责）
+                    if (value is IConvertible conv)
+                    {
+                        var typeCode = conv.GetTypeCode();
+                        switch (typeCode)
+                        {
+                            case TypeCode.Byte:
+                            case TypeCode.SByte:
+                            case TypeCode.Int16:
+                            case TypeCode.UInt16:
+                            case TypeCode.Int32:
+                            case TypeCode.UInt32:
+                            case TypeCode.Int64:
+                            case TypeCode.UInt64:
+                                try
+                                {
+                                    var asI64 = Convert.ToInt64(conv);
+                                    SetInt(key, asI64);
+                                    return;
+                                }
+                                catch (Exception ex) when (ex is OverflowException || ex is InvalidCastException || ex is FormatException)
+                                {
+                                    // fallthrough to error
+                                }
+                                break;
+                            case TypeCode.Single:
+                            case TypeCode.Double:
+                            case TypeCode.Decimal:
+                                try
+                                {
+                                    var asD = Convert.ToDouble(conv);
+                                    SetDouble(key, asD);
+                                    return;
+                                }
+                                catch (Exception) { /* fallthrough */ }
+                                break;
+                            case TypeCode.Boolean:
+                                SetBool(key, Convert.ToBoolean(conv));
+                                return;
+                            case TypeCode.String:
+                                SetString(key, Convert.ToString(conv));
+                                return;
+                        }
+                    }
+ 
+                    // 不可识别的类型
+                    throw new ArgumentException($"Unsupported value type for Add: {(value?.GetType().FullName ?? "null")}", nameof(value));
+            }
+        }
+ 
+        /// <summary>
+        /// 允许以 KeyValuePair 的形式初始化（例如 from LINQ 等场景）。
+        /// </summary>
+        public void Add(KeyValuePair<string, DrxValue> kv)
+        {
+            if (kv.Key is null) throw new ArgumentNullException(nameof(kv.Key));
+            Put(kv.Key, kv.Value);
+        }
+ 
+        /// <summary>
+        /// 返回线程安全拷贝的枚举器，枚举期间不会持有写锁，避免死锁与长时间锁持有。
+        /// </summary>
+        public IEnumerator<KeyValuePair<string, DrxValue>> GetEnumerator()
+        {
+            _lock.EnterReadLock();
+            try
+            {
+                // 复制到列表，返回其枚举器；拷贝保证枚举稳定性与避免长时间持锁
+                var copy = new List<KeyValuePair<string, DrxValue>>(_map);
+                return copy.GetEnumerator();
+            }
+            finally
+            {
+                _lock.ExitReadLock();
+            }
+        }
+ 
+        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator()
+        {
+            return GetEnumerator();
         }
 
         // 基础操作

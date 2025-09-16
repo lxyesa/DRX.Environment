@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Net.Sockets;
 using System.Threading;
 using System.Threading.Tasks;
+using Drx.Sdk.Network.V2.Socket.Handler;
+using Drx.Sdk.Shared;
 
 namespace Drx.Sdk.Network.V2.Socket.Client;
 
@@ -77,21 +79,77 @@ public class DrxTcpClient : TcpClient
         try { base.Close(); } catch { }
     }
 
-    public void RegisterHandler(string name, Drx.Sdk.Network.V2.Socket.Handler.IClientHandler handler)
+    /// <summary>
+    /// 注册一个处理器实例，优先级高的在前。
+    /// </summary>
+    /// <typeparam name="T">处理器类型</typeparam>
+    /// <param name="args">构造函数参数</param>
+    public void RegisterHandler<T>(params object[] args) where T : IClientHandler
     {
-        if (handler == null) return;
-        lock (_sync)
+        try
         {
-            _handlers.Add(handler);
-            _handlers.Sort((a, b) => a.Priority.CompareTo(b.Priority));
+            var obj = Activator.CreateInstance(typeof(T), args) as IClientHandler;
+            if (obj is not IClientHandler) throw new ArgumentException("Handler must implement IClientHandler");
+
+            lock (_sync)
+            {
+                // 避免重复注册同类型 handler，在有相同类型（不包括子类）的情况下，掷出警告并移除旧的
+                var existing = _handlers.FindAll(h => h.GetType() == typeof(T));
+                if (existing.Count > 0)
+                {
+                    Logger.Warn($"Handler of type {typeof(T).FullName} is already registered. Replacing the old one.");
+                    foreach (var e in existing) _handlers.Remove(e);
+                }
+
+                // 按优先级插入，优先级高的在前
+                int index = _handlers.FindIndex(h => h.GetPriority() < obj.GetPriority());
+                if (index >= 0) _handlers.Insert(index, obj);
+                else _handlers.Add(obj);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.Error("Failed to register handler: " + ex.Message);
         }
     }
 
-    public void UnregisterHandler(string name, Drx.Sdk.Network.V2.Socket.Handler.IClientHandler handler)
+    /// <summary>
+    /// 注销指定类型的处理器实例。
+    /// </summary>
+    /// <typeparam name="T">处理器类型</typeparam>
+    public void UnregisterHandler<T>() where T : IClientHandler
     {
-        lock (_sync) { _handlers.Remove(handler); }
+        lock (_sync)
+        {
+            _handlers.RemoveAll(h => h is T);
+        }
     }
 
+    /// <summary>
+    /// 获取所有注册的处理器实例。
+    /// </summary>
+    /// <returns>所有注册的处理器实例列表</returns>
+    public List<IClientHandler> GetHandlers()
+    {
+        lock (_sync) { return new List<IClientHandler>(_handlers); }
+    }
+
+    /// <summary>
+    /// 获取指定类型的处理器实例，若不存在则返回 null。
+    /// </summary>
+    /// <typeparam name="T">处理器类型</typeparam>
+    /// <returns>指定类型的处理器实例，若不存在则返回 null。</returns>
+    public T GetHandler<T>() where T : class, IClientHandler
+    {
+        lock (_sync)
+        {
+            return _handlers.OfType<T>().FirstOrDefault()!;
+        }
+    }
+
+    /// <summary>
+    /// 注销所有处理器实例。
+    /// </summary>
     public void UnregisterAllHandlers()
     {
         lock (_sync) { _handlers.Clear(); }

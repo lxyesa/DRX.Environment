@@ -9,7 +9,6 @@ using System.IO;
 using System.Linq;
 using Microsoft.Extensions.Logging;
 using Drx.Sdk.Network.Security;
-using DRX.Framework;
 
 namespace Drx.Sdk.Network.Socket
 {

@@ -5,6 +5,9 @@ using System.Net.Sockets;
 using Drx.Sdk.Network.V2.Socket.Client;
 using System.Threading;
 using System.Threading.Tasks;
+using Drx.Sdk.Network.V2.Socket.Handler;
+using Drx.Sdk.Shared;
+using System.Linq;
 
 namespace Drx.Sdk.Network.V2.Socket.Server;
 
@@ -14,12 +17,19 @@ namespace Drx.Sdk.Network.V2.Socket.Server;
 /// </summary>
 public class DrxTcpServer
 {
+    // 委托定义
+    public delegate void ClientConnectedHandler(DrxTcpClient client);
+    public delegate void ClientDisconnectedHandler(DrxTcpClient client);
+
+    // 事件声明
+    public event ClientConnectedHandler? ClientConnected;
+    public event ClientDisconnectedHandler? ClientDisconnected;
+
     private TcpListener? _listener;
     private readonly List<DrxTcpClient> _clients = new();
     private readonly object _sync = new();
     private readonly List<Drx.Sdk.Network.V2.Socket.Handler.IServerHandler> _handlers = new();
-    private readonly Dictionary<string, object?> _tags = new();
-    private readonly Dictionary<DrxTcpClient, string> _groups = new();
+
     // 消息列队与处理
     private readonly System.Collections.Concurrent.BlockingCollection<(byte[] Payload, DrxTcpClient Client)> _messageQueue;
     private CancellationTokenSource? _queueCts;
@@ -57,35 +67,91 @@ public class DrxTcpServer
         catch { }
     }
 
-    public void RegisterHandler(string name, Drx.Sdk.Network.V2.Socket.Handler.IServerHandler handler)
+    /// <summary>
+    /// 注册一个处理器实例，优先级高的在前。
+    /// </summary>
+    /// <typeparam name="T">处理器类型</typeparam>
+    /// <param name="args">构造函数参数</param>
+    public void RegisterHandler<T>(params object[] args) where T : IServerHandler
     {
-        if (handler == null) return;
-        lock (_sync)
+        try
         {
-            _handlers.Add(handler);
-            _handlers.Sort((a, b) => a.Priority.CompareTo(b.Priority));
+            var obj = Activator.CreateInstance(typeof(T), args) as IServerHandler;
+            if (obj == null) throw new ArgumentException("Handler must implement IServerHandler");
+
+            lock (_sync)
+            {
+                // 避免重复注册同类型 handler，在有相同类型（不包括子类）的情况下，掷出警告并移除旧的
+                var existing = _handlers.FindAll(h => h.GetType() == typeof(T));
+                if (existing.Count > 0)
+                {
+                    Logger.Warn($"Handler of type {typeof(T).FullName} is already registered. Replacing the old one.");
+                    foreach (var e in existing) _handlers.Remove(e);
+                }
+
+                // 按优先级插入，优先级高的在前
+                int index = _handlers.FindIndex(h => h.GetPriority() < obj.GetPriority());
+                if (index >= 0) _handlers.Insert(index, obj);
+                else _handlers.Add(obj);
+            }
+        }
+        catch (MissingMethodException ex)
+        {
+            var constructors = typeof(T).GetConstructors();
+            var descriptions = constructors.Select(c => $"({string.Join(", ", c.GetParameters().Select(p => $"{p.ParameterType.Name} {p.Name}"))})");
+            var message = $"Constructor not found or parameters do not match. Available constructors: {string.Join("; ", descriptions)}";
+            throw new ArgumentException(message, ex);
+        }
+        catch (Exception ex)
+        {
+            Logger.Error("Failed to register handler: " + ex.Message);
+            throw;
         }
     }
 
-    public void UnregisterHandler(string name, Drx.Sdk.Network.V2.Socket.Handler.IServerHandler handler)
+    /// <summary>
+    /// 注销指定类型的处理器实例。
+    /// </summary>
+    /// <typeparam name="T">处理器类型</typeparam>
+    public void UnregisterHandler<T>() where T : IServerHandler
     {
-        lock (_sync) { _handlers.Remove(handler); }
+        lock (_sync)
+        {
+            _handlers.RemoveAll(h => h is T);
+        }
     }
 
+    /// <summary>
+    /// 获取所有注册的处理器实例。
+    /// </summary>
+    /// <returns>所有注册的处理器实例列表</returns>
+    public List<IServerHandler> GetHandlers()
+    {
+        lock (_sync) { return new List<IServerHandler>(_handlers); }
+    }
+
+    /// <summary>
+    /// 获取指定类型的处理器实例，若不存在则返回 null。
+    /// </summary>
+    /// <typeparam name="T">处理器类型</typeparam>
+    /// <returns>指定类型的处理器实例，若不存在则返回 null。</returns>
+    public T GetHandler<T>() where T : class, IServerHandler
+    {
+        lock (_sync)
+        {
+            return _handlers.OfType<T>().FirstOrDefault()!;
+        }
+    }
+
+    /// <summary>
+    /// 注销所有处理器实例。
+    /// </summary>
     public void UnregisterAllHandlers()
     {
         lock (_sync) { _handlers.Clear(); }
     }
 
-    public void SetTag(string key, object? value)
-    {
-        lock (_sync) { _tags[key] = value; }
-    }
 
-    public object? GetTag(string key)
-    {
-        lock (_sync) { return _tags.TryGetValue(key, out var v) ? v : null; }
-    }
 
     public void Start(int port)
     {
@@ -96,6 +162,19 @@ public class DrxTcpServer
         _ = AcceptLoopAsync();
     }
 
+    /// <summary>
+    /// 异步启动服务器
+    /// </summary>
+    public async Task StartAsync(int port)
+    {
+        _listener = new TcpListener(IPAddress.Any, port);
+        _listener.Start();
+        _queueCts = new CancellationTokenSource();
+        _queueTask = Task.Run(() => ProcessQueue(_queueCts.Token));
+        _ = AcceptLoopAsync();
+        await Task.Yield();
+    }
+
     public void Stop()
     {
         try { _listener?.Stop(); } catch { }
@@ -103,7 +182,6 @@ public class DrxTcpServer
         {
             foreach (var c in _clients) try { c.Close(); } catch { }
             _clients.Clear();
-            _groups.Clear();
         }
         // 停止队列处理
         try
@@ -117,6 +195,34 @@ public class DrxTcpServer
             }
         }
         catch { }
+    }
+
+    public bool IsRunning
+    {
+        get { return _listener != null; }
+    }
+
+    public async Task StopAsync()
+    {
+        try { _listener?.Stop(); } catch { }
+        lock (_sync)
+        {
+            foreach (var c in _clients) try { c.Close(); } catch { }
+            _clients.Clear();
+        }
+        // 停止队列处理
+        try
+        {
+            if (_queueCts != null)
+            {
+                _queueCts.Cancel();
+                // 完成添加，促使 BlockingCollection 完结
+                try { _messageQueue.CompleteAdding(); } catch { }
+                if (_queueTask != null) await Task.Run(() => _queueTask.Wait(2000));
+            }
+        }
+        catch { }
+        await Task.Yield();
     }
 
     public int ClientCount
@@ -142,30 +248,7 @@ public class DrxTcpServer
     public void ForceDisconnect(DrxTcpClient client)
     {
         try { client?.Close(); } catch { }
-        lock (_sync) { _clients.Remove(client!); _groups.Remove(client!); }
-    }
-
-    public void MoveToGroup(DrxTcpClient client, string group)
-    {
-        lock (_sync) { _groups[client] = group ?? "default"; }
-    }
-
-    public List<DrxTcpClient> GetGroupClients(string group)
-    {
-        lock (_sync)
-        {
-            var list = new List<DrxTcpClient>();
-            foreach (var kv in _groups)
-            {
-                if (kv.Value == group) list.Add(kv.Key);
-            }
-            return list;
-        }
-    }
-
-    public string GetClientGroup(DrxTcpClient client)
-    {
-        lock (_sync) { return _groups.TryGetValue(client, out var g) ? g : "default"; }
+        lock (_sync) { _clients.Remove(client!); }
     }
 
     /// <summary>
@@ -252,7 +335,9 @@ public class DrxTcpServer
             catch { break; }
             if (socket == null) break;
             var client = new DrxTcpClient(socket);
-            lock (_sync) { _clients.Add(client); _groups[client] = "default"; }
+            lock (_sync) { _clients.Add(client); }
+            // 触发客户端连接事件
+            ClientConnected?.Invoke(client);
             _ = HandleClientAsync(client);
         }
     }
@@ -317,7 +402,12 @@ public class DrxTcpServer
         finally
         {
             try { client.Close(); } catch { }
-            lock (_sync) { if (client != null) { _clients.Remove(client!); _groups.Remove(client!); } }
+            lock (_sync) { if (client != null) { _clients.Remove(client!); } }
+            // 触发客户端断开事件
+            if (client != null)
+            {
+                ClientDisconnected?.Invoke(client);
+            }
         }
     }
 }

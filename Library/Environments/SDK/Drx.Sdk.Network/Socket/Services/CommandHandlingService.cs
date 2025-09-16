@@ -5,7 +5,7 @@ using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
-using DRX.Framework;
+using Drx.Sdk.Shared;
 
 namespace Drx.Sdk.Network.Socket.Services
 {

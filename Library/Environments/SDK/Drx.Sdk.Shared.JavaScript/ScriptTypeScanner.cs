@@ -1,7 +1,6 @@
 using System;
 using System.Linq;
 using System.Reflection;
-using DRX.Framework;
 
 namespace Drx.Sdk.Shared.JavaScript
 {

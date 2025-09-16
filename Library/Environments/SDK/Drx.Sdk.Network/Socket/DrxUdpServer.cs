@@ -5,7 +5,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Drx.Sdk.Network.Security;
-using DRX.Framework;
+using Drx.Sdk.Shared;
 
 namespace Drx.Sdk.Network.Socket
 {

@@ -41,4 +41,9 @@ public abstract class DefaultClientHandler : IClientHandler
         modifiedData = rawData;
         return true;
     }
+
+    public virtual int GetPriority()
+    {
+        return Priority;
+    }
 }
