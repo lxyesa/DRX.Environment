@@ -1,0 +1,231 @@
+@*
+    注释：共享布局文件（模组平台主题）。
+    说明：使用现代、简洁的白色主题，适配 ModHub 平台的落地页与模组展示页面。
+    样式保持内联以便快速预览，长期建议迁移到 `wwwroot/css/site.css`。
+*@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="ModHub - 为游戏模组作者与玩家打造的一站式模组平台，支持浏览、安装、发布与管理模组。" />
+    <title>@ViewData["Title"] - KaxModHub</title>
+    <!-- 引入 Font Awesome 图标库（CDN） -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
+        crossorigin="anonymous" referrerpolicy="no-referrer" />
+    <style>
+        /*
+            注释：内联的现代、简洁的白色主题样式。
+        */
+        :root {
+            --bg: #ffffff;
+            --surface: #ffffff;
+            --muted: #6b7280;
+            --text: #0f172a;
+            --accent: #2563eb;
+            --radius: 10px;
+            --container-width: 1100px
+        }
+
+        * {
+            box-sizing: border-box
+        }
+
+        body {
+            margin: 0;
+            background: var(--bg);
+            color: var(--text);
+            font-family: Inter, ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial
+        }
+
+        .container {
+            max-width: var(--container-width);
+            margin: 0 auto;
+            padding: 20px
+        }
+
+        .site-header {
+            background: transparent;
+            padding: 18px 0;
+            border-bottom: 0.2px solid rgba(15, 23, 42, 0.08)
+        }
+
+        .header-inner {
+            display: flex;
+            align-items: center;
+            justify-content: space-between
+        }
+
+        .brand {
+            font-weight: 600;
+            color: var(--text);
+            text-decoration: none;
+            font-size: 18px
+        }
+
+        .site-nav a {
+            margin-left: 18px;
+            color: var(--muted);
+            text-decoration: none;
+            font-size: 14px
+        }
+
+        .site-nav a:hover {
+            color: var(--text)
+        }
+
+        /* 导航与内容图标样式 */
+        .site-nav a i {
+            margin-right: 8px;
+            color: var(--muted)
+        }
+
+        .feature-icon {
+            font-size: 28px;
+            color: var(--accent);
+            margin-bottom: 12px;
+            display: block
+        }
+
+        .hero {
+            background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
+            padding: 64px;
+            border-radius: var(--radius);
+            /* 弱化阴影：尽量不使用阴影 */
+            box-shadow: none;
+            border: 0.2px solid rgba(15, 23, 42, 0.06);
+        }
+
+        .hero h1 {
+            font-size: 40px;
+            margin: 0 0 12px;
+            font-weight: 700;
+            color: var(--text)
+        }
+
+        .tagline {
+            color: var(--muted);
+            margin: 0 0 18px;
+            font-size: 16px
+        }
+
+        .cta {
+            display: inline-block;
+            background: var(--accent);
+            color: #fff;
+            padding: 12px 20px;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: 600
+        }
+
+        .secondary {
+            display: inline-block;
+            margin-left: 12px;
+            padding: 10px 18px;
+            border-radius: 8px;
+            border: 0.2px solid rgba(15, 23, 42, 0.06);
+            color: var(--text);
+            text-decoration: none
+        }
+
+        .features {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 20px;
+            margin-top: 28px
+        }
+
+        .feature {
+            background: var(--surface);
+            border-radius: 10px;
+            padding: 20px;
+            border: 0.2px solid rgba(15, 23, 42, 0.04)
+        }
+
+        .feature h2 {
+            margin-top: 0;
+            margin-bottom: 8px;
+            font-size: 18px
+        }
+
+        .feature p {
+            margin: 0;
+            color: var(--muted)
+        }
+
+        .site-footer {
+            padding: 28px 0;
+            margin-top: 40px;
+            border-top: 0.2px solid rgba(15, 23, 42, 0.04);
+            background: transparent
+        }
+
+        .footer-inner {
+            display: flex;
+            justify-content: center
+        }
+
+        @@media (max-width:900px) {
+            .hero {
+                padding: 36px
+            }
+
+            .hero h1 {
+                font-size: 28px
+            }
+
+            .features {
+                grid-template-columns: 1fr
+            }
+
+            .site-nav {
+                display: none
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="site-root">
+        <header class="site-header">
+            <div class="container header-inner">
+                <a class="brand" href="/">KaxModHub</a>
+                <nav class="site-nav">
+                    <a href="/mods">模组库</a>
+                    <a href="/authors">作者中心</a>
+                    @* 基于登录状态显示 登录/注册 或 用户名/退出 *@
+                    @if (User?.Identity?.IsAuthenticated ?? false)
+                    {
+                        <span style="margin-left:18px; color:var(--muted); font-size:14px;">你好，@User.Identity.Name</span>
+                        <form method="post" action="/Logout" style="display:inline;margin-left:12px;">
+                            <button type="submit" class="secondary" style="vertical-align:middle;">退出</button>
+                        </form>
+                    }
+                    else
+                    {
+                        <a href="/Login">登录</a>
+                        <a href="/Register">注册</a>
+                    }
+                </nav>
+            </div>
+        </header>
+
+        <main class="site-main">
+            <div class="container">
+                @RenderBody()
+            </div>
+        </main>
+
+        <footer class="site-footer">
+            <div class="container footer-inner">
+                <p>&copy; @DateTime.Now.Year KaxModHub。保留所有权利。</p>
+            </div>
+        </footer>
+    </div>
+
+    @RenderSection("Scripts", required: false)
+</body>
+
+</html>

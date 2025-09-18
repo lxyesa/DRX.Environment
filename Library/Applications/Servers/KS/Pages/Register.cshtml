@@ -1,0 +1,53 @@
+@page
+@model KS.Pages.RegisterModel
+@{
+    Layout = "~/Pages/Shared/_Layout.cshtml"; // 使用共享布局
+    ViewData["Title"] = "注册 - KaxModHub";
+}
+
+<!-- 注册页面：保持与主页面一致的风格 -->
+<section class="hero">
+    <div class="hero-inner">
+        <h1>创建你的 ModHub 账户</h1>
+        <p class="tagline">注册成为作者或用户，发布并管理你的模组。</p>
+    </div>
+</section>
+
+<section class="features" aria-label="注册表单">
+    <div class="feature" style="max-width:520px; margin:0 auto;">
+        <form method="post">
+            <div asp-validation-summary="ModelOnly" class="validation-summary-valid" style="color:#b91c1c; margin-bottom:12px;"></div>
+
+            <div style="margin-bottom:12px;">
+                <label asp-for="Input.UserName"></label>
+                <input asp-for="Input.UserName" class="form-control" style="width:100%; padding:8px; margin-top:6px;" />
+                <span asp-validation-for="Input.UserName" class="text-danger" style="font-size:13px;"></span>
+            </div>
+
+            <div style="margin-bottom:12px;">
+                <label asp-for="Input.Email"></label>
+                <input asp-for="Input.Email" class="form-control" style="width:100%; padding:8px; margin-top:6px;" />
+                <span asp-validation-for="Input.Email" class="text-danger" style="font-size:13px;"></span>
+            </div>
+
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:12px;">
+                <div>
+                    <label asp-for="Input.Password"></label>
+                    <input asp-for="Input.Password" type="password" class="form-control" style="width:100%; padding:8px; margin-top:6px;" />
+                    <span asp-validation-for="Input.Password" class="text-danger" style="font-size:13px;"></span>
+                </div>
+                <div>
+                    <label asp-for="Input.ConfirmPassword"></label>
+                    <input asp-for="Input.ConfirmPassword" type="password" class="form-control" style="width:100%; padding:8px; margin-top:6px;" />
+                    <span asp-validation-for="Input.ConfirmPassword" class="text-danger" style="font-size:13px;"></span>
+                </div>
+            </div>
+
+            <div style="text-align:right;">
+                <button type="submit" class="cta">注册</button>
+            </div>
+        </form>
+    </div>
+</section>
+
+@await Html.PartialAsync("_ValidationScriptsPartial")

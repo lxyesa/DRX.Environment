@@ -1,0 +1,36 @@
+@page
+@model MainModel
+@{
+    Layout = "~/Pages/Shared/_Layout.cshtml"; // 使用共享布局
+    ViewData["Title"] = "KaxModHub - 首页";
+}
+
+<!-- 页面描述：模组平台落地页，突出模组浏览、安装与创作 -->
+<section class="hero">
+    <div class="hero-inner">
+        <h1>欢迎来到 ModHub 模组平台</h1>
+        <p class="tagline">发现、管理与分享高质量模组，一站式支持安装与创作工作流。</p>
+        <p>
+            <a class="cta" href="/mods">浏览模组</a>
+            <a class="secondary" href="/upload">上传模组</a>
+        </p>
+    </div>
+</section>
+
+<section id="features" class="features" aria-label="平台特色">
+    <div class="feature">
+        <i class="fa-solid fa-box-open feature-icon" aria-hidden="true"></i>
+        <h2>小量模组库</h2>
+        <p>按类别、标签与评分快速查找，支持一键安装与版本回滚。</p>
+    </div>
+    <div class="feature">
+        <i class="fa-solid fa-wand-magic-sparkles feature-icon" aria-hidden="true"></i>
+        <h2>创作与托管</h2>
+        <p>内置模组打包与发布流程，支持作者页面、更新通知与依赖管理。</p>
+    </div>
+    <div class="feature">
+        <i class="fa-solid fa-users-gear feature-icon" aria-hidden="true"></i>
+        <h2>社区与评分</h2>
+        <p>用户评价、讨论区与排行榜，帮助优质模组脱颖而出。</p>
+    </div>
+</section>

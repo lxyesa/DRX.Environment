@@ -24,6 +24,7 @@ public interface IClientHandler
     /// <returns></returns>
     /// <exception cref="NotImplementedException"></exception>
     bool OnClientReceiveAsync(byte[] data);
+    bool OnClientReceiveAsync(byte[] data, Drx.Sdk.Network.V2.Socket.Client.DrxUdpClient client);
 
     /// <summary>
     /// 发送数据前触发，可修改数据内容后返回
@@ -62,6 +63,7 @@ public interface IClientHandler
     /// <param name="modifiedData">可修改该参数以改变后续处理的数据内容</param>
     /// <returns>是否继续发送该数据（返回 false 则取消发送）</returns>
     bool OnClientRawSendAsync(byte[] rawData, out byte[]? modifiedData);
+    bool OnClientRawSendAsync(byte[] rawData, Drx.Sdk.Network.V2.Socket.Client.DrxUdpClient client, out byte[]? modifiedData);
 
     /// <summary>
     /// 获取优先级

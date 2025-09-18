@@ -1,0 +1,306 @@
+﻿<!DOCTYPE html>
+<!-- saved from url=(0014)about:internet -->
+ <html xmlns:msxsl="urn:schemas-microsoft-com:xslt"><head><meta content="en-us" http-equiv="Content-Language" /><meta content="text/html; charset=utf-16" http-equiv="Content-Type" /><title _locID="ConversionReport0">
+          迁移报告
+        </title><style> 
+                    /* Body style, for the entire document */
+                    body
+                    {
+                        background: #F3F3F4;
+                        color: #1E1E1F;
+                        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+                        padding: 0;
+                        margin: 0;
+                    }
+
+                    /* Header1 style, used for the main title */
+                    h1
+                    {
+                        padding: 10px 0px 10px 10px;
+                        font-size: 21pt;
+                        background-color: #E2E2E2;
+                        border-bottom: 1px #C1C1C2 solid; 
+                        color: #201F20;
+                        margin: 0;
+                        font-weight: normal;
+                    }
+
+                    /* Header2 style, used for "Overview" and other sections */
+                    h2
+                    {
+                        font-size: 18pt;
+                        font-weight: normal;
+                        padding: 15px 0 5px 0;
+                        margin: 0;
+                    }
+
+                    /* Header3 style, used for sub-sections, such as project name */
+                    h3
+                    {
+                        font-weight: normal;
+                        font-size: 15pt;
+                        margin: 0;
+                        padding: 15px 0 5px 0;
+                        background-color: transparent;
+                    }
+
+                    /* Color all hyperlinks one color */
+                    a
+                    {
+                        color: #1382CE;
+                    }
+
+                    /* Table styles */ 
+                    table
+                    {
+                        border-spacing: 0 0;
+                        border-collapse: collapse;
+                        font-size: 10pt;
+                    }
+
+                    table th
+                    {
+                        background: #E7E7E8;
+                        text-align: left;
+                        text-decoration: none;
+                        font-weight: normal;
+                        padding: 3px 6px 3px 6px;
+                    }
+
+                    table td
+                    {
+                        vertical-align: top;
+                        padding: 3px 6px 5px 5px;
+                        margin: 0px;
+                        border: 1px solid #E7E7E8;
+                        background: #F7F7F8;
+                    }
+
+                    /* Local link is a style for hyperlinks that link to file:/// content, there are lots so color them as 'normal' text until the user mouse overs */
+                    .localLink
+                    {
+                        color: #1E1E1F;
+                        background: #EEEEED;
+                        text-decoration: none;
+                    }
+
+                    .localLink:hover
+                    {
+                        color: #1382CE;
+                        background: #FFFF99;
+                        text-decoration: none;
+                    }
+
+                    /* Center text, used in the over views cells that contain message level counts */ 
+                    .textCentered
+                    {
+                        text-align: center;
+                    }
+
+                    /* The message cells in message tables should take up all avaliable space */
+                    .messageCell
+                    {
+                        width: 100%;
+                    }
+
+                    /* Padding around the content after the h1 */ 
+                    #content 
+                    {
+	                    padding: 0px 12px 12px 12px; 
+                    }
+
+                    /* The overview table expands to width, with a max width of 97% */ 
+                    #overview table
+                    {
+                        width: auto;
+                        max-width: 75%; 
+                    }
+
+                    /* The messages tables are always 97% width */
+                    #messages table
+                    {
+                        width: 97%;
+                    }
+
+                    /* All Icons */
+                    .IconSuccessEncoded, .IconInfoEncoded, .IconWarningEncoded, .IconErrorEncoded
+                    {
+                        min-width:18px;
+                        min-height:18px; 
+                        background-repeat:no-repeat;
+                        background-position:center;
+                    }
+
+                    /* Success icon encoded */
+                    .IconSuccessEncoded
+                    {
+                        /* Note: Do not delete the comment below. It is used to verify the correctness of the encoded image resource below before the product is released */
+                        /* [---XsltValidateInternal-Base64EncodedImage:IconSuccess#Begin#background-image: url(data:image/png;base64,#Separator#);#End#] */
+                        background-image: url(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAACXBIWXMAAA7EAAAOxAGVKw4bAAABcElEQVR4Xq2TsUsCURzHv15g8ZJcBWlyiYYgCIWcb9DFRRwMW5TA2c0/QEFwFkxxUQdxVlBwCYWOi6IhWgQhBLHJUCkhLr/BW8S7gvrAg+N+v8/v+x68Z8MGy+XSCyABQAXgBgHGALoASkIIDWSLeLBetdHryMjd5IxQPWT4rn1c/P7+xxp72Cs9m5SZ0Bq2vPnbPFafK2zDvmNHypdC0BPkLlQhxJsCAhQoZwdZU5mwxh720qGo8MzTxTTKZDPCx2HoVzp6lz0Q9tKhyx0kGs8Ny+TkWRKk8lCROwEduhyg9l/6lunOPSfmH3NUH6uQ0KHLAe7JYvJjevm+DAMGJHToKtigE+vwvIidxLamb8IBY9e+C5LiXREkfho3TSd06HJA13/oh6T51MTsfQbHrsMynQ5dDihFjiK8JJAU9AKIWTp76dCVN7HWHrajmUEGvyF9nkbAE6gLIS7kTUyuf2gscLoJrElZo/Mvj+nPz/kLTmfnEwP3tB0AAAAASUVORK5CYII=);
+                    }
+
+                    /* Information icon encoded */
+                    .IconInfoEncoded
+                    {
+                        /* Note: Do not delete the comment below. It is used to verify the correctness of the encoded image resource below before the product is released */
+                        /* [---XsltValidateInternal-Base64EncodedImage:IconInformation#Begin#background-image: url(data:image/png;base64,#Separator#);#End#] */
+                        background-image: url(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAABHElEQVR4Xs2TsUoDQRRF7wwoziokjZUKadInhdhukR9YP8DMX1hYW+QvdsXa/QHBbcXC7W0CamWTQnclFutceIQJwwaWNLlwm5k5d94M76mmaeCrrmsLYOocY12FcxZFUeozCqKqqgYA8uevv1H6VuPxcwlfk5N92KHBxfFeCSAxxswlYAW/Xr989x/mv9gkhtyMDhcAxgzRsp7flj8B/HF1RsMXq+NZMkopaHe7lbKxQUEIGbKsYNoGn969060hZBkQex/W8oRQwsQaW2o3Ago2SVcJUzAgY3N0lTCZZm+zPS8HB51gMmS1DEYyOz9acKO1D8JWTlafKIMxdhvlfdyT94Vv5h7P8Ky7nQzACmhvKq3zk3PjW9asz9D/1oigecsioooAAAAASUVORK5CYII=);
+                    }
+
+                    /* Warning icon encoded */
+                    .IconWarningEncoded
+                    {
+                        /* Note: Do not delete the comment below. It is used to verify the correctness of the encoded image resource below before the product is released */
+                        /* [---XsltValidateInternal-Base64EncodedImage:IconWarning#Begin#background-image: url(data:image/png;base64,#Separator#);#End#] */
+                        background-image: url(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAACXBIWXMAAA7EAAAOxAGVKw4bAAAAx0lEQVR4XpWSMQ7CMAxFf4xAyBMLCxMrO8dhaBcuwdCJS3RJBw7SA/QGTCxdWJgiQYWKXJWKIXHIlyw5lqr34tQgEOdcBsCOx5yZK3hCCKdYXneQkh4pEfqzLfu+wVDSyyzFoJjfz9NB+pAF+eizx2Vruts0k15mPgvS6GYvpVtQhB61IB/dk6AF6fS4Ben0uIX5odtFe8Q/eW1KvFeH4e8khT6+gm5B+t3juyDt7n0jpe+CANTd+oTUjN/U3yVaABnSUjFz/gFq44JaVSCXeQAAAABJRU5ErkJggg==);
+                    }
+
+                    /* Error icon encoded */
+                    .IconErrorEncoded
+                    {
+                        /* Note: Do not delete the comment below. It is used to verify the correctness of the encoded image resource below before the product is released */
+                        /* [---XsltValidateInternal-Base64EncodedImage:IconError#Begin#background-image: url(data:image/png;base64,#Separator#);#End#] */
+                        background-image: url(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAABQElEQVR4XqWTvUoEQRCE6wYPZUA80AfwAQz23uCMjA7MDRQEIzPBVEyNTQUFIw00vcQTTMzuAh/AxEQQT8HF/3G/oGGnEUGuoNnd6qoZuqltyKEsyzVJq5I6rnUp6SjGeGhESikzzlc1eL7opfuVbrqbU1Zw9NCgtQMaZpY0eNnaaL2fHusvTK5vKu7sjSS1Y4y3QUA6K3e3Mau5UFDyMP7tYF9o8cAHZv68vipoIJg971PZIZ5HiwdvYGGvFVFHmGmZ2MxwmQYPXubPl9Up0tfoMQGetXd6mRbvhBw+boZ6WF7Mbv1+GsHRk0fQmPAH1GfmZirbCfDJ61tw3Px8/8pZsPAG4jlVhcPgZ7adwNWBB68lkRQWFiTgFlbnLY3DGGM7izIJIyT/jjIvEJw6fdJTc6krDzh6aMwMP9bvDH4ADSsa9uSWVJkAAAAASUVORK5CYII=);
+                    }
+                 </style><script type="text/javascript" language="javascript"> 
+          
+            // Startup 
+            // Hook up the the loaded event for the document/window, to linkify the document content
+            var startupFunction = function() { linkifyElement("messages"); };
+            
+            if(window.attachEvent)
+            {
+              window.attachEvent('onload', startupFunction);
+            }
+            else if (window.addEventListener) 
+            {
+              window.addEventListener('load', startupFunction, false);
+            }
+            else 
+            {
+              document.addEventListener('load', startupFunction, false);
+            } 
+            
+            // Toggles the visibility of table rows with the specified name 
+            function toggleTableRowsByName(name)
+            {
+               var allRows = document.getElementsByTagName('tr');
+               for (i=0; i < allRows.length; i++)
+               {
+                  var currentName = allRows[i].getAttribute('name');
+                  if(!!currentName && currentName.indexOf(name) == 0)
+                  {
+                      var isVisible = allRows[i].style.display == ''; 
+                      isVisible ? allRows[i].style.display = 'none' : allRows[i].style.display = '';
+                  }
+               }
+            }
+            
+            function scrollToFirstVisibleRow(name) 
+            {
+               var allRows = document.getElementsByTagName('tr');
+               for (i=0; i < allRows.length; i++)
+               {
+                  var currentName = allRows[i].getAttribute('name');
+                  var isVisible = allRows[i].style.display == ''; 
+                  if(!!currentName && currentName.indexOf(name) == 0 && isVisible)
+                  {
+                     allRows[i].scrollIntoView(true); 
+                     return true; 
+                  }
+               }
+               
+               return false;
+            }
+            
+            // Linkifies the specified text content, replaces candidate links with html links 
+            function linkify(text)
+            {
+                 if(!text || 0 === text.length)
+                 {
+                     return text; 
+                 }
+
+                 // Find http, https and ftp links and replace them with hyper links 
+                 var urlLink = /(http|https|ftp)\:\/\/[a-zA-Z0-9\-\.]+(:[a-zA-Z0-9]*)?\/?([a-zA-Z0-9\-\._\?\,\/\\\+&%\$#\=~;\{\}])*/gi;
+                 
+                 return text.replace(urlLink, '<a href="$&">$&</a>') ;
+            }
+            
+            // Linkifies the specified element by ID
+            function linkifyElement(id)
+            {
+                var element = document.getElementById(id);
+                if(!!element)
+                {
+                  element.innerHTML = linkify(element.innerHTML); 
+                }
+            }
+            
+            function ToggleMessageVisibility(projectName)
+            {
+              if(!projectName || 0 === projectName.length)
+              {
+                return; 
+              }
+              
+              toggleTableRowsByName("MessageRowClass" + projectName);
+              toggleTableRowsByName('MessageRowHeaderShow' + projectName);
+              toggleTableRowsByName('MessageRowHeaderHide' + projectName); 
+            }
+            
+            function ScrollToFirstVisibleMessage(projectName)
+            {
+              if(!projectName || 0 === projectName.length)
+              {
+                return; 
+              }
+              
+              // First try the 'Show messages' row
+              if(!scrollToFirstVisibleRow('MessageRowHeaderShow' + projectName))
+              {
+                // Failed to find a visible row for 'Show messages', try an actual message row 
+                scrollToFirstVisibleRow('MessageRowClass' + projectName); 
+              }
+            }
+           </script></head><body><h1 _locID="ConversionReport">
+          迁移报告 - </h1><div id="content"><h2 _locID="OverviewTitle">概述</h2><div id="overview"><table><tr><th></th><th _locID="ProjectTableHeader">项目</th><th _locID="PathTableHeader">路径</th><th _locID="ErrorsTableHeader">错误</th><th _locID="WarningsTableHeader">警告</th><th _locID="MessagesTableHeader">消息</th></tr><tr><td class="IconWarningEncoded" /><td><strong><a href="#Solution"><span _locID="OverviewSolutionSpan">解决方案</span></a></strong></td><td>DRX.Environment.sln</td><td class="textCentered"><a>0</a></td><td class="textCentered"><a href="#SolutionWarning">1</a></td><td class="textCentered"><a href="#" onclick="ScrollToFirstVisibleMessage('Solution'); return false;">2</a></td></tr><tr><td class="IconSuccessEncoded" /><td><strong><a href="#Applications">Applications</a></strong></td><td>Applications</td><td class="textCentered"><a>0</a></td><td class="textCentered"><a>0</a></td><td class="textCentered"><a href="#">0</a></td></tr><tr><td class="IconSuccessEncoded" /><td><strong><a href="#Clients">Clients</a></strong></td><td>Clients</td><td class="textCentered"><a>0</a></td><td class="textCentered"><a>0</a></td><td class="textCentered"><a href="#">0</a></td></tr><tr><td class="IconSuccessEncoded" /><td><strong><a href="#ConsoleApp1">ConsoleApp1</a></strong></td><td>Library\Applications\Clients\ConsoleApp1\ConsoleApp1.csproj</td><td class="textCentered"><a>0</a></td><td class="textCentered"><a>0</a></td><td class="textCentered"><a href="#">0</a></td></tr><tr><td class="IconSuccessEncoded" /><td><strong><a href="#DLTools">DLTools</a></strong></td><td>Library\Applications\Clients\DLTools\DLTools.csproj</td><td class="textCentered"><a>0</a></td><td class="textCentered"><a>0</a></td><td class="textCentered"><a href="#">0</a></td></tr><tr><td class="IconSuccessEncoded" /><td><strong><a href="#DRX.Framework">DRX.Framework</a></strong></td><td>Library\Environments\Framework\DRX.Framework\DRX.Framework.csproj</td><td class="textCentered"><a>0</a></td><td class="textCentered"><a>0</a></td><td class="textCentered"><a href="#">0</a></td></tr><tr><td class="IconSuccessEncoded" /><td><strong><a href="#DRX.Framework.Chat">DRX.Framework.Chat</a></strong></td><td>Library\Environments\Framework\DRX.Framework.Chat\DRX.Framework.Chat.csproj</td><td class="textCentered"><a>0</a></td><td class="textCentered"><a>0</a></td><td class="textCentered"><a href="#">0</a></td></tr><tr><td class="IconSuccessEncoded" /><td><strong><a href="#DRX.Framework.Media">DRX.Framework.Media</a></strong></td><td>Library\Environments\Framework\DRX.Framework.Media\DRX.Framework.Media.csproj</td><td class="textCentered"><a>0</a></td><td class="textCentered"><a>0</a></td><td class="textCentered"><a href="#">0</a></td></tr><tr><td class="IconSuccessEncoded" /><td><strong><a href="#Drx.Framework.Memory">Drx.Framework.Memory</a></strong></td><td>Library\Environments\Framework\Drx.Framework.Memory\Drx.Framework.Memory.csproj</td><td class="textCentered"><a>0</a></td><td class="textCentered"><a>0</a></td><td class="textCentered"><a href="#">0</a></td></tr><tr><td class="IconSuccessEncoded" /><td><strong><a href="#Drx.Sdk.Input">Drx.Sdk.Input</a></strong></td><td>Library\Environments\SDK\Drx.Sdk.Input\Drx.Sdk.Input.csproj</td><td class="textCentered"><a>0</a></td><td class="textCentered"><a>0</a></td><td class="textCentered"><a href="#">0</a></td></tr><tr><td class="IconSuccessEncoded" /><td><strong><a href="#Drx.Sdk.Memory">Drx.Sdk.Memory</a></strong></td><td>Library\Environments\SDK\Drx.Sdk.Memory\Drx.Sdk.Memory.csproj</td><td class="textCentered"><a>0</a></td><td class="textCentered"><a>0</a></td><td class="textCentered"><a href="#">0</a></td></tr><tr><td class="IconSuccessEncoded" /><td><strong><a href="#Drx.Sdk.Native">Drx.Sdk.Native</a></strong></td><td>Library\Environments\SDK\Drx.Sdk.Native\Drx.Sdk.Native.csproj</td><td class="textCentered"><a>0</a></td><td class="textCentered"><a>0</a></td><td class="textCentered"><a href="#">0</a></td></tr><tr><td class="IconSuccessEncoded" /><td><strong><a href="#Drx.Sdk.Network">Drx.Sdk.Network</a></strong></td><td>Library\Environments\SDK\Drx.Sdk.Network\Drx.Sdk.Network.csproj</td><td class="textCentered"><a>0</a></td><td class="textCentered"><a>0</a></td><td class="textCentered"><a href="#">0</a></td></tr><tr><td class="IconSuccessEncoded" /><td><strong><a href="#Drx.Sdk.Shared">Drx.Sdk.Shared</a></strong></td><td>Library\Environments\SDK\Drx.Sdk.Shared\Drx.Sdk.Shared.csproj</td><td class="textCentered"><a>0</a></td><td class="textCentered"><a>0</a></td><td class="textCentered"><a href="#">0</a></td></tr><tr><td class="IconSuccessEncoded" /><td><strong><a href="#Drx.Sdk.Shared.JavaScript">Drx.Sdk.Shared.JavaScript</a></strong></td><td>Library\Environments\SDK\Drx.Sdk.Shared.JavaScript\Drx.Sdk.Shared.JavaScript.csproj</td><td class="textCentered"><a>0</a></td><td class="textCentered"><a>0</a></td><td class="textCentered"><a href="#">0</a></td></tr><tr><td class="IconSuccessEncoded" /><td><strong><a href="#Drx.Sdk.Style">Drx.Sdk.Style</a></strong></td><td>Library\Environments\SDK\Drx.Sdk.Style\Drx.Sdk.Style.csproj</td><td class="textCentered"><a>0</a></td><td class="textCentered"><a>0</a></td><td class="textCentered"><a href="#">0</a></td></tr><tr><td class="IconSuccessEncoded" /><td><strong><a href="#Drx.Sdk.Text">Drx.Sdk.Text</a></strong></td><td>Library\Environments\SDK\Drx.Sdk.Text\Drx.Sdk.Text.csproj</td><td class="textCentered"><a>0</a></td><td class="textCentered"><a>0</a></td><td class="textCentered"><a href="#">0</a></td></tr><tr><td class="IconSuccessEncoded" /><td><strong><a href="#Drx.Sdk.Ui.Wpf">Drx.Sdk.Ui.Wpf</a></strong></td><td>Library\Environments\SDK\Drx.Sdk.Ui.Wpf\Drx.Sdk.Ui.Wpf.csproj</td><td class="textCentered"><a>0</a></td><td class="textCentered"><a>0</a></td><td class="textCentered"><a href="#">0</a></td></tr><tr><td class="IconSuccessEncoded" /><td><strong><a href="#DSTools">DSTools</a></strong></td><td>Library\Applications\Clients\DSTools\DSTools.csproj</td><td class="textCentered"><a>0</a></td><td class="textCentered"><a>0</a></td><td class="textCentered"><a href="#">0</a></td></tr><tr><td class="IconSuccessEncoded" /><td><strong><a href="#Dynamic">Dynamic</a></strong></td><td>Dynamic</td><td class="textCentered"><a>0</a></td><td class="textCentered"><a>0</a></td><td class="textCentered"><a href="#">0</a></td></tr><tr><td class="IconSuccessEncoded" /><td><strong><a href="#Environments">Environments</a></strong></td><td>Environments</td><td class="textCentered"><a>0</a></td><td class="textCentered"><a>0</a></td><td class="textCentered"><a href="#">0</a></td></tr><tr><td class="IconSuccessEncoded" /><td><strong><a href="#ExportWatcher">ExportWatcher</a></strong></td><td>Library\Applications\Clients\ExportWatcher\ExportWatcher.csproj</td><td class="textCentered"><a>0</a></td><td class="textCentered"><a>0</a></td><td class="textCentered"><a href="#">0</a></td></tr><tr><td class="IconSuccessEncoded" /><td><strong><a href="#Framework">Framework</a></strong></td><td>Framework</td><td class="textCentered"><a>0</a></td><td class="textCentered"><a>0</a></td><td class="textCentered"><a href="#">0</a></td></tr><tr><td class="IconSuccessEncoded" /><td><strong><a href="#KaxServer">KaxServer</a></strong></td><td>Library\Applications\Servers\KaxServer\KaxServer.csproj</td><td class="textCentered"><a>0</a></td><td class="textCentered"><a>0</a></td><td class="textCentered"><a href="#">0</a></td></tr><tr><td class="IconSuccessEncoded" /><td><strong><a href="#KaxSocket">KaxSocket</a></strong></td><td>Library\Applications\Servers\KaxSocket\KaxSocket.csproj</td><td class="textCentered"><a>0</a></td><td class="textCentered"><a>0</a></td><td class="textCentered"><a href="#">0</a></td></tr><tr><td class="IconSuccessEncoded" /><td><strong><a href="#KS">KS</a></strong></td><td>Library\Applications\Servers\KS\KS.csproj</td><td class="textCentered"><a>0</a></td><td class="textCentered"><a>0</a></td><td class="textCentered"><a href="#">0</a></td></tr><tr><td class="IconSuccessEncoded" /><td><strong><a href="#Library">Library</a></strong></td><td>Library</td><td class="textCentered"><a>0</a></td><td class="textCentered"><a>0</a></td><td class="textCentered"><a href="#">0</a></td></tr><tr><td class="IconSuccessEncoded" /><td><strong><a href="#NDV">NDV</a></strong></td><td>Library\Applications\Servers\NDV\NDV.csproj</td><td class="textCentered"><a>0</a></td><td class="textCentered"><a>0</a></td><td class="textCentered"><a href="#">0</a></td></tr><tr><td class="IconSuccessEncoded" /><td><strong><a href="#Plugins">Plugins</a></strong></td><td>Plugins</td><td class="textCentered"><a>0</a></td><td class="textCentered"><a>0</a></td><td class="textCentered"><a href="#">0</a></td></tr><tr><td class="IconSuccessEncoded" /><td><strong><a href="#SDK">SDK</a></strong></td><td>SDK</td><td class="textCentered"><a>0</a></td><td class="textCentered"><a>0</a></td><td class="textCentered"><a href="#">0</a></td></tr><tr><td class="IconSuccessEncoded" /><td><strong><a href="#Servers">Servers</a></strong></td><td>Servers</td><td class="textCentered"><a>0</a></td><td class="textCentered"><a>0</a></td><td class="textCentered"><a href="#">0</a></td></tr><tr><td class="IconSuccessEncoded" /><td><strong><a href="#SocketTest">SocketTest</a></strong></td><td>Library\Applications\Clients\SocketTest\SocketTest.csproj</td><td class="textCentered"><a>0</a></td><td class="textCentered"><a>0</a></td><td class="textCentered"><a href="#">0</a></td></tr><tr><td class="IconSuccessEncoded" /><td><strong><a href="#Static">Static</a></strong></td><td>Static</td><td class="textCentered"><a>0</a></td><td class="textCentered"><a>0</a></td><td class="textCentered"><a href="#">0</a></td></tr></table></div><h2 _locID="SolutionAndProjectsTitle">解决方案和项目</h2><div id="messages"><a name="Solution" /><h3 _locID="ProjectDisplayNameHeader">解决方案</h3><table><tr id="SolutionHeaderRow"><th></th><th class="messageCell" _locID="MessageTableHeader">消息</th></tr><tr name="WarningRowClassSolution"><td class="IconWarningEncoded"><a name="SolutionWarning" /></td><td class="messageCell"><strong>DRX.Environment.sln:
+        </strong><span>Visual Studio 需对此项目要进行非功能性更改，以使该项目能在比 Visual Studio 2010 SP1 新的 Visual Studio 发布版本中打开，而不影响项目的行为。</span></td></tr><tr name="MessageRowHeaderShowSolution"><td class="IconInfoEncoded" /><td class="messageCell"><a _locID="ShowAdditionalMessages" href="#" name="SolutionMessage" onclick="ToggleMessageVisibility('Solution'); return false;">
+          显示 2 其他消息
+        </a></td></tr><tr name="MessageRowClassSolution" style="display: none"><td class="IconInfoEncoded"><a name="SolutionMessage" /></td><td class="messageCell"><strong>DRX.Environment.sln:
+        </strong><span>文件已成功备份为 D:\Code\Backup\DRX.Environment.sln</span></td></tr><tr name="MessageRowClassSolution" style="display: none"><td class="IconInfoEncoded"><a name="SolutionMessage" /></td><td class="messageCell"><strong>DRX.Environment.sln:
+        </strong><span>已成功迁移解决方案</span></td></tr><tr style="display: none" name="MessageRowHeaderHideSolution"><td class="IconInfoEncoded" /><td class="messageCell"><a _locID="HideAdditionalMessages" href="#" name="SolutionMessage" onclick="ToggleMessageVisibility('Solution'); return false;">
+          隐藏 2 其他消息
+        </a></td></tr></table><a name="Applications" /><h3>Applications</h3><table><tr id="ApplicationsHeaderRow"><th></th><th class="messageCell" _locID="MessageTableHeader">消息</th></tr><tr><td class="IconInfoEncoded" /><td class="messageCell" _locID="NoMessagesRow">Applications 未记录任何消息。
+                  </td></tr></table><a name="Clients" /><h3>Clients</h3><table><tr id="ClientsHeaderRow"><th></th><th class="messageCell" _locID="MessageTableHeader">消息</th></tr><tr><td class="IconInfoEncoded" /><td class="messageCell" _locID="NoMessagesRow">Clients 未记录任何消息。
+                  </td></tr></table><a name="ConsoleApp1" /><h3>ConsoleApp1</h3><table><tr id="ConsoleApp1HeaderRow"><th></th><th class="messageCell" _locID="MessageTableHeader">消息</th></tr><tr><td class="IconInfoEncoded" /><td class="messageCell" _locID="NoMessagesRow">ConsoleApp1 未记录任何消息。
+                  </td></tr></table><a name="DLTools" /><h3>DLTools</h3><table><tr id="DLToolsHeaderRow"><th></th><th class="messageCell" _locID="MessageTableHeader">消息</th></tr><tr><td class="IconInfoEncoded" /><td class="messageCell" _locID="NoMessagesRow">DLTools 未记录任何消息。
+                  </td></tr></table><a name="DRX.Framework" /><h3>DRX.Framework</h3><table><tr id="DRX.FrameworkHeaderRow"><th></th><th class="messageCell" _locID="MessageTableHeader">消息</th></tr><tr><td class="IconInfoEncoded" /><td class="messageCell" _locID="NoMessagesRow">DRX.Framework 未记录任何消息。
+                  </td></tr></table><a name="DRX.Framework.Chat" /><h3>DRX.Framework.Chat</h3><table><tr id="DRX.Framework.ChatHeaderRow"><th></th><th class="messageCell" _locID="MessageTableHeader">消息</th></tr><tr><td class="IconInfoEncoded" /><td class="messageCell" _locID="NoMessagesRow">DRX.Framework.Chat 未记录任何消息。
+                  </td></tr></table><a name="DRX.Framework.Media" /><h3>DRX.Framework.Media</h3><table><tr id="DRX.Framework.MediaHeaderRow"><th></th><th class="messageCell" _locID="MessageTableHeader">消息</th></tr><tr><td class="IconInfoEncoded" /><td class="messageCell" _locID="NoMessagesRow">DRX.Framework.Media 未记录任何消息。
+                  </td></tr></table><a name="Drx.Framework.Memory" /><h3>Drx.Framework.Memory</h3><table><tr id="Drx.Framework.MemoryHeaderRow"><th></th><th class="messageCell" _locID="MessageTableHeader">消息</th></tr><tr><td class="IconInfoEncoded" /><td class="messageCell" _locID="NoMessagesRow">Drx.Framework.Memory 未记录任何消息。
+                  </td></tr></table><a name="Drx.Sdk.Input" /><h3>Drx.Sdk.Input</h3><table><tr id="Drx.Sdk.InputHeaderRow"><th></th><th class="messageCell" _locID="MessageTableHeader">消息</th></tr><tr><td class="IconInfoEncoded" /><td class="messageCell" _locID="NoMessagesRow">Drx.Sdk.Input 未记录任何消息。
+                  </td></tr></table><a name="Drx.Sdk.Memory" /><h3>Drx.Sdk.Memory</h3><table><tr id="Drx.Sdk.MemoryHeaderRow"><th></th><th class="messageCell" _locID="MessageTableHeader">消息</th></tr><tr><td class="IconInfoEncoded" /><td class="messageCell" _locID="NoMessagesRow">Drx.Sdk.Memory 未记录任何消息。
+                  </td></tr></table><a name="Drx.Sdk.Native" /><h3>Drx.Sdk.Native</h3><table><tr id="Drx.Sdk.NativeHeaderRow"><th></th><th class="messageCell" _locID="MessageTableHeader">消息</th></tr><tr><td class="IconInfoEncoded" /><td class="messageCell" _locID="NoMessagesRow">Drx.Sdk.Native 未记录任何消息。
+                  </td></tr></table><a name="Drx.Sdk.Network" /><h3>Drx.Sdk.Network</h3><table><tr id="Drx.Sdk.NetworkHeaderRow"><th></th><th class="messageCell" _locID="MessageTableHeader">消息</th></tr><tr><td class="IconInfoEncoded" /><td class="messageCell" _locID="NoMessagesRow">Drx.Sdk.Network 未记录任何消息。
+                  </td></tr></table><a name="Drx.Sdk.Shared" /><h3>Drx.Sdk.Shared</h3><table><tr id="Drx.Sdk.SharedHeaderRow"><th></th><th class="messageCell" _locID="MessageTableHeader">消息</th></tr><tr><td class="IconInfoEncoded" /><td class="messageCell" _locID="NoMessagesRow">Drx.Sdk.Shared 未记录任何消息。
+                  </td></tr></table><a name="Drx.Sdk.Shared.JavaScript" /><h3>Drx.Sdk.Shared.JavaScript</h3><table><tr id="Drx.Sdk.Shared.JavaScriptHeaderRow"><th></th><th class="messageCell" _locID="MessageTableHeader">消息</th></tr><tr><td class="IconInfoEncoded" /><td class="messageCell" _locID="NoMessagesRow">Drx.Sdk.Shared.JavaScript 未记录任何消息。
+                  </td></tr></table><a name="Drx.Sdk.Style" /><h3>Drx.Sdk.Style</h3><table><tr id="Drx.Sdk.StyleHeaderRow"><th></th><th class="messageCell" _locID="MessageTableHeader">消息</th></tr><tr><td class="IconInfoEncoded" /><td class="messageCell" _locID="NoMessagesRow">Drx.Sdk.Style 未记录任何消息。
+                  </td></tr></table><a name="Drx.Sdk.Text" /><h3>Drx.Sdk.Text</h3><table><tr id="Drx.Sdk.TextHeaderRow"><th></th><th class="messageCell" _locID="MessageTableHeader">消息</th></tr><tr><td class="IconInfoEncoded" /><td class="messageCell" _locID="NoMessagesRow">Drx.Sdk.Text 未记录任何消息。
+                  </td></tr></table><a name="Drx.Sdk.Ui.Wpf" /><h3>Drx.Sdk.Ui.Wpf</h3><table><tr id="Drx.Sdk.Ui.WpfHeaderRow"><th></th><th class="messageCell" _locID="MessageTableHeader">消息</th></tr><tr><td class="IconInfoEncoded" /><td class="messageCell" _locID="NoMessagesRow">Drx.Sdk.Ui.Wpf 未记录任何消息。
+                  </td></tr></table><a name="DSTools" /><h3>DSTools</h3><table><tr id="DSToolsHeaderRow"><th></th><th class="messageCell" _locID="MessageTableHeader">消息</th></tr><tr><td class="IconInfoEncoded" /><td class="messageCell" _locID="NoMessagesRow">DSTools 未记录任何消息。
+                  </td></tr></table><a name="Dynamic" /><h3>Dynamic</h3><table><tr id="DynamicHeaderRow"><th></th><th class="messageCell" _locID="MessageTableHeader">消息</th></tr><tr><td class="IconInfoEncoded" /><td class="messageCell" _locID="NoMessagesRow">Dynamic 未记录任何消息。
+                  </td></tr></table><a name="Environments" /><h3>Environments</h3><table><tr id="EnvironmentsHeaderRow"><th></th><th class="messageCell" _locID="MessageTableHeader">消息</th></tr><tr><td class="IconInfoEncoded" /><td class="messageCell" _locID="NoMessagesRow">Environments 未记录任何消息。
+                  </td></tr></table><a name="ExportWatcher" /><h3>ExportWatcher</h3><table><tr id="ExportWatcherHeaderRow"><th></th><th class="messageCell" _locID="MessageTableHeader">消息</th></tr><tr><td class="IconInfoEncoded" /><td class="messageCell" _locID="NoMessagesRow">ExportWatcher 未记录任何消息。
+                  </td></tr></table><a name="Framework" /><h3>Framework</h3><table><tr id="FrameworkHeaderRow"><th></th><th class="messageCell" _locID="MessageTableHeader">消息</th></tr><tr><td class="IconInfoEncoded" /><td class="messageCell" _locID="NoMessagesRow">Framework 未记录任何消息。
+                  </td></tr></table><a name="KaxServer" /><h3>KaxServer</h3><table><tr id="KaxServerHeaderRow"><th></th><th class="messageCell" _locID="MessageTableHeader">消息</th></tr><tr><td class="IconInfoEncoded" /><td class="messageCell" _locID="NoMessagesRow">KaxServer 未记录任何消息。
+                  </td></tr></table><a name="KaxSocket" /><h3>KaxSocket</h3><table><tr id="KaxSocketHeaderRow"><th></th><th class="messageCell" _locID="MessageTableHeader">消息</th></tr><tr><td class="IconInfoEncoded" /><td class="messageCell" _locID="NoMessagesRow">KaxSocket 未记录任何消息。
+                  </td></tr></table><a name="KS" /><h3>KS</h3><table><tr id="KSHeaderRow"><th></th><th class="messageCell" _locID="MessageTableHeader">消息</th></tr><tr><td class="IconInfoEncoded" /><td class="messageCell" _locID="NoMessagesRow">KS 未记录任何消息。
+                  </td></tr></table><a name="Library" /><h3>Library</h3><table><tr id="LibraryHeaderRow"><th></th><th class="messageCell" _locID="MessageTableHeader">消息</th></tr><tr><td class="IconInfoEncoded" /><td class="messageCell" _locID="NoMessagesRow">Library 未记录任何消息。
+                  </td></tr></table><a name="NDV" /><h3>NDV</h3><table><tr id="NDVHeaderRow"><th></th><th class="messageCell" _locID="MessageTableHeader">消息</th></tr><tr><td class="IconInfoEncoded" /><td class="messageCell" _locID="NoMessagesRow">NDV 未记录任何消息。
+                  </td></tr></table><a name="Plugins" /><h3>Plugins</h3><table><tr id="PluginsHeaderRow"><th></th><th class="messageCell" _locID="MessageTableHeader">消息</th></tr><tr><td class="IconInfoEncoded" /><td class="messageCell" _locID="NoMessagesRow">Plugins 未记录任何消息。
+                  </td></tr></table><a name="SDK" /><h3>SDK</h3><table><tr id="SDKHeaderRow"><th></th><th class="messageCell" _locID="MessageTableHeader">消息</th></tr><tr><td class="IconInfoEncoded" /><td class="messageCell" _locID="NoMessagesRow">SDK 未记录任何消息。
+                  </td></tr></table><a name="Servers" /><h3>Servers</h3><table><tr id="ServersHeaderRow"><th></th><th class="messageCell" _locID="MessageTableHeader">消息</th></tr><tr><td class="IconInfoEncoded" /><td class="messageCell" _locID="NoMessagesRow">Servers 未记录任何消息。
+                  </td></tr></table><a name="SocketTest" /><h3>SocketTest</h3><table><tr id="SocketTestHeaderRow"><th></th><th class="messageCell" _locID="MessageTableHeader">消息</th></tr><tr><td class="IconInfoEncoded" /><td class="messageCell" _locID="NoMessagesRow">SocketTest 未记录任何消息。
+                  </td></tr></table><a name="Static" /><h3>Static</h3><table><tr id="StaticHeaderRow"><th></th><th class="messageCell" _locID="MessageTableHeader">消息</th></tr><tr><td class="IconInfoEncoded" /><td class="messageCell" _locID="NoMessagesRow">Static 未记录任何消息。
+                  </td></tr></table></div></div></body></html>

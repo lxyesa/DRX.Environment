@@ -11,7 +11,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Drx.Sdk.Script\Drx.Sdk.Script.csproj" />
     <ProjectReference Include="..\Drx.Sdk.Native\Drx.Sdk.Native.csproj" />
   </ItemGroup>
 
@@ -23,7 +22,6 @@
     <PackageReference Include="ExternalMemorySharp" Version="1.4.3" />
     <PackageReference Include="keystoneengine" Version="0.9.2" />
     <PackageReference Include="keystoneengine.csharp" Version="0.9.1.1" />
-    <PackageReference Include="MemorySharp" Version="1.2.0" />
 	<PackageReference Include="Iced" Version="1.20.0" />
 	  <EmbeddedResource Include="..\Drx.Sdk.Memory\x64\keystone.dll">
 		  <LogicalName>Drx.Sdk.Memory.Native.x64.keystone.dll</LogicalName>

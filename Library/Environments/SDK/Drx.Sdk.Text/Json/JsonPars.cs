@@ -171,7 +171,7 @@ namespace Drx.Sdk.Text.Json
             try
             {
                 var obj = JsonNode.Parse(json);
-                return obj.ToJsonString(new JsonSerializerOptions { WriteIndented = true });
+                return obj?.ToJsonString(new JsonSerializerOptions { WriteIndented = true });
             }
             catch (Exception ex)
             {

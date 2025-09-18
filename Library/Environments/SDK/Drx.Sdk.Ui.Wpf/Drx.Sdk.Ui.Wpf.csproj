@@ -15,12 +15,11 @@
     <PackageReference Include="iNKORE.UI.WPF" Version="1.2.8" />
     <PackageReference Include="iNKORE.UI.WPF.Modern" Version="0.10.0" />
     <PackageReference Include="WPF-UI" Version="4.0.1" />
-	  <PackageReference Include="System.Windows.Forms" Version="4.0.0" />
 	  <PackageReference Include="Microsoft.Windows.Compatibility" Version="5.0.2" />
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Drx.Sdk.Script\Drx.Sdk.Script.csproj" />
+    <Folder Include="Controls\" />
   </ItemGroup>
 
 </Project>

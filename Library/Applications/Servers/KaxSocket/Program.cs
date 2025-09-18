@@ -73,11 +73,13 @@ public class Program
     {
         var client = new DrxTcpClient();
         await client.ConnectAsync("127.0.0.1", 8462);
+        client.Close();
     }
 
     private static void OnClientDisconnected(DrxTcpClient client)
     {
-        Logger.Info($"Client disconnected: {client.Client.RemoteEndPoint}");
+        var ep = client.Client.RemoteEndPoint;
+        Console.WriteLine($"Client disconnected: {ep}");
     }
 
     private static void OnClientConnected(DrxTcpClient client)

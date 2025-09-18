@@ -13,8 +13,4 @@
     </PackageReference>
   </ItemGroup>
 
-  <ItemGroup>
-    <ProjectReference Include="..\Drx.Sdk.Script\Drx.Sdk.Script.csproj" />
-  </ItemGroup>
-
 </Project>

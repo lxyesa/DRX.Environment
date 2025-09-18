@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 using Drx.Sdk.Network.V2.Socket.Handler;
 using Drx.Sdk.Shared;
 using System.Linq;
+using System.Diagnostics;
 
 namespace Drx.Sdk.Network.V2.Socket.Server;
 
@@ -15,11 +16,19 @@ namespace Drx.Sdk.Network.V2.Socket.Server;
 /// 精简版 V2 TCP 服务器实现，使用 Packetizer 格式收发数据。
 /// 目的是提供可用且与 V2 PacketBuilder/Packetizer 配合的基础实现。
 /// </summary>
-public class DrxTcpServer
+public class DrxTcpServer : NetworkObject
 {
     // 委托定义
     public delegate void ClientConnectedHandler(DrxTcpClient client);
     public delegate void ClientDisconnectedHandler(DrxTcpClient client);
+
+    // tick 委托与事件（服务器主循环）
+    public delegate void TickHandler(DrxTcpServer self);
+    /// <summary>
+    /// OnTick 事件：每秒触发 Tick 次，作为服务器主循环的入口。
+    /// 参数: self - 当前服务器实例
+    /// </summary>
+    public event TickHandler? OnTick;
 
     // 事件声明
     public event ClientConnectedHandler? ClientConnected;
@@ -27,129 +36,39 @@ public class DrxTcpServer
 
     private TcpListener? _listener;
     private readonly List<DrxTcpClient> _clients = new();
-    private readonly object _sync = new();
-    private readonly List<Drx.Sdk.Network.V2.Socket.Handler.IServerHandler> _handlers = new();
 
-    // 消息列队与处理
-    private readonly System.Collections.Concurrent.BlockingCollection<(byte[] Payload, DrxTcpClient Client)> _messageQueue;
-    private CancellationTokenSource? _queueCts;
-    private Task? _queueTask;
-    /// <summary>队列上限，默认 1000</summary>
-    public int QueueCapacity { get; set; } = 1000;
+    // 消息列队（已迁移到基类）
+
+    // tick 相关（Tick 属性移至基类 NetworkObject）
+    /// <summary>
+    /// 是否接受临时连接（短连接）。如果为 true，服务器在处理完第一个有效请求后会关闭该连接，行为类似 HTTP 的短连接。
+    /// 默认为 false，默认保持长连接（连接生命周期由客户端或服务器主动关闭控制）。
+    /// </summary>
+    public bool AcceptTemporaryConnections { get; set; } = false;
+    private CancellationTokenSource? _tickCts;
+    private Task? _tickTask;
 
     public DrxTcpServer()
     {
-        _messageQueue = new System.Collections.Concurrent.BlockingCollection<(byte[] Payload, DrxTcpClient Client)>(
-            new System.Collections.Concurrent.ConcurrentQueue<(byte[] Payload, DrxTcpClient Client)>(), QueueCapacity);
-    }
-
-    private void ProcessQueue(CancellationToken token)
-    {
-        try
-        {
-            foreach (var item in _messageQueue.GetConsumingEnumerable(token))
-            {
-                // 按序处理，每个消息依次调用 handlers
-                try
-                {
-                    lock (_sync)
-                    {
-                        foreach (var h in _handlers)
-                        {
-                            try { h.OnServerReceiveAsync(item.Payload, item.Client); } catch { }
-                        }
-                    }
-                }
-                catch { }
-            }
-        }
-        catch (OperationCanceledException) { }
-        catch { }
+        // 基类的队列将延迟初始化，子类可以在构造后直接使用 EnqueueMessage
+        // 将基类的 OnNetworkTick 事件转发到旧的 OnTick（向后兼容）
+        base.OnNetworkTick += (obj) => { try { OnTick?.Invoke(this); } catch (Exception ex) { Console.WriteLine($"OnNetworkTick handler exception: {ex}"); } };
     }
 
     /// <summary>
-    /// 注册一个处理器实例，优先级高的在前。
+    /// 可以在构造时指定 tick 速率（每秒触发次数），默认 20。
     /// </summary>
-    /// <typeparam name="T">处理器类型</typeparam>
-    /// <param name="args">构造函数参数</param>
-    public void RegisterHandler<T>(params object[] args) where T : IServerHandler
+    public DrxTcpServer(int tick) : this()
     {
-        try
-        {
-            var obj = Activator.CreateInstance(typeof(T), args) as IServerHandler;
-            if (obj == null) throw new ArgumentException("Handler must implement IServerHandler");
-
-            lock (_sync)
-            {
-                // 避免重复注册同类型 handler，在有相同类型（不包括子类）的情况下，掷出警告并移除旧的
-                var existing = _handlers.FindAll(h => h.GetType() == typeof(T));
-                if (existing.Count > 0)
-                {
-                    Logger.Warn($"Handler of type {typeof(T).FullName} is already registered. Replacing the old one.");
-                    foreach (var e in existing) _handlers.Remove(e);
-                }
-
-                // 按优先级插入，优先级高的在前
-                int index = _handlers.FindIndex(h => h.GetPriority() < obj.GetPriority());
-                if (index >= 0) _handlers.Insert(index, obj);
-                else _handlers.Add(obj);
-            }
-        }
-        catch (MissingMethodException ex)
-        {
-            var constructors = typeof(T).GetConstructors();
-            var descriptions = constructors.Select(c => $"({string.Join(", ", c.GetParameters().Select(p => $"{p.ParameterType.Name} {p.Name}"))})");
-            var message = $"Constructor not found or parameters do not match. Available constructors: {string.Join("; ", descriptions)}";
-            throw new ArgumentException(message, ex);
-        }
-        catch (Exception ex)
-        {
-            Logger.Error("Failed to register handler: " + ex.Message);
-            throw;
-        }
+        if (tick <= 0) throw new ArgumentException("Tick must be positive", nameof(tick));
+        Tick = tick;
     }
 
-    /// <summary>
-    /// 注销指定类型的处理器实例。
-    /// </summary>
-    /// <typeparam name="T">处理器类型</typeparam>
-    public void UnregisterHandler<T>() where T : IServerHandler
-    {
-        lock (_sync)
-        {
-            _handlers.RemoveAll(h => h is T);
-        }
-    }
+    // 本地的消息处理已迁移到基类 NetworkObject.ProcessQueue
 
-    /// <summary>
-    /// 获取所有注册的处理器实例。
-    /// </summary>
-    /// <returns>所有注册的处理器实例列表</returns>
-    public List<IServerHandler> GetHandlers()
-    {
-        lock (_sync) { return new List<IServerHandler>(_handlers); }
-    }
+    // TickLoop 实现已移至基类 NetworkObject；子类通过 base.TickLoop 启动
 
-    /// <summary>
-    /// 获取指定类型的处理器实例，若不存在则返回 null。
-    /// </summary>
-    /// <typeparam name="T">处理器类型</typeparam>
-    /// <returns>指定类型的处理器实例，若不存在则返回 null。</returns>
-    public T GetHandler<T>() where T : class, IServerHandler
-    {
-        lock (_sync)
-        {
-            return _handlers.OfType<T>().FirstOrDefault()!;
-        }
-    }
-
-    /// <summary>
-    /// 注销所有处理器实例。
-    /// </summary>
-    public void UnregisterAllHandlers()
-    {
-        lock (_sync) { _handlers.Clear(); }
-    }
+    // 处理器管理相关方法已移至 NetworkObject 基类，保留原逻辑并使用基类实现
 
 
 
@@ -157,8 +76,10 @@ public class DrxTcpServer
     {
         _listener = new TcpListener(IPAddress.Any, port);
         _listener.Start();
-        _queueCts = new CancellationTokenSource();
-        _queueTask = Task.Run(() => ProcessQueue(_queueCts.Token));
+        // 通过基类延迟初始化队列（在入队时自动创建）
+        // start tick loop
+        _tickCts = new CancellationTokenSource();
+        _tickTask = Task.Run(() => base.TickLoop(_tickCts.Token));
         _ = AcceptLoopAsync();
     }
 
@@ -169,32 +90,44 @@ public class DrxTcpServer
     {
         _listener = new TcpListener(IPAddress.Any, port);
         _listener.Start();
-        _queueCts = new CancellationTokenSource();
-        _queueTask = Task.Run(() => ProcessQueue(_queueCts.Token));
+        // 通过基类延迟初始化队列（在入队时自动创建）
+        // start tick loop
+        _tickCts = new CancellationTokenSource();
+        _tickTask = Task.Run(() => base.TickLoop(_tickCts.Token));
         _ = AcceptLoopAsync();
         await Task.Yield();
     }
 
     public void Stop()
     {
-        try { _listener?.Stop(); } catch { }
+        try { _listener?.Stop(); } catch (Exception ex) { Console.WriteLine($"Stop() listener stop exception: {ex}"); }
         lock (_sync)
         {
-            foreach (var c in _clients) try { c.Close(); } catch { }
+            // 使用统一方法关闭并通知每个客户端
+            foreach (var c in _clients.ToList())
+            {
+                try { RemoveClientAndNotify(c); } catch (Exception ex) { Console.WriteLine($"Stop() RemoveClientAndNotify exception: {ex}"); }
+            }
             _clients.Clear();
         }
         // 停止队列处理
         try
         {
-            if (_queueCts != null)
+            // 通过基类关闭队列
+            try { base.ShutdownQueue(); } catch (Exception ex) { Console.WriteLine($"Stop() ShutdownQueue exception: {ex}"); }
+        }
+        catch (Exception ex) { Console.WriteLine($"Stop() outer exception: {ex}"); }
+
+        // 停止 tick loop
+        try
+        {
+            if (_tickCts != null)
             {
-                _queueCts.Cancel();
-                // 完成添加，促使 BlockingCollection 完结
-                try { _messageQueue.CompleteAdding(); } catch { }
-                _queueTask?.Wait(2000);
+                _tickCts.Cancel();
+                _tickTask?.Wait(2000);
             }
         }
-        catch { }
+        catch (Exception ex) { Console.WriteLine($"Stop() tick stop exception: {ex}"); }
     }
 
     public bool IsRunning
@@ -204,24 +137,32 @@ public class DrxTcpServer
 
     public async Task StopAsync()
     {
-        try { _listener?.Stop(); } catch { }
+        try { _listener?.Stop(); } catch (Exception ex) { Console.WriteLine($"StopAsync() listener stop exception: {ex}"); }
         lock (_sync)
         {
-            foreach (var c in _clients) try { c.Close(); } catch { }
+            foreach (var c in _clients.ToList())
+            {
+                try { RemoveClientAndNotify(c); } catch (Exception ex) { Console.WriteLine($"StopAsync() RemoveClientAndNotify exception: {ex}"); }
+            }
             _clients.Clear();
         }
         // 停止队列处理
         try
         {
-            if (_queueCts != null)
+            try { await base.ShutdownQueueAsync(); } catch (Exception ex) { Console.WriteLine($"StopAsync() ShutdownQueueAsync exception: {ex}"); }
+        }
+        catch (Exception ex) { Console.WriteLine($"StopAsync() outer exception: {ex}"); }
+
+        // 停止 tick loop
+        try
+        {
+            if (_tickCts != null)
             {
-                _queueCts.Cancel();
-                // 完成添加，促使 BlockingCollection 完结
-                try { _messageQueue.CompleteAdding(); } catch { }
-                if (_queueTask != null) await Task.Run(() => _queueTask.Wait(2000));
+                _tickCts.Cancel();
+                if (_tickTask != null) await Task.Run(() => _tickTask.Wait(2000));
             }
         }
-        catch { }
+        catch (Exception ex) { Console.WriteLine($"StopAsync() tick stop exception: {ex}"); }
         await Task.Yield();
     }
 
@@ -237,18 +178,94 @@ public class DrxTcpServer
 
     public IPEndPoint? GetRemoteEndPoint(DrxTcpClient client)
     {
-        try { return client?.Client?.RemoteEndPoint as IPEndPoint; } catch { return null; }
+        try { return client?.Client?.RemoteEndPoint as IPEndPoint; } catch (Exception ex) { Console.WriteLine($"GetRemoteEndPoint exception: {ex}"); return null; }
     }
 
     public IPEndPoint? GetLocalEndPoint(DrxTcpClient client)
     {
-        try { return client?.Client?.LocalEndPoint as IPEndPoint; } catch { return null; }
+        try { return client?.Client?.LocalEndPoint as IPEndPoint; } catch (Exception ex) { Console.WriteLine($"GetLocalEndPoint exception: {ex}"); return null; }
     }
 
+    /// <summary>
+    /// 强制断开指定客户端连接
+    /// </summary>
+    /// <param name="client">要断开的客户端</param>
     public void ForceDisconnect(DrxTcpClient client)
     {
-        try { client?.Close(); } catch { }
-        lock (_sync) { _clients.Remove(client!); }
+        // 使用统一方法处理移除与断开事件，保证只触发一次
+        try { RemoveClientAndNotify(client); } catch (Exception ex) { Console.WriteLine($"ForceDisconnect RemoveClientAndNotify exception: {ex}"); }
+    }
+
+    /// <summary>
+    /// 统一从客户端列表中移除客户端并触发断开事件（如果尚未触发）。
+    /// 此方法线程安全，并保证事件只在客户端确实存在于列表时触发一次。
+    /// </summary>
+    /// <param name="client">要移除并通知的客户端</param>
+    private void RemoveClientAndNotify(DrxTcpClient? client)
+    {
+        if (client == null) return;
+
+        // 我们改为：在锁内从客户端实例中分离出底层 Socket（避免并发访问），
+        // 然后用该 Socket 构造一个副本传给 handlers/event，副本在处理完成后被关闭。
+        System.Net.Sockets.Socket? socket = null;
+        string? remoteEp = null;
+        string? localEp = null;
+        bool existed = false;
+        lock (_sync)
+        {
+            existed = _clients.Remove(client);
+            try
+            {
+                socket = client.Client; // 取得底层 socket
+                if (socket != null)
+                {
+                    try { remoteEp = socket.RemoteEndPoint?.ToString(); } catch (Exception ex) { Console.WriteLine($"RemoveClientAndNotify get RemoteEndPoint exception: {ex}"); }
+                    try { localEp = socket.LocalEndPoint?.ToString(); } catch (Exception ex) { Console.WriteLine($"RemoveClientAndNotify get LocalEndPoint exception: {ex}"); }
+                }
+                // 将原对象与 socket 分离，防止后续 Close 导致副本不可用或重复关闭
+                try { client.Client = null!; } catch (Exception ex) { Console.WriteLine($"RemoveClientAndNotify clear client.Client exception: {ex}"); }
+            }
+            catch (Exception ex) { Console.WriteLine($"RemoveClientAndNotify lock block exception: {ex}"); }
+        }
+
+        // 如果既不在列表中且没有底层 socket，则不需进一步处理
+        if (!existed && socket == null) return;
+
+        // 构造副本（使用分离出的 socket，如果为 null 则构造空副本）
+        DrxTcpClient snapshot = (socket != null) ? new DrxTcpClient(socket) : new DrxTcpClient();
+        try { if (remoteEp != null) snapshot.SetTag("RemoteEndPoint", remoteEp); } catch (Exception ex) { Console.WriteLine($"RemoveClientAndNotify SetTag RemoteEndPoint exception: {ex}"); }
+        try { if (localEp != null) snapshot.SetTag("LocalEndPoint", localEp); } catch (Exception ex) { Console.WriteLine($"RemoveClientAndNotify SetTag LocalEndPoint exception: {ex}"); }
+
+        try
+        {
+            // 先通知 handlers 正在断开（可在此做出清理动作）
+            lock (_sync)
+            {
+                foreach (var h in _handlers)
+                {
+                    try { h.OnServerDisconnecting(snapshot); } catch (Exception ex) { Console.WriteLine($"Handler OnServerDisconnecting exception: {ex}"); }
+                }
+            }
+
+            // 关闭副本的底层 socket，表示连接已真正断开（确保 OnServerDisconnected 在关闭后执行）
+            try { snapshot.Close(); } catch (Exception ex) { Console.WriteLine($"snapshot.Close() exception: {ex}"); }
+
+            // 通知 handlers 已断开
+            lock (_sync)
+            {
+                foreach (var h in _handlers)
+                {
+                    try { h.OnServerDisconnected(snapshot); } catch (Exception ex) { Console.WriteLine($"Handler OnServerDisconnected exception: {ex}"); }
+                }
+            }
+
+            // 最后触发事件回调
+            try { ClientDisconnected?.Invoke(snapshot); } catch (Exception ex) { Console.WriteLine($"ClientDisconnected invoke exception: {ex}"); }
+        }
+        finally
+        {
+            try { snapshot.Close(); } catch (Exception ex) { Console.WriteLine($"RemoveClientAndNotify final snapshot.Close() exception: {ex}"); }
+        }
     }
 
     /// <summary>
@@ -276,17 +293,17 @@ public class DrxTcpServer
                         }
                         if (outData != null) rawToSend = outData;
                     }
-                    catch { }
+                    catch (Exception ex) { Console.WriteLine($"PacketS2C handler OnServerRawSendAsync exception: {ex}"); }
                 }
             }
             if (!proceed) { callback?.Invoke(false); return false; }
 
-            var packet = Drx.Sdk.Network.V2.Socket.Packet.Packetizer.Pack(rawToSend);
+            var packet = base.Packetize(rawToSend);
             stream.Write(packet, 0, packet.Length);
             callback?.Invoke(true);
             return true;
         }
-        catch { callback?.Invoke(false); return false; }
+        catch (Exception ex) { Console.WriteLine($"PacketS2C exception: {ex}"); callback?.Invoke(false); return false; }
     }
 
     /// <summary>
@@ -313,14 +330,14 @@ public class DrxTcpServer
                             }
                             if (outData != null) rawToSend = outData;
                         }
-                        catch { }
+                        catch (Exception ex) { Console.WriteLine($"PacketS2AllC handler OnServerRawSendAsync exception: {ex}"); }
                     }
                     if (!proceed) continue;
 
-                    var packet = Drx.Sdk.Network.V2.Socket.Packet.Packetizer.Pack(rawToSend);
+                    var packet = base.Packetize(rawToSend);
                     c.GetStream().Write(packet, 0, packet.Length);
                 }
-                catch { }
+                catch (Exception ex) { Console.WriteLine($"PacketS2AllC send exception: {ex}"); }
             }
         }
     }
@@ -332,17 +349,78 @@ public class DrxTcpServer
         {
             System.Net.Sockets.Socket? socket = null;
             try { socket = await _listener.AcceptSocketAsync(); }
-            catch { break; }
+            catch (Exception ex) { Console.WriteLine($"AcceptLoopAsync AcceptSocketAsync exception: {ex}"); break; }
             if (socket == null) break;
             var client = new DrxTcpClient(socket);
-            lock (_sync) { _clients.Add(client); }
-            // 触发客户端连接事件
-            ClientConnected?.Invoke(client);
-            _ = HandleClientAsync(client);
+            // 根据服务器配置决定该连接是否为一次性连接（短连接）
+            bool isTemp = AcceptTemporaryConnections;
+            if (!isTemp)
+            {
+                // 只有非临时连接才加入服务器连接列表并触发连接事件
+                lock (_sync) { _clients.Add(client); }
+                // 触发客户端连接事件
+                ClientConnected?.Invoke(client);
+                // 为长连接启动一个监控任务，以便更可靠地检测远端主动关闭
+                _ = MonitorClientAsync(client);
+            }
+            _ = HandleClientAsync(client, isTemp);
         }
     }
 
-    private async Task HandleClientAsync(DrxTcpClient client)
+    /// <summary>
+    /// 监控客户端连接状态（用于更可靠检测远端主动断开）。
+    /// 使用 Socket.Poll + Available 的组合：当可读且 Available==0 时视为对端已关闭连接。
+    /// 发现断开后会调用 RemoveClientAndNotify 保证事件被触发且仅触发一次。
+    /// </summary>
+    private async Task MonitorClientAsync(DrxTcpClient client)
+    {
+        try
+        {
+            while (true)
+            {
+                try
+                {
+                    var sock = client?.Client;
+                    if (sock == null) break;
+                    // 更可靠的检测：使用 Peek 读取 1 字节；若返回 0 或抛出异常视为连接已关闭
+                    try
+                    {
+                        var buffer = new byte[1];
+                        int rc = sock.Receive(buffer, 0, 1, SocketFlags.Peek);
+                        if (rc == 0)
+                        {
+                            RemoveClientAndNotify(client);
+                            break;
+                        }
+                    }
+                    catch (SocketException)
+                    {
+                        // 异常通常表示对端已经断开或 socket 出现错误
+                        RemoveClientAndNotify(client);
+                        break;
+                    }
+                    catch (ObjectDisposedException)
+                    {
+                        RemoveClientAndNotify(client);
+                        break;
+                    }
+
+                    // 作为补充，再检查 Connected（判空以避免分析警告）
+                    if (client == null || !client.Connected)
+                    {
+                        RemoveClientAndNotify(client);
+                        break;
+                    }
+                }
+                catch (Exception ex) { Console.WriteLine($"MonitorClientAsync inner exception: {ex}"); }
+
+                await Task.Delay(1000);
+            }
+        }
+        catch (Exception ex) { Console.WriteLine($"MonitorClientAsync outer exception: {ex}"); }
+    }
+
+    private async Task HandleClientAsync(DrxTcpClient client, bool isTemporary)
     {
         var stream = client.GetStream();
         var buf = new byte[8192];
@@ -372,41 +450,108 @@ public class DrxTcpServer
                                 }
                                 if (outData != null) raw = outData; // 使用最后一个非空修改结果
                             }
-                            catch { }
+                            catch (Exception ex) { Console.WriteLine($"HandleClientAsync handler OnServerRawReceiveAsync exception: {ex}"); }
                         }
                     }
 
                     if (!proceed) continue; // 中断本次循环，丢弃该数据
 
-                    var payload = Drx.Sdk.Network.V2.Socket.Packet.Packetizer.Unpack(raw);
+                    var payload = base.UnpackPacket(raw);
 
-                    // 入队，由后台队列任务处理
+                    // 入队或直接处理（一次性连接不入队，立即同步调用 handlers 并允许发送响应）
                     try
                     {
-                        // 若队列已关闭或达到容量限制，TryAdd 返回 false
-                        if (!_messageQueue.TryAdd((payload, client)))
+                        if (isTemporary)
                         {
-                            // 若无法入队，则立即调用 handlers（降级策略），并继续
+                            // 一次性连接：同步调用 handlers，让它们可以选择发送响应
                             lock (_sync)
                             {
-                                foreach (var h in _handlers) try { h.OnServerReceiveAsync(payload, client); } catch { }
+                                foreach (var h in _handlers)
+                                {
+                                    try
+                                    {
+                                        bool shouldRespond = false;
+                                        try { shouldRespond = h.OnServerReceiveAsync(payload, client); } catch (Exception ex) { Console.WriteLine($"HandleClientAsync handler OnServerReceiveAsync exception: {ex}"); }
+                                        if (shouldRespond)
+                                        {
+                                            // 让 handler 修改发送内容（OnServerSendAsync）并发送
+                                            try
+                                            {
+                                                var response = h.OnServerSendAsync(Array.Empty<byte>(), client);
+                                                if (response != null && response.Length > 0)
+                                                {
+                                                    // 直接调用发送，不触发加入 clients 列表的限制
+                                                    try { PacketS2C(client, response); } catch (Exception ex) { Console.WriteLine($"HandleClientAsync PacketS2C exception: {ex}"); }
+                                                }
+                                            }
+                                            catch (Exception ex) { Console.WriteLine($"HandleClientAsync handler OnServerSendAsync exception: {ex}"); }
+                                        }
+                                    }
+                                    catch (Exception ex) { Console.WriteLine($"HandleClientAsync handler loop exception: {ex}"); }
+                                }
+                            }
+                            // 一次性连接在处理完首个请求后关闭（不继续循环）
+                            break;
+                        }
+                        else
+                        {
+                            // 非临时连接：尝试入队到基类队列，失败时降级同步调用 handlers
+                            if (!base.EnqueueMessage(payload, client))
+                            {
+                                lock (_sync)
+                                {
+                                    foreach (var h in _handlers) try { h.OnServerReceiveAsync(payload, client); } catch (Exception ex) { Console.WriteLine($"HandleClientAsync fallback OnServerReceiveAsync exception: {ex}"); }
+                                }
                             }
                         }
                     }
-                    catch { /* 忽略入队异常 */ }
+                    catch (Exception ex) { Console.WriteLine($"HandleClientAsync enqueue/process exception: {ex}"); /* 忽略入队/处理异常 */ }
                 }
-                catch { /* 忽略无法解析的数据 */ }
+                catch (Exception ex) { Console.WriteLine($"HandleClientAsync unpack/parse exception: {ex}"); /* 忽略无法解析的数据 */ }
             }
         }
-        catch { }
+        catch (Exception ex) { Console.WriteLine($"HandleClientAsync outer exception: {ex}"); }
         finally
         {
-            try { client.Close(); } catch { }
-            lock (_sync) { if (client != null) { _clients.Remove(client!); } }
-            // 触发客户端断开事件
-            if (client != null)
+            try { client.Close(); } catch (Exception ex) { Console.WriteLine($"finally client.Close() exception: {ex}"); }
+            // 对于临时连接（一次性连接），它们没有加入到 _clients 列表中，
+            // 因此需要直接触发断开事件；非临时连接使用统一方法移除并通知。
+            if (isTemporary)
             {
-                ClientDisconnected?.Invoke(client);
+                // 临时连接没有加入到 _clients，因此我们需要构造一个副本并交给 handlers/event
+                DrxTcpClient snapshot = null;
+                try
+                {
+                    var sock = client?.Client;
+                    string? re = null; string? le = null;
+                    try { if (sock != null) { re = sock.RemoteEndPoint?.ToString(); le = sock.LocalEndPoint?.ToString(); } } catch (Exception ex) { Console.WriteLine($"temporary disconnect get endpoints exception: {ex}"); }
+                    if (sock != null) snapshot = new DrxTcpClient(sock);
+                    else snapshot = new DrxTcpClient();
+
+                    try { if (re != null) snapshot.SetTag("RemoteEndPoint", re); } catch (Exception ex) { Console.WriteLine($"temporary snapshot SetTag RemoteEndPoint exception: {ex}"); }
+                    try { if (le != null) snapshot.SetTag("LocalEndPoint", le); } catch (Exception ex) { Console.WriteLine($"temporary snapshot SetTag LocalEndPoint exception: {ex}"); }
+
+                    // handlers OnServerDisconnecting
+                    lock (_sync)
+                    {
+                        foreach (var h in _handlers) try { h.OnServerDisconnecting(snapshot); } catch (Exception ex) { Console.WriteLine($"temporary handler OnServerDisconnecting exception: {ex}"); }
+                    }
+
+                    try { snapshot.Close(); } catch (Exception ex) { Console.WriteLine($"temporary snapshot.Close() exception: {ex}"); }
+
+                    lock (_sync)
+                    {
+                        foreach (var h in _handlers) try { h.OnServerDisconnected(snapshot); } catch (Exception ex) { Console.WriteLine($"temporary handler OnServerDisconnected exception: {ex}"); }
+                    }
+
+                    try { ClientDisconnected?.Invoke(snapshot); } catch (Exception ex) { Console.WriteLine($"temporary ClientDisconnected invoke exception: {ex}"); }
+                }
+                catch (Exception ex) { Console.WriteLine($"temporary disconnect outer exception: {ex}"); }
+                finally { try { snapshot?.Close(); } catch (Exception ex) { Console.WriteLine($"temporary final snapshot.Close() exception: {ex}"); } }
+            }
+            else
+            {
+                try { RemoveClientAndNotify(client); } catch (Exception ex) { Console.WriteLine($"finally RemoveClientAndNotify exception: {ex}"); }
             }
         }
     }
