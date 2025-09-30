@@ -1,89 +1,72 @@
-﻿using System.Threading.Tasks;
-using Drx.Sdk.Network.V2.Socket.Client;
-using Drx.Sdk.Network.V2.Socket.Handler;
-using Drx.Sdk.Network.V2.Socket.Packet;
-using Drx.Sdk.Network.V2.Socket.Server;
-using Drx.Sdk.Shared;
+﻿
+using System;
+using System.Net;
+using System.Text;
+using System.Threading.Tasks;
+using Drx.Sdk.Network.V2.Socket;
 using Drx.Sdk.Shared.Serialization;
-using KaxSocket.Command;
 
 public class Program
 {
-    private static DrxTcpServer? _tcpServer;
+	// 简单测试：启动 NetworkServer（TCP+UDP），然后用 NetworkClient 发起 TCP 和 UDP 消息
+	public static async Task Main(string[] args)
+	{
+		var localEp = new IPEndPoint(IPAddress.Loopback, 12345);
 
-    public static async Task Main(string[] args)
-    {
-        if (!Initialize())
+		var server = new NetworkServer(localEp, enableTcp: true, enableUdp: true);
+
+		server.OnClientConnected += (id, ep) => Console.WriteLine($"Client connected: {id} @ {ep}");
+		server.OnClientDisconnected += (id, ep) => Console.WriteLine($"Client disconnected: {id} @ {ep}");
+		server.OnDataReceived += OnDataReceived;
+		server.OnError += (ex) => Console.WriteLine($"Server error: {ex}");
+
+		await server.StartAsync();
+
+		// 等待服务就绪
+		await Task.Delay(200);
+
+		// TCP 客户端测试
+		var tcpClient = new NetworkClient(new IPEndPoint(IPAddress.Loopback, 12345), System.Net.Sockets.ProtocolType.Tcp);
+		var ok = await tcpClient.ConnectAsync();
+		Console.WriteLine($"TCP connected: {ok}");
+		if (ok)
+		{
+			var msg = Encoding.UTF8.GetBytes("Hello from TCP client");
+			tcpClient.Send(msg);
+		}
+
+		// UDP 客户端测试（不需要 Connect）
+		var udpClient = new NetworkClient(new IPEndPoint(IPAddress.Loopback, 12345), System.Net.Sockets.ProtocolType.Udp);
+		Console.WriteLine($"UDP client send...");
+
+		DrxSerializationData data = new DrxSerializationData
         {
-            Logger.Error("KaxSocket initialization failed");
-            return;
-        }
+            { "key1", 18446744073709551615 },
+            { "key2", "Hello from UDP client" },
+            { "key3", new int[] { 1, 2, 3, 4, 5 } }
+        };
 
-        int port = 8462; // 默认端口
-        if (_tcpServer != null)
-        {
-            await _tcpServer.StartAsync(port);
-            Logger.Info($"{new Text("KaxSocket server started on port").SetColor(ConsoleColor.Green).SetBold()}：{new Text(port.ToString()).SetColor(ConsoleColor.Blue).SetBold()}");
-            Logger.Info("Input '/stop' to stop the server.");
-            Logger.Info("If you don’t want to lose your user data (or anything else you care about), use '/stop' to shut down the server properly — not by freaking clicking the damn '×' button.");
+		var serialized = data.Serialize();
 
-            // ----------------------------------------
-            DebugMethod().Wait();   // 连接调试
-            // ----------------------------------------
+		udpClient.Send(serialized);
 
-            while (true)
-            {
-                var input = Console.ReadLine();
-                if (input != null && input.Trim().Equals("/stop", StringComparison.OrdinalIgnoreCase))
-                {
-                    await _tcpServer.StopAsync();
-                    Logger.Info("The server has gone to sleep. Don't wake it unless you bring snacks.");
-                    Console.ReadKey();
-                    break;
-                }
-            }
-        }
-    }
+		// 等待接收输出
+		await Task.Delay(500);
 
-    public static bool Initialize()
-    {
-        try
-        {
-            if (_tcpServer != null)
-            {
-                Logger.Error("KaxSocket already initialized");
-                throw new InvalidOperationException("KaxSocket already initialized");
-            }
-            _tcpServer = new DrxTcpServer();
-            _tcpServer.RegisterHandler<CommandHandlerServer>(_tcpServer);
-            _tcpServer.ClientConnected += OnClientConnected;
-            _tcpServer.ClientDisconnected += OnClientDisconnected;
-            CommandHandler.registerAllCommands(_tcpServer);
+		// 清理
+		tcpClient.Dispose();
+		udpClient.Dispose();
 
-            return true;
-        }
-        catch (Exception ex)
-        {
-            Logger.Error($"KaxSocket initialization failed: {ex.Message}");
-            return false;
-        }
-    }
+		server.Stop();
+	}
 
-    private static async Task DebugMethod()
-    {
-        var client = new DrxTcpClient();
-        await client.ConnectAsync("127.0.0.1", 8462);
-        client.Close();
-    }
+	private static void OnDataReceived(string clientId, IPEndPoint remote, byte[] data)
+	{
+		var deserialized = DrxSerializationData.Deserialize(data);
+		deserialized.TryGet("key1", out var key1);
+		deserialized.TryGet("key2", out var key2);
+		deserialized.TryGet("key3", out var key3);
 
-    private static void OnClientDisconnected(DrxTcpClient client)
-    {
-        var ep = client.Client.RemoteEndPoint;
-        Console.WriteLine($"Client disconnected: {ep}");
-    }
-
-    private static void OnClientConnected(DrxTcpClient client)
-    {
-        Logger.Info($"Client connected: {client.Client.RemoteEndPoint}");
-    }
+		Console.WriteLine($"Data from {clientId} @ {remote}: key1={key1.As<ulong>()}, key2={key2.As<string>()}, key3=[{string.Join(",", key3.As<int[]>() ?? new int[0])}]");
+	}
 }

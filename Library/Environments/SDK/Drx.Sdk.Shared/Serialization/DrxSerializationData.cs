@@ -30,6 +30,17 @@ namespace Drx.Sdk.Shared.Serialization
             Bytes = 5,
             Array = 6,
             Object = 7,
+            Short = 8,
+            Int = 9,
+            UInt = 10,
+            ULong = 11,
+            Float = 12,
+            Decimal = 13,
+            Char = 14,
+            Byte = 15,
+            SByte = 16,
+            IntPtr = 17,
+            UIntPtr = 18,
         }
 
         // 值的容器（不可变语义）
@@ -47,6 +58,17 @@ namespace Drx.Sdk.Shared.Serialization
             private readonly byte[]? _bytes;
             private readonly DrxSerializationData? _obj;
             private readonly DrxValue[]? _arr;
+            private readonly short _short;
+            private readonly int _int;
+            private readonly uint _uint;
+            private readonly ulong _ulong;
+            private readonly float _float;
+            private readonly decimal _decimal;
+            private readonly char _char;
+            private readonly byte _byte;
+            private readonly sbyte _sbyte;
+            private readonly IntPtr _intPtr;
+            private readonly UIntPtr _uintPtr;
 
             /// <summary>
             /// 使用 64 位有符号整数初始化值容器。
@@ -61,6 +83,18 @@ namespace Drx.Sdk.Shared.Serialization
                 _s = null;
                 _bytes = null;
                 _obj = null;
+                _arr = null;
+                _short = default;
+                _int = default;
+                _uint = default;
+                _ulong = default;
+                _float = default;
+                _decimal = default;
+                _char = default;
+                _byte = default;
+                _sbyte = default;
+                _intPtr = default;
+                _uintPtr = default;
             }
 
             /// <summary>
@@ -76,6 +110,18 @@ namespace Drx.Sdk.Shared.Serialization
                 _s = null;
                 _bytes = null;
                 _obj = null;
+                _arr = null;
+                _short = default;
+                _int = default;
+                _uint = default;
+                _ulong = default;
+                _float = default;
+                _decimal = default;
+                _char = default;
+                _byte = default;
+                _sbyte = default;
+                _intPtr = default;
+                _uintPtr = default;
             }
 
             /// <summary>
@@ -91,6 +137,18 @@ namespace Drx.Sdk.Shared.Serialization
                 _s = null;
                 _bytes = null;
                 _obj = null;
+                _arr = null;
+                _short = default;
+                _int = default;
+                _uint = default;
+                _ulong = default;
+                _float = default;
+                _decimal = default;
+                _char = default;
+                _byte = default;
+                _sbyte = default;
+                _intPtr = default;
+                _uintPtr = default;
             }
 
             /// <summary>
@@ -108,6 +166,18 @@ namespace Drx.Sdk.Shared.Serialization
                     _i64 = default;
                     _dbl = default;
                     _b = default;
+                    _arr = null;
+                    _short = default;
+                    _int = default;
+                    _uint = default;
+                    _ulong = default;
+                    _float = default;
+                    _decimal = default;
+                    _char = default;
+                    _byte = default;
+                    _sbyte = default;
+                    _intPtr = default;
+                    _uintPtr = default;
                 }
                 else
                 {
@@ -118,6 +188,18 @@ namespace Drx.Sdk.Shared.Serialization
                     _i64 = default;
                     _dbl = default;
                     _b = default;
+                    _arr = null;
+                    _short = default;
+                    _int = default;
+                    _uint = default;
+                    _ulong = default;
+                    _float = default;
+                    _decimal = default;
+                    _char = default;
+                    _byte = default;
+                    _sbyte = default;
+                    _intPtr = default;
+                    _uintPtr = default;
                 }
             }
 
@@ -135,6 +217,17 @@ namespace Drx.Sdk.Shared.Serialization
                 _i64 = default;
                 _dbl = default;
                 _b = default;
+                _short = default;
+                _int = default;
+                _uint = default;
+                _ulong = default;
+                _float = default;
+                _decimal = default;
+                _char = default;
+                _byte = default;
+                _sbyte = default;
+                _intPtr = default;
+                _uintPtr = default;
             }
 
             /// <summary>
@@ -161,6 +254,17 @@ namespace Drx.Sdk.Shared.Serialization
                 _i64 = default;
                 _dbl = default;
                 _b = default;
+                _short = default;
+                _int = default;
+                _uint = default;
+                _ulong = default;
+                _float = default;
+                _decimal = default;
+                _char = default;
+                _byte = default;
+                _sbyte = default;
+                _intPtr = default;
+                _uintPtr = default;
             }
 
             /// <summary>
@@ -176,6 +280,315 @@ namespace Drx.Sdk.Shared.Serialization
                 _i64 = default;
                 _dbl = default;
                 _b = default;
+                _arr = null;
+                _short = default;
+                _int = default;
+                _uint = default;
+                _ulong = default;
+                _float = default;
+                _decimal = default;
+                _char = default;
+                _byte = default;
+                _sbyte = default;
+                _intPtr = default;
+                _uintPtr = default;
+            }
+
+            /// <summary>
+            /// 使用 short 初始化值容器。
+            /// </summary>
+            /// <param name="v">要保存的 short 值。</param>
+            public DrxValue(short v)
+            {
+                Type = ValueType.Short;
+                _short = v;
+                _i64 = default;
+                _dbl = default;
+                _b = default;
+                _s = null;
+                _bytes = null;
+                _obj = null;
+                _arr = null;
+                _int = default;
+                _uint = default;
+                _ulong = default;
+                _float = default;
+                _decimal = default;
+                _char = default;
+                _byte = default;
+                _sbyte = default;
+                _intPtr = default;
+                _uintPtr = default;
+            }
+
+            /// <summary>
+            /// 使用 int 初始化值容器。
+            /// </summary>
+            /// <param name="v">要保存的 int 值。</param>
+            public DrxValue(int v)
+            {
+                Type = ValueType.Int;
+                _int = v;
+                _i64 = default;
+                _dbl = default;
+                _b = default;
+                _s = null;
+                _bytes = null;
+                _obj = null;
+                _arr = null;
+                _short = default;
+                _uint = default;
+                _ulong = default;
+                _float = default;
+                _decimal = default;
+                _char = default;
+                _byte = default;
+                _sbyte = default;
+                _intPtr = default;
+                _uintPtr = default;
+            }
+
+            /// <summary>
+            /// 使用 uint 初始化值容器。
+            /// </summary>
+            /// <param name="v">要保存的 uint 值。</param>
+            public DrxValue(uint v)
+            {
+                Type = ValueType.UInt;
+                _uint = v;
+                _i64 = default;
+                _dbl = default;
+                _b = default;
+                _s = null;
+                _bytes = null;
+                _obj = null;
+                _arr = null;
+                _short = default;
+                _int = default;
+                _ulong = default;
+                _float = default;
+                _decimal = default;
+                _char = default;
+                _byte = default;
+                _sbyte = default;
+                _intPtr = default;
+                _uintPtr = default;
+            }
+
+            /// <summary>
+            /// 使用 ulong 初始化值容器。
+            /// </summary>
+            /// <param name="v">要保存的 ulong 值。</param>
+            public DrxValue(ulong v)
+            {
+                Type = ValueType.ULong;
+                _ulong = v;
+                _i64 = default;
+                _dbl = default;
+                _b = default;
+                _s = null;
+                _bytes = null;
+                _obj = null;
+                _arr = null;
+                _short = default;
+                _int = default;
+                _uint = default;
+                _float = default;
+                _decimal = default;
+                _char = default;
+                _byte = default;
+                _sbyte = default;
+                _intPtr = default;
+                _uintPtr = default;
+            }
+
+            /// <summary>
+            /// 使用 float 初始化值容器。
+            /// </summary>
+            /// <param name="v">要保存的 float 值。</param>
+            public DrxValue(float v)
+            {
+                Type = ValueType.Float;
+                _float = v;
+                _i64 = default;
+                _dbl = default;
+                _b = default;
+                _s = null;
+                _bytes = null;
+                _obj = null;
+                _arr = null;
+                _short = default;
+                _int = default;
+                _uint = default;
+                _ulong = default;
+                _decimal = default;
+                _char = default;
+                _byte = default;
+                _sbyte = default;
+                _intPtr = default;
+                _uintPtr = default;
+            }
+
+            /// <summary>
+            /// 使用 decimal 初始化值容器。
+            /// </summary>
+            /// <param name="v">要保存的 decimal 值。</param>
+            public DrxValue(decimal v)
+            {
+                Type = ValueType.Decimal;
+                _decimal = v;
+                _i64 = default;
+                _dbl = default;
+                _b = default;
+                _s = null;
+                _bytes = null;
+                _obj = null;
+                _arr = null;
+                _short = default;
+                _int = default;
+                _uint = default;
+                _ulong = default;
+                _float = default;
+                _char = default;
+                _byte = default;
+                _sbyte = default;
+                _intPtr = default;
+                _uintPtr = default;
+            }
+
+            /// <summary>
+            /// 使用 char 初始化值容器。
+            /// </summary>
+            /// <param name="v">要保存的 char 值。</param>
+            public DrxValue(char v)
+            {
+                Type = ValueType.Char;
+                _char = v;
+                _i64 = default;
+                _dbl = default;
+                _b = default;
+                _s = null;
+                _bytes = null;
+                _obj = null;
+                _arr = null;
+                _short = default;
+                _int = default;
+                _uint = default;
+                _ulong = default;
+                _float = default;
+                _decimal = default;
+                _byte = default;
+                _sbyte = default;
+                _intPtr = default;
+                _uintPtr = default;
+            }
+
+            /// <summary>
+            /// 使用 byte 初始化值容器。
+            /// </summary>
+            /// <param name="v">要保存的 byte 值。</param>
+            public DrxValue(byte v)
+            {
+                Type = ValueType.Byte;
+                _byte = v;
+                _i64 = default;
+                _dbl = default;
+                _b = default;
+                _s = null;
+                _bytes = null;
+                _obj = null;
+                _arr = null;
+                _short = default;
+                _int = default;
+                _uint = default;
+                _ulong = default;
+                _float = default;
+                _decimal = default;
+                _char = default;
+                _sbyte = default;
+                _intPtr = default;
+                _uintPtr = default;
+            }
+
+            /// <summary>
+            /// 使用 sbyte 初始化值容器。
+            /// </summary>
+            /// <param name="v">要保存的 sbyte 值。</param>
+            public DrxValue(sbyte v)
+            {
+                Type = ValueType.SByte;
+                _sbyte = v;
+                _i64 = default;
+                _dbl = default;
+                _b = default;
+                _s = null;
+                _bytes = null;
+                _obj = null;
+                _arr = null;
+                _short = default;
+                _int = default;
+                _uint = default;
+                _ulong = default;
+                _float = default;
+                _decimal = default;
+                _char = default;
+                _byte = default;
+                _intPtr = default;
+                _uintPtr = default;
+            }
+
+            /// <summary>
+            /// 使用 IntPtr 初始化值容器。
+            /// </summary>
+            /// <param name="v">要保存的 IntPtr 值。</param>
+            public DrxValue(IntPtr v)
+            {
+                Type = ValueType.IntPtr;
+                _intPtr = v;
+                _i64 = default;
+                _dbl = default;
+                _b = default;
+                _s = null;
+                _bytes = null;
+                _obj = null;
+                _arr = null;
+                _short = default;
+                _int = default;
+                _uint = default;
+                _ulong = default;
+                _float = default;
+                _decimal = default;
+                _char = default;
+                _byte = default;
+                _sbyte = default;
+                _uintPtr = default;
+            }
+
+            /// <summary>
+            /// 使用 UIntPtr 初始化值容器。
+            /// </summary>
+            /// <param name="v">要保存的 UIntPtr 值。</param>
+            public DrxValue(UIntPtr v)
+            {
+                Type = ValueType.UIntPtr;
+                _uintPtr = v;
+                _i64 = default;
+                _dbl = default;
+                _b = default;
+                _s = null;
+                _bytes = null;
+                _obj = null;
+                _arr = null;
+                _short = default;
+                _int = default;
+                _uint = default;
+                _ulong = default;
+                _float = default;
+                _decimal = default;
+                _char = default;
+                _byte = default;
+                _sbyte = default;
+                _intPtr = default;
             }
 
             /// <summary>
@@ -213,6 +626,127 @@ namespace Drx.Sdk.Shared.Serialization
             /// </summary>
             /// <returns>内部值数组，可能为 null。</returns>
             public DrxValue[]? AsArray() => _arr;
+
+            /// <summary>
+            /// 将当前值作为 Short 返回（无类型检查）。
+            /// </summary>
+            /// <returns>内部的 Short 值。</returns>
+            public short AsShort() => _short;
+
+            /// <summary>
+            /// 将当前值作为 Int 返回（无类型检查）。
+            /// </summary>
+            /// <returns>内部的 Int 值。</returns>
+            public int AsInt() => _int;
+
+            /// <summary>
+            /// 将当前值作为 UInt 返回（无类型检查）。
+            /// </summary>
+            /// <returns>内部的 UInt 值。</returns>
+            public uint AsUInt() => _uint;
+
+            /// <summary>
+            /// 将当前值作为 ULong 返回（无类型检查）。
+            /// </summary>
+            /// <returns>内部的 ULong 值。</returns>
+            public ulong AsULong() => _ulong;
+
+            /// <summary>
+            /// 将当前值作为 Float 返回（无类型检查）。
+            /// </summary>
+            /// <returns>内部的 Float 值。</returns>
+            public float AsFloat() => _float;
+
+            /// <summary>
+            /// 将当前值作为 Decimal 返回（无类型检查）。
+            /// </summary>
+            /// <returns>内部的 Decimal 值。</returns>
+            public decimal AsDecimal() => _decimal;
+
+            /// <summary>
+            /// 将当前值作为 Char 返回（无类型检查）。
+            /// </summary>
+            /// <returns>内部的 Char 值。</returns>
+            public char AsChar() => _char;
+
+            /// <summary>
+            /// 将当前值作为 Byte 返回（无类型检查）。
+            /// </summary>
+            /// <returns>内部的 Byte 值。</returns>
+            public byte AsByte() => _byte;
+
+            /// <summary>
+            /// 将当前值作为 SByte 返回（无类型检查）。
+            /// </summary>
+            /// <returns>内部的 SByte 值。</returns>
+            public sbyte AsSByte() => _sbyte;
+
+            /// <summary>
+            /// 将当前值作为 IntPtr 返回（无类型检查）。
+            /// </summary>
+            /// <returns>内部的 IntPtr 值。</returns>
+            public IntPtr AsIntPtr() => _intPtr;
+
+            /// <summary>
+            /// 将当前值作为 UIntPtr 返回（无类型检查）。
+            /// </summary>
+            /// <returns>内部的 UIntPtr 值。</returns>
+            public UIntPtr AsUIntPtr() => _uintPtr;
+
+            /// <summary>
+            /// 泛型访问器：根据 T 的类型自动分派到相应的 AsXxx 方法。
+            /// 支持常见标量类型以及数组类型。
+            /// </summary>
+            /// <typeparam name="T">目标类型</typeparam>
+            /// <returns>转换后的值</returns>
+            /// <exception cref="InvalidOperationException">当类型不匹配时抛出。</exception>
+            public T As<T>()
+            {
+                var targetType = Nullable.GetUnderlyingType(typeof(T)) ?? typeof(T);
+
+                if (targetType == typeof(long)) return (T)(object)AsInt64();
+                if (targetType == typeof(double)) return (T)(object)AsDouble();
+                if (targetType == typeof(bool)) return (T)(object)AsBool();
+                if (targetType == typeof(string)) return (T)(object)AsString();
+                if (targetType == typeof(byte[])) return (T)(object)AsBytes();
+                if (targetType == typeof(DrxSerializationData)) return (T)(object)AsObject();
+                if (targetType == typeof(DrxValue[])) return (T)(object)AsArray();
+                if (targetType == typeof(short)) return (T)(object)AsShort();
+                if (targetType == typeof(int)) return (T)(object)AsInt();
+                if (targetType == typeof(uint)) return (T)(object)AsUInt();
+                if (targetType == typeof(ulong)) return (T)(object)AsULong();
+                if (targetType == typeof(float)) return (T)(object)AsFloat();
+                if (targetType == typeof(decimal)) return (T)(object)AsDecimal();
+                if (targetType == typeof(char)) return (T)(object)AsChar();
+                if (targetType == typeof(byte)) return (T)(object)AsByte();
+                if (targetType == typeof(sbyte)) return (T)(object)AsSByte();
+                if (targetType == typeof(IntPtr)) return (T)(object)AsIntPtr();
+                if (targetType == typeof(UIntPtr)) return (T)(object)AsUIntPtr();
+
+                // 数组类型
+                if (targetType.IsArray)
+                {
+                    var elem = targetType.GetElementType();
+                    var arr = AsArray();
+                    if (arr == null) return default!;
+                    if (elem == typeof(long)) return (T)(object)arr.Select(v => v.As<long>()).ToArray();
+                    if (elem == typeof(int)) return (T)(object)arr.Select(v => v.As<int>()).ToArray();
+                    if (elem == typeof(short)) return (T)(object)arr.Select(v => v.As<short>()).ToArray();
+                    if (elem == typeof(ushort)) return (T)(object)arr.Select(v => v.As<ushort>()).ToArray();
+                    if (elem == typeof(byte)) return (T)(object)arr.Select(v => v.As<byte>()).ToArray();
+                    if (elem == typeof(sbyte)) return (T)(object)arr.Select(v => v.As<sbyte>()).ToArray();
+                    if (elem == typeof(uint)) return (T)(object)arr.Select(v => v.As<uint>()).ToArray();
+                    if (elem == typeof(ulong)) return (T)(object)arr.Select(v => v.As<ulong>()).ToArray();
+                    if (elem == typeof(float)) return (T)(object)arr.Select(v => v.As<float>()).ToArray();
+                    if (elem == typeof(double)) return (T)(object)arr.Select(v => v.As<double>()).ToArray();
+                    if (elem == typeof(bool)) return (T)(object)arr.Select(v => v.As<bool>()).ToArray();
+                    if (elem == typeof(string)) return (T)(object)arr.Select(v => v.As<string>()).ToArray();
+                    if (elem == typeof(byte[])) return (T)(object)arr.Select(v => v.As<byte[]>()).ToArray();
+                    if (elem == typeof(DrxSerializationData)) return (T)(object)arr.Select(v => v.As<DrxSerializationData>()).ToArray();
+                }
+
+                throw new InvalidOperationException($"Unsupported type {typeof(T)} for As<T>");
+            }
         }
 
         private readonly Dictionary<string, DrxValue> _map;
@@ -225,7 +759,7 @@ namespace Drx.Sdk.Shared.Serialization
         {
             _map = new Dictionary<string, DrxValue>(StringComparer.Ordinal);
         }
- 
+
         /// <summary>
         /// 创建一个具有指定初始容量的 DrxSerializationData 实例。
         /// </summary>
@@ -234,7 +768,7 @@ namespace Drx.Sdk.Shared.Serialization
         {
             _map = new Dictionary<string, DrxValue>(capacity, StringComparer.Ordinal);
         }
- 
+
         // Internal helper that sets a DrxValue with proper locking (keeps existing SetX semantics untouched).
         private void Put(string key, DrxValue v)
         {
@@ -243,7 +777,7 @@ namespace Drx.Sdk.Shared.Serialization
             try { _map[key] = v; }
             finally { _lock.ExitWriteLock(); }
         }
- 
+
         /// <summary>
         /// 支持集合初始化器：Add(string key, object? value)
         /// 将常见 CLR 类型映射到内部的 DrxValue 表示（优先使用现有 SetX 方法以保持语义一致性，例如字节数组会被复制）。
@@ -254,7 +788,7 @@ namespace Drx.Sdk.Shared.Serialization
         public void Add(string key, object? value)
         {
             if (key is null) throw new ArgumentNullException(nameof(key));
- 
+
             // 常见类型映射（覆盖多数场景）
             switch (value)
             {
@@ -289,24 +823,37 @@ namespace Drx.Sdk.Shared.Serialization
                     SetFloat(key, f);
                     break;
                 case int i:
-                    SetInt(key, i);
+                    SetInt32(key, i);
                     break;
                 case long l:
                     SetInt(key, l);
                     break;
                 case short sh:
-                    SetInt(key, sh);
+                    SetShort(key, sh);
                     break;
                 case byte by:
-                    SetInt(key, by);
+                    SetByte(key, by);
+                    break;
+                case sbyte sb:
+                    SetSByte(key, sb);
                     break;
                 case uint ui:
-                    // 可能溢出，按 unchecked 转换；若超出 long.MaxValue 会产生负值，用户应避免极端值
-                    SetInt(key, unchecked((long)ui));
+                    SetUInt32(key, ui);
                     break;
                 case ulong ul:
-                    // 可能溢出 -> 尝试在 checked 下转换以捕获异常
-                    try { SetInt(key, checked((long)ul)); } catch (OverflowException) { throw new ArgumentException("ulong value is too large to store as Int64", nameof(value)); }
+                    SetUInt64(key, ul);
+                    break;
+                case decimal d:
+                    SetDecimal(key, d);
+                    break;
+                case char c:
+                    SetChar(key, c);
+                    break;
+                case IntPtr ip:
+                    SetIntPtr(key, ip);
+                    break;
+                case UIntPtr up:
+                    SetUIntPtr(key, up);
                     break;
                 case IEnumerable<DrxValue> seqDv:
                     SetArray(key, System.Linq.Enumerable.ToArray(seqDv));
@@ -314,6 +861,14 @@ namespace Drx.Sdk.Shared.Serialization
                 case IEnumerable<string> seqS:
                     {
                         var arr = System.Linq.Enumerable.ToArray(seqS);
+                        var va = new DrxValue[arr.Length];
+                        for (int i = 0; i < arr.Length; i++) va[i] = new DrxValue(arr[i]);
+                        SetArray(key, va);
+                        break;
+                    }
+                case IEnumerable<int> seqI:
+                    {
+                        var arr = System.Linq.Enumerable.ToArray(seqI);
                         var va = new DrxValue[arr.Length];
                         for (int i = 0; i < arr.Length; i++) va[i] = new DrxValue(arr[i]);
                         SetArray(key, va);
@@ -372,12 +927,12 @@ namespace Drx.Sdk.Shared.Serialization
                                 return;
                         }
                     }
- 
+
                     // 不可识别的类型
                     throw new ArgumentException($"Unsupported value type for Add: {(value?.GetType().FullName ?? "null")}", nameof(value));
             }
         }
- 
+
         /// <summary>
         /// 允许以 KeyValuePair 的形式初始化（例如 from LINQ 等场景）。
         /// </summary>
@@ -386,7 +941,7 @@ namespace Drx.Sdk.Shared.Serialization
             if (kv.Key is null) throw new ArgumentNullException(nameof(kv.Key));
             Put(kv.Key, kv.Value);
         }
- 
+
         /// <summary>
         /// 返回线程安全拷贝的枚举器，枚举期间不会持有写锁，避免死锁与长时间锁持有。
         /// </summary>
@@ -404,7 +959,7 @@ namespace Drx.Sdk.Shared.Serialization
                 _lock.ExitReadLock();
             }
         }
- 
+
         System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator()
         {
             return GetEnumerator();
@@ -504,6 +1059,156 @@ namespace Drx.Sdk.Shared.Serialization
         }
 
         /// <summary>
+        /// 设置指定键的 short 值。
+        /// </summary>
+        /// <param name="key">键，不能为空。</param>
+        /// <param name="value">要保存的 short 值。</param>
+        /// <exception cref="ArgumentNullException">当 key 为 null 时抛出。</exception>
+        public void SetShort(string key, short value)
+        {
+            if (key is null) throw new ArgumentNullException(nameof(key));
+            var v = new DrxValue(value);
+            _lock.EnterWriteLock();
+            try { _map[key] = v; }
+            finally { _lock.ExitWriteLock(); }
+        }
+
+        /// <summary>
+        /// 设置指定键的 int 值。
+        /// </summary>
+        /// <param name="key">键，不能为空。</param>
+        /// <param name="value">要保存的 int 值。</param>
+        /// <exception cref="ArgumentNullException">当 key 为 null 时抛出。</exception>
+        public void SetInt32(string key, int value)
+        {
+            if (key is null) throw new ArgumentNullException(nameof(key));
+            var v = new DrxValue(value);
+            _lock.EnterWriteLock();
+            try { _map[key] = v; }
+            finally { _lock.ExitWriteLock(); }
+        }
+
+        /// <summary>
+        /// 设置指定键的 uint 值。
+        /// </summary>
+        /// <param name="key">键，不能为空。</param>
+        /// <param name="value">要保存的 uint 值。</param>
+        /// <exception cref="ArgumentNullException">当 key 为 null 时抛出。</exception>
+        public void SetUInt32(string key, uint value)
+        {
+            if (key is null) throw new ArgumentNullException(nameof(key));
+            var v = new DrxValue(value);
+            _lock.EnterWriteLock();
+            try { _map[key] = v; }
+            finally { _lock.ExitWriteLock(); }
+        }
+
+        /// <summary>
+        /// 设置指定键的 ulong 值。
+        /// </summary>
+        /// <param name="key">键，不能为空。</param>
+        /// <param name="value">要保存的 ulong 值。</param>
+        /// <exception cref="ArgumentNullException">当 key 为 null 时抛出。</exception>
+        public void SetUInt64(string key, ulong value)
+        {
+            if (key is null) throw new ArgumentNullException(nameof(key));
+            var v = new DrxValue(value);
+            _lock.EnterWriteLock();
+            try { _map[key] = v; }
+            finally { _lock.ExitWriteLock(); }
+        }
+
+        /// <summary>
+        /// 设置指定键的 decimal 值。
+        /// </summary>
+        /// <param name="key">键，不能为空。</param>
+        /// <param name="value">要保存的 decimal 值。</param>
+        /// <exception cref="ArgumentNullException">当 key 为 null 时抛出。</exception>
+        public void SetDecimal(string key, decimal value)
+        {
+            if (key is null) throw new ArgumentNullException(nameof(key));
+            var v = new DrxValue(value);
+            _lock.EnterWriteLock();
+            try { _map[key] = v; }
+            finally { _lock.ExitWriteLock(); }
+        }
+
+        /// <summary>
+        /// 设置指定键的 char 值。
+        /// </summary>
+        /// <param name="key">键，不能为空。</param>
+        /// <param name="value">要保存的 char 值。</param>
+        /// <exception cref="ArgumentNullException">当 key 为 null 时抛出。</exception>
+        public void SetChar(string key, char value)
+        {
+            if (key is null) throw new ArgumentNullException(nameof(key));
+            var v = new DrxValue(value);
+            _lock.EnterWriteLock();
+            try { _map[key] = v; }
+            finally { _lock.ExitWriteLock(); }
+        }
+
+        /// <summary>
+        /// 设置指定键的 byte 值。
+        /// </summary>
+        /// <param name="key">键，不能为空。</param>
+        /// <param name="value">要保存的 byte 值。</param>
+        /// <exception cref="ArgumentNullException">当 key 为 null 时抛出。</exception>
+        public void SetByte(string key, byte value)
+        {
+            if (key is null) throw new ArgumentNullException(nameof(key));
+            var v = new DrxValue(value);
+            _lock.EnterWriteLock();
+            try { _map[key] = v; }
+            finally { _lock.ExitWriteLock(); }
+        }
+
+        /// <summary>
+        /// 设置指定键的 sbyte 值。
+        /// </summary>
+        /// <param name="key">键，不能为空。</param>
+        /// <param name="value">要保存的 sbyte 值。</param>
+        /// <exception cref="ArgumentNullException">当 key 为 null 时抛出。</exception>
+        public void SetSByte(string key, sbyte value)
+        {
+            if (key is null) throw new ArgumentNullException(nameof(key));
+            var v = new DrxValue(value);
+            _lock.EnterWriteLock();
+            try { _map[key] = v; }
+            finally { _lock.ExitWriteLock(); }
+        }
+
+        /// <summary>
+        /// 设置指定键的 IntPtr 值。
+        /// </summary>
+        /// <param name="key">键，不能为空。</param>
+        /// <param name="value">要保存的 IntPtr 值。</param>
+        /// <exception cref="ArgumentNullException">当 key 为 null 时抛出。</exception>
+        public void SetIntPtr(string key, IntPtr value)
+        {
+            if (key is null) throw new ArgumentNullException(nameof(key));
+            var v = new DrxValue(value);
+            _lock.EnterWriteLock();
+            try { _map[key] = v; }
+            finally { _lock.ExitWriteLock(); }
+        }
+
+        /// <summary>
+        /// 设置指定键的 UIntPtr 值。
+        /// </summary>
+        /// <param name="key">键，不能为空。</param>
+        /// <param name="value">要保存的 UIntPtr 值。</param>
+        /// <exception cref="ArgumentNullException">当 key 为 null 时抛出。</exception>
+        public void SetUIntPtr(string key, UIntPtr value)
+        {
+            if (key is null) throw new ArgumentNullException(nameof(key));
+            var v = new DrxValue(value);
+            _lock.EnterWriteLock();
+            try { _map[key] = v; }
+            finally { _lock.ExitWriteLock(); }
+        }
+
+        /// <summary>
         /// 设置指定键的嵌套对象值。传入 null 表示 Null。
         /// </summary>
         /// <param name="key">键，不能为空。</param>
@@ -541,6 +1246,139 @@ namespace Drx.Sdk.Shared.Serialization
         /// <param name="arr">长整型数组，允许为 null。</param>
         /// <exception cref="ArgumentNullException">当 key 为 null 时抛出。</exception>
         public void SetArray(string key, long[]? arr)
+        {
+            if (key is null) throw new ArgumentNullException(nameof(key));
+            if (arr is null)
+            {
+                SetArray(key, (DrxValue[]?)null);
+                return;
+            }
+            var va = new DrxValue[arr.Length];
+            for (int i = 0; i < arr.Length; i++) va[i] = new DrxValue(arr[i]);
+            SetArray(key, va);
+        }
+
+        /// <summary>
+        /// 设置指定键的 32 位整数数组（便捷重载）。若传入 null 则表示 Null。
+        /// </summary>
+        /// <param name="key">键，不能为空。</param>
+        /// <param name="arr">整型数组，允许为 null。</param>
+        /// <exception cref="ArgumentNullException">当 key 为 null 时抛出。</exception>
+        public void SetArray(string key, int[]? arr)
+        {
+            if (key is null) throw new ArgumentNullException(nameof(key));
+            if (arr is null)
+            {
+                SetArray(key, (DrxValue[]?)null);
+                return;
+            }
+            var va = new DrxValue[arr.Length];
+            for (int i = 0; i < arr.Length; i++) va[i] = new DrxValue(arr[i]);
+            SetArray(key, va);
+        }
+
+        /// <summary>
+        /// 设置指定键的 16 位有符号整数数组（便捷重载）。若传入 null 则表示 Null。
+        /// </summary>
+        /// <param name="key">键，不能为空。</param>
+        /// <param name="arr">短整型数组，允许为 null。</param>
+        /// <exception cref="ArgumentNullException">当 key 为 null 时抛出。</exception>
+        public void SetArray(string key, short[]? arr)
+        {
+            if (key is null) throw new ArgumentNullException(nameof(key));
+            if (arr is null)
+            {
+                SetArray(key, (DrxValue[]?)null);
+                return;
+            }
+            var va = new DrxValue[arr.Length];
+            for (int i = 0; i < arr.Length; i++) va[i] = new DrxValue(arr[i]);
+            SetArray(key, va);
+        }
+
+        /// <summary>
+        /// 设置指定键的 32 位无符号整数数组（便捷重载）。若传入 null 则表示 Null。
+        /// </summary>
+        /// <param name="key">键，不能为空。</param>
+        /// <param name="arr">无符号整型数组，允许为 null。</param>
+        /// <exception cref="ArgumentNullException">当 key 为 null 时抛出。</exception>
+        public void SetArray(string key, uint[]? arr)
+        {
+            if (key is null) throw new ArgumentNullException(nameof(key));
+            if (arr is null)
+            {
+                SetArray(key, (DrxValue[]?)null);
+                return;
+            }
+            var va = new DrxValue[arr.Length];
+            for (int i = 0; i < arr.Length; i++) va[i] = new DrxValue(arr[i]);
+            SetArray(key, va);
+        }
+
+        /// <summary>
+        /// 设置指定键的单精度浮点数组（便捷重载）。若传入 null 则表示 Null。
+        /// </summary>
+        /// <param name="key">键，不能为空。</param>
+        /// <param name="arr">float 数组，允许为 null。</param>
+        /// <exception cref="ArgumentNullException">当 key 为 null 时抛出。</exception>
+        public void SetArray(string key, float[]? arr)
+        {
+            if (key is null) throw new ArgumentNullException(nameof(key));
+            if (arr is null)
+            {
+                SetArray(key, (DrxValue[]?)null);
+                return;
+            }
+            var va = new DrxValue[arr.Length];
+            for (int i = 0; i < arr.Length; i++) va[i] = new DrxValue(arr[i]);
+            SetArray(key, va);
+        }
+
+        /// <summary>
+        /// 设置指定键的字符数组（便捷重载）。若传入 null 则表示 Null。
+        /// </summary>
+        /// <param name="key">键，不能为空。</param>
+        /// <param name="arr">字符数组，允许为 null。</param>
+        /// <exception cref="ArgumentNullException">当 key 为 null 时抛出。</exception>
+        public void SetArray(string key, char[]? arr)
+        {
+            if (key is null) throw new ArgumentNullException(nameof(key));
+            if (arr is null)
+            {
+                SetArray(key, (DrxValue[]?)null);
+                return;
+            }
+            var va = new DrxValue[arr.Length];
+            for (int i = 0; i < arr.Length; i++) va[i] = new DrxValue(arr[i]);
+            SetArray(key, va);
+        }
+
+        /// <summary>
+        /// 设置指定键的字节数组（便捷重载）。若传入 null 则表示 Null。
+        /// </summary>
+        /// <param name="key">键，不能为空。</param>
+        /// <param name="arr">字节数组，允许为 null。</param>
+        /// <exception cref="ArgumentNullException">当 key 为 null 时抛出。</exception>
+        public void SetArray(string key, byte[]? arr)
+        {
+            if (key is null) throw new ArgumentNullException(nameof(key));
+            if (arr is null)
+            {
+                SetArray(key, (DrxValue[]?)null);
+                return;
+            }
+            var va = new DrxValue[arr.Length];
+            for (int i = 0; i < arr.Length; i++) va[i] = new DrxValue(arr[i]);
+            SetArray(key, va);
+        }
+
+        /// <summary>
+        /// 设置指定键的 8 位有符号整数数组（便捷重载）。若传入 null 则表示 Null。
+        /// </summary>
+        /// <param name="key">键，不能为空。</param>
+        /// <param name="arr">有符号字节数组，允许为 null。</param>
+        /// <exception cref="ArgumentNullException">当 key 为 null 时抛出。</exception>
+        public void SetArray(string key, sbyte[]? arr)
         {
             if (key is null) throw new ArgumentNullException(nameof(key));
             if (arr is null)
@@ -724,6 +1562,23 @@ namespace Drx.Sdk.Shared.Serialization
         }
 
         /// <summary>
+        /// 尝试按键获取 32 位整数值（仅在值类型为 Int 时成功）。
+        /// </summary>
+        /// <param name="key">要获取的键。</param>
+        /// <param name="value">输出整数值。</param>
+        /// <returns>成功返回 true，否则返回 false。</returns>
+        public bool TryGetInt32(string key, out int value)
+        {
+            if (TryGet(key, out var v) && v.Type == ValueType.Int)
+            {
+                value = v.AsInt();
+                return true;
+            }
+            value = default;
+            return false;
+        }
+
+        /// <summary>
         /// 尝试按键获取 64 位整数值（仅在值类型为 Int64 时成功）。
         /// </summary>
         /// <param name="key">要获取的键。</param>
@@ -842,6 +1697,342 @@ namespace Drx.Sdk.Shared.Serialization
             return false;
         }
 
+        /// <summary>
+        /// 泛型读取器：根据 T 的类型自动分派到相应的 TryGetX 方法。
+        /// 支持常见标量（long/int/double/float/bool/string/byte[]/DrxSerializationData/DrxValue[]）
+        /// 以及数组（long[], int[], double[], bool[], string[]/string?[], byte[][], DrxSerializationData[]）。
+        /// 当 T 为 Nullable<TUnderlying> 时也会自动处理。
+        /// </summary>
+        /// <typeparam name="T">目标类型</typeparam>
+        /// <param name="key">键</param>
+        /// <param name="value">输出值（找不到或类型不匹配则为 default）</param>
+        /// <returns>成功返回 true，否则返回 false</returns>
+        public bool TryGetValue<T>(string key, out T? value)
+        {
+            // 默认输出
+            value = default;
+
+            if (key is null) throw new ArgumentNullException(nameof(key));
+
+            // 支持 Nullable<T> 的情况
+            var targetType = Nullable.GetUnderlyingType(typeof(T)) ?? typeof(T);
+
+            // 标量类型分支
+            if (targetType == typeof(long))
+            {
+                if (TryGetInt(key, out var v)) { value = (T)(object)v; return true; }
+                return false;
+            }
+            if (targetType == typeof(int))
+            {
+                if (TryGetInt32(key, out var v)) { value = (T)(object)v; return true; }
+                return false;
+            }
+            if (targetType == typeof(double))
+            {
+                if (TryGetDouble(key, out var d)) { value = (T)(object)d; return true; }
+                return false;
+            }
+            if (targetType == typeof(float))
+            {
+                if (TryGetFloat(key, out var f)) { value = (T)(object)f; return true; }
+                // 允许从 double 转换为 float
+                if (TryGetDouble(key, out var dd)) { value = (T)(object)(float)dd; return true; }
+                return false;
+            }
+            if (targetType == typeof(bool))
+            {
+                if (TryGetBool(key, out var b)) { value = (T)(object)b; return true; }
+                return false;
+            }
+            if (targetType == typeof(string))
+            {
+                if (TryGetString(key, out var s)) { value = (T)(object)s!; return true; }
+                return false;
+            }
+            if (targetType == typeof(byte[]))
+            {
+                if (TryGetBytes(key, out var bytes)) { value = (T)(object)bytes!; return true; }
+                return false;
+            }
+            if (targetType == typeof(DrxSerializationData))
+            {
+                if (TryGetObject(key, out var obj)) { value = (T)(object)obj!; return true; }
+                return false;
+            }
+            if (targetType == typeof(DrxValue[]))
+            {
+                if (TryGetArray(key, out var va)) { value = (T)(object)va!; return true; }
+                return false;
+            }
+
+            // 额外的数值类型支持（short/ushort/byte/sbyte/uint/ulong/IntPtr/UIntPtr）
+            if (targetType == typeof(short))
+            {
+                if (TryGetInt(key, out var v))
+                {
+                    if (v < short.MinValue || v > short.MaxValue) return false;
+                    value = (T)(object)(short)v;
+                    return true;
+                }
+                return false;
+            }
+            if (targetType == typeof(ushort))
+            {
+                if (TryGetInt(key, out var v))
+                {
+                    if (v < 0 || v > ushort.MaxValue) return false;
+                    value = (T)(object)(ushort)v;
+                    return true;
+                }
+                return false;
+            }
+            if (targetType == typeof(byte))
+            {
+                if (TryGetInt(key, out var v))
+                {
+                    if (v < byte.MinValue || v > byte.MaxValue) return false;
+                    value = (T)(object)(byte)v;
+                    return true;
+                }
+                return false;
+            }
+            if (targetType == typeof(sbyte))
+            {
+                if (TryGetInt(key, out var v))
+                {
+                    if (v < sbyte.MinValue || v > sbyte.MaxValue) return false;
+                    value = (T)(object)(sbyte)v;
+                    return true;
+                }
+                return false;
+            }
+            if (targetType == typeof(uint))
+            {
+                if (TryGetInt(key, out var v))
+                {
+                    if (v < 0 || v > uint.MaxValue) return false;
+                    value = (T)(object)(uint)v;
+                    return true;
+                }
+                return false;
+            }
+            if (targetType == typeof(ulong))
+            {
+                if (TryGetInt(key, out var v))
+                {
+                    if (v < 0) return false;
+                    // 注意：如果原始 ulong 大于 long.MaxValue，则 Add 在写入时会抛出，因此这里不会看到那些值
+                    value = (T)(object)(ulong)v;
+                    return true;
+                }
+                return false;
+            }
+            if (targetType == typeof(IntPtr))
+            {
+                if (TryGetInt(key, out var v))
+                {
+                    if (IntPtr.Size == 4)
+                    {
+                        if (v < int.MinValue || v > int.MaxValue) return false;
+                        value = (T)(object)new IntPtr((int)v);
+                        return true;
+                    }
+                    else
+                    {
+                        value = (T)(object)new IntPtr(v);
+                        return true;
+                    }
+                }
+                return false;
+            }
+            if (targetType == typeof(UIntPtr))
+            {
+                if (TryGetInt(key, out var v))
+                {
+                    if (v < 0) return false;
+                    if (UIntPtr.Size == 4)
+                    {
+                        if (v > uint.MaxValue) return false;
+                        value = (T)(object)new UIntPtr((uint)v);
+                        return true;
+                    }
+                    else
+                    {
+                        // UIntPtr(long) ctor is not available; use unchecked cast via ulong
+                        value = (T)(object)new UIntPtr((ulong)v);
+                        return true;
+                    }
+                }
+                return false;
+            }
+
+            // 数组类型分派（例如 int[], long[], double[] 等）
+            if (targetType.IsArray)
+            {
+                var elem = targetType.GetElementType();
+                if (elem == typeof(long))
+                {
+                    if (TryGetLongArray(key, out var la) && la != null) { value = (T)(object)la; return true; }
+                    return false;
+                }
+                if (elem == typeof(int))
+                {
+                    // 原生没有 int[] 存储，尝试从 long[] 转换
+                    if (!TryGetLongArray(key, out var la) || la is null) return false;
+                    var ia = new int[la.Length];
+                    for (int i = 0; i < la.Length; i++)
+                    {
+                        if (la[i] < int.MinValue || la[i] > int.MaxValue) return false;
+                        ia[i] = (int)la[i];
+                    }
+                    value = (T)(object)ia;
+                    return true;
+                }
+                if (elem == typeof(short))
+                {
+                    if (!TryGetLongArray(key, out var la) || la is null) return false;
+                    var ra = new short[la.Length];
+                    for (int i = 0; i < la.Length; i++)
+                    {
+                        if (la[i] < short.MinValue || la[i] > short.MaxValue) return false;
+                        ra[i] = (short)la[i];
+                    }
+                    value = (T)(object)ra;
+                    return true;
+                }
+                if (elem == typeof(ushort))
+                {
+                    if (!TryGetLongArray(key, out var la) || la is null) return false;
+                    var ra = new ushort[la.Length];
+                    for (int i = 0; i < la.Length; i++)
+                    {
+                        if (la[i] < 0 || la[i] > ushort.MaxValue) return false;
+                        ra[i] = (ushort)la[i];
+                    }
+                    value = (T)(object)ra;
+                    return true;
+                }
+                if (elem == typeof(byte))
+                {
+                    if (!TryGetLongArray(key, out var la) || la is null) return false;
+                    var ra = new byte[la.Length];
+                    for (int i = 0; i < la.Length; i++)
+                    {
+                        if (la[i] < byte.MinValue || la[i] > byte.MaxValue) return false;
+                        ra[i] = (byte)la[i];
+                    }
+                    value = (T)(object)ra;
+                    return true;
+                }
+                if (elem == typeof(sbyte))
+                {
+                    if (!TryGetLongArray(key, out var la) || la is null) return false;
+                    var ra = new sbyte[la.Length];
+                    for (int i = 0; i < la.Length; i++)
+                    {
+                        if (la[i] < sbyte.MinValue || la[i] > sbyte.MaxValue) return false;
+                        ra[i] = (sbyte)la[i];
+                    }
+                    value = (T)(object)ra;
+                    return true;
+                }
+                if (elem == typeof(uint))
+                {
+                    if (!TryGetLongArray(key, out var la) || la is null) return false;
+                    var ra = new uint[la.Length];
+                    for (int i = 0; i < la.Length; i++)
+                    {
+                        if (la[i] < 0 || la[i] > uint.MaxValue) return false;
+                        ra[i] = (uint)la[i];
+                    }
+                    value = (T)(object)ra;
+                    return true;
+                }
+                if (elem == typeof(ulong))
+                {
+                    if (!TryGetLongArray(key, out var la) || la is null) return false;
+                    var ra = new ulong[la.Length];
+                    for (int i = 0; i < la.Length; i++)
+                    {
+                        if (la[i] < 0) return false;
+                        ra[i] = (ulong)la[i];
+                    }
+                    value = (T)(object)ra;
+                    return true;
+                }
+                if (elem == typeof(IntPtr))
+                {
+                    if (!TryGetLongArray(key, out var la) || la is null) return false;
+                    var ra = new IntPtr[la.Length];
+                    for (int i = 0; i < la.Length; i++)
+                    {
+                        var vv = la[i];
+                        if (IntPtr.Size == 4)
+                        {
+                            if (vv < int.MinValue || vv > int.MaxValue) return false;
+                            ra[i] = new IntPtr((int)vv);
+                        }
+                        else
+                        {
+                            ra[i] = new IntPtr(vv);
+                        }
+                    }
+                    value = (T)(object)ra;
+                    return true;
+                }
+                if (elem == typeof(UIntPtr))
+                {
+                    if (!TryGetLongArray(key, out var la) || la is null) return false;
+                    var ra = new UIntPtr[la.Length];
+                    for (int i = 0; i < la.Length; i++)
+                    {
+                        var vv = la[i];
+                        if (vv < 0) return false;
+                        if (UIntPtr.Size == 4)
+                        {
+                            if (vv > uint.MaxValue) return false;
+                            ra[i] = new UIntPtr((uint)vv);
+                        }
+                        else
+                        {
+                            ra[i] = new UIntPtr((ulong)vv);
+                        }
+                    }
+                    value = (T)(object)ra;
+                    return true;
+                }
+                if (elem == typeof(double))
+                {
+                    if (TryGetDoubleArray(key, out var da) && da != null) { value = (T)(object)da; return true; }
+                    return false;
+                }
+                if (elem == typeof(bool))
+                {
+                    if (TryGetBoolArray(key, out var ba) && ba != null) { value = (T)(object)ba; return true; }
+                    return false;
+                }
+                if (elem == typeof(string))
+                {
+                    if (TryGetStringArray(key, out var sa) && sa != null) { value = (T)(object)sa; return true; }
+                    return false;
+                }
+                if (elem == typeof(byte[]))
+                {
+                    if (TryGetBytesArray(key, out var bba) && bba != null) { value = (T)(object)bba; return true; }
+                    return false;
+                }
+                if (elem == typeof(DrxSerializationData))
+                {
+                    if (TryGetObjectArray(key, out var oa) && oa != null) { value = (T)(object)oa; return true; }
+                    return false;
+                }
+            }
+
+            // 未知类型，不支持
+            return false;
+        }
+
         // 原生类型数组读取方法（若类型不一致则返回 false）
         /// <summary>
         /// 尝试按键获取 64 位整数数组；当数组元素类型均为 Int64 时成功。
@@ -858,6 +2049,31 @@ namespace Drx.Sdk.Shared.Serialization
             {
                 if (arr[i].Type != ValueType.Int64) return false;
                 outArr[i] = arr[i].AsInt64();
+            }
+            value = outArr;
+            return true;
+        }
+
+        /// <summary>
+        /// 尝试按键获取 int 数组；当数组元素类型均为 Int64 且值可安全转换为 int 时成功。
+        /// </summary>
+        /// <param name="key">要获取的键。</param>
+        /// <param name="value">输出 int 数组，或 null。</param>
+        /// <returns>成功返回 true，否则返回 false（包括类型不匹配或值越界）。</returns>
+        public bool TryGetIntArray(string key, out int[]? value)
+        {
+            value = null;
+            if (!TryGetArray(key, out var arr) || arr is null) return false;
+            var outArr = new int[arr.Length];
+            for (int i = 0; i < arr.Length; i++)
+            {
+                if (arr[i].Type != ValueType.Int64)
+                {
+                    return false;
+                }
+                var v = arr[i].AsInt64();
+                if (v < int.MinValue || v > int.MaxValue) return false;
+                outArr[i] = (int)v;
             }
             value = outArr;
             return true;
@@ -1241,6 +2457,39 @@ namespace Drx.Sdk.Shared.Serialization
                         s.WriteByte((byte)elem.Type);
                         WriteValuePayloadCompact(s, elem, objToId, emitted, stringToId);
                     }
+                    break;
+                case ValueType.Short:
+                    WriteVarInt64(s, v.AsShort());
+                    break;
+                case ValueType.Int:
+                    WriteVarInt64(s, v.AsInt());
+                    break;
+                case ValueType.UInt:
+                    WriteVarInt64(s, v.AsUInt());
+                    break;
+                case ValueType.ULong:
+                    WriteVarInt64(s, (long)v.AsULong());
+                    break;
+                case ValueType.Float:
+                    WriteDouble(s, v.AsFloat());
+                    break;
+                case ValueType.Decimal:
+                    WriteDouble(s, (double)v.AsDecimal());
+                    break;
+                case ValueType.Char:
+                    WriteVarInt64(s, v.AsChar());
+                    break;
+                case ValueType.Byte:
+                    WriteVarInt64(s, v.AsByte());
+                    break;
+                case ValueType.SByte:
+                    WriteVarInt64(s, v.AsSByte());
+                    break;
+                case ValueType.IntPtr:
+                    WriteVarInt64(s, v.AsIntPtr().ToInt64());
+                    break;
+                case ValueType.UIntPtr:
+                    WriteVarInt64(s, (long)v.AsUIntPtr().ToUInt64());
                     break;
                 default:
                     throw new InvalidDataException("Unknown value type");
@@ -1630,6 +2879,50 @@ namespace Drx.Sdk.Shared.Serialization
                             var obj = ReadObjectPayloadCompact(s, idToObj, strings);
                             ds.SetObject(key, obj);
                             break;
+                        case ValueType.Short:
+                            var sh = (short)ReadVarInt64(s);
+                            ds.SetShort(key, sh);
+                            break;
+                        case ValueType.Int:
+                            var i32 = (int)ReadVarInt64(s);
+                            ds.SetInt32(key, i32);
+                            break;
+                        case ValueType.UInt:
+                            var ui32 = (uint)ReadVarInt64(s);
+                            ds.SetUInt32(key, ui32);
+                            break;
+                        case ValueType.ULong:
+                            var ui64 = (ulong)ReadVarInt64(s);
+                            ds.SetUInt64(key, ui64);
+                            break;
+                        case ValueType.Float:
+                            var f = (float)ReadDouble(s);
+                            ds.SetFloat(key, f);
+                            break;
+                        case ValueType.Decimal:
+                            var dec = (decimal)ReadDouble(s);
+                            ds.SetDecimal(key, dec);
+                            break;
+                        case ValueType.Char:
+                            var ch = (char)ReadVarInt64(s);
+                            ds.SetChar(key, ch);
+                            break;
+                        case ValueType.Byte:
+                            var b = (byte)ReadVarInt64(s);
+                            ds.SetByte(key, b);
+                            break;
+                        case ValueType.SByte:
+                            var sb = (sbyte)ReadVarInt64(s);
+                            ds.SetSByte(key, sb);
+                            break;
+                        case ValueType.IntPtr:
+                            var ip = new IntPtr(ReadVarInt64(s));
+                            ds.SetIntPtr(key, ip);
+                            break;
+                        case ValueType.UIntPtr:
+                            var up = new UIntPtr((ulong)ReadVarInt64(s));
+                            ds.SetUIntPtr(key, up);
+                            break;
                         default:
                             throw new InvalidDataException("Unknown value type during deserialize (compact)");
                     }
@@ -1962,6 +3255,50 @@ namespace Drx.Sdk.Shared.Serialization
                             var child = ReadObjectPayloadCompact(s, idToObj, strings);
                             newObj.SetObject(key, child);
                             break;
+                        case ValueType.Short:
+                            var sh = (short)ReadVarInt64(s);
+                            newObj.SetShort(key, sh);
+                            break;
+                        case ValueType.Int:
+                            var i32 = (int)ReadVarInt64(s);
+                            newObj.SetInt32(key, i32);
+                            break;
+                        case ValueType.UInt:
+                            var ui32 = (uint)ReadVarInt64(s);
+                            newObj.SetUInt32(key, ui32);
+                            break;
+                        case ValueType.ULong:
+                            var ui64 = (ulong)ReadVarInt64(s);
+                            newObj.SetUInt64(key, ui64);
+                            break;
+                        case ValueType.Float:
+                            var f = (float)ReadDouble(s);
+                            newObj.SetFloat(key, f);
+                            break;
+                        case ValueType.Decimal:
+                            var dec = (decimal)ReadDouble(s);
+                            newObj.SetDecimal(key, dec);
+                            break;
+                        case ValueType.Char:
+                            var ch = (char)ReadVarInt64(s);
+                            newObj.SetChar(key, ch);
+                            break;
+                        case ValueType.Byte:
+                            var b = (byte)ReadVarInt64(s);
+                            newObj.SetByte(key, b);
+                            break;
+                        case ValueType.SByte:
+                            var sb = (sbyte)ReadVarInt64(s);
+                            newObj.SetSByte(key, sb);
+                            break;
+                        case ValueType.IntPtr:
+                            var ip = new IntPtr(ReadVarInt64(s));
+                            newObj.SetIntPtr(key, ip);
+                            break;
+                        case ValueType.UIntPtr:
+                            var up = new UIntPtr((ulong)ReadVarInt64(s));
+                            newObj.SetUIntPtr(key, up);
+                            break;
                         default:
                             throw new InvalidDataException("Unknown value type during deserialize (compact)");
                     }
@@ -2018,6 +3355,28 @@ namespace Drx.Sdk.Shared.Serialization
                 case ValueType.Array:
                     var nested = ReadArrayPayloadCompact(s, idToObj, strings);
                     return new DrxValue(nested);
+                case ValueType.Short:
+                    return new DrxValue((short)ReadVarInt64(s));
+                case ValueType.Int:
+                    return new DrxValue((int)ReadVarInt64(s));
+                case ValueType.UInt:
+                    return new DrxValue((uint)ReadVarInt64(s));
+                case ValueType.ULong:
+                    return new DrxValue((ulong)ReadVarInt64(s));
+                case ValueType.Float:
+                    return new DrxValue((float)ReadDouble(s));
+                case ValueType.Decimal:
+                    return new DrxValue((decimal)ReadDouble(s));
+                case ValueType.Char:
+                    return new DrxValue((char)ReadVarInt64(s));
+                case ValueType.Byte:
+                    return new DrxValue((byte)ReadVarInt64(s));
+                case ValueType.SByte:
+                    return new DrxValue((sbyte)ReadVarInt64(s));
+                case ValueType.IntPtr:
+                    return new DrxValue(new IntPtr(ReadVarInt64(s)));
+                case ValueType.UIntPtr:
+                    return new DrxValue(new UIntPtr((ulong)ReadVarInt64(s)));
                 default:
                     throw new InvalidDataException("Unknown value type during deserialize (compact)");
             }
