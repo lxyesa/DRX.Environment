@@ -12,27 +12,27 @@ namespace Drx.Sdk.Network.V2.Socket;
 
 public class NetworkServer : IDisposable
 {
-    // -------------------- ÅäÖÃÏî --------------------
+    // -------------------- æ„é€ å‡½æ•° --------------------
     private readonly IPEndPoint _localEndPoint;
     private readonly bool _enableTcp;
     private readonly bool _enableUdp;
     /// <summary>
-    /// ¿Í»§¶Ë±»ÈÏÎªÊÇ½©Ê¬£¨³¤Ê±¼äÎŞ»î¶¯£©µÄÊ±¼ä£¬Ä¬ÈÏ 60 Ãë
+    /// å®¢æˆ·ç«¯è¢«è®¤ä¸ºæ˜¯åƒµå°¸è¿æ¥æ—¶çš„æ— æ´»åŠ¨è¶…æ—¶æ—¶é—´ï¼Œé»˜è®¤ 60 ç§’
     /// </summary>
     public TimeSpan InactivityTimeout { get; set; } = TimeSpan.FromSeconds(60);
     /// <summary>
-    /// ½©Ê¬É¨ÃèÖÜÆÚ£¬Ä¬ÈÏ 30 Ãë
+    /// åƒµå°¸æ‰«æé—´éš”ï¼Œé»˜è®¤ 30 ç§’
     /// </summary>
     public TimeSpan ZombieScanInterval { get; set; } = TimeSpan.FromSeconds(30);
 
-    // -------------------- ÄÚ²¿×Ö¶Î --------------------
+    // -------------------- å†…éƒ¨å­—æ®µ --------------------
     private TcpListener? _tcpListener;
     private System.Net.Sockets.Socket? _udpSocket;
 
     private readonly ConcurrentDictionary<string, TcpClientState> _tcpClients = new();
     private readonly ConcurrentDictionary<string, UdpClientState> _udpClients = new();
 
-    // ½ÓÊÕ¶ÓÁĞ£ºÍ³Ò»°ÑÊÕµ½µÄÊı¾İ°ü·Å½ø¶ÓÁĞ£¬¹©ÉÏ²ãÏû·Ñ»òÊÂ¼ş´¥·¢
+    // æ¥æ”¶é˜Ÿåˆ—ï¼Œç»Ÿä¸€å¤„ç†æ¥æ”¶åˆ°çš„æ•°æ®åŒ…ï¼Œåˆå¹¶å’Œå¤„ç†äº‹ä»¶
     private readonly ConcurrentQueue<ReceivedPacket> _receiveQueue = new();
 
     private CancellationTokenSource? _cts;
@@ -42,7 +42,7 @@ public class NetworkServer : IDisposable
 
     private readonly byte[] _bufferPrototype = new byte[8192];
 
-    // -------------------- ÊÂ¼ş & Î¯ÍĞ --------------------
+    // -------------------- äº‹ä»¶ & å§”æ‰˜ --------------------
     public delegate void ClientConnectedHandler(string clientId, IPEndPoint remote);
     public delegate void ClientDisconnectedHandler(string clientId, IPEndPoint remote);
     public delegate void DataReceivedHandler(string clientId, IPEndPoint remote, byte[] data);
@@ -53,7 +53,7 @@ public class NetworkServer : IDisposable
     public event DataReceivedHandler? OnDataReceived;
     public event ErrorHandler? OnError;
 
-    // -------------------- ¹¹Ôì --------------------
+    // -------------------- æ„é€ å‡½æ•° --------------------
     public NetworkServer(IPEndPoint localEndPoint, bool enableTcp = true, bool enableUdp = true)
     {
         _localEndPoint = localEndPoint ?? throw new ArgumentNullException(nameof(localEndPoint));
@@ -61,7 +61,7 @@ public class NetworkServer : IDisposable
         _enableUdp = enableUdp;
     }
 
-    // -------------------- Æô¶¯/Í£Ö¹ --------------------
+    // -------------------- å¯åŠ¨/åœæ­¢ --------------------
     public async Task StartAsync()
     {
         if (_cts != null)
@@ -79,7 +79,7 @@ public class NetworkServer : IDisposable
 
         if (_enableUdp)
         {
-            // ÓÃÔ­Ê¼ Socket À´¸üÁé»îµØ´¦Àí UDP
+            // ä½¿ç”¨åŸå§‹ Socket åˆ›å»ºå¹¶ç»‘å®š UDP
             _udpSocket = new System.Net.Sockets.Socket(_localEndPoint.AddressFamily, SocketType.Dgram, ProtocolType.Udp);
             _udpSocket.Bind(_localEndPoint);
             _udpReceiveTask = Task.Run(() => UdpReceiveLoopAsync(token), token);
@@ -113,7 +113,7 @@ public class NetworkServer : IDisposable
         }
         catch { }
 
-        // ¶Ï¿ª²¢ÇåÀí¿Í»§¶Ë
+        // å…³é—­æ‰€æœ‰è¿æ¥çš„å®¢æˆ·ç«¯
         foreach (var kv in _tcpClients)
         {
             TryCloseTcpClient(kv.Key, kv.Value);
@@ -125,7 +125,7 @@ public class NetworkServer : IDisposable
         _cts = null;
     }
 
-    // -------------------- TCP ´¦Àí --------------------
+    // -------------------- TCP å¤„ç† --------------------
     private async Task AcceptLoopAsync(CancellationToken token)
     {
         Debug.WriteLine("TCP accept loop started");
@@ -172,7 +172,7 @@ public class NetworkServer : IDisposable
 
         if (!_tcpClients.TryAdd(id, state))
         {
-            // ²»ÄÜ¼Ó¾Í¹Øµô
+            // æ— æ³•åŠ å…¥åˆ™å›æ”¶
             TryCloseTcpClient(id, state);
             return;
         }
@@ -189,7 +189,7 @@ public class NetworkServer : IDisposable
                 int read = 0;
                 try
                 {
-                    // ReadAsync »áÔÚÁ¬½Ó¶Ï¿ªÊ±·µ»Ø 0
+                    // ReadAsync åœ¨è¿æ¥æ–­å¼€æ—¶è¿”å› 0
                     read = await stream.ReadAsync(buffer, 0, buffer.Length, state.ReceiveCts.Token).ConfigureAwait(false);
                 }
                 catch (OperationCanceledException)
@@ -204,7 +204,7 @@ public class NetworkServer : IDisposable
 
                 if (read == 0)
                 {
-                    // ¿Í»§¶Ë¹Ø±ÕÁ¬½Ó
+                    // å®¢æˆ·ç«¯å…³é—­è¿æ¥
                     break;
                 }
 
@@ -213,7 +213,7 @@ public class NetworkServer : IDisposable
                 var data = new byte[read];
                 Array.Copy(buffer, 0, data, 0, read);
 
-                // Èë¶Ó²¢´¥·¢ÊÂ¼ş£¨ÊÂ¼ş¿ÉÄÜ»á×èÈûµ÷ÓÃ·½£¬¾¡Á¿ÔÚÊÂ¼ş´¦ÀíÀï²»Òª×ö³¤Ê±¼ä×èÈû£©
+                // åŠ å…¥æ¥æ”¶é˜Ÿåˆ—ï¼Œäº‹ä»¶å¯èƒ½ä¼šå¼‚æ­¥è§¦å‘ï¼Œæ‰€ä»¥ä¸è¦æ±‚å®æ—¶è§¦å‘
                 var packet = new ReceivedPacket
                 {
                     ClientId = id,
@@ -227,7 +227,7 @@ public class NetworkServer : IDisposable
         }
         finally
         {
-            // ÇåÀí
+            // æ¸…ç†
             _tcpClients.TryRemove(id, out var _);
             TryCloseTcpClient(id, state);
             OnClientDisconnected?.Invoke(id, state.RemoteEndPoint);
@@ -262,7 +262,7 @@ public class NetworkServer : IDisposable
         }
     }
 
-    // -------------------- UDP ´¦Àí --------------------
+    // -------------------- UDP å¤„ç† --------------------
     private async Task UdpReceiveLoopAsync(CancellationToken token)
     {
         Debug.WriteLine("UDP receive loop started");
@@ -296,7 +296,7 @@ public class NetworkServer : IDisposable
             }
             catch (SocketException se)
             {
-                // µ± socket ¹Ø±ÕÊ±¿ÉÄÜ»áÅ×Òì³££¬°´ĞèÒªÍ¨Öª
+                // å½“ socket å…³é—­æ—¶å¯èƒ½ä¼šæŠ›å‡ºå¼‚å¸¸ï¼Œä½†ä¸éœ€è¦é€šçŸ¥
                 OnError?.Invoke(se);
                 await Task.Delay(50, token).ConfigureAwait(false);
             }
@@ -314,7 +314,7 @@ public class NetworkServer : IDisposable
         Debug.WriteLine("UDP receive loop stopped");
     }
 
-    // -------------------- ½©Ê¬É¨Ãè --------------------
+    // -------------------- åƒµå°¸æ‰«æ --------------------
     private async Task ZombieScanLoopAsync(CancellationToken token)
     {
         while (!token.IsCancellationRequested)
@@ -323,14 +323,14 @@ public class NetworkServer : IDisposable
             {
                 var now = DateTime.UtcNow;
 
-                // TCP ¿Í»§¶Ë
+                // TCP å®¢æˆ·ç«¯
                 foreach (var kv in _tcpClients)
                 {
                     var id = kv.Key;
                     var state = kv.Value;
                     if (now - state.LastSeen > InactivityTimeout)
                     {
-                        // ÈÏ¶¨Îª½©Ê¬£¬ÏÈ³¢ÊÔÓÅÑÅ¶Ï¿ª
+                        // è®¤ä¸ºæ˜¯åƒµå°¸è¿æ¥ï¼Œå¼ºåˆ¶æ–­å¼€
                         OnError?.Invoke(new TimeoutException($"TCP client {id} seems inactive and will be disconnected."));
                         if (_tcpClients.TryRemove(id, out var removed))
                         {
@@ -340,7 +340,7 @@ public class NetworkServer : IDisposable
                     }
                 }
 
-                // UDP ¿Í»§¶Ë£¨°´ endpoint Ê¶±ğ£©
+                // UDP å®¢æˆ·ç«¯ï¼Œä»¥ endpoint æ ‡è¯†
                 foreach (var kv in _udpClients)
                 {
                     var key = kv.Key;
@@ -348,7 +348,7 @@ public class NetworkServer : IDisposable
                     if (now - state.LastSeen > InactivityTimeout)
                     {
                         _udpClients.TryRemove(key, out var _);
-                        // ¶ÔÓÚ UDP ÎÒÃÇÒ²´¥·¢¶Ï¿ªÊÂ¼şÒÔ±ãÉÏ²ãÇåÀí
+                        // å¯¹äº UDP è¿æ¥ä¹Ÿä¸éœ€è¦æ–­å¼€äº‹ä»¶ï¼Œä»¥ä¿æŒä¸€è‡´æ€§
                         OnClientDisconnected?.Invoke(key, state.RemoteEndPoint);
                     }
                 }
@@ -369,7 +369,7 @@ public class NetworkServer : IDisposable
         }
     }
 
-    // -------------------- ·¢ËÍ --------------------
+    // -------------------- å‘é€ --------------------
     public void SendToTcpClient(string clientId, byte[] data)
     {
         if (!_tcpClients.TryGetValue(clientId, out var state))
@@ -414,7 +414,7 @@ public class NetworkServer : IDisposable
         }
     }
 
-    // -------------------- ¹«¹²²éÑ¯ --------------------
+    // -------------------- è¿æ¥æŸ¥è¯¢ --------------------
     public IEnumerable<string> GetTcpClientIds() => _tcpClients.Keys;
     public IEnumerable<string> GetUdpClientKeys() => _udpClients.Keys;
 
@@ -428,19 +428,19 @@ public class NetworkServer : IDisposable
         catch { return false; }
     }
 
-    // ´Ó¶ÓÁĞÀï³¢ÊÔÈ¡³öÒ»ÌõÏûÏ¢
+    // ä»é˜Ÿåˆ—ä¸­è·å–ä¸‹ä¸€æ¡æ¶ˆæ¯
     public bool TryDequeue(out ReceivedPacket packet)
     {
         return _receiveQueue.TryDequeue(out packet!);
     }
 
-    // -------------------- ÇåÀíÓëÊÍ·Å --------------------
+    // -------------------- èµ„æºé‡Šæ”¾ --------------------
     public void Dispose()
     {
         Stop();
     }
 
-    // -------------------- ÄÚ²¿ÀàĞÍ --------------------
+    // -------------------- å†…éƒ¨ç±» --------------------
     public class TcpClientState
     {
         public string Id = string.Empty;
@@ -458,7 +458,7 @@ public class NetworkServer : IDisposable
 
     public class ReceivedPacket
     {
-        public string ClientId = string.Empty; // TCP ÓÃ clientId£¬UDP ÓÃ endpoint.ToString()
+        public string ClientId = string.Empty; // TCP ä¸º clientIdï¼ŒUDP ä¸º endpoint.ToString()
         public IPEndPoint Remote = null!;
         public byte[] Data = null!;
         public bool IsUdp = false;

@@ -7,8 +7,9 @@ using System.Diagnostics;
 
 namespace Drx.Sdk.Network.V2.Socket
 {
-    // 简单的网络客户端，支持 TCP 和 UDP 的基本连接与发送
-    // 注释均为中文，接口尽量保持同步阻塞/异步混合以便快速测试
+    /// <summary>
+    /// 网络客户端，支持 TCP 和 UDP 协议
+    /// </summary>
     public class NetworkClient : IDisposable
     {
         // 远程端点

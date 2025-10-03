@@ -51,7 +51,7 @@ public class Program
 		udpClient.Send(serialized);
 
 		// 等待接收输出
-		await Task.Delay(500);
+		await Task.Delay(500000);
 
 		// 清理
 		tcpClient.Dispose();

@@ -7,6 +7,8 @@ using System.Threading.Channels;
 using System.Threading.Tasks;
 using System;
 using System.IO;
+using System.Reflection;
+using System.Linq;
 
 namespace Drx.Sdk.Shared;
 
@@ -69,7 +71,7 @@ public static class Logger
     public static void Log(string header, string message, [CallerLineNumber] int lineNumber = 0, [CallerFilePath] string filePath = "")
     {
         var className = GetShortClassName(filePath);
-        Enqueue(LogLevel.Info, header, message, null, className, lineNumber);
+        Enqueue(LogLevel.Info, header, message, null, className, lineNumber, filePath);
     }
 
     /// <summary>
@@ -82,7 +84,7 @@ public static class Logger
     public static void Log(string header, Text text, [CallerLineNumber] int lineNumber = 0, [CallerFilePath] string filePath = "")
     {
         var className = GetShortClassName(filePath);
-        Enqueue(LogLevel.Info, header, null, text, className, lineNumber);
+        Enqueue(LogLevel.Info, header, null, text, className, lineNumber, filePath);
     }
 
     /// <summary>
@@ -96,7 +98,7 @@ public static class Logger
     public static void Log(LogLevel level, string header, string message, [CallerLineNumber] int lineNumber = 0, [CallerFilePath] string filePath = "")
     {
         var className = GetShortClassName(filePath);
-        Enqueue(level, header, message, null, className, lineNumber);
+        Enqueue(level, header, message, null, className, lineNumber, filePath);
     }
 
     /// <summary>
@@ -110,7 +112,7 @@ public static class Logger
     public static void Log(LogLevel level, string header, Text text, [CallerLineNumber] int lineNumber = 0, [CallerFilePath] string filePath = "")
     {
         var className = GetShortClassName(filePath);
-        Enqueue(level, header, null, text, className, lineNumber);
+        Enqueue(level, header, null, text, className, lineNumber, filePath);
     }
 
     /// <summary>
@@ -122,7 +124,7 @@ public static class Logger
     public static void Error(string message, [CallerLineNumber] int lineNumber = 0, [CallerFilePath] string filePath = "")
     {
         var className = GetShortClassName(filePath);
-        Enqueue(LogLevel.Fail, className, message, null, className, lineNumber);
+        Enqueue(LogLevel.Fail, className, message, null, className, lineNumber, filePath);
     }
 
     /// <summary>
@@ -134,7 +136,7 @@ public static class Logger
     public static void Error(Text text, [CallerLineNumber] int lineNumber = 0, [CallerFilePath] string filePath = "")
     {
         var className = GetShortClassName(filePath);
-        Enqueue(LogLevel.Fail, className, null, text, className, lineNumber);
+        Enqueue(LogLevel.Fail, className, null, text, className, lineNumber, filePath);
     }
 
     /// <summary>
@@ -146,7 +148,7 @@ public static class Logger
     public static void Debug(string message, [CallerLineNumber] int lineNumber = 0, [CallerFilePath] string filePath = "")
     {
         var className = GetShortClassName(filePath);
-        Enqueue(LogLevel.Dbug, className, message, null, className, lineNumber);
+        Enqueue(LogLevel.Dbug, className, message, null, className, lineNumber, filePath);
     }
 
     /// <summary>
@@ -158,7 +160,7 @@ public static class Logger
     public static void Debug(Text text, [CallerLineNumber] int lineNumber = 0, [CallerFilePath] string filePath = "")
     {
         var className = GetShortClassName(filePath);
-        Enqueue(LogLevel.Dbug, className, null, text, className, lineNumber);
+        Enqueue(LogLevel.Dbug, className, null, text, className, lineNumber, filePath);
     }
 
     /// <summary>
@@ -170,7 +172,7 @@ public static class Logger
     public static void Warn(string message, [CallerLineNumber] int lineNumber = 0, [CallerFilePath] string filePath = "")
     {
         var className = GetShortClassName(filePath);
-        Enqueue(LogLevel.Warn, className, message, null, className, lineNumber);
+        Enqueue(LogLevel.Warn, className, message, null, className, lineNumber, filePath);
     }
 
     /// <summary>
@@ -182,7 +184,7 @@ public static class Logger
     public static void Warn(Text text, [CallerLineNumber] int lineNumber = 0, [CallerFilePath] string filePath = "")
     {
         var className = GetShortClassName(filePath);
-        Enqueue(LogLevel.Warn, className, null, text, className, lineNumber);
+        Enqueue(LogLevel.Warn, className, null, text, className, lineNumber, filePath);
     }
 
     /// <summary>
@@ -194,7 +196,7 @@ public static class Logger
     public static void Info(string message, [CallerLineNumber] int lineNumber = 0, [CallerFilePath] string filePath = "")
     {
         var className = GetShortClassName(filePath);
-        Enqueue(LogLevel.Info, className, message, null, className, lineNumber);
+        Enqueue(LogLevel.Info, className, message, null, className, lineNumber, filePath);
     }
 
     /// <summary>
@@ -206,7 +208,7 @@ public static class Logger
     public static void Info(Text text, [CallerLineNumber] int lineNumber = 0, [CallerFilePath] string filePath = "")
     {
         var className = GetShortClassName(filePath);
-        Enqueue(LogLevel.Info, className, null, text, className, lineNumber);
+        Enqueue(LogLevel.Info, className, null, text, className, lineNumber, filePath);
     }
 
     /// <summary>
@@ -219,7 +221,7 @@ public static class Logger
     {
         var className = GetShortClassName(filePath);
         // 按需求将 Trace 映射为调试级别
-        Enqueue(LogLevel.Dbug, className, message, null, className, lineNumber);
+        Enqueue(LogLevel.Dbug, className, message, null, className, lineNumber, filePath);
     }
 
     /// <summary>
@@ -232,7 +234,7 @@ public static class Logger
     {
         var className = GetShortClassName(filePath);
         // 按需求将 Trace 映射为调试级别
-        Enqueue(LogLevel.Dbug, className, null, text, className, lineNumber);
+        Enqueue(LogLevel.Dbug, className, null, text, className, lineNumber, filePath);
     }
 
     private static string GetShortClassName(string filePath)
@@ -242,9 +244,34 @@ public static class Logger
         return name;
     }
 
-    private static void Enqueue(LogLevel level, string header, string? message, Text? text, string className, int lineNumber)
+    private static void Enqueue(LogLevel level, string header, string? message, Text? text, string className, int lineNumber, string filePath)
     {
         if (string.IsNullOrEmpty(message) && text == null) return;
+        // 检查是否为非托管模块调用
+        string moduleInfo = "";
+        bool isUnmanagedCall = false;
+        try
+        {
+            var assembly = Assembly.GetCallingAssembly();
+            if (assembly == null)
+            {
+                isUnmanagedCall = true;
+            }
+        }
+        catch
+        {
+            isUnmanagedCall = true;
+        }
+        if (isUnmanagedCall)
+        {
+            string moduleName = "NonManaged";
+            moduleInfo = $" [{moduleName}]";
+            if (level == LogLevel.Dbug)
+            {
+                moduleInfo += " [Address: N/A]";
+            }
+        }
+        header += moduleInfo;
         var entry = new LogEntry
         {
             Level = level,
@@ -446,7 +473,7 @@ public static class Logger
             }
 
             // 同时入队到异步日志系统，以便持久化或统一处理
-            Enqueue(LogLevel.Fatal, header, message, null, header, 0);
+            Enqueue(LogLevel.Fatal, header, message, null, header, 0, "");
         }
         catch
         {

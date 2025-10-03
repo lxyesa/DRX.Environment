@@ -6,6 +6,7 @@ using System.Text;
 using System.Buffers.Text;
 using System.Threading;
 using System.IO.Compression;
+using System.Runtime.CompilerServices;
 
 namespace Drx.Sdk.Shared.Serialization
 {
@@ -13,9 +14,16 @@ namespace Drx.Sdk.Shared.Serialization
     /// Drx 序列化数据类（基础实现）。
     /// 说明：实现了一个轻量级键值存储，支持基本类型与嵌套对象的序列化/反序列化。
     /// 当前为基础骨架，后续可以按设计文档扩展优化（字符串表、变长编码、数组等）。
+    /// 性能优化：使用 ArrayPool、方法内联、缓存编码器等技术提升性能。
     /// </summary>
     public class DrxSerializationData : System.Collections.IEnumerable
     {
+        // 性能优化：缓存 UTF8 编码器以避免重复获取
+        private static readonly Encoding Utf8NoBom = new UTF8Encoding(false);
+        
+        // 性能优化：共享的 ArrayPool 用于临时缓冲区
+        private static readonly ArrayPool<byte> BytePool = ArrayPool<byte>.Shared;
+        
         // 内部值类型标签
         /// <summary>
         /// 值类型枚举：表示 DrxValue 可以承载的数据类型。
@@ -595,102 +603,126 @@ namespace Drx.Sdk.Shared.Serialization
             /// 将当前值作为 Int64 返回（无类型检查）。
             /// </summary>
             /// <returns>内部的 Int64 值。</returns>
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
             public long AsInt64() => _i64;
+            
             /// <summary>
             /// 将当前值作为 Double 返回（无类型检查）。
             /// </summary>
             /// <returns>内部的 Double 值。</returns>
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
             public double AsDouble() => _dbl;
+            
             /// <summary>
             /// 将当前值作为 Bool 返回（无类型检查）。
             /// </summary>
             /// <returns>内部的 Bool 值。</returns>
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
             public bool AsBool() => _b;
+            
             /// <summary>
             /// 将当前值作为字符串返回（无类型检查）。
             /// </summary>
             /// <returns>内部字符串，可能为 null。</returns>
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
             public string? AsString() => _s;
+            
             /// <summary>
             /// 将当前值作为字节数组返回（无类型检查）。
             /// </summary>
             /// <returns>内部字节数组，可能为 null。</returns>
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
             public byte[]? AsBytes() => _bytes;
+            
             /// <summary>
             /// 将当前值作为嵌套对象返回（无类型检查）。
             /// </summary>
             /// <returns>内部嵌套对象，可能为 null。</returns>
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
             public DrxSerializationData? AsObject() => _obj;
+            
             /// <summary>
             /// 将当前值作为值数组返回（无类型检查）。
             /// </summary>
             /// <returns>内部值数组，可能为 null。</returns>
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
             public DrxValue[]? AsArray() => _arr;
 
             /// <summary>
             /// 将当前值作为 Short 返回（无类型检查）。
             /// </summary>
             /// <returns>内部的 Short 值。</returns>
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
             public short AsShort() => _short;
 
             /// <summary>
             /// 将当前值作为 Int 返回（无类型检查）。
             /// </summary>
             /// <returns>内部的 Int 值。</returns>
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
             public int AsInt() => _int;
 
             /// <summary>
             /// 将当前值作为 UInt 返回（无类型检查）。
             /// </summary>
             /// <returns>内部的 UInt 值。</returns>
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
             public uint AsUInt() => _uint;
 
             /// <summary>
             /// 将当前值作为 ULong 返回（无类型检查）。
             /// </summary>
             /// <returns>内部的 ULong 值。</returns>
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
             public ulong AsULong() => _ulong;
 
             /// <summary>
             /// 将当前值作为 Float 返回（无类型检查）。
             /// </summary>
             /// <returns>内部的 Float 值。</returns>
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
             public float AsFloat() => _float;
 
             /// <summary>
             /// 将当前值作为 Decimal 返回（无类型检查）。
             /// </summary>
             /// <returns>内部的 Decimal 值。</returns>
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
             public decimal AsDecimal() => _decimal;
 
             /// <summary>
             /// 将当前值作为 Char 返回（无类型检查）。
             /// </summary>
             /// <returns>内部的 Char 值。</returns>
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
             public char AsChar() => _char;
 
             /// <summary>
             /// 将当前值作为 Byte 返回（无类型检查）。
             /// </summary>
             /// <returns>内部的 Byte 值。</returns>
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
             public byte AsByte() => _byte;
 
             /// <summary>
             /// 将当前值作为 SByte 返回（无类型检查）。
             /// </summary>
             /// <returns>内部的 SByte 值。</returns>
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
             public sbyte AsSByte() => _sbyte;
 
             /// <summary>
             /// 将当前值作为 IntPtr 返回（无类型检查）。
             /// </summary>
             /// <returns>内部的 IntPtr 值。</returns>
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
             public IntPtr AsIntPtr() => _intPtr;
 
             /// <summary>
             /// 将当前值作为 UIntPtr 返回（无类型检查）。
             /// </summary>
             /// <returns>内部的 UIntPtr 值。</returns>
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
             public UIntPtr AsUIntPtr() => _uintPtr;
 
             /// <summary>
@@ -1038,6 +1070,24 @@ namespace Drx.Sdk.Shared.Serialization
             // 默认复制以保持安全；若性能关键可增加不复制的重载
             var payload = bytes is null ? null : (byte[])bytes.Clone();
             var v = new DrxValue(payload!);
+            _lock.EnterWriteLock();
+            try { _map[key] = v; }
+            finally { _lock.ExitWriteLock(); }
+        }
+
+        /// <summary>
+        /// 设置指定键的字节数组（无拷贝版本，性能优化）。
+        /// 警告：调用者需要确保后续不修改传入的数组，否则会破坏数据一致性。
+        /// 用于性能敏感场景，避免不必要的内存拷贝。
+        /// </summary>
+        /// <param name="key">键，不能为空。</param>
+        /// <param name="bytes">字节数组，允许为 null 表示 Null。</param>
+        /// <exception cref="ArgumentNullException">当 key 为 null 时抛出。</exception>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void SetBytesNoCopy(string key, byte[]? bytes)
+        {
+            if (key is null) throw new ArgumentNullException(nameof(key));
+            var v = new DrxValue(bytes);
             _lock.EnterWriteLock();
             try { _map[key] = v; }
             finally { _lock.ExitWriteLock(); }
@@ -1531,15 +1581,14 @@ namespace Drx.Sdk.Shared.Serialization
         /// <param name="value">若存在则输出对应的 DrxValue，否则输出默认值。</param>
         /// <returns>存在则返回 true，否则返回 false。</returns>
         /// <exception cref="ArgumentNullException">当 key 为 null 时抛出。</exception>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public bool TryGet(string key, out DrxValue value)
         {
             if (key is null) throw new ArgumentNullException(nameof(key));
             _lock.EnterReadLock();
             try
             {
-                if (_map.TryGetValue(key, out value)) return true;
-                value = default;
-                return false;
+                return _map.TryGetValue(key, out value);
             }
             finally { _lock.ExitReadLock(); }
         }
@@ -2599,6 +2648,7 @@ namespace Drx.Sdk.Shared.Serialization
         }
 
         // --- Varint helpers（LEB128 风格） ---
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static void WriteVarUInt(Stream s, uint value)
         {
             while (value >= 0x80)
@@ -2609,6 +2659,7 @@ namespace Drx.Sdk.Shared.Serialization
             s.WriteByte((byte)value);
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static uint ReadVarUInt(Stream s)
         {
             uint result = 0;
@@ -2625,7 +2676,79 @@ namespace Drx.Sdk.Shared.Serialization
             return result;
         }
 
+        // 性能优化：字符串写入方法，使用缓存的编码器和 ArrayPool
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static void WriteStringUtf8(Stream s, string str)
+        {
+            if (string.IsNullOrEmpty(str))
+            {
+                WriteVarUInt(s, 0);
+                return;
+            }
+
+            // 获取所需字节数
+            int byteCount = Utf8NoBom.GetByteCount(str);
+            WriteVarUInt(s, (uint)byteCount);
+
+            if (byteCount == 0) return;
+
+            // 对于小字符串使用 stackalloc，大字符串使用 ArrayPool
+            if (byteCount <= 256)
+            {
+                Span<byte> buffer = stackalloc byte[byteCount];
+                Utf8NoBom.GetBytes(str, buffer);
+                s.Write(buffer);
+            }
+            else
+            {
+                byte[] buffer = BytePool.Rent(byteCount);
+                try
+                {
+                    int written = Utf8NoBom.GetBytes(str, 0, str.Length, buffer, 0);
+                    s.Write(buffer, 0, written);
+                }
+                finally
+                {
+                    BytePool.Return(buffer);
+                }
+            }
+        }
+
+        // 性能优化：字符串读取方法，使用 ArrayPool
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static string ReadStringUtf8(Stream s)
+        {
+            uint len = ReadVarUInt(s);
+            if (len == 0) return string.Empty;
+
+            int length = (int)len;
+            
+            // 对于小字符串使用 stackalloc
+            if (length <= 256)
+            {
+                Span<byte> buffer = stackalloc byte[length];
+                int read = s.Read(buffer);
+                if (read != length) throw new InvalidDataException("Unexpected end of stream reading string");
+                return Utf8NoBom.GetString(buffer);
+            }
+            else
+            {
+                byte[] buffer = BytePool.Rent(length);
+                try
+                {
+                    int read = s.Read(buffer, 0, length);
+                    if (read != length) throw new InvalidDataException("Unexpected end of stream reading string");
+                    return Utf8NoBom.GetString(buffer, 0, length);
+                }
+                finally
+                {
+                    BytePool.Return(buffer);
+                }
+            }
+        }
+
         // ZigZag encode for signed integers, then store as varuint
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static void WriteVarInt64(Stream s, long value)
         {
             ulong zig = (ulong)((value << 1) ^ (value >> 63));
@@ -2637,6 +2760,7 @@ namespace Drx.Sdk.Shared.Serialization
             s.WriteByte((byte)zig);
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static long ReadVarInt64(Stream s)
         {
             ulong result = 0;
