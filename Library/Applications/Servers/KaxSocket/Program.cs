@@ -1,72 +1,46 @@
-﻿
+﻿using Drx.Sdk.Network.V2.Socket;
+using Drx.Sdk.Network.V2.Web;
+using Drx.Sdk.Shared;
+using Drx.Sdk.Shared.Serialization;
+using Drx.Sdk.Shared.Utility;
 using System;
+using System.Diagnostics;
 using System.Net;
 using System.Text;
 using System.Threading.Tasks;
-using Drx.Sdk.Network.V2.Socket;
-using Drx.Sdk.Shared.Serialization;
+using HttpMethod = System.Net.Http.HttpMethod;
 
 public class Program
 {
-	// 简单测试：启动 NetworkServer（TCP+UDP），然后用 NetworkClient 发起 TCP 和 UDP 消息
-	public static async Task Main(string[] args)
-	{
-		var localEp = new IPEndPoint(IPAddress.Loopback, 12345);
-
-		var server = new NetworkServer(localEp, enableTcp: true, enableUdp: true);
-
-		server.OnClientConnected += (id, ep) => Console.WriteLine($"Client connected: {id} @ {ep}");
-		server.OnClientDisconnected += (id, ep) => Console.WriteLine($"Client disconnected: {id} @ {ep}");
-		server.OnDataReceived += OnDataReceived;
-		server.OnError += (ex) => Console.WriteLine($"Server error: {ex}");
-
-		await server.StartAsync();
-
-		// 等待服务就绪
-		await Task.Delay(200);
-
-		// TCP 客户端测试
-		var tcpClient = new NetworkClient(new IPEndPoint(IPAddress.Loopback, 12345), System.Net.Sockets.ProtocolType.Tcp);
-		var ok = await tcpClient.ConnectAsync();
-		Console.WriteLine($"TCP connected: {ok}");
-		if (ok)
-		{
-			var msg = Encoding.UTF8.GetBytes("Hello from TCP client");
-			tcpClient.Send(msg);
-		}
-
-		// UDP 客户端测试（不需要 Connect）
-		var udpClient = new NetworkClient(new IPEndPoint(IPAddress.Loopback, 12345), System.Net.Sockets.ProtocolType.Udp);
-		Console.WriteLine($"UDP client send...");
-
-		DrxSerializationData data = new DrxSerializationData
+    // 简单测试：启动 HttpServer 并注册处理方法
+    public static async Task Main(string[] args)
+    {
+        if (!GlobalUtility.IsAdministrator())
         {
-            { "key1", 18446744073709551615 },
-            { "key2", "Hello from UDP client" },
-            { "key3", new int[] { 1, 2, 3, 4, 5 } }
-        };
+            var err_NotAdmin = "权限不足，正在尝试以管理员权限重启...";
+            Logger.Warn(err_NotAdmin);
+            Logger.Info("如果重启失败，请以管理员权限手动运行此程序。");
 
-		var serialized = data.Serialize();
+            _ = GlobalUtility.RestartAsAdministratorAsync();
+            // 结束当前进程
+            Environment.Exit(0);
+        }
 
-		udpClient.Send(serialized);
+        var prefixes = new[] { "http://+:8462/" };
+        var server = new HttpServer(prefixes);
+        HttpServer.RegisterHandlersFromAssembly(typeof(Program).Assembly, server);
 
-		// 等待接收输出
-		await Task.Delay(500000);
+        try
+        {
+            await server.StartAsync();
+        }
+        catch (Exception ex)
+        {
 
-		// 清理
-		tcpClient.Dispose();
-		udpClient.Dispose();
-
-		server.Stop();
-	}
-
-	private static void OnDataReceived(string clientId, IPEndPoint remote, byte[] data)
-	{
-		var deserialized = DrxSerializationData.Deserialize(data);
-		deserialized.TryGet("key1", out var key1);
-		deserialized.TryGet("key2", out var key2);
-		deserialized.TryGet("key3", out var key3);
-
-		Console.WriteLine($"Data from {clientId} @ {remote}: key1={key1.As<ulong>()}, key2={key2.As<string>()}, key3=[{string.Join(",", key3.As<int[]>() ?? new int[0])}]");
-	}
+            Logger.Error($"启动 HttpServer 时发生错误: {ex.Message}");
+            Console.WriteLine("启动 HttpServer失败: " + ex.Message);
+            Console.WriteLine("提示: HttpListener 不支持 '0.0.0.0' 前缀。若需监听所有接口，请使用 'http://+:<port>/' 并为该 URL 注册 ACL（需要管理员权限）。");
+            throw;
+        }
+    }
 }

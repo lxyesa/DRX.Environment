@@ -19,11 +19,18 @@ class Program
         Console.WriteLine($"Serialized {bytes.Length} bytes");
 
         var d2 = DrxSerializationData.Deserialize(bytes);
-        if (d2.TryGetString("name", out var name))
+        var name = d2.TryGetString("name");
+        if (name is not null)
             Console.WriteLine($"name={name}");
-        if (d2.TryGetInt("age", out var age))
+        var age = d2.TryGetInt("age");
+        if (age is not null)
             Console.WriteLine($"age={age}");
-        if (d2.TryGetObject("meta", out var m) && m.TryGetString("role", out var role))
-            Console.WriteLine($"meta.role={role}");
+        var m = d2.TryGetObject("meta");
+        if (m is not null)
+        {
+            var role = m.TryGetString("role");
+            if (role is not null)
+                Console.WriteLine($"meta.role={role}");
+        }
     }
 }

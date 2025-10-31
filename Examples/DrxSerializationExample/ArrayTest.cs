@@ -56,7 +56,8 @@ namespace DrxSerializationExample
                 Console.WriteLine("反序列化成功");
 
                 // 验证反序列化后的数据
-                if (deserialized.TryGetValue<int[]>("intArray", out var restoredIntArray))
+                var restoredIntArray = deserialized.TryGetValue<int[]>("intArray");
+                if (restoredIntArray is not null)
                 {
                     Console.WriteLine($"恢复的 int[] 数组: [{string.Join(", ", restoredIntArray)}]");
                 }
@@ -65,7 +66,8 @@ namespace DrxSerializationExample
                     Console.WriteLine("恢复 int[] 数组失败");
                 }
 
-                if (deserialized.TryGetValue<short[]>("shortArray", out var restoredShortArray))
+                var restoredShortArray = deserialized.TryGetValue<short[]>("shortArray");
+                if (restoredShortArray is not null)
                 {
                     Console.WriteLine($"恢复的 short[] 数组: [{string.Join(", ", restoredShortArray)}]");
                 }
@@ -74,7 +76,8 @@ namespace DrxSerializationExample
                     Console.WriteLine("恢复 short[] 数组失败");
                 }
 
-                if (deserialized.TryGetValue<float[]>("floatArray", out var restoredFloatArray))
+                var restoredFloatArray = deserialized.TryGetValue<float[]>("floatArray");
+                if (restoredFloatArray is not null)
                 {
                     Console.WriteLine($"恢复的 float[] 数组: [{string.Join(", ", restoredFloatArray)}]");
                 }

@@ -23,25 +23,29 @@ class Program
         var data2 = DrxSerializationData.Deserialize(bytes);
 
         // 测试 TryGetValue<int> - 应该直接返回 int，不通过 long
-        if (data2.TryGetValue("intValue", out int intVal))
+        var intVal = data2.TryGetValue<int>("intValue");
+        if (intVal is not null)
         {
             Console.WriteLine($"TryGetValue<int> for intValue: {intVal} (type: {intVal.GetType().Name})");
         }
 
         // 测试 TryGetValue<long> - 应该返回 long
-        if (data2.TryGetValue("longValue", out long longVal))
+        var longVal = data2.TryGetValue<long>("longValue");
+        if (longVal is not null)
         {
             Console.WriteLine($"TryGetValue<long> for longValue: {longVal} (type: {longVal.GetType().Name})");
         }
 
         // 测试 TryGetInt32 - 直接返回 int
-        if (data2.TryGetInt32("intValue", out int int32Val))
+        var int32Val = data2.TryGetInt32("intValue");
+        if (int32Val is not null)
         {
             Console.WriteLine($"TryGetInt32 for intValue: {int32Val} (type: {int32Val.GetType().Name})");
         }
 
         // 测试 TryGetInt - 返回 long
-        if (data2.TryGetInt("longValue", out long int64Val))
+        var int64Val = data2.TryGetInt("longValue");
+        if (int64Val is not null)
         {
             Console.WriteLine($"TryGetInt for longValue: {int64Val} (type: {int64Val.GetType().Name})");
         }

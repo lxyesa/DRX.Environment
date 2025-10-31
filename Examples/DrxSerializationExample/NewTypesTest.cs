@@ -61,10 +61,12 @@ class Program
 
         // 测试 TryGetValue<T>
         Console.WriteLine("\nTesting TryGetValue<T>:");
-        if (data2.TryGetValue("shortValue", out short shortVal))
+        var shortVal = data2.TryGetValue<short>("shortValue");
+        if (shortVal is not null)
             Console.WriteLine($"TryGetValue short: {shortVal}");
 
-        if (data2.TryGetValue("intArray", out int[] intArr))
+        var intArr = data2.TryGetValue<int[]>("intArray");
+        if (intArr is not null)
             Console.WriteLine($"TryGetValue int[]: [{string.Join(", ", intArr)}]");
 
         Console.WriteLine("\nAll tests completed successfully!");

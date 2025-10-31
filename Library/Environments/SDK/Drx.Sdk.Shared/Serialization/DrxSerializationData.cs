@@ -997,6 +997,27 @@ namespace Drx.Sdk.Shared.Serialization
             return GetEnumerator();
         }
 
+        /// <summary>
+        /// 返回当前对象中所有键的线程安全拷贝。
+        /// 枚举期间不会持有读锁，避免死锁与长时间锁持有。
+        /// </summary>
+        public IEnumerable<string> Keys
+        {
+            get
+            {
+                _lock.EnterReadLock();
+                try
+                {
+                    // 创建键集合的快照并返回，保证在外部枚举时不会持有内部锁
+                    return new List<string>(_map.Keys);
+                }
+                finally
+                {
+                    _lock.ExitReadLock();
+                }
+            }
+        }
+
         // 基础操作
         /// <summary>
         /// 设置指定键的字符串值。若 value 为 null，则存储为 Null 类型。
@@ -1480,7 +1501,7 @@ namespace Drx.Sdk.Shared.Serialization
         }
 
         /// <summary>
-        /// 设置指定键的字符串数组（便捷重载）。若传入 null 则表示 Null，数组元素允许为 null。
+        /// 设置指定键的字符串数组（便捷重载）。 若传入 null 则表示 Null，数组元素允许为 null。
         /// </summary>
         /// <param name="key">键，不能为空。</param>
         /// <param name="arr">字符串数组，允许为 null 且元素可为 null。</param>
@@ -1578,17 +1599,20 @@ namespace Drx.Sdk.Shared.Serialization
         /// 尝试按键获取通用 DrxValue 值。
         /// </summary>
         /// <param name="key">要获取的键，不能为空。</param>
-        /// <param name="value">若存在则输出对应的 DrxValue，否则输出默认值。</param>
-        /// <returns>存在则返回 true，否则返回 false。</returns>
+        /// <returns>成功时返回对应的 DrxValue，否则返回 null。</returns>
         /// <exception cref="ArgumentNullException">当 key 为 null 时抛出。</exception>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public bool TryGet(string key, out DrxValue value)
+        public DrxValue? TryGet(string key)
         {
             if (key is null) throw new ArgumentNullException(nameof(key));
             _lock.EnterReadLock();
             try
             {
-                return _map.TryGetValue(key, out value);
+                if (_map.TryGetValue(key, out var value))
+                {
+                    return value;
+                }
+                return null;
             }
             finally { _lock.ExitReadLock(); }
         }
@@ -1597,153 +1621,135 @@ namespace Drx.Sdk.Shared.Serialization
         /// 尝试按键获取字符串值（仅在值类型为 String 时成功）。
         /// </summary>
         /// <param name="key">要获取的键。</param>
-        /// <param name="value">输出字符串，或 null。</param>
-        /// <returns>成功返回 true，否则返回 false。</returns>
-        public bool TryGetString(string key, out string? value)
+        /// <returns>成功时返回对应字符串，否则返回 null。</returns>
+        public string? TryGetString(string key)
         {
-            if (TryGet(key, out var v) && v.Type == ValueType.String)
+            var v = TryGet(key);
+            if (v?.Type == ValueType.String)
             {
-                value = v.AsString();
-                return true;
+                return v.Value.AsString();
             }
-            value = null;
-            return false;
+            return null;
         }
 
         /// <summary>
         /// 尝试按键获取 32 位整数值（仅在值类型为 Int 时成功）。
         /// </summary>
         /// <param name="key">要获取的键。</param>
-        /// <param name="value">输出整数值。</param>
-        /// <returns>成功返回 true，否则返回 false。</returns>
-        public bool TryGetInt32(string key, out int value)
+        /// <returns>成功时返回对应整数，否则返回 null。</returns>
+        public int? TryGetInt32(string key)
         {
-            if (TryGet(key, out var v) && v.Type == ValueType.Int)
+            var v = TryGet(key);
+            if (v?.Type == ValueType.Int)
             {
-                value = v.AsInt();
-                return true;
+                return v.Value.AsInt();
             }
-            value = default;
-            return false;
+            return null;
         }
 
         /// <summary>
         /// 尝试按键获取 64 位整数值（仅在值类型为 Int64 时成功）。
         /// </summary>
         /// <param name="key">要获取的键。</param>
-        /// <param name="value">输出整数值。</param>
-        /// <returns>成功返回 true，否则返回 false。</returns>
-        public bool TryGetInt(string key, out long value)
+        /// <returns>成功时返回对应整数，否则返回 null。</returns>
+        public long? TryGetInt(string key)
         {
-            if (TryGet(key, out var v) && v.Type == ValueType.Int64)
+            var v = TryGet(key);
+            if (v?.Type == ValueType.Int64)
             {
-                value = v.AsInt64();
-                return true;
+                return v.Value.AsInt64();
             }
-            value = default;
-            return false;
+            return null;
         }
 
         /// <summary>
         /// 尝试按键获取单精度浮点值（仅在值类型为 Double 时成功并转换为 float）。
         /// </summary>
         /// <param name="key">要获取的键。</param>
-        /// <param name="value">输出 float 值。</param>
-        /// <returns>成功返回 true，否则返回 false。</returns>
-        public bool TryGetFloat(string key, out float value)
+        /// <returns>成功时返回对应 float 值，否则返回 null。</returns>
+        public float? TryGetFloat(string key)
         {
-            if (TryGet(key, out var v) && v.Type == ValueType.Double)
+            var v = TryGet(key);
+            if (v?.Type == ValueType.Double)
             {
-                value = (float)v.AsDouble();
-                return true;
+                return (float)v.Value.AsDouble();
             }
-            value = default;
-            return false;
+            return null;
         }
 
         /// <summary>
         /// 尝试按键获取双精度浮点值（仅在值类型为 Double 时成功）。
         /// </summary>
         /// <param name="key">要获取的键。</param>
-        /// <param name="value">输出 double 值。</param>
-        /// <returns>成功返回 true，否则返回 false。</returns>
-        public bool TryGetDouble(string key, out double value)
+        /// <returns>成功时返回对应 double 值，否则返回 null。</returns>
+        public double? TryGetDouble(string key)
         {
-            if (TryGet(key, out var v) && v.Type == ValueType.Double)
+            var v = TryGet(key);
+            if (v?.Type == ValueType.Double)
             {
-                value = v.AsDouble();
-                return true;
+                return v.Value.AsDouble();
             }
-            value = default;
-            return false;
+            return null;
         }
 
         /// <summary>
         /// 尝试按键获取布尔值（仅在值类型为 Bool 时成功）。
         /// </summary>
         /// <param name="key">要获取的键。</param>
-        /// <param name="value">输出布尔值。</param>
-        /// <returns>成功返回 true，否则返回 false。</returns>
-        public bool TryGetBool(string key, out bool value)
+        /// <returns>成功时返回对应布尔值，否则返回 null。</returns>
+        public bool? TryGetBool(string key)
         {
-            if (TryGet(key, out var v) && v.Type == ValueType.Bool)
+            var v = TryGet(key);
+            if (v?.Type == ValueType.Bool)
             {
-                value = v.AsBool();
-                return true;
+                return v.Value.AsBool();
             }
-            value = default;
-            return false;
+            return null;
         }
 
         /// <summary>
         /// 尝试按键获取字节数组（仅在值类型为 Bytes 时成功）。
         /// </summary>
         /// <param name="key">要获取的键。</param>
-        /// <param name="value">输出字节数组，可能为 null。</param>
-        /// <returns>成功返回 true，否则返回 false。</returns>
-        public bool TryGetBytes(string key, out byte[]? value)
+        /// <returns>成功时返回对应字节数组，否则返回 null。</returns>
+        public byte[]? TryGetBytes(string key)
         {
-            if (TryGet(key, out var v) && v.Type == ValueType.Bytes)
+            var v = TryGet(key);
+            if (v?.Type == ValueType.Bytes)
             {
-                value = v.AsBytes();
-                return true;
+                return v.Value.AsBytes();
             }
-            value = null;
-            return false;
+            return null;
         }
 
         /// <summary>
         /// 尝试按键获取嵌套对象（仅在值类型为 Object 时成功）。
         /// </summary>
         /// <param name="key">要获取的键。</param>
-        /// <param name="value">输出嵌套对象，可能为 null。</param>
-        /// <returns>成功返回 true，否则返回 false。</returns>
-        public bool TryGetObject(string key, out DrxSerializationData? value)
+        /// <returns>成功时返回对应对象，否则返回 null。</returns>
+        public DrxSerializationData? TryGetObject(string key)
         {
-            if (TryGet(key, out var v) && v.Type == ValueType.Object)
+            var v = TryGet(key);
+            if (v?.Type == ValueType.Object)
             {
-                value = v.AsObject();
-                return true;
+                return v.Value.AsObject();
             }
-            value = null;
-            return false;
+            return null;
         }
 
         /// <summary>
         /// 尝试按键获取值数组（仅在值类型为 Array 时成功）。
         /// </summary>
         /// <param name="key">要获取的键。</param>
-        /// <param name="value">输出 DrxValue 数组，可能为 null。</param>
-        /// <returns>成功返回 true，否则返回 false。</returns>
-        public bool TryGetArray(string key, out DrxValue[]? value)
+        /// <returns>成功时返回对应 DrxValue 数组，否则返回 null。</returns>
+        public DrxValue[]? TryGetArray(string key)
         {
-            if (TryGet(key, out var v) && v.Type == ValueType.Array)
+            var v = TryGet(key);
+            if (v?.Type == ValueType.Array)
             {
-                value = v.AsArray();
-                return true;
+                return v.Value.AsArray();
             }
-            value = null;
-            return false;
+            return null;
         }
 
         /// <summary>
@@ -1754,13 +1760,9 @@ namespace Drx.Sdk.Shared.Serialization
         /// </summary>
         /// <typeparam name="T">目标类型</typeparam>
         /// <param name="key">键</param>
-        /// <param name="value">输出值（找不到或类型不匹配则为 default）</param>
-        /// <returns>成功返回 true，否则返回 false</returns>
-        public bool TryGetValue<T>(string key, out T? value)
+        /// <returns>成功时返回对应值，否则返回 null。</returns>
+        public T? TryGetValue<T>(string key)
         {
-            // 默认输出
-            value = default;
-
             if (key is null) throw new ArgumentNullException(nameof(key));
 
             // 支持 Nullable<T> 的情况
@@ -1769,151 +1771,147 @@ namespace Drx.Sdk.Shared.Serialization
             // 标量类型分支
             if (targetType == typeof(long))
             {
-                if (TryGetInt(key, out var v)) { value = (T)(object)v; return true; }
-                return false;
+                var v = TryGetInt(key);
+                return v is null ? default : (T)(object)v.Value;
             }
             if (targetType == typeof(int))
             {
-                if (TryGetInt32(key, out var v)) { value = (T)(object)v; return true; }
-                return false;
+                var v = TryGetInt32(key);
+                return v is null ? default : (T)(object)v.Value;
             }
             if (targetType == typeof(double))
             {
-                if (TryGetDouble(key, out var d)) { value = (T)(object)d; return true; }
-                return false;
+                var d = TryGetDouble(key);
+                return d is null ? default : (T)(object)d.Value;
             }
             if (targetType == typeof(float))
             {
-                if (TryGetFloat(key, out var f)) { value = (T)(object)f; return true; }
+                var f = TryGetFloat(key);
+                if (f is not null) return (T)(object)f.Value;
                 // 允许从 double 转换为 float
-                if (TryGetDouble(key, out var dd)) { value = (T)(object)(float)dd; return true; }
-                return false;
+                var dd = TryGetDouble(key);
+                return dd is null ? default : (T)(object)(float)dd.Value;
             }
             if (targetType == typeof(bool))
             {
-                if (TryGetBool(key, out var b)) { value = (T)(object)b; return true; }
-                return false;
+                var b = TryGetBool(key);
+                return b is null ? default : (T)(object)b.Value;
             }
             if (targetType == typeof(string))
             {
-                if (TryGetString(key, out var s)) { value = (T)(object)s!; return true; }
-                return false;
+                var s = TryGetString(key);
+                return s is null ? default : (T)(object)s;
             }
             if (targetType == typeof(byte[]))
             {
-                if (TryGetBytes(key, out var bytes)) { value = (T)(object)bytes!; return true; }
-                return false;
+                var bytes = TryGetBytes(key);
+                return bytes is null ? default : (T)(object)bytes;
             }
             if (targetType == typeof(DrxSerializationData))
             {
-                if (TryGetObject(key, out var obj)) { value = (T)(object)obj!; return true; }
-                return false;
+                var obj = TryGetObject(key);
+                return obj is null ? default : (T)(object)obj;
             }
             if (targetType == typeof(DrxValue[]))
             {
-                if (TryGetArray(key, out var va)) { value = (T)(object)va!; return true; }
-                return false;
+                var va = TryGetArray(key);
+                return va is null ? default : (T)(object)va;
             }
 
             // 额外的数值类型支持（short/ushort/byte/sbyte/uint/ulong/IntPtr/UIntPtr）
             if (targetType == typeof(short))
             {
-                if (TryGetInt(key, out var v))
+                var v = TryGetInt(key);
+                if (v is not null && v.Value >= short.MinValue && v.Value <= short.MaxValue)
                 {
-                    if (v < short.MinValue || v > short.MaxValue) return false;
-                    value = (T)(object)(short)v;
-                    return true;
+                    return (T)(object)(short)v.Value;
                 }
-                return false;
+                return default;
             }
             if (targetType == typeof(ushort))
             {
-                if (TryGetInt(key, out var v))
+                var v = TryGetInt(key);
+                if (v is not null && v.Value >= 0 && v.Value <= ushort.MaxValue)
                 {
-                    if (v < 0 || v > ushort.MaxValue) return false;
-                    value = (T)(object)(ushort)v;
-                    return true;
+                    return (T)(object)(ushort)v.Value;
                 }
-                return false;
+                return default;
             }
             if (targetType == typeof(byte))
             {
-                if (TryGetInt(key, out var v))
+                var v = TryGetInt(key);
+                if (v is not null && v.Value >= byte.MinValue && v.Value <= byte.MaxValue)
                 {
-                    if (v < byte.MinValue || v > byte.MaxValue) return false;
-                    value = (T)(object)(byte)v;
-                    return true;
+                    return (T)(object)(byte)v.Value;
                 }
-                return false;
+                return default;
             }
             if (targetType == typeof(sbyte))
             {
-                if (TryGetInt(key, out var v))
+                var v = TryGetInt(key);
+                if (v is not null && v.Value >= sbyte.MinValue && v.Value <= sbyte.MaxValue)
                 {
-                    if (v < sbyte.MinValue || v > sbyte.MaxValue) return false;
-                    value = (T)(object)(sbyte)v;
-                    return true;
+                    return (T)(object)(sbyte)v.Value;
                 }
-                return false;
+                return default;
             }
             if (targetType == typeof(uint))
             {
-                if (TryGetInt(key, out var v))
+                var v = TryGetInt(key);
+                if (v is not null && v.Value >= 0 && v.Value <= uint.MaxValue)
                 {
-                    if (v < 0 || v > uint.MaxValue) return false;
-                    value = (T)(object)(uint)v;
-                    return true;
+                    return (T)(object)(uint)v.Value;
                 }
-                return false;
+                return default;
             }
             if (targetType == typeof(ulong))
             {
-                if (TryGetInt(key, out var v))
+                var v = TryGetInt(key);
+                if (v is not null && v.Value >= 0)
                 {
-                    if (v < 0) return false;
                     // 注意：如果原始 ulong 大于 long.MaxValue，则 Add 在写入时会抛出，因此这里不会看到那些值
-                    value = (T)(object)(ulong)v;
-                    return true;
+                    return (T)(object)(ulong)v.Value;
                 }
-                return false;
+                return default;
             }
             if (targetType == typeof(IntPtr))
             {
-                if (TryGetInt(key, out var v))
+                var v = TryGetInt(key);
+                if (v is not null)
                 {
                     if (IntPtr.Size == 4)
                     {
-                        if (v < int.MinValue || v > int.MaxValue) return false;
-                        value = (T)(object)new IntPtr((int)v);
-                        return true;
+                        if (v.Value >= int.MinValue && v.Value <= int.MaxValue)
+                        {
+                            return (T)(object)new IntPtr((int)v.Value);
+                        }
                     }
                     else
                     {
-                        value = (T)(object)new IntPtr(v);
-                        return true;
+                        return (T)(object)new IntPtr(v.Value);
                     }
                 }
-                return false;
+                return default;
             }
             if (targetType == typeof(UIntPtr))
             {
-                if (TryGetInt(key, out var v))
+                var v = TryGetInt(key);
+                if (v is not null && v.Value >= 0)
                 {
-                    if (v < 0) return false;
                     if (UIntPtr.Size == 4)
                     {
-                        if (v > uint.MaxValue) return false;
-                        value = (T)(object)new UIntPtr((uint)v);
-                        return true;
+                        if (v.Value <= uint.MaxValue)
+                        {
+                            return (T)(object)new UIntPtr((uint)v.Value);
+                        }
                     }
                     else
                     {
                         // UIntPtr(long) ctor is not available; use unchecked cast via ulong
-                        value = (T)(object)new UIntPtr((ulong)v);
-                        return true;
+                        return (T)(object)new UIntPtr((ulong)v.Value);
                     }
                 }
-                return false;
+                return default;
             }
 
             // 数组类型分派（例如 int[], long[], double[] 等）
@@ -1922,104 +1920,105 @@ namespace Drx.Sdk.Shared.Serialization
                 var elem = targetType.GetElementType();
                 if (elem == typeof(long))
                 {
-                    if (TryGetLongArray(key, out var la) && la != null) { value = (T)(object)la; return true; }
-                    return false;
+                    var la = TryGetLongArray(key);
+                    return la is null ? default : (T)(object)la;
                 }
                 if (elem == typeof(int))
                 {
                     // 原生没有 int[] 存储，尝试从 long[] 转换
-                    if (!TryGetLongArray(key, out var la) || la is null) return false;
+                    var la = TryGetLongArray(key);
+                    if (la is null) return default;
                     var ia = new int[la.Length];
                     for (int i = 0; i < la.Length; i++)
                     {
-                        if (la[i] < int.MinValue || la[i] > int.MaxValue) return false;
+                        if (la[i] < int.MinValue || la[i] > int.MaxValue) return default;
                         ia[i] = (int)la[i];
                     }
-                    value = (T)(object)ia;
-                    return true;
+                    return (T)(object)ia;
                 }
                 if (elem == typeof(short))
                 {
-                    if (!TryGetLongArray(key, out var la) || la is null) return false;
+                    var la = TryGetLongArray(key);
+                    if (la is null) return default;
                     var ra = new short[la.Length];
                     for (int i = 0; i < la.Length; i++)
                     {
-                        if (la[i] < short.MinValue || la[i] > short.MaxValue) return false;
+                        if (la[i] < short.MinValue || la[i] > short.MaxValue) return default;
                         ra[i] = (short)la[i];
                     }
-                    value = (T)(object)ra;
-                    return true;
+                    return (T)(object)ra;
                 }
                 if (elem == typeof(ushort))
                 {
-                    if (!TryGetLongArray(key, out var la) || la is null) return false;
+                    var la = TryGetLongArray(key);
+                    if (la is null) return default;
                     var ra = new ushort[la.Length];
                     for (int i = 0; i < la.Length; i++)
                     {
-                        if (la[i] < 0 || la[i] > ushort.MaxValue) return false;
+                        if (la[i] < 0 || la[i] > ushort.MaxValue) return default;
                         ra[i] = (ushort)la[i];
                     }
-                    value = (T)(object)ra;
-                    return true;
+                    return (T)(object)ra;
                 }
                 if (elem == typeof(byte))
                 {
-                    if (!TryGetLongArray(key, out var la) || la is null) return false;
+                    var la = TryGetLongArray(key);
+                    if (la is null) return default;
                     var ra = new byte[la.Length];
                     for (int i = 0; i < la.Length; i++)
                     {
-                        if (la[i] < byte.MinValue || la[i] > byte.MaxValue) return false;
+                        if (la[i] < byte.MinValue || la[i] > byte.MaxValue) return default;
                         ra[i] = (byte)la[i];
                     }
-                    value = (T)(object)ra;
-                    return true;
+                    return (T)(object)ra;
                 }
                 if (elem == typeof(sbyte))
                 {
-                    if (!TryGetLongArray(key, out var la) || la is null) return false;
+                    var la = TryGetLongArray(key);
+                    if (la is null) return default;
                     var ra = new sbyte[la.Length];
                     for (int i = 0; i < la.Length; i++)
                     {
-                        if (la[i] < sbyte.MinValue || la[i] > sbyte.MaxValue) return false;
+                        if (la[i] < sbyte.MinValue || la[i] > sbyte.MaxValue) return default;
                         ra[i] = (sbyte)la[i];
                     }
-                    value = (T)(object)ra;
-                    return true;
+                    return (T)(object)ra;
                 }
                 if (elem == typeof(uint))
                 {
-                    if (!TryGetLongArray(key, out var la) || la is null) return false;
+                    var la = TryGetLongArray(key);
+                    if (la is null) return default;
                     var ra = new uint[la.Length];
                     for (int i = 0; i < la.Length; i++)
                     {
-                        if (la[i] < 0 || la[i] > uint.MaxValue) return false;
+                        if (la[i] < 0 || la[i] > uint.MaxValue) return default;
                         ra[i] = (uint)la[i];
                     }
-                    value = (T)(object)ra;
-                    return true;
+                    return (T)(object)ra;
                 }
                 if (elem == typeof(ulong))
                 {
-                    if (!TryGetLongArray(key, out var la) || la is null) return false;
+                    var la = TryGetLongArray(key);
+                    if (la is null) return default;
                     var ra = new ulong[la.Length];
                     for (int i = 0; i < la.Length; i++)
                     {
-                        if (la[i] < 0) return false;
+                        if (la[i] < 0) return default;
                         ra[i] = (ulong)la[i];
                     }
-                    value = (T)(object)ra;
-                    return true;
+                    return (T)(object)ra;
                 }
                 if (elem == typeof(IntPtr))
                 {
-                    if (!TryGetLongArray(key, out var la) || la is null) return false;
+                    var la = TryGetLongArray(key);
+                    if (la is null) return default;
                     var ra = new IntPtr[la.Length];
                     for (int i = 0; i < la.Length; i++)
                     {
                         var vv = la[i];
                         if (IntPtr.Size == 4)
                         {
-                            if (vv < int.MinValue || vv > int.MaxValue) return false;
+                            if (vv < int.MinValue || vv > int.MaxValue) return default;
                             ra[i] = new IntPtr((int)vv);
                         }
                         else
@@ -2027,20 +2026,20 @@ namespace Drx.Sdk.Shared.Serialization
                             ra[i] = new IntPtr(vv);
                         }
                     }
-                    value = (T)(object)ra;
-                    return true;
+                    return (T)(object)ra;
                 }
                 if (elem == typeof(UIntPtr))
                 {
-                    if (!TryGetLongArray(key, out var la) || la is null) return false;
+                    var la = TryGetLongArray(key);
+                    if (la is null) return default;
                     var ra = new UIntPtr[la.Length];
                     for (int i = 0; i < la.Length; i++)
                     {
                         var vv = la[i];
-                        if (vv < 0) return false;
+                        if (vv < 0) return default;
                         if (UIntPtr.Size == 4)
                         {
-                            if (vv > uint.MaxValue) return false;
+                            if (vv > uint.MaxValue) return default;
                             ra[i] = new UIntPtr((uint)vv);
                         }
                         else
@@ -2048,38 +2047,37 @@ namespace Drx.Sdk.Shared.Serialization
                             ra[i] = new UIntPtr((ulong)vv);
                         }
                     }
-                    value = (T)(object)ra;
-                    return true;
+                    return (T)(object)ra;
                 }
                 if (elem == typeof(double))
                 {
-                    if (TryGetDoubleArray(key, out var da) && da != null) { value = (T)(object)da; return true; }
-                    return false;
+                    var da = TryGetDoubleArray(key);
+                    return da is null ? default : (T)(object)da;
                 }
                 if (elem == typeof(bool))
                 {
-                    if (TryGetBoolArray(key, out var ba) && ba != null) { value = (T)(object)ba; return true; }
-                    return false;
+                    var ba = TryGetBoolArray(key);
+                    return ba is null ? default : (T)(object)ba;
                 }
                 if (elem == typeof(string))
                 {
-                    if (TryGetStringArray(key, out var sa) && sa != null) { value = (T)(object)sa; return true; }
-                    return false;
+                    var sa = TryGetStringArray(key);
+                    return sa is null ? default : (T)(object)sa;
                 }
                 if (elem == typeof(byte[]))
                 {
-                    if (TryGetBytesArray(key, out var bba) && bba != null) { value = (T)(object)bba; return true; }
-                    return false;
+                    var bba = TryGetBytesArray(key);
+                    return bba is null ? default : (T)(object)bba;
                 }
                 if (elem == typeof(DrxSerializationData))
                 {
-                    if (TryGetObjectArray(key, out var oa) && oa != null) { value = (T)(object)oa; return true; }
-                    return false;
+                    var oa = TryGetObjectArray(key);
+                    return oa is null ? default : (T)(object)oa;
                 }
             }
 
             // 未知类型，不支持
-            return false;
+            return default;
         }
 
         // 原生类型数组读取方法（若类型不一致则返回 false）
@@ -2087,97 +2085,88 @@ namespace Drx.Sdk.Shared.Serialization
         /// 尝试按键获取 64 位整数数组；当数组元素类型均为 Int64 时成功。
         /// </summary>
         /// <param name="key">要获取的键。</param>
-        /// <param name="value">输出 long 数组，或 null。</param>
-        /// <returns>成功返回 true，否则返回 false（包括类型不匹配）。</returns>
-        public bool TryGetLongArray(string key, out long[]? value)
+        /// <returns>成功时返回对应 long 数组，否则返回 null。</returns>
+        public long[]? TryGetLongArray(string key)
         {
-            value = null;
-            if (!TryGetArray(key, out var arr) || arr is null) return false;
+            var arr = TryGetArray(key);
+            if (arr is null) return null;
             var outArr = new long[arr.Length];
             for (int i = 0; i < arr.Length; i++)
             {
-                if (arr[i].Type != ValueType.Int64) return false;
+                if (arr[i].Type != ValueType.Int64) return null;
                 outArr[i] = arr[i].AsInt64();
             }
-            value = outArr;
-            return true;
+            return outArr;
         }
 
         /// <summary>
         /// 尝试按键获取 int 数组；当数组元素类型均为 Int64 且值可安全转换为 int 时成功。
         /// </summary>
         /// <param name="key">要获取的键。</param>
-        /// <param name="value">输出 int 数组，或 null。</param>
-        /// <returns>成功返回 true，否则返回 false（包括类型不匹配或值越界）。</returns>
-        public bool TryGetIntArray(string key, out int[]? value)
+        /// <returns>成功时返回对应 int 数组，否则返回 null。</returns>
+        public int[]? TryGetIntArray(string key)
         {
-            value = null;
-            if (!TryGetArray(key, out var arr) || arr is null) return false;
+            var arr = TryGetArray(key);
+            if (arr is null) return null;
             var outArr = new int[arr.Length];
             for (int i = 0; i < arr.Length; i++)
             {
                 if (arr[i].Type != ValueType.Int64)
                 {
-                    return false;
+                    return null;
                 }
                 var v = arr[i].AsInt64();
-                if (v < int.MinValue || v > int.MaxValue) return false;
+                if (v < int.MinValue || v > int.MaxValue) return null;
                 outArr[i] = (int)v;
             }
-            value = outArr;
-            return true;
+            return outArr;
         }
 
         /// <summary>
         /// 尝试按键获取 double 数组；当数组元素类型均为 Double 时成功。
         /// </summary>
         /// <param name="key">要获取的键。</param>
-        /// <param name="value">输出 double 数组，或 null。</param>
-        /// <returns>成功返回 true，否则返回 false（包括类型不匹配）。</returns>
-        public bool TryGetDoubleArray(string key, out double[]? value)
+        /// <returns>成功时返回对应 double 数组，否则返回 null。</returns>
+        public double[]? TryGetDoubleArray(string key)
         {
-            value = null;
-            if (!TryGetArray(key, out var arr) || arr is null) return false;
+            var arr = TryGetArray(key);
+            if (arr is null) return null;
             var outArr = new double[arr.Length];
             for (int i = 0; i < arr.Length; i++)
             {
-                if (arr[i].Type != ValueType.Double) return false;
+                if (arr[i].Type != ValueType.Double) return null;
                 outArr[i] = arr[i].AsDouble();
             }
-            value = outArr;
-            return true;
+            return outArr;
         }
 
         /// <summary>
         /// 尝试按键获取 bool 数组；当数组元素类型均为 Bool 时成功。
         /// </summary>
         /// <param name="key">要获取的键。</param>
-        /// <param name="value">输出 bool 数组，或 null。</param>
-        /// <returns>成功返回 true，否则返回 false（包括类型不匹配）。</returns>
-        public bool TryGetBoolArray(string key, out bool[]? value)
+        /// <returns>成功时返回对应 bool 数组，否则返回 null。</returns>
+        public bool[]? TryGetBoolArray(string key)
         {
-            value = null;
-            if (!TryGetArray(key, out var arr) || arr is null) return false;
+            var arr = TryGetArray(key);
+            if (arr is null) return null;
             var outArr = new bool[arr.Length];
             for (int i = 0; i < arr.Length; i++)
             {
-                if (arr[i].Type != ValueType.Bool) return false;
+                if (arr[i].Type != ValueType.Bool) return null;
                 outArr[i] = arr[i].AsBool();
             }
-            value = outArr;
-            return true;
+            return outArr;
         }
 
         /// <summary>
         /// 尝试按键获取字符串数组；支持数组元素为 null。
         /// </summary>
         /// <param name="key">要获取的键。</param>
-        /// <param name="value">输出字符串数组，或 null。</param>
-        /// <returns>成功返回 true，否则返回 false（包括类型不匹配）。</returns>
-        public bool TryGetStringArray(string key, out string?[]? value)
+        /// <returns>成功时返回对应字符串数组，否则返回 null。</returns>
+        public string?[]? TryGetStringArray(string key)
         {
-            value = null;
-            if (!TryGetArray(key, out var arr) || arr is null) return false;
+            var arr = TryGetArray(key);
+            if (arr is null) return null;
             var outArr = new string?[arr.Length];
             for (int i = 0; i < arr.Length; i++)
             {
@@ -2186,23 +2175,21 @@ namespace Drx.Sdk.Shared.Serialization
                     outArr[i] = null;
                     continue;
                 }
-                if (arr[i].Type != ValueType.String) return false;
+                if (arr[i].Type != ValueType.String) return null;
                 outArr[i] = arr[i].AsString();
             }
-            value = outArr;
-            return true;
+            return outArr;
         }
 
         /// <summary>
         /// 尝试按键获取字节数组数组；支持元素为 null。
         /// </summary>
         /// <param name="key">要获取的键。</param>
-        /// <param name="value">输出字节数组集合，或 null。</param>
-        /// <returns>成功返回 true，否则返回 false（包括类型不匹配）。</returns>
-        public bool TryGetBytesArray(string key, out byte[][]? value)
+        /// <returns>成功时返回对应字节数组集合，否则返回 null。</returns>
+        public byte[][]? TryGetBytesArray(string key)
         {
-            value = null;
-            if (!TryGetArray(key, out var arr) || arr is null) return false;
+            var arr = TryGetArray(key);
+            if (arr is null) return null;
             var outArr = new byte[arr.Length][];
             for (int i = 0; i < arr.Length; i++)
             {
@@ -2211,23 +2198,21 @@ namespace Drx.Sdk.Shared.Serialization
                     outArr[i] = null!;
                     continue;
                 }
-                if (arr[i].Type != ValueType.Bytes) return false;
+                if (arr[i].Type != ValueType.Bytes) return null;
                 outArr[i] = arr[i].AsBytes()!;
             }
-            value = outArr;
-            return true;
+            return outArr;
         }
 
         /// <summary>
         /// 尝试按键获取嵌套对象数组；支持元素为 null。
         /// </summary>
         /// <param name="key">要获取的键。</param>
-        /// <param name="value">输出嵌套对象数组，或 null。</param>
-        /// <returns>成功返回 true，否则返回 false（包括类型不匹配）。</returns>
-        public bool TryGetObjectArray(string key, out DrxSerializationData?[]? value)
+        /// <returns>成功时返回对应嵌套对象数组，否则返回 null。</returns>
+        public DrxSerializationData?[]? TryGetObjectArray(string key)
         {
-            value = null;
-            if (!TryGetArray(key, out var arr) || arr is null) return false;
+            var arr = TryGetArray(key);
+            if (arr is null) return null;
             var outArr = new DrxSerializationData?[arr.Length];
             for (int i = 0; i < arr.Length; i++)
             {
@@ -2236,11 +2221,10 @@ namespace Drx.Sdk.Shared.Serialization
                     outArr[i] = null;
                     continue;
                 }
-                if (arr[i].Type != ValueType.Object) return false;
+                if (arr[i].Type != ValueType.Object) return null;
                 outArr[i] = arr[i].AsObject();
             }
-            value = outArr;
-            return true;
+            return outArr;
         }
 
         // 序列化格式（简单实现，用于 PoC）：
@@ -2358,7 +2342,7 @@ namespace Drx.Sdk.Shared.Serialization
                     continue;
                 }
 
-                // 将字符串编码到租用缓冲区
+                // 将字符串编码到租用缓缓冲区
                 var rent = ArrayPool<byte>.Shared.Rent(bcount);
                 int wrote = 0;
                 try
@@ -2851,8 +2835,8 @@ namespace Drx.Sdk.Shared.Serialization
                                 var rentStr = ArrayPool<byte>.Shared.Rent(strLen);
                                 try
                                 {
-                                    var wrote = Encoding.UTF8.GetBytes(str, 0, str.Length, rentStr, 0);
-                                    s.Write(rentStr, 0, wrote);
+                                    var written = Encoding.UTF8.GetBytes(str, 0, str.Length, rentStr, 0);
+                                    s.Write(rentStr, 0, written);
                                 }
                                 finally { ArrayPool<byte>.Shared.Return(rentStr); }
                             }
@@ -3204,38 +3188,27 @@ namespace Drx.Sdk.Shared.Serialization
                                 newObj.SetBool(key, vb != 0);
                                 break;
                             case ValueType.String:
-                                var sl = ReadInt32(s);
-                                if (sl == 0) { newObj.SetString(key, string.Empty); break; }
-                                var sBuf = ArrayPool<byte>.Shared.Rent(sl);
-                                try
-                                {
-                                    var sr = s.Read(sBuf, 0, sl);
-                                    if (sr != sl) throw new InvalidDataException("Unexpected end of stream reading string");
-                                    newObj.SetString(key, Encoding.UTF8.GetString(sBuf, 0, sl));
-                                }
-                                finally { ArrayPool<byte>.Shared.Return(sBuf); }
+                                var ss = ReadInt32(s);
+                                if (ss == 0) { newObj.SetString(key, string.Empty); break; }
+                                var sBuf = new byte[ss];
+                                var sr = s.Read(sBuf, 0, ss);
+                                if (sr != ss) throw new InvalidDataException("Unexpected end of stream reading string");
+                                newObj.SetString(key, Encoding.UTF8.GetString(sBuf));
                                 break;
                             case ValueType.Bytes:
                                 var bl = ReadInt32(s);
-                                if (bl == 0) { newObj.SetBytes(key, Array.Empty<byte>()); break; }
-                                var bBuf = ArrayPool<byte>.Shared.Rent(bl);
-                                try
-                                {
-                                    var br = s.Read(bBuf, 0, bl);
-                                    if (br != bl) throw new InvalidDataException("Unexpected end of stream reading bytes");
-                                    var exact = new byte[bl];
-                                    Buffer.BlockCopy(bBuf, 0, exact, 0, bl);
-                                    newObj.SetBytes(key, exact);
-                                }
-                                finally { ArrayPool<byte>.Shared.Return(bBuf); }
-                                break;
-                            case ValueType.Array:
-                                var arr = ReadArrayPayload(s, idToObj);
-                                newObj.SetArray(key, arr);
+                                var bBuf = new byte[bl];
+                                var br = s.Read(bBuf, 0, bl);
+                                if (br != bl) throw new InvalidDataException("Unexpected end of stream reading bytes");
+                                newObj.SetBytes(key, bBuf);
                                 break;
                             case ValueType.Object:
                                 var child = ReadObjectPayload(s, idToObj);
                                 newObj.SetObject(key, child);
+                                break;
+                            case ValueType.Array:
+                                var arr = ReadArrayPayload(s, idToObj);
+                                newObj.SetArray(key, arr);
                                 break;
                             default:
                                 throw new InvalidDataException("Unknown value type during deserialize");
@@ -3296,8 +3269,8 @@ namespace Drx.Sdk.Shared.Serialization
                     var obj = ReadObjectPayload(s, idToObj);
                     return new DrxValue(obj!);
                 case ValueType.Array:
-                    var nested = ReadArrayPayload(s, idToObj);
-                    return new DrxValue(nested);
+                    var arr = ReadArrayPayload(s, idToObj);
+                    return new DrxValue(arr);
                 default:
                     throw new InvalidDataException("Unknown value type during deserialize");
             }
@@ -3376,7 +3349,7 @@ namespace Drx.Sdk.Shared.Serialization
                             newObj.SetArray(key, arr);
                             break;
                         case ValueType.Object:
-                            var child = ReadObjectPayloadCompact(s, idToObj, strings);
+                            var child = ReadObjectPayload(s, idToObj);
                             newObj.SetObject(key, child);
                             break;
                         case ValueType.Short:
