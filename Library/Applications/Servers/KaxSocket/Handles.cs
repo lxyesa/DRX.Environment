@@ -1,14 +1,9 @@
-﻿using Drx.Sdk.Network.V2.Web;
+﻿using System.Dynamic;
+using Drx.Sdk.Network.V2.Web;
 using Drx.Sdk.Shared;
 using Drx.Sdk.Shared.Serialization;
 using Drx.Sdk.Shared.Utility;
 using Newtonsoft.Json.Linq;
-using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace KaxSocket
 {
@@ -17,12 +12,12 @@ namespace KaxSocket
         [HttpHandle("/api/test", "GET")]
         public static HttpResponse GetTest(HttpRequest request)
         {
-            var version = ConfigUtility.Read("KaxSocket.ini", "version", "general");
+            var version = ConfigUtility.Read("configs.ini", "version", "general");
             if (string.IsNullOrEmpty(version))
             {
-                Logger.Warn("KaxSocket.ini 中未找到版本号，已写入默认版本号1.0.0");
+                Logger.Warn("configs.ini 中未找到版本号，已写入默认版本号1.0.0");
                 version = "1.0.0";
-                ConfigUtility.Push("KaxSocket.ini", "version", version, "general");
+                ConfigUtility.Push("configs.ini", "version", version, "general");
             }
 
             var dataSer = new DrxSerializationData
@@ -44,7 +39,7 @@ namespace KaxSocket
             // 验证 User-Agent: DLTBModPacker/x.x.x
             var userAgent = request.Headers["User-Agent"];
             var clientVer = request.Headers["Client-Version"];
-            var version = ConfigUtility.Read("KaxSocket.ini", "version", "general");
+            var version = ConfigUtility.Read("configs.ini", "version", "general");
 
             if (string.IsNullOrEmpty(userAgent))
             {
@@ -130,28 +125,62 @@ namespace KaxSocket
         [HttpHandle("/api/mod/upload", "POST")]
         public static HttpResponse PostUploadMod(HttpRequest request)
         {
-            // 首先获取请求中的拓展请求体
-            var extraData = request.Body;
-            if (extraData == null || extraData.Length == 0)
+            // 请求的 Body 与 UploadFile由 HttpServer.ParseRequestAsync解析并填充（包括 multipart 流式解析）
+            var reqBody = request.Body;
+
+            if (string.IsNullOrEmpty(reqBody) && (request.UploadFile == null || request.UploadFile.Stream == null))
             {
                 return new HttpResponse
                 {
                     StatusCode = 400,
-                    Body = "缺少请求体"
+                    Body = "缺少请求体或上传的文件"
                 };
             }
 
-            var jsonObj = JObject.Parse(extraData);
+            if (string.IsNullOrEmpty(reqBody))
+            {
+                // 没有 metadata，但可能有上传文件；返回错误以要求 metadata
+                return new HttpResponse
+                {
+                    StatusCode =400,
+                    Body = "缺少 metadata（JSON）"
+                };
+            }
+
+            JObject jsonObj;
+            try
+            {
+                jsonObj = JObject.Parse(reqBody);
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"解析上传请求的 metadata失败: {ex}");
+                return new HttpResponse
+                {
+                    StatusCode =400,
+                    Body = "无效的 metadata JSON"
+                };
+            }
+
             var modName = jsonObj["mod_name"]?.ToString();
             var modVersion = jsonObj["mod_version"]?.ToString();
             var modAuthor = jsonObj["mod_author"]?.ToString();
             var modDescription = jsonObj["mod_description"]?.ToString();
+            var uploadToken = jsonObj["upload_token"]?.ToString();
 
+            if (uploadToken != ConfigUtility.Read("configs.ini", "upload_token", "general"))
+            {
+                return new HttpResponse
+                {
+                    StatusCode =401,
+                    Body = "无效的上传令牌"
+                };
+            }
 
             if (modName != null && modVersion != null && modAuthor != null && modDescription != null)
             {
                 Logger.Info($"收到Mod上传请求：{modName} v{modVersion} by {modAuthor}");
-              
+
                 var modId = HashUtility.ComputeMD5Hash($"{modName}-{modVersion}-{modAuthor}");
 
                 Logger.Info($"分配Mod ID：{modId}");
@@ -167,41 +196,106 @@ namespace KaxSocket
 
                 try
                 {
-                    Global.Instance.GetModInfoDataBase().Push(modInfo);
+                    var result = HttpServer.SaveUploadFile(request, "mods", $"{modId}.dltbmodpak");
+
+                    // 检测数据库内是否已存在该Mod信息，若不存在则保存，而是更新
+                    var existingMod = Global.Instance.GetModInfoDataBase().Query("ModId", modId);
+                    if (existingMod.Count > 0)
+                    {
+                        Logger.Info($"Mod {modId} 已存在，更新信息");
+                        Global.Instance.GetModInfoDataBase().EditWhere("ModId", modId, modInfo);
+                    }
+                    else
+                    {
+                        Logger.Info($"保存新的Mod信息：{modId}");
+                        Global.Instance.GetModInfoDataBase().Push(modInfo);
+                    }
+
+                    Logger.Info($"完成操作，mod数量统计：{Global.Instance.GetModInfoDataBase().QueryAll().Count}");
+
+                    return result;
                 }
                 catch (Exception ex)
                 {
                     Logger.Error($"保存Mod信息时发生错误：{ex.Message}");
                     return new HttpResponse
                     {
-                        StatusCode = 500,
+                        StatusCode =500,
                         Body = "保存Mod信息时发生错误"
                     };
                 }
-
+            }
+            else
+            {
                 return new HttpResponse
                 {
-                    StatusCode = 200,
-                    Body = "Mod上传成功"
+                    StatusCode =400,
+                    Body = "缺少必要的Mod信息字段"
                 };
+            }
+        }
+
+        [HttpHandle("/api/mod/{modid}/download", "GET")]
+        public static HttpResponse GetDownloadMod(HttpRequest request)
+        {
+            if (request.PathParameters.TryGetValue("modid", out var modid))
+            {
+                // 根据modid向服务器运行目录下的mods文件夹请求对应的Mod包文件（.dltbmodpak）
+                Logger.Info($"收到Mod下载请求：{modid}");
+
+                var modsDir = Path.Combine(AppContext.BaseDirectory, "mods");
+                var filePath = Path.Combine(modsDir, $"{modid}.dltbmodpak");
+
+                if (!File.Exists(filePath))
+                {
+                    Logger.Warn($"请求的 Mod 文件不存在: {filePath}");
+                    return new HttpResponse
+                    {
+                        StatusCode = 404,
+                        Body = "Not Found"
+                    };
+                }
+
+                var result = HttpServer.CreateFileResponse(filePath, $"{modid}.dltbmodpak", bandwidthLimitKb: 5120);
+                return result;
             }
             else
             {
                 return new HttpResponse
                 {
                     StatusCode = 400,
-                    Body = "缺少必要的Mod信息字段"
+                    Body = "缺少modid参数"
                 };
             }
         }
-
-        [HttpHandle("/api/mod/download/{modid}", "GET")]
-        public static HttpResponse GetDownloadMod(HttpRequest request)
+        
+        [HttpHandle("/api/mod/{modid}/filesize", "GET")]
+        public static HttpResponse GetModFileSize(HttpRequest request)
         {
             if (request.PathParameters.TryGetValue("modid", out var modid))
             {
-                // todo
-                return null;
+                Logger.Info($"查询Mod {modid} 的文件大小");
+
+                var modsDir = Path.Combine(AppContext.BaseDirectory, "mods");
+                var filePath = Path.Combine(modsDir, $"{modid}.dltbmodpak");
+
+                if (!File.Exists(filePath))
+                {
+                    Logger.Warn($"请求的 Mod 文件不存在: {filePath}");
+                    return new HttpResponse
+                    {
+                        StatusCode = 404,
+                        Body = "Not Found"
+                    };
+                }
+
+                var fileInfo = new FileInfo(filePath);
+                var result = new HttpResponse
+                {
+                    StatusCode = 200,
+                    Body = fileInfo.Length.ToString()
+                };
+                return result;
             }
             else
             {
@@ -233,41 +327,6 @@ namespace KaxSocket
                     StatusCode = 400,
                     Body = "缺少modid参数"
                 };
-            }
-        }
-
-        [HttpHandle("/api/mod/testu", "POST", StreamUpload = true)]
-        public static HttpResponse PostMod(HttpRequest request)
-        {
-            //仅在 StreamUpload 模式下，UploadFile 会被填充并包含请求的输入流
-            if (request?.UploadFile == null || request.UploadFile.Stream == null)
-            {
-                return new HttpResponse(400, "缺少上传的文件流");
-            }
-            
-            try
-            {
-                var upload = request.UploadFile;
-                var uploadsDir = Path.Combine(AppContext.BaseDirectory, "uploads", "mods");
-                Directory.CreateDirectory(uploadsDir);
-                
-                var fileName = string.IsNullOrEmpty(upload.FileName) ? $"upload_{DateTime.UtcNow.Ticks}" : upload.FileName;
-                var filePath = Path.Combine(uploadsDir, fileName);
-                
-                // 将上传流保存到文件（同步写入以简化示例）
-                using (var outFs = new FileStream(filePath, FileMode.Create, FileAccess.Write, FileShare.None))
-                {
-                    upload.Stream.CopyTo(outFs);
-                }
-                
-                Logger.Info($"已保存上传文件: {filePath}");
-                
-                return new HttpResponse(200, "上传成功");
-            }
-            catch (Exception ex)
-            {
-                Logger.Error($"处理上传时发生错误: {ex.Message}");
-                return new HttpResponse(500, "上传处理失败");
             }
         }
     }

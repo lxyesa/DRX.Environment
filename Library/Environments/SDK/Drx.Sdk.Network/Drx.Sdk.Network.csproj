@@ -43,6 +43,7 @@
     <PackageReference Include="Microsoft.AspNetCore.Routing" Version="2.3.0" />
     <PackageReference Include="Microsoft.Data.Sqlite" Version="9.0.6" />
     <PackageReference Include="SQLite" Version="3.13.0" />
+    <PackageReference Include="Microsoft.AspNetCore.WebUtilities" Version="3.1.28" />
   </ItemGroup>
 
   <ItemGroup>

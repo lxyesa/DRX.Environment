@@ -12,21 +12,26 @@ using System.Threading.Channels;
 using System.Threading;
 using System.Reflection;
 using System.Text.RegularExpressions;
+using System.Diagnostics;
+using Microsoft.AspNetCore.WebUtilities;
+using Microsoft.Net.Http.Headers;
 
 namespace Drx.Sdk.Network.V2.Web
 {
     public class HttpServer
     {
-        private HttpListener _listener;
-        // 文件路由映射：url 前缀 -> 本地根目录
-        private readonly List<(string Prefix, string RootDir)> _fileRoutes = new();
-        private readonly List<RouteEntry> _routes = new();
-        private readonly List<(string Template, Func<HttpListenerContext, Task> Handler)> _rawRoutes = new();
-        private readonly string _staticFileRoot;
+    private HttpListener _listener;
+    private readonly List<(string Prefix, string RootDir)> _fileRoutes = new();
+    private readonly List<RouteEntry> _routes = new();
+    private readonly List<(string Template, Func<HttpListenerContext, Task> Handler)> _rawRoutes = new();
+    private readonly string? _staticFileRoot;
+
         private CancellationTokenSource _cts;
-        private readonly Channel<HttpListenerContext> _requestChannel;
-        private readonly SemaphoreSlim _semaphore;
-        private const int MaxConcurrentRequests = 100; // 最大并发请求数
+    private readonly Channel<HttpListenerContext> _requestChannel;
+    private readonly SemaphoreSlim _semaphore;
+    private const int MaxConcurrentRequests = 100; // 最大并发请求数
+    private readonly MessageQueue<HttpListenerContext> _messageQueue;
+    private readonly ThreadPoolManager _threadPool;
 
         private class RouteEntry
         {
@@ -40,8 +45,8 @@ namespace Drx.Sdk.Network.V2.Web
         /// 构造函数
         /// </summary>
         /// <param name="prefixes">监听前缀，如 "http://localhost:8080/"</param>
-        /// <param name="staticFileRoot">静态文件根目录</param>
-        public HttpServer(IEnumerable<string> prefixes, string staticFileRoot = null)
+        /// <param name="staticFileRoot">静态文件根目录（可为 null）</param>
+        public HttpServer(IEnumerable<string> prefixes, string? staticFileRoot = null)
         {
             _listener = new HttpListener();
             foreach (var prefix in prefixes)
@@ -56,6 +61,8 @@ namespace Drx.Sdk.Network.V2.Web
                 FullMode = BoundedChannelFullMode.DropOldest
             });
             _semaphore = new SemaphoreSlim(MaxConcurrentRequests);
+            _messageQueue = new MessageQueue<HttpListenerContext>(1000);
+            _threadPool = new ThreadPoolManager(Environment.ProcessorCount);
         }
 
         /// <summary>
@@ -66,10 +73,19 @@ namespace Drx.Sdk.Network.V2.Web
         public void AddRawRoute(string path, Func<HttpListenerContext, Task> handler)
         {
             if (string.IsNullOrEmpty(path) || handler == null) return;
-            //规范化
             if (!path.StartsWith("/")) path = "/" + path;
-            _rawRoutes.Add((path, handler));
+            _raw_routes_add(path, handler);
             Logger.Info($"添加原始路由: {path}");
+        }
+
+        private void _raw_routes_add(string path, Func<HttpListenerContext, Task> handler)
+        {
+            _raw_routes_internal_add(path, handler);
+        }
+
+        private void _raw_routes_internal_add(string path, Func<HttpListenerContext, Task> handler)
+        {
+            _rawRoutes.Add((path, handler));
         }
 
         /// <summary>
@@ -110,27 +126,27 @@ namespace Drx.Sdk.Network.V2.Web
                         CancellationToken = CancellationToken.None
                     };
 
-                    HttpResponse resp;
+                    HttpResponse? resp;
                     try
                     {
-                        resp = await handler(req).ConfigureAwait(false);
+                        resp = await handler(req).ConfigureAwait(false) ?? new HttpResponse(500, "Internal Server Error");
                     }
                     catch (Exception ex)
                     {
-                        Logger.Error($"执行 StreamUpload处理方法时发生错误: {ex.Message}");
-                        resp = new HttpResponse(500, $"Internal Server Error: {ex.Message}");
+                        Logger.Error($"执行 StreamUpload处理方法时发生错误: {ex.InnerException?.Message ?? ex.Message}\n{ex.InnerException?.StackTrace ?? ex.StackTrace}");
+                        resp = new HttpResponse(500, $"Internal Server Error: {ex.InnerException?.Message ?? ex.Message}");
                     }
 
-                    SendResponse(ctx.Response, resp);
+                    SendResponse(ctx.Response, resp ?? new HttpResponse(500, "Internal Server Error"));
                 }
                 catch (Exception ex)
                 {
-                    Logger.Error($"StreamUpload raw handler 错误: {ex.Message}");
-                    try { ctx.Response.StatusCode =500; using var sw = new StreamWriter(ctx.Response.OutputStream, Encoding.UTF8, leaveOpen: false); sw.Write("Internal Server Error"); } catch { }
+                    Logger.Error($"StreamUpload raw handler 错误: {ex}");
+                    try { ctx.Response.StatusCode = 500; using var sw = new StreamWriter(ctx.Response.OutputStream, Encoding.UTF8, leaveOpen: false); sw.Write("Internal Server Error"); } catch { }
                 }
             };
 
-            _rawRoutes.Add((path, rawHandler));
+            _raw_routes_add(path, rawHandler);
             Logger.Info($"添加流式上传路由: {path}");
         }
 
@@ -144,8 +160,6 @@ namespace Drx.Sdk.Network.V2.Web
                 _cts = new CancellationTokenSource();
                 _listener.Start();
                 Logger.Info("HttpServer 已启动");
-
-                // 启动请求处理任务
                 var processingTasks = new Task[Environment.ProcessorCount];
                 for (int i = 0; i < processingTasks.Length; i++)
                 {
@@ -159,7 +173,7 @@ namespace Drx.Sdk.Network.V2.Web
             }
             catch (Exception ex)
             {
-                Logger.Error($"启动 HttpServer 时发生错误: {ex.Message}");
+                Logger.Error($"启动 HttpServer 时发生错误: {ex}");
                 throw;
             }
         }
@@ -174,11 +188,14 @@ namespace Drx.Sdk.Network.V2.Web
                 _cts?.Cancel();
                 _listener.Stop();
                 _semaphore.Dispose();
+                // 停止并释放新增的队列与线程池
+                try { _messageQueue?.Complete(); } catch { }
+                try { _threadPool?.Dispose(); } catch { }
                 Logger.Info("HttpServer 已停止");
             }
             catch (Exception ex)
             {
-                Logger.Error($"停止 HttpServer 时发生错误: {ex.Message}");
+                Logger.Error($"停止 HttpServer 时发生错误: {ex}");
             }
         }
 
@@ -204,7 +221,7 @@ namespace Drx.Sdk.Network.V2.Web
             }
             catch (Exception ex)
             {
-                Logger.Error($"添加路由 {method} {path} 时发生错误: {ex.Message}");
+                Logger.Error($"添加路由 {method} {path} 时发生错误: {ex}");
             }
         }
 
@@ -230,7 +247,7 @@ namespace Drx.Sdk.Network.V2.Web
             }
             catch (Exception ex)
             {
-                Logger.Error($"添加异步路由 {method} {path} 时发生错误: {ex.Message}");
+                Logger.Error($"添加异步路由 {method} {path} 时发生错误: {ex}");
             }
         }
 
@@ -259,7 +276,7 @@ namespace Drx.Sdk.Network.V2.Web
                         {
                             // 方法签名需接受 HttpListenerContext
                             var parameters = method.GetParameters();
-                            if (parameters.Length ==1 && parameters[0].ParameterType == typeof(HttpListenerContext))
+                            if (parameters.Length == 1 && parameters[0].ParameterType == typeof(HttpListenerContext))
                             {
                                 var returnType = method.ReturnType;
                                 if (returnType == typeof(void))
@@ -276,8 +293,21 @@ namespace Drx.Sdk.Network.V2.Web
                                 {
                                     Func<HttpListenerContext, Task> handler = async ctx =>
                                     {
-                                        var resp = (HttpResponse)method.Invoke(null, new object[] { ctx });
-                                        server.SendResponse(ctx.Response, resp);
+                                        try
+                                        {
+                                            var resp = (HttpResponse)method.Invoke(null, new object[] { ctx })!;
+                                            server.SendResponse(ctx.Response, resp ?? new HttpResponse(500, "Internal Server Error"));
+                                        }
+                                        catch (TargetInvocationException tie)
+                                        {
+                                            Logger.Error($"执行原始路由方法 {method.Name} 时发生错误: {tie.InnerException?.Message ?? tie.Message}\n{tie.InnerException?.StackTrace ?? tie.StackTrace}");
+                                            try { ctx.Response.StatusCode = 500; using var sw = new StreamWriter(ctx.Response.OutputStream, Encoding.UTF8, leaveOpen: false); sw.Write($"Internal Server Error: {tie.InnerException?.Message ?? tie.Message}"); } catch { }
+                                        }
+                                        catch (Exception ex)
+                                        {
+                                            Logger.Error($"执行原始路由方法 {method.Name} 时发生错误: {ex}");
+                                            try { ctx.Response.StatusCode = 500; using var sw = new StreamWriter(ctx.Response.OutputStream, Encoding.UTF8, leaveOpen: false); sw.Write("Internal Server Error"); } catch { }
+                                        }
                                         await Task.CompletedTask;
                                     };
                                     server.AddRawRoute(attr.Path, handler);
@@ -286,9 +316,22 @@ namespace Drx.Sdk.Network.V2.Web
                                 {
                                     Func<HttpListenerContext, Task> handler = async ctx =>
                                     {
-                                        var task = (Task<HttpResponse>)method.Invoke(null, new object[] { ctx });
-                                        var resp = await task.ConfigureAwait(false);
-                                        server.SendResponse(ctx.Response, resp);
+                                        try
+                                        {
+                                            var task = (Task<HttpResponse>)method.Invoke(null, new object[] { ctx })!;
+                                            var resp = await task.ConfigureAwait(false) ?? new HttpResponse(500, "Internal Server Error");
+                                            server.SendResponse(ctx.Response, resp);
+                                        }
+                                        catch (TargetInvocationException tie)
+                                        {
+                                            Logger.Error($"执行原始路由方法 {method.Name} 时发生错误: {tie.InnerException?.Message ?? tie.Message}\n{tie.InnerException?.StackTrace ?? tie.StackTrace}");
+                                            try { ctx.Response.StatusCode = 500; using var sw = new StreamWriter(ctx.Response.OutputStream, Encoding.UTF8, leaveOpen: false); sw.Write($"Internal Server Error: {tie.InnerException?.Message ?? tie.Message}"); } catch { }
+                                        }
+                                        catch (Exception ex)
+                                        {
+                                            Logger.Error($"执行原始路由方法 {method.Name} 时发生错误: {ex}");
+                                            try { ctx.Response.StatusCode = 500; using var sw = new StreamWriter(ctx.Response.OutputStream, Encoding.UTF8, leaveOpen: false); sw.Write("Internal Server Error"); } catch { }
+                                        }
                                     };
                                     server.AddRawRoute(attr.Path, handler);
                                 }
@@ -304,7 +347,7 @@ namespace Drx.Sdk.Network.V2.Web
                         }
                         else if (attr.StreamUpload)
                         {
-                            // StreamUpload: 自动将 HttpListenerContext 的请求流传递给处理方法，方法可声明为 (HttpRequest) -> HttpResponse/Task<HttpResponse>
+                            // StreamUpload 路由会自动将 HttpListenerContext 的请求流传递给处理方法，签名可为 (HttpRequest) -> HttpResponse/Task<HttpResponse>
                             var handler = CreateHandlerDelegate(method);
                             if (handler != null)
                             {
@@ -339,7 +382,7 @@ namespace Drx.Sdk.Network.V2.Web
             }
             catch (Exception ex)
             {
-                Logger.Error($"注册 HTTP处理方法时发生错误: {ex.Message}");
+                Logger.Error($"注册 HTTP处理方法时发生错误: {ex}");
             }
         }
 
@@ -367,23 +410,28 @@ namespace Drx.Sdk.Network.V2.Web
                     {
                         if (returnType == typeof(HttpResponse))
                         {
-                            return (HttpResponse)method.Invoke(null, new object[] { request });
+                            return (HttpResponse)method.Invoke(null, new object[] { request })!;
                         }
                         else
                         {
-                            return await (Task<HttpResponse>)method.Invoke(null, new object[] { request });
+                            return await (Task<HttpResponse>)method.Invoke(null, new object[] { request })!;
                         }
+                    }
+                    catch (TargetInvocationException tie)
+                    {
+                        Logger.Error($"执行 HTTP处理方法 {method.Name} 时发生错误: {tie.InnerException?.Message ?? tie.Message}\n{tie.InnerException?.StackTrace ?? tie.StackTrace}");
+                        return new HttpResponse(500, $"Internal Server Error: {tie.InnerException?.Message ?? tie.Message}");
                     }
                     catch (Exception ex)
                     {
-                        Logger.Error($"执行 HTTP处理方法 {method.Name} 时发生错误: {ex.Message}");
+                        Logger.Error($"执行 HTTP处理方法 {method.Name} 时发生错误: {ex}");
                         return new HttpResponse(500, $"Internal Server Error: {ex.Message}");
                     }
                 };
             }
             catch (Exception ex)
             {
-                Logger.Error($"创建处理委托时发生错误: {ex.Message}");
+                Logger.Error($"创建处理委托时发生错误: {ex}");
                 return null;
             }
         }
@@ -395,7 +443,8 @@ namespace Drx.Sdk.Network.V2.Web
                 try
                 {
                     var context = await _listener.GetContextAsync();
-                    await _requestChannel.Writer.WriteAsync(context, token);
+                    await _requestChannel.Writer.WriteAsync(context);
+                    try { _ = _message_queue_write(context); } catch { }
                 }
                 catch (HttpListenerException) when (token.IsCancellationRequested)
                 {
@@ -403,18 +452,31 @@ namespace Drx.Sdk.Network.V2.Web
                 }
                 catch (Exception ex)
                 {
-                    Logger.Error($"接受请求时发生错误: {ex.Message}");
+                    Logger.Error($"接受请求时发生错误: {ex}");
                 }
             }
             _requestChannel.Writer.Complete();
+            _messageQueue.Complete();
         }
+
+        private ValueTask _message_queue_write(HttpListenerContext context) => _messageQueue.WriteAsync(context);
 
         private async Task ProcessRequestsAsync(CancellationToken token)
         {
             await foreach (var context in _requestChannel.Reader.ReadAllAsync(token))
             {
                 await _semaphore.WaitAsync(token);
-                _ = Task.Run(() => HandleRequestAsync(context), token).ContinueWith(t => _semaphore.Release());
+                _threadPool?.QueueWork(async () =>
+                {
+                    try
+                    {
+                        await HandleRequestAsync(context).ConfigureAwait(false);
+                    }
+                    finally
+                    {
+                        _semaphore.Release();
+                    }
+                });
             }
         }
 
@@ -430,7 +492,7 @@ namespace Drx.Sdk.Network.V2.Web
 
                 // 尝试原始路由（raw handlers），这些处理器可以直接操作 HttpListenerContext 用于流式上传/下载
                 var rawPath = context.Request.Url?.AbsolutePath ?? "/";
-                foreach (var (Template, Handler) in _rawRoutes)
+                foreach (var (Template, Handler) in _raw_routes_reader())
                 {
                     if (rawPath.StartsWith(Template, StringComparison.OrdinalIgnoreCase))
                     {
@@ -440,14 +502,14 @@ namespace Drx.Sdk.Network.V2.Web
                         }
                         catch (Exception ex)
                         {
-                            Logger.Error($"Raw handler 错误: {ex.Message}");
+                            Logger.Error($"Raw handler 错误: {ex}");
                             try { context.Response.StatusCode = 500; using var sw = new StreamWriter(context.Response.OutputStream, Encoding.UTF8, leaveOpen: false); sw.Write("Internal Server Error"); } catch { }
                         }
                         return;
                     }
                 }
 
-                var request = ParseRequest(context.Request);
+                var request = await ParseRequestAsync(context.Request);
                 HttpResponse response;
 
                 var method = ParseHttpMethod(request.Method);
@@ -471,7 +533,7 @@ namespace Drx.Sdk.Network.V2.Web
                 // 如果没有匹配的路由，尝试静态文件
                 if (_staticFileRoot != null && TryServeStaticFile(request.Path, out var fileResponse))
                 {
-                    response = fileResponse;
+                    response = fileResponse ?? new HttpResponse(500, "Internal Server Error");
                 }
                 else
                 {
@@ -483,11 +545,13 @@ namespace Drx.Sdk.Network.V2.Web
             }
             catch (Exception ex)
             {
-                Logger.Error($"处理请求时发生错误: {ex.Message}");
+                Logger.Error($"处理请求时发生错误: {ex}");
                 var errorResponse = new HttpResponse(500, $"Internal Server Error: {ex.Message}");
                 SendResponse(context.Response, errorResponse);
             }
         }
+
+        private IEnumerable<(string Template, Func<HttpListenerContext, Task> Handler)> _raw_routes_reader() => _rawRoutes;
 
         /// <summary>
         /// 添加文件路由，将 URL 前缀映射到本地目录。例如 AddFileRoute("/download/", "C:\\wwwroot")
@@ -496,12 +560,13 @@ namespace Drx.Sdk.Network.V2.Web
         public void AddFileRoute(string urlPrefix, string rootDirectory)
         {
             if (string.IsNullOrEmpty(urlPrefix) || string.IsNullOrEmpty(rootDirectory)) return;
-            //规范化前缀，确保以 '/' 开头并以 '/'结尾
             if (!urlPrefix.StartsWith("/")) urlPrefix = "/" + urlPrefix;
             if (!urlPrefix.EndsWith("/")) urlPrefix += "/";
-            _fileRoutes.Add((urlPrefix, rootDirectory));
+            _file_routes_add(urlPrefix, rootDirectory);
             Logger.Info($"添加文件路由: {urlPrefix} -> {rootDirectory}");
         }
+
+        private void _file_routes_add(string urlPrefix, string rootDirectory) => _fileRoutes.Add((urlPrefix, rootDirectory));
 
         /// <summary>
         /// 尝试以流方式服务文件（支持 Range），如果处理则直接写入 context.Response 并返回 true。
@@ -592,7 +657,7 @@ namespace Drx.Sdk.Network.V2.Web
                         }
                         catch (Exception ex)
                         {
-                            Logger.Error($"后台流式传输文件时发生错误: {ex.Message}");
+                            Logger.Error($"后台流式传输文件时发生错误: {ex}");
                             try { context.Response.StatusCode = 500; context.Response.OutputStream.Close(); } catch { }
                         }
                     });
@@ -604,7 +669,7 @@ namespace Drx.Sdk.Network.V2.Web
             }
             catch (Exception ex)
             {
-                Logger.Error($"TryServeFileStream发生错误: {ex.Message}");
+                Logger.Error($"TryServeFileStream发生错误: {ex}");
                 try { context.Response.StatusCode = 500; context.Response.OutputStream.Close(); } catch { }
                 return true;
             }
@@ -618,31 +683,125 @@ namespace Drx.Sdk.Network.V2.Web
             const int BufferSize = 64 * 1024;
             var resp = context.Response;
 
-            // 使用异步文件流
-            using (var fs = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read, BufferSize, FileOptions.Asynchronous))
+            // 自动附加常用响应头（仅在调用方未设置时添加），以提升兼容性和客户端体验
+            try
             {
-                fs.Seek(start, SeekOrigin.Begin);
-                var remaining = (isPartial ? (end - start + 1) : totalLength);
-                var buffer = new byte[BufferSize];
-                while (remaining > 0)
+                var fi = new FileInfo(filePath);
+                // Content-Type：若未设置则根据扩展名推断
+                if (string.IsNullOrEmpty(resp.ContentType))
                 {
-                    int toRead = (int)Math.Min(buffer.Length, remaining);
-                    var read = await fs.ReadAsync(buffer.AsMemory(0, toRead)).ConfigureAwait(false);
-                    if (read <= 0) break;
+                    try { resp.ContentType = GetMimeType(Path.GetExtension(filePath)); } catch { }
+                }
+
+                // Accept-Ranges：建议设置为 bytes
+                try { if (resp.Headers["Accept-Ranges"] == null) resp.AddHeader("Accept-Ranges", "bytes"); } catch { }
+
+                // Content-Disposition：若未设置则设置为 attachment，包含兼容的 filename 和 filename*
+                bool hasContentDisposition = false;
+                try
+                {
+                    for (int i = 0; i < resp.Headers.Count; i++)
+                    {
+                        var k = resp.Headers.GetKey(i);
+                        if (string.Equals(k, "Content-Disposition", StringComparison.OrdinalIgnoreCase)) { hasContentDisposition = true; break; }
+                    }
+                }
+                catch { }
+
+                if (!hasContentDisposition)
+                {
                     try
                     {
-                        await resp.OutputStream.WriteAsync(buffer.AsMemory(0, read)).ConfigureAwait(false);
+                        var fileName = Path.GetFileName(filePath);
+                        var safeName = SanitizeFileNameForHeader(fileName);
+                        var disposition = $"attachment; filename=\"{safeName}\"; filename*=UTF-8''{Uri.EscapeDataString(fileName)}";
+                        resp.AddHeader("Content-Disposition", disposition);
                     }
-                    catch (Exception ex)
+                    catch { }
+                }
+
+                // Last-Modified：若未设置则使用文件最后写入时间（UTC，RFC1123）
+                try { if (resp.Headers["Last-Modified"] == null) resp.AddHeader("Last-Modified", fi.LastWriteTimeUtc.ToString("R")); } catch { }
+
+                // ETag：基于长度与最后写入时间生成简单 ETag
+                try { if (resp.Headers["ETag"] == null) resp.AddHeader("ETag", $"\"{fi.Length}-{fi.LastWriteTimeUtc.Ticks}\""); } catch { }
+
+                // Cache-Control：默认私有且不缓存（可被调用方覆盖）
+                try { if (resp.Headers["Cache-Control"] == null) resp.AddHeader("Cache-Control", "private, no-cache"); } catch { }
+            }
+            catch (Exception ex)
+            {
+                // 如果头部设置失败不应阻止流式传输，记录并继续
+                Logger.Warn($"自动附加响应头时发生错误: {ex.Message}");
+            }
+
+            try
+            {
+                using (var fs = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read, BufferSize, FileOptions.Asynchronous))
+                {
+                    fs.Seek(start, SeekOrigin.Begin);
+                    var remaining = (isPartial ? (end - start + 1) : totalLength);
+                    var buffer = new byte[BufferSize];
+                    while (remaining > 0)
                     {
-                        Logger.Warn($"写入响应输出流时发生错误（文件流）: {ex.Message}");
-                        break;
+                        int toRead = (int)Math.Min(buffer.Length, remaining);
+                        var read = await fs.ReadAsync(buffer.AsMemory(0, toRead)).ConfigureAwait(false);
+                        if (read <= 0) break;
+                        try
+                        {
+                            await resp.OutputStream.WriteAsync(buffer.AsMemory(0, read)).ConfigureAwait(false);
+                        }
+                        catch (Exception ex)
+                        {
+                            if (IsClientDisconnect(ex))
+                            {
+                                Logger.Warn($"客户端在流式传输期间断开连接: {ex.Message}");
+                                break;
+                            }
+                            Logger.Warn($"写入响应输出流时发生错误（文件流）: {ex}");
+                            break;
+                        }
+                        remaining -= read;
                     }
-                    remaining -= read;
+                }
+            }
+            catch (Exception ex)
+            {
+                if (IsClientDisconnect(ex))
+                {
+                    Logger.Warn($"流式传输文件时客户端断开: {ex.Message}");
+                }
+                else
+                {
+                    Logger.Error($"后台流式传输文件时发生错误: {ex}");
                 }
             }
 
             try { resp.OutputStream.Close(); } catch { }
+        }
+
+        private static bool IsClientDisconnect(Exception ex)
+        {
+            if (ex == null) return false;
+            try
+            {
+                if (ex is HttpListenerException hle)
+                {
+                    return hle.ErrorCode == 64 || hle.ErrorCode == 995 || hle.ErrorCode == 10054;
+                }
+
+                if (ex is IOException ioe && ioe.InnerException is System.Net.Sockets.SocketException se)
+                {
+                    return se.SocketErrorCode == System.Net.Sockets.SocketError.ConnectionReset || se.SocketErrorCode == System.Net.Sockets.SocketError.Shutdown;
+                }
+
+                if (ex is System.Net.Sockets.SocketException socketEx)
+                {
+                    return socketEx.SocketErrorCode == System.Net.Sockets.SocketError.ConnectionReset || socketEx.SocketErrorCode == System.Net.Sockets.SocketError.Shutdown;
+                }
+            }
+            catch { }
+            return false;
         }
 
         private static HttpMethod? ParseHttpMethod(string methodString)
@@ -682,12 +841,137 @@ namespace Drx.Sdk.Network.V2.Web
                     Headers = request.Headers,
                     Body = body,
                     BodyBytes = bodyBytes,
+                    Content = body,
                     RemoteEndPoint = request.RemoteEndPoint
                 };
             }
             catch (Exception ex)
             {
-                Logger.Error($"解析请求时发生错误: {ex.Message}");
+                Logger.Error($"解析请求时发生错误: {ex}");
+                throw;
+            }
+        }
+
+        private async Task<HttpRequest> ParseRequestAsync(HttpListenerRequest request)
+        {
+            try
+            {
+                byte[] bodyBytes = null;
+                string body = "";
+                var httpRequest = new HttpRequest
+                {
+                    Method = request.HttpMethod,
+                    Path = request.Url!.AbsolutePath,
+                    Query = request.QueryString,
+                    Headers = request.Headers,
+                    RemoteEndPoint = request.RemoteEndPoint
+                };
+
+                var contentType = request.Headers["Content-Type"] ?? request.Headers["content-type"];
+                if (!string.IsNullOrEmpty(contentType) && contentType.IndexOf("multipart/", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    try
+                    {
+                        var mediaType = MediaTypeHeaderValue.Parse(contentType);
+                        var boundary = HeaderUtilities.RemoveQuotes(mediaType.Boundary).ToString();
+                        var reader = new MultipartReader(boundary, request.InputStream);
+
+                        MultipartSection section;
+                        while ((section = await reader.ReadNextSectionAsync().ConfigureAwait(false)) != null)
+                        {
+                            var hasContentDispositionHeader = ContentDispositionHeaderValue.TryParse(section.ContentDisposition, out var contentDisposition);
+                            if (!hasContentDispositionHeader) continue;
+
+                            if (contentDisposition != null && contentDisposition.IsFileDisposition())
+                            {
+                                var fileName = HeaderUtilities.RemoveQuotes(contentDisposition.FileName).ToString();
+                                var name = HeaderUtilities.RemoveQuotes(contentDisposition.Name).ToString();
+
+                                var ms = new MemoryStream();
+                                await section.Body.CopyToAsync(ms).ConfigureAwait(false);
+                                ms.Position = 0;
+
+                                httpRequest.UploadFile = new HttpRequest.UploadFileDescriptor
+                                {
+                                    Stream = ms,
+                                    FileName = string.IsNullOrEmpty(fileName) ? "file" : fileName,
+                                    FieldName = string.IsNullOrEmpty(name) ? "file" : name,
+                                    CancellationToken = CancellationToken.None,
+                                    Progress = null
+                                };
+                            }
+                            else if (contentDisposition != null && contentDisposition.IsFormDisposition())
+                            {
+                                var name = HeaderUtilities.RemoveQuotes(contentDisposition.Name).ToString();
+                                using var sr = new StreamReader(section.Body, Encoding.UTF8);
+                                var value = await sr.ReadToEndAsync().ConfigureAwait(false);
+                                if (string.Equals(name, "metadata", StringComparison.OrdinalIgnoreCase) || string.Equals(name, "body", StringComparison.OrdinalIgnoreCase))
+                                {
+                                    body = value;
+                                    try
+                                    {
+                                        httpRequest.Headers.Add(name, value);
+                                    }
+                                    catch (Exception)
+                                    {
+                                        try
+                                        {
+                                            httpRequest.Form.Add(name, value);
+                                        }
+                                        catch
+                                        {
+                                            if (string.IsNullOrEmpty(httpRequest.Body)) httpRequest.Body = value; else httpRequest.Body += "\n" + value;
+                                        }
+                                    }
+                                }
+                                else
+                                {
+                                    try { httpRequest.Form.Add(name, value); } catch { }
+                                    try
+                                    {
+                                        httpRequest.Headers.Add(name, value);
+                                    }
+                                    catch
+                                    {
+                                    }
+                                }
+                            }
+                        }
+
+                        if (!string.IsNullOrEmpty(body))
+                        {
+                            httpRequest.Body = body;
+                            httpRequest.BodyBytes = Encoding.UTF8.GetBytes(body);
+                            httpRequest.Content = new System.Dynamic.ExpandoObject();
+                            try { ((System.Collections.Generic.IDictionary<string, object>)httpRequest.Content)["Text"] = body; } catch { }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Error($"Multipart解析失败: {ex}");
+                        throw;
+                    }
+
+                    return httpRequest;
+                }
+
+                if (request.HasEntityBody)
+                {
+                    using var memoryStream = new MemoryStream();
+                    request.InputStream.CopyTo(memoryStream);
+                    bodyBytes = memoryStream.ToArray();
+                    body = Encoding.UTF8.GetString(bodyBytes);
+                }
+
+                httpRequest.Body = body;
+                httpRequest.BodyBytes = bodyBytes;
+                httpRequest.Content = new System.Dynamic.ExpandoObject();
+                try { ((System.Collections.Generic.IDictionary<string, object>)httpRequest.Content)["Text"] = body; } catch { }
+                return httpRequest;
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"解析请求时发生错误: {ex}");
                 throw;
             }
         }
@@ -697,10 +981,8 @@ namespace Drx.Sdk.Network.V2.Web
             try
             {
                 response.StatusCode = httpResponse.StatusCode;
-                // Ensure StatusDescription is not null (HttpListenerResponse may throw on null)
                 response.StatusDescription = httpResponse.StatusDescription ?? GetDefaultStatusDescription(httpResponse.StatusCode);
 
-                // Safely add headers, skipping null keys/values
                 for (int i = 0; i < httpResponse.Headers.Count; i++)
                 {
                     var key = httpResponse.Headers.GetKey(i);
@@ -708,14 +990,130 @@ namespace Drx.Sdk.Network.V2.Web
                     if (string.IsNullOrEmpty(key) || val == null)
                         continue;
 
+                    if (string.Equals(key, "Content-Length", StringComparison.OrdinalIgnoreCase)
+                        || string.Equals(key, "Transfer-Encoding", StringComparison.OrdinalIgnoreCase))
+                    {
+                        continue;
+                    }
+
                     try
                     {
                         response.AddHeader(key, val);
                     }
                     catch (Exception ex)
                     {
-                        Logger.Warn($"跳过无法添加的响应头 {key}: {ex.Message}");
+                        Logger.Warn($"跳过无法添加的响应头 {key}: {ex}");
                     }
+                }
+
+                if (httpResponse.FileStream != null)
+                {
+                    var fs = httpResponse.FileStream;
+                    try
+                    {
+                        if (fs.CanSeek)
+                        {
+                            long remaining = fs.Length - fs.Position;
+                            try { response.ContentLength64 = remaining; }
+                            catch (InvalidOperationException ioe)
+                            {
+                                Logger.Warn($"无法设置 ContentLength64（响应头可能已发送）: {ioe.Message}");
+                                try { response.SendChunked = true; } catch { }
+                            }
+                        }
+                        else
+                        {
+                            try { response.SendChunked = true; } catch { }
+                        }
+                    }
+                    catch { try { response.SendChunked = true; } catch { } }
+
+                    _ = Task.Run(async () =>
+                    {
+                        try
+                        {
+                            const int BufferSize = 64 * 1024;
+                            var buffer = new byte[BufferSize];
+
+                            long localRemaining = -1;
+                            try { localRemaining = response.ContentLength64; } catch { localRemaining = -1; }
+
+                            long bytesPerSecond = 0;
+                            try { bytesPerSecond = (long)httpResponse.BandwidthLimitKb * 1024L; } catch { bytesPerSecond = 0; }
+
+                            var sw = Stopwatch.StartNew();
+                            long totalBytesSent = 0;
+
+                            while (true)
+                            {
+                                int toRead = (int)Math.Min(buffer.Length, (localRemaining >= 0) ? Math.Min(localRemaining, buffer.Length) : buffer.Length);
+                                if (toRead <= 0) break;
+
+                                int read = 0;
+                                try { read = await fs.ReadAsync(buffer.AsMemory(0, toRead)).ConfigureAwait(false); } catch (Exception ex) { Logger.Warn($"读取文件流时发生错误: {ex}"); break; }
+                                if (read <= 0) break;
+
+                                try
+                                {
+                                    int writeCount = read;
+                                    if (localRemaining >= 0)
+                                    {
+                                        writeCount = (int)Math.Min(read, localRemaining);
+                                    }
+
+                                    await response.OutputStream.WriteAsync(buffer.AsMemory(0, writeCount)).ConfigureAwait(false);
+                                    totalBytesSent += writeCount;
+                                    if (localRemaining >= 0) localRemaining -= writeCount;
+
+                                    if (bytesPerSecond > 0)
+                                    {
+                                        double expectedMs = (double)totalBytesSent * 1000.0 / bytesPerSecond;
+                                        var actualMs = sw.Elapsed.TotalMilliseconds;
+                                        if (expectedMs > actualMs)
+                                        {
+                                            var waitMs = (int)Math.Ceiling(expectedMs - actualMs);
+                                            if (waitMs > 0) await Task.Delay(waitMs).ConfigureAwait(false);
+                                        }
+                                    }
+
+                                    if (writeCount < read)
+                                    {
+                                        break;
+                                    }
+                                }
+                                catch (Exception ex)
+                                {
+                                    if (IsClientDisconnect(ex))
+                                    {
+                                        Logger.Warn($"客户端已断开连接，停止写入响应: {ex.Message}");
+                                    }
+                                    else
+                                    {
+                                        Logger.Warn($"写入响应输出流时发生错误（文件流）: {ex}");
+                                    }
+                                    break;
+                                }
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            if (IsClientDisconnect(ex))
+                            {
+                                Logger.Warn($"客户端在传输中断开连接: {ex.Message}");
+                            }
+                            else
+                            {
+                                Logger.Error($"在传输文件到响应时发生错误: {ex}");
+                            }
+                        }
+                        finally
+                        {
+                            try { httpResponse.FileStream?.Dispose(); } catch { }
+                            try { response.OutputStream.Close(); } catch { }
+                        }
+                    });
+
+                    return;
                 }
 
                 byte[] responseBytes = null;
@@ -737,17 +1135,23 @@ namespace Drx.Sdk.Network.V2.Web
                     responseBytes = Encoding.UTF8.GetBytes(httpResponse.Body);
                 }
 
-                // Ensure ContentLength64 is set to0 if no body
                 if (responseBytes != null)
                 {
-                    response.ContentLength64 = responseBytes.Length;
+                    try
+                    {
+                        response.ContentLength64 = responseBytes.Length;
+                    }
+                    catch (InvalidOperationException ioe)
+                    {
+                        // 如果响应头已发送，无法设置 ContentLength64，记录警告并继续写入（可能使用分块传输）
+                        Logger.Warn($"无法设置 ContentLength64（响应头可能已发送）: {ioe.Message}");
+                    }
                     try
                     {
                         response.OutputStream.Write(responseBytes, 0, responseBytes.Length);
                     }
-                    catch (Exception ex)
+                    catch (Exception)
                     {
-                        Logger.Error($"写入响应输出流时发生错误: {ex.Message}");
                     }
                 }
                 else
@@ -761,12 +1165,12 @@ namespace Drx.Sdk.Network.V2.Web
                 }
                 catch (Exception ex)
                 {
-                    Logger.Warn($"关闭响应流时发生错误: {ex.Message}");
+                    Logger.Warn($"关闭响应流时发生错误: {ex}");
                 }
             }
             catch (Exception ex)
             {
-                Logger.Error($"发送响应时发生错误: {ex.Message}");
+                Logger.Error($"发送响应时发生错误: {ex}");
             }
         }
 
@@ -787,7 +1191,7 @@ namespace Drx.Sdk.Network.V2.Web
             };
         }
 
-        private bool TryServeStaticFile(string path, out HttpResponse response)
+        private bool TryServeStaticFile(string path, out HttpResponse? response)
         {
             response = null;
             if (string.IsNullOrEmpty(_staticFileRoot) || !path.StartsWith("/static/"))
@@ -807,7 +1211,7 @@ namespace Drx.Sdk.Network.V2.Web
             }
             catch (Exception ex)
             {
-                Logger.Error($"服务静态文件 {filePath} 时发生错误: {ex.Message}");
+                Logger.Error($"服务静态文件 {filePath} 时发生错误: {ex}");
                 return false;
             }
         }
@@ -828,7 +1232,7 @@ namespace Drx.Sdk.Network.V2.Web
             };
         }
 
-        private bool MatchRoute(string path, string template, out Dictionary<string, string> parameters)
+        private bool MatchRoute(string path, string template, out Dictionary<string, string>? parameters)
         {
             parameters = null;
             var templateParts = template.Split('/');
@@ -866,17 +1270,34 @@ namespace Drx.Sdk.Network.V2.Web
                 return path => path == template ? new Dictionary<string, string>() : null;
             }
 
-            // 提取参数名
+            // 提取参数名并构建正则模式，安全地转义模板中的文本部分
             var paramNames = new List<string>();
-            var regexPattern = "^" + Regex.Escape(template).Replace("\\{[^}]+\\}", "([^/]+)") + "$";
-            var match = Regex.Match(template, @"\{([^}]+)\}");
-            while (match.Success)
+            var sb = new System.Text.StringBuilder();
+            int lastIndex = 0;
+            var matches = Regex.Matches(template, "\\{([^}]+)\\}");
+            foreach (Match m in matches)
             {
-                paramNames.Add(match.Groups[1].Value);
-                match = match.NextMatch();
+                //追加参数前的文字（转义）
+                if (m.Index > lastIndex)
+                {
+                    sb.Append(Regex.Escape(template.Substring(lastIndex, m.Index - lastIndex)));
+                }
+
+                // 用捕获组替换参数
+                sb.Append("([^/]+)");
+                paramNames.Add(m.Groups[1].Value);
+                lastIndex = m.Index + m.Length;
             }
 
-            var regex = new Regex(regexPattern);
+            //追加尾部文字
+            if (lastIndex < template.Length)
+            {
+                sb.Append(Regex.Escape(template.Substring(lastIndex)));
+            }
+
+            var regexPattern = "^" + sb.ToString() + "$";
+            var regex = new Regex(regexPattern, RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
             return path =>
             {
                 var m = regex.Match(path);
@@ -888,6 +1309,157 @@ namespace Drx.Sdk.Network.V2.Web
                 }
                 return dict;
             };
+        }
+
+        /// <summary>
+        /// 将请求中的上传流保存为文件。
+        /// 若未提供 savePath，则使用默认目录 AppContext.BaseDirectory/uploads/mods。
+        /// </summary>
+        /// <param name="request">包含 UploadFile 流的请求对象</param>
+        /// <param name="savePath">目标保存目录</param>
+        /// <param name="fileName">保存的文件名。默认值 "upload_" 会追加时间戳以避免冲突</param>
+        /// <returns>处理结果 HttpResponse</returns>
+        public static HttpResponse SaveUploadFile(HttpRequest request, string savePath, string fileName = "upload_")
+        {
+            if (request?.UploadFile == null || request.UploadFile.Stream == null)
+            {
+                return new HttpResponse(400, "缺少上传的文件流");
+            }
+
+            try
+            {
+                var upload = request.UploadFile;
+
+                // 如果未指定保存路径，使用应用程序目录下的默认上传目录
+                var defaultUploadsDir = Path.Combine(AppContext.BaseDirectory, "uploads");
+                if (string.IsNullOrEmpty(savePath))
+                {
+                    savePath = defaultUploadsDir;
+                }
+
+                // 确保目录存在
+                Directory.CreateDirectory(savePath);
+
+                //生成文件名（若使用默认前缀则追加时间戳）
+                if (fileName == "upload_")
+                {
+                    fileName += DateTime.UtcNow.Ticks;
+                }
+
+                var filePath = Path.Combine(savePath, fileName);
+
+                // 将上传流保存到文件（同步写入以保持原实现行为）
+                using (var outFs = new FileStream(filePath, FileMode.Create, FileAccess.Write, FileShare.None))
+                {
+                    upload.Stream.CopyTo(outFs);
+                }
+
+                return new HttpResponse(200, "上传成功");
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"处理上传时发生错误: {ex}");
+                return new HttpResponse(500, $"上传处理失败: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// 创建一个用于流式下载的 HttpResponse（快捷方法）。
+        /// 调用方只需传入本地文件路径，本方法打开文件流并设置常用响应头（Content-Type、Content-Disposition），
+        /// 并对文件名做安全过滤以避免非法控制字符导致的头部添加失败。
+        /// </summary>
+        /// <param name="filePath">本地文件路径</param>
+        /// <param name="fileName">用于提示的下载文件名（可选），为空时使用 filePath 的文件名</param>
+        /// <param name="contentType">Content-Type，默认为 application/octet-stream</param>
+        /// <param name="bandwidthLimitKb">可选的带宽限制（KB/s），0 表示不限制</param>
+        /// <returns>HttpResponse，若文件不存在返回404 响应</returns>
+    public static HttpResponse CreateFileResponse(string filePath, string? fileName = null, string contentType = "application/octet-stream", int bandwidthLimitKb = 0)
+        {
+            if (string.IsNullOrEmpty(filePath) || !File.Exists(filePath))
+            {
+                return new HttpResponse(404, "Not Found");
+            }
+
+            FileStream fs = null;
+            try
+            {
+                fs = File.OpenRead(filePath);
+                var resp = new HttpResponse(200) { FileStream = fs };
+                // 保存带宽限制（KB/s），0 表示不限制
+                resp.BandwidthLimitKb = bandwidthLimitKb;
+
+                // 尝试设置 Content-Type（忽略可能的异常）
+                try { resp.Headers.Add("Content-Type", contentType); } catch { }
+
+                if (string.IsNullOrEmpty(fileName)) fileName = Path.GetFileName(filePath);
+                var safeName = SanitizeFileNameForHeader(fileName);
+
+                // 同时提供 filename 和 filename*（RFC5987）以兼容多客户端并支持非 ASCII 名称
+                try
+                {
+                    var disposition = $"attachment; filename=\"{safeName}\"; filename*=UTF-8''{Uri.EscapeDataString(fileName)}";
+                    resp.Headers.Add("Content-Disposition", disposition);
+                }
+                catch
+                {
+                    // 如果添加失败则忽略（SendResponse 中也会安全处理）
+                }
+
+                return resp;
+            }
+            catch (Exception ex)
+            {
+                // 打开文件失败时确保释放流并返回500
+                try { fs?.Dispose(); } catch { }
+                Logger.Error($"创建文件响应时发生错误: {ex}");
+                return new HttpResponse(500, "Internal Server Error");
+            }
+        }
+
+        /// <summary>
+        /// 打开指定的文件用于读取，并返回一个用于访问其内容的流。
+        /// </summary>
+        /// <remarks>
+        /// 如果文件不存在或打开文件时发生错误，该方法将返回 null，而不是抛出异常。
+        /// 调用方需负责在不再需要时释放返回的流资源。
+        /// </remarks>
+        /// <param name="filePath">
+        /// 要打开的文件的完整路径。不能为空或空字符串。该文件必须存在。
+        /// </param>
+        /// <returns>
+        /// 如果文件存在且可以成功打开，则返回一个只读流；否则返回 null。
+        /// </returns>
+        public static Stream GetFileStream(string filePath)
+        {
+            if (string.IsNullOrEmpty(filePath) || !File.Exists(filePath))
+            {
+                return null;
+            }
+            try
+            {
+                return File.OpenRead(filePath);
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"获取文件流时发生错误: {ex}");
+                return null;
+            }
+        }
+
+        // 辅助：清理文件名以便安全放入 HTTP头（移除控制字符和双引号）
+        private static string SanitizeFileNameForHeader(string name)
+        {
+            if (string.IsNullOrEmpty(name)) return "file";
+            var sb = new System.Text.StringBuilder();
+            foreach (var ch in name)
+            {
+                // 跳过控制字符（包括 \r \n \t 等）和引号、反斜杠
+                if (char.IsControl(ch) || ch == '"' || ch == '\\') continue;
+                sb.Append(ch);
+            }
+            var result = sb.ToString().Trim();
+            if (string.IsNullOrEmpty(result)) result = "file";
+            return result;
         }
     }
 
@@ -904,7 +1476,7 @@ namespace Drx.Sdk.Network.V2.Web
         public string Path { get; }
 
         /// <summary>
-        /// HTTP 方法字符串 (e.g. "GET", "POST")
+    /// HTTP 方法字符串（例如 "GET"、"POST"）
         /// </summary>
         public string Method { get; }
 

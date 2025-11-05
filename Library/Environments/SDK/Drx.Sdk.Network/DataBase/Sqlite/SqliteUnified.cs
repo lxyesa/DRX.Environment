@@ -824,6 +824,184 @@ namespace Drx.Sdk.Network.DataBase.Sqlite
         }
 
         /// <summary>
+        /// 按指定 ID 编辑实体（不会修改 Id 字段）
+        /// </summary>
+        public void EditById(int id, T entity)
+        {
+            if (entity == null) throw new ArgumentNullException(nameof(entity));
+            // 构建只更新主表的简单类型字段（不包含子表和 Id）
+            var mainProperties = _properties.Where(kvp =>
+                !_dataTableProperties.ContainsKey(kvp.Key) &&
+                !_dataTableListProperties.ContainsKey(kvp.Key) &&
+                !_arrayProperties.ContainsKey(kvp.Key) &&
+                !_dictionaryProperties.ContainsKey(kvp.Key) &&
+                !_linkedListProperties.ContainsKey(kvp.Key) &&
+                IsSimpleType(kvp.Value.PropertyType) &&
+                kvp.Key != "Id");
+
+            if (!mainProperties.Any()) return;
+
+            using var connection = new SqliteConnection(_connectionString);
+            connection.Open();
+            using var transaction = connection.BeginTransaction();
+            try
+            {
+                var sets = string.Join(", ", mainProperties.Select(kvp => $"[{kvp.Key}] = @{kvp.Key}"));
+                var sql = $"UPDATE [{_tableName}] SET {sets} WHERE [Id] = @id";
+                using var cmd = new SqliteCommand(sql, connection, transaction);
+                // 使用缓存 getter 获取传入实体的值（但不允许修改 Id）
+                var getterDict = GetterCache[typeof(T)];
+                foreach (var prop in mainProperties)
+                {
+                    var rawValue = getterDict[prop.Key](entity);
+                    var value = ToDbDateTimeString(rawValue, prop.Value.PropertyType) ?? DBNull.Value;
+                    cmd.Parameters.AddWithValue($"@{prop.Key}", value);
+                }
+                cmd.Parameters.AddWithValue("@id", id);
+                cmd.ExecuteNonQuery();
+
+                transaction.Commit();
+            }
+            catch
+            {
+                transaction.Rollback();
+                throw;
+            }
+        }
+
+        /// <summary>
+        /// 根据属性名和值更新所有匹配的实体（不修改 Id 字段）
+        /// </summary>
+        public int EditWhere(string propertyName, object propertyValue, T entity)
+        {
+            if (string.IsNullOrEmpty(propertyName)) throw new ArgumentNullException(nameof(propertyName));
+            if (!_properties.ContainsKey(propertyName))
+                throw new ArgumentException($"属性 {propertyName} 不存在于类型 {typeof(T).Name} 中");
+
+            // 查找符合条件的 Id 列表，然后对每个 Id 执行 EditById（保证子表一致性）
+            var ids = new List<int>();
+            using (var connection = new SqliteConnection(_connectionString))
+            {
+                connection.Open();
+                var sql = $"SELECT [Id] FROM [{_tableName}] WHERE [{propertyName}] = @value";
+                using var cmd = new SqliteCommand(sql, connection);
+                cmd.Parameters.AddWithValue("@value", propertyValue ?? DBNull.Value);
+                using var reader = cmd.ExecuteReader();
+                while (reader.Read())
+                {
+                    if (reader[0] != DBNull.Value)
+                        ids.Add(Convert.ToInt32(reader[0]));
+                }
+            }
+
+            foreach (var id in ids)
+            {
+                EditById(id, entity);
+            }
+
+            return ids.Count;
+        }
+
+        /// <summary>
+        /// 根据任意 SQL 条件更新所有匹配的实体（不修改 Id 字段）
+        /// 注意：condition 是 SQL WHERE 子句（不包含 WHERE 关键字），请确保参数安全以防注入
+        /// </summary>
+        public int EditWhere(string condition, T entity)
+        {
+            if (string.IsNullOrEmpty(condition)) throw new ArgumentNullException(nameof(condition));
+
+            var ids = new List<int>();
+            using (var connection = new SqliteConnection(_connectionString))
+            {
+                connection.Open();
+                var sql = $"SELECT [Id] FROM [{_tableName}] WHERE {condition}";
+                using var cmd = new SqliteCommand(sql, connection);
+                using var reader = cmd.ExecuteReader();
+                while (reader.Read())
+                {
+                    if (reader[0] != DBNull.Value)
+                        ids.Add(Convert.ToInt32(reader[0]));
+                }
+            }
+
+            foreach (var id in ids)
+            {
+                EditById(id, entity);
+            }
+
+            return ids.Count;
+        }
+
+        /// <summary>
+        /// 根据 Id 删除实体（包装已有 Delete 方法，保持语义）
+        /// </summary>
+        public bool DeleteById(int id)
+        {
+            return Delete(id);
+        }
+
+        /// <summary>
+        /// 根据属性名和值删除所有匹配的实体及其关联数据
+        /// </summary>
+        public int DeleteWhere(string propertyName, object propertyValue)
+        {
+            if (string.IsNullOrEmpty(propertyName)) throw new ArgumentNullException(nameof(propertyName));
+            if (!_properties.ContainsKey(propertyName))
+                throw new ArgumentException($"属性 {propertyName} 不存在于类型 {typeof(T).Name} 中");
+
+            var ids = new List<int>();
+            using (var connection = new SqliteConnection(_connectionString))
+            {
+                connection.Open();
+                var sql = $"SELECT [Id] FROM [{_tableName}] WHERE [{propertyName}] = @value";
+                using var cmd = new SqliteCommand(sql, connection);
+                cmd.Parameters.AddWithValue("@value", propertyValue ?? DBNull.Value);
+                using var reader = cmd.ExecuteReader();
+                while (reader.Read())
+                {
+                    if (reader[0] != DBNull.Value)
+                        ids.Add(Convert.ToInt32(reader[0]));
+                }
+            }
+
+            var deleted = 0;
+            foreach (var id in ids)
+            {
+                if (Delete(id)) deleted++;
+            }
+            return deleted;
+        }
+
+        /// <summary>
+        /// 根据任意 SQL 条件删除所有匹配的实体及其关联数据
+        /// </summary>
+        public int DeleteWhere(string condition)
+        {
+            if (string.IsNullOrEmpty(condition)) throw new ArgumentNullException(nameof(condition));
+
+            var ids = new List<int>();
+            using (var connection = new SqliteConnection(_connectionString))
+            {
+                connection.Open();
+                var sql = $"SELECT [Id] FROM [{_tableName}] WHERE {condition}";
+                using var cmd = new SqliteCommand(sql, connection);
+                using var reader = cmd.ExecuteReader();
+                while (reader.Read())
+                {
+                    if (reader[0] != DBNull.Value)
+                        ids.Add(Convert.ToInt32(reader[0]));
+                }
+            }
+
+            var deleted = 0;
+            foreach (var id in ids)
+            {
+                if (Delete(id)) deleted++;
+            }
+            return deleted;
+        }
+
+        /// <summary>
         /// 从 SqliteDataReader 创建实体
         /// </summary>
         private T CreateEntityFromReader(SqliteDataReader reader)

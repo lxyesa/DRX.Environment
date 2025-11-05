@@ -1,124 +1,200 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using System.Collections.Specialized;
+using System.Dynamic;
+using System.Collections.Generic;
 using System.Net;
 using System.IO;
 
 namespace Drx.Sdk.Network.V2.Web
 {
     /// <summary>
-    /// ±íÊ¾ HTTP ÇëÇó
+    /// è¡¨ç¤º HTTP è¯·æ±‚
     /// </summary>
     public class HttpRequest : IDisposable
     {
         /// <summary>
-        /// HTTP ·½·¨ (GET, POST, etc.)
+        /// HTTP æ–¹æ³• (GET, POST ç­‰)
         /// </summary>
         public string Method { get; set; }
 
         /// <summary>
-        /// ÇëÇóÂ·¾¶
+        /// è¯·æ±‚è·¯å¾„
         /// </summary>
         public string Path { get; set; }
 
         /// <summary>
-        /// ÍêÕûÇëÇó URL£¨¿ÉÑ¡£¬Í¨³£ÔÚ¿Í»§¶Ëµ÷ÓÃÊ±Ê¹ÓÃ£©
+        /// å®Œæ•´ URLï¼ˆå¯é€‰ï¼‰ï¼Œå®¢æˆ·ç«¯ç›´è¿æˆ–ä»£ç†åœºæ™¯ä¸‹ä½¿ç”¨
         /// </summary>
-        public string Url { get; set; }
+        public string? Url { get; set; }
 
         /// <summary>
-        /// ²éÑ¯²ÎÊı
+        /// æŸ¥è¯¢å‚æ•°
         /// </summary>
         public NameValueCollection Query { get; set; }
 
         /// <summary>
-        /// ÇëÇóÍ·
+        /// è¯·æ±‚å¤´
         /// </summary>
         public NameValueCollection Headers { get; set; }
 
         /// <summary>
-        /// ÇëÇóÌå (×Ö·û´®ĞÎÊ½)
+        /// è¯·æ±‚ä½“ï¼ˆå­—ç¬¦ä¸²å½¢å¼ï¼‰
         /// </summary>
-        public string Body { get; set; }
+        public string? Body { get; set; }
+
+    /// <summary>
+    /// è¯·æ±‚å†…å®¹çš„ä¾¿æ·å­—æ®µï¼ˆContentï¼‰ï¼Œä¸ºåŠ¨æ€å¯¹è±¡ï¼Œè°ƒç”¨è€…å¯ä½¿ç”¨ Content.XYZ ä»»æ„æ‰©å±•å­—æ®µã€‚
+    /// é»˜è®¤å®ç°ä¸º ExpandoObjectï¼Œè§£æå™¨ä¼šåœ¨è§£æåˆ°æ–‡æœ¬ä½“æ—¶å°†å…¶èµ‹å€¼åˆ° Content.Textã€‚
+    /// </summary>
+    public dynamic Content { get; set; } = new ExpandoObject();
 
         /// <summary>
-        /// ÇëÇóÌå (×Ö½ÚÊı×éĞÎÊ½)
+        /// è¯·æ±‚ä½“ï¼ˆå­—èŠ‚æ•°ç»„å½¢å¼ï¼‰
         /// </summary>
-        public byte[] BodyBytes { get; set; }
+        public byte[]? BodyBytes { get; set; }
 
         /// <summary>
-        /// ÇëÇóÌå (¶ÔÏóĞÎÊ½)
+        /// è¯·æ±‚ä½“ï¼ˆå¯¹è±¡å½¢å¼ï¼Œå¯åºåˆ—åŒ–ä¸º JSONï¼‰
         /// </summary>
-        public object BodyObject { get; set; }
+        public object? BodyObject { get; set; }
 
         /// <summary>
-        /// ×¨ÓÃÓÚ´«µİ JSON ×Ö·û´®µÄÊôĞÔ£¨¼æÈİ¾Éµ÷ÓÃ·½£©
+        /// åŸå§‹æˆ–ç¼“å­˜çš„ JSON å­—ç¬¦ä¸²ï¼ˆå¦‚æœé€‚ç”¨ï¼‰
         /// </summary>
         public string BodyJson { get; set; }
 
         /// <summary>
-        ///¼æÈİ¾Éµ÷ÓÃ·½µÄ¶îÍâ×Ö½Ú°ü×Ö¶Î
+        /// é™„åŠ æ•°æ®åŒ…ï¼ˆå­—èŠ‚æ•°ç»„ï¼‰ï¼Œç”¨äºæ‰¿è½½è‡ªå®šä¹‰äºŒè¿›åˆ¶æ‰©å±•æ•°æ®
         /// </summary>
         public byte[] ExtraDataPack { get; set; }
 
         /// <summary>
-        ///Ô¶³Ì¶Ëµã
+        /// è¿œç«¯ç»ˆç»“ç‚¹ä¿¡æ¯ï¼ˆå¯ç”¨äºè®°å½•æ¥æºæˆ–å›ä¼ ï¼‰
         /// </summary>
         public IPEndPoint RemoteEndPoint { get; set; }
 
         /// <summary>
-        /// Â·¾¶²ÎÊı£¬´ÓÂ·¾¶Ä£°åÖĞÌáÈ¡
+        /// è·¯å¾„å‚æ•°ï¼ˆä»æ¨¡æ¿åŒ–è·¯å¾„ä¸­æå–çš„å‘½åå‚æ•°ï¼‰
         /// </summary>
         public Dictionary<string, string> PathParameters { get; set; } = new Dictionary<string, string>();
 
         /// <summary>
-        /// ÉÏ´«ÎÄ¼şÃèÊö(µ±½Ó¿ÚÖ§³ÖÎÄ¼şÉÏ´«Ê±Ê¹ÓÃ)¡£
-        /// Èç¹ûÉèÖÃ, ½«ÒÔ multipart/form-data µÄ·½Ê½°Ñ¸ÃÎÄ¼şÁ÷ÉÏ´«µ½·şÎñÆ÷¡£
+        /// è¡¨å•å­—æ®µé›†åˆï¼Œmultipart/form-data æˆ– application/x-www-form-urlencoded åœºæ™¯ä½¿ç”¨
         /// </summary>
-        public UploadFileDescriptor UploadFile { get; set; }
+        public NameValueCollection Form { get; set; } = new NameValueCollection();
 
         /// <summary>
-        /// ÎÄ¼şÉÏ´«ÃèÊöÀàĞÍ
+        /// ä¸Šä¼ æ–‡ä»¶æè¿°ï¼ˆå½“éœ€è¦ä»¥ multipart/form-data ä¸Šä¼ æ–‡ä»¶æ—¶ä½¿ç”¨ï¼‰
+        /// </summary>
+        public UploadFileDescriptor? UploadFile { get; set; }
+
+        /// <summary>
+        /// ä¸Šä¼ æ–‡ä»¶æè¿°ç¬¦
         /// </summary>
         public class UploadFileDescriptor
         {
             /// <summary>
-            /// ÒªÉÏ´«µÄÁ÷£¬µ÷ÓÃ·½¸ºÔğÁ÷µÄÉúÃüÖÜÆÚ£¨ÊÇ·ñ¹Ø±ÕÓÉµ÷ÓÃ·½¾ö¶¨£©
+            /// å¾…ä¸Šä¼ çš„æµï¼ˆè°ƒç”¨æ–¹è´Ÿè´£æµçš„ç”Ÿå‘½å‘¨æœŸç®¡ç†ï¼Œé€šå¸¸ä¸åœ¨æ¡†æ¶å†…éƒ¨å…³é—­ï¼‰
             /// </summary>
             public Stream Stream { get; set; }
 
             /// <summary>
-            /// ÉÏ´«µ½·şÎñ¶ËµÄÎÄ¼şÃû
+            /// ä¸Šä¼ æ—¶ä½¿ç”¨çš„æ–‡ä»¶å
             /// </summary>
             public string FileName { get; set; }
 
             /// <summary>
-            /// ±íµ¥×Ö¶ÎÃû£¬Ä¬ÈÏ "file"
+            /// è¡¨å•å­—æ®µåï¼Œé»˜è®¤ "file"
             /// </summary>
             public string FieldName { get; set; } = "file";
 
             /// <summary>
-            /// ¿ÉÑ¡£ºµ±ĞèÒª±¨¸æ½ø¶ÈÊ±´«ÈëÒ»¸ö IProgress<long>
+            /// å¯é€‰ï¼šä¸Šä¼ è¿›åº¦å›è°ƒ (å·²ä¸Šä¼ å­—èŠ‚æ•°)
             /// </summary>
-            public IProgress<long> Progress { get; set; }
+            public IProgress<long>? Progress { get; set; }
 
             /// <summary>
-            /// ¿ÉÑ¡£ºÈ¡ÏûÁîÅÆ£¬ÓÃÓÚÔÚÉÏ´«Ê±È¡Ïû²Ù×÷
+            /// å¯é€‰ï¼šå–æ¶ˆä»¤ç‰Œï¼Œç”¨äºå–æ¶ˆä¸Šä¼ æ“ä½œ
             /// </summary>
             public CancellationToken CancellationToken { get; set; } = CancellationToken.None;
         }
 
         /// <summary>
-        /// Ô­Ê¼µÄ HttpListenerContext£¨½öµ±ĞèÒª·ÃÎÊµ×²ãÉÏÏÂÎÄÊ±ÉèÖÃ£©
+        /// åŸå§‹çš„ HttpListenerContextï¼ˆä»…åœ¨å®ç°åŸºäº HttpListener çš„æœåŠ¡å™¨æ—¶è®¾ç½®ï¼‰
         /// </summary>
         public HttpListenerContext ListenerContext { get; set; }
 
+        /// <summary>
+        /// è®¾ç½®å•ä¸ªé»˜è®¤è¯·æ±‚å¤´ï¼ˆä»…åœ¨å½“å‰ Headers ä¸­ä¸å­˜åœ¨è¯¥é”®æ—¶æ·»åŠ ï¼‰
+        /// </summary>
+        /// <param name="name">å¤´åç§°</param>
+        /// <param name="value">å¤´å€¼</param>
+        public void SetDefaultHeader(string name, string value)
+        {
+            if (string.IsNullOrEmpty(name) || value == null) return;
+            try
+            {
+                // NameValueCollection çš„ç´¢å¼•å™¨åœ¨é”®ä¸å­˜åœ¨æ—¶è¿”å› null
+                if (Headers[name] == null)
+                {
+                    Headers.Add(name, value);
+                }
+            }
+            catch { }
+        }
+
+        /// <summary>
+        /// æ‰¹é‡è®¾ç½®é»˜è®¤è¯·æ±‚å¤´ï¼ˆä»…åœ¨ç›®æ ‡å¤´ä¸å­˜åœ¨æ—¶æ·»åŠ ï¼‰ã€‚æ¥å— NameValueCollection æˆ– IDictionary&lt;string,string&gt;ã€‚
+        /// </summary>
+        /// <param name="defaults">é»˜è®¤å¤´é›†åˆ</param>
+        public void SetDefaultHeaders(System.Collections.Specialized.NameValueCollection defaults)
+        {
+            if (defaults == null) return;
+            try
+            {
+                foreach (string key in defaults)
+                {
+                    if (string.IsNullOrEmpty(key)) continue;
+                    if (Headers[key] == null)
+                    {
+                        Headers.Add(key, defaults[key]);
+                    }
+                }
+            }
+            catch { }
+        }
+
+        /// <summary>
+        /// æ‰¹é‡è®¾ç½®é»˜è®¤è¯·æ±‚å¤´ï¼ˆä»…åœ¨ç›®æ ‡å¤´ä¸å­˜åœ¨æ—¶æ·»åŠ ï¼‰ï¼Œæ¥å— IDictionary&lt;string,string&gt;ã€‚
+        /// </summary>
+        /// <param name="defaults">é»˜è®¤å¤´å­—å…¸</param>
+        public void SetDefaultHeaders(System.Collections.Generic.IDictionary<string, string> defaults)
+        {
+            if (defaults == null) return;
+            try
+            {
+                foreach (var kv in defaults)
+                {
+                    if (string.IsNullOrEmpty(kv.Key)) continue;
+                    if (Headers[kv.Key] == null)
+                    {
+                        Headers.Add(kv.Key, kv.Value);
+                    }
+                }
+            }
+            catch { }
+        }
+
         public void Dispose()
         {
-            // ²»ÔÚ´Ë´¦×Ô¶¯¹Ø±Õ UploadFile.Stream£¬ÓÉ´´½¨Õß¾ö¶¨ºÎÊ±¹Ø±Õ
+            // å¦‚æœéœ€è¦ï¼Œåœ¨æ­¤å¤„é‡Šæ”¾ UploadFile.Stream ç­‰èµ„æºï¼ˆç›®å‰ä¿ç•™ç»™è°ƒç”¨æ–¹ç®¡ç†æµç”Ÿå‘½å‘¨æœŸï¼‰
         }
     }
 }

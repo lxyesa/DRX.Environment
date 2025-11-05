@@ -1,22 +1,17 @@
 ﻿using Drx.Sdk.Shared;
-using System;
-using System.Collections.Generic;
+using Newtonsoft.Json.Linq;
 using System.Collections.Specialized;
-using System.IO;
-using System.Linq;
-using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
-using System.Threading;
+using System.Text.Json;
 using System.Threading.Channels;
-using System.Threading.Tasks;
 
 namespace Drx.Sdk.Network.V2.Web
 {
     /// <summary>
-    /// HTTP 客户端类，用于发送 HTTP 请求
-    ///说明: 上传功能已合并到统一的 `SendAsync(HttpRequest)` 接口中，调用方可通过 `HttpRequest.UploadFile` 提供流式上传信息。
-    /// 为兼容性仍保留原有的 `UploadFileAsync` 方法。
+    /// HTTP 客户端，用于发送各类 HTTP 请求并支持流式上传/下载。
+    ///说明：上传功能已与 `SendAsync(HttpRequest)` 合并，调用方可通过 `HttpRequest.UploadFile` 提供流式上传信息。
+    /// 为兼容性仍保留部分便捷方法（如 UploadFileAsync / UploadFileWithMetadataAsync）。
     /// </summary>
     public class HttpClient : IAsyncDisposable
     {
@@ -41,7 +36,7 @@ namespace Drx.Sdk.Network.V2.Web
         }
 
         /// <summary>
-        /// 构造函数
+        /// 默认构造函数，使用内部 HttpClient 并启动请求处理通道。
         /// </summary>
         public HttpClient()
         {
@@ -56,7 +51,7 @@ namespace Drx.Sdk.Network.V2.Web
         }
 
         /// <summary>
-        /// 构造函数，指定基础地址
+        /// 指定基础地址的构造函数。
         /// </summary>
         /// <param name="baseAddress">基础地址</param>
         public HttpClient(string baseAddress)
@@ -83,10 +78,10 @@ namespace Drx.Sdk.Network.V2.Web
             }
         }
 
-        // Helper to ensure header values are ASCII-only. Non-ASCII characters will be percent-encoded.
-        private static string EnsureAsciiHeaderValue(string value)
+        // 将 header 值保证为 ASCII，不可 ASCII 的字节会以百分号转义形式编码。
+        private static string EnsureAsciiHeaderValue(string? value)
         {
-            if (string.IsNullOrEmpty(value)) return value;
+            if (string.IsNullOrEmpty(value)) return value ?? "";
             bool allAscii = true;
             foreach (var ch in value)
             {
@@ -97,12 +92,10 @@ namespace Drx.Sdk.Network.V2.Web
                 }
             }
             if (allAscii) return value;
-            // Percent-encode using UTF8 similar to Uri.EscapeDataString but operate on raw bytes
             var bytes = Encoding.UTF8.GetBytes(value);
             var sb = new StringBuilder();
             foreach (var b in bytes)
             {
-                // safe ASCII characters which are commonly allowed in headers: alnum and few symbols
                 if ((b >= 0x30 && b <= 0x39) || (b >= 0x41 && b <= 0x5A) || (b >= 0x61 && b <= 0x7A) || b == 0x2D || b == 0x5F || b == 0x2E || b == 0x7E)
                 {
                     sb.Append((char)b);
@@ -117,67 +110,33 @@ namespace Drx.Sdk.Network.V2.Web
         }
 
         /// <summary>
-        /// 发送 HTTP 请求
+        ///发送 HTTP 请求（字符串 body）。
         /// </summary>
-        /// <param name="method">HTTP 方法</param>
-        /// <param name="url">请求 URL</param>
-        /// <param name="body">请求体 (字符串)</param>
-        /// <param name="headers">请求头</param>
-        /// <param name="query">查询参数</param>
-        /// <returns>HTTP 响应</returns>
-        public async Task<HttpResponse> SendAsync(System.Net.Http.HttpMethod method, string url, string body = null, NameValueCollection headers = null, NameValueCollection query = null)
+        public async Task<HttpResponse> SendAsync(System.Net.Http.HttpMethod method, string url, string? body = null, NameValueCollection? headers = null, NameValueCollection? query = null)
         {
             return await SendAsyncInternal(method, url, body, null, null, headers, query, null);
         }
 
         /// <summary>
-        /// 发送 HTTP 请求 (字节数组)
+        ///发送 HTTP 请求（字节数组 body）。
         /// </summary>
-        /// <param name="method">HTTP 方法</param>
-        /// <param name="url">请求 URL</param>
-        /// <param name="bodyBytes">请求体 (字节数组)</param>
-        /// <param name="headers">请求头</param>
-        /// <param name="query">查询参数</param>
-        /// <returns>HTTP 响应</returns>
-        public async Task<HttpResponse> SendAsync(System.Net.Http.HttpMethod method, string url, byte[] bodyBytes, NameValueCollection headers = null, NameValueCollection query = null)
+        public async Task<HttpResponse> SendAsync(System.Net.Http.HttpMethod method, string url, byte[]? bodyBytes, NameValueCollection? headers = null, NameValueCollection? query = null)
         {
             return await SendAsyncInternal(method, url, null, bodyBytes, null, headers, query, null);
         }
 
         /// <summary>
-        /// 发送 HTTP 请求 (对象)
+        ///发送 HTTP 请求（对象 body，会被序列化为 JSON）。
         /// </summary>
-        /// <param name="method">HTTP 方法</param>
-        /// <param name="url">请求 URL</param>
-        /// <param name="bodyObject">请求体 (对象)</param>
-        /// <param name="headers">请求头</param>
-        /// <param name="query">查询参数</param>
-        /// <returns>HTTP 响应</returns>
-        public async Task<HttpResponse> SendAsync(System.Net.Http.HttpMethod method, string url, object bodyObject, NameValueCollection headers = null, NameValueCollection query = null)
+        public async Task<HttpResponse> SendAsync(System.Net.Http.HttpMethod method, string url, object? bodyObject, NameValueCollection? headers = null, NameValueCollection? query = null)
         {
             return await SendAsyncInternal(method, url, null, null, bodyObject, headers, query, null);
         }
 
         /// <summary>
-        /// 上传文件到服务器（multipart/form-data），支持进度和取消。
-        /// 注意: 文件上传功能已与 `SendAsync(HttpRequest)` 合并。
-        /// 推荐使用：构造 `HttpRequest` 并设置 `UploadFile` 字段，然后调用 `SendAsync(request)`。
-        ///例如：
-        /// <code>
-        /// var req = new HttpRequest { Method = "POST", Path = "/api/upload" };
-        /// req.UploadFile = new HttpRequest.UploadFileDescriptor { Stream = fs, FileName = "a.bin" };
-        /// var resp = await client.SendAsync(req);
-        /// </code>
-        /// 本方法仍然保留以兼容旧代码。
+        ///便捷的文件上传（保持兼容，内部最终调用 SendAsync(HttpRequest)）。
         /// </summary>
-        /// <param name="url">目标 URL</param>
-        /// <param name="filePath">本地文件路径</param>
-        /// <param name="fieldName">表单字段名，默认 "file"</param>
-        /// <param name="headers">额外请求头</param>
-        /// <param name="query">查询参数</param>
-        /// <param name="progress">进度（已上传字节数）</param>
-        /// <param name="cancellationToken">取消令牌</param>
-        public async Task<HttpResponse> UploadFileAsync(string url, string filePath, string fieldName = "file", NameValueCollection headers = null, NameValueCollection query = null, IProgress<long> progress = null, CancellationToken cancellationToken = default)
+        public async Task<HttpResponse> UploadFileAsync(string url, string filePath, string fieldName = "file", NameValueCollection? headers = null, NameValueCollection? query = null, IProgress<long>? progress = null, CancellationToken cancellationToken = default)
         {
             if (string.IsNullOrEmpty(filePath) || !File.Exists(filePath)) throw new FileNotFoundException("上传文件不存在", filePath);
 
@@ -187,9 +146,9 @@ namespace Drx.Sdk.Network.V2.Web
         }
 
         /// <summary>
-        /// 上传文件到服务器（流），支持进度和取消。
+        /// 上传流并支持进度/取消。
         /// </summary>
-        public async Task<HttpResponse> UploadFileAsync(string url, Stream fileStream, string fileName, string fieldName = "file", NameValueCollection headers = null, NameValueCollection query = null, IProgress<long> progress = null, CancellationToken cancellationToken = default)
+        public async Task<HttpResponse> UploadFileAsync(string url, Stream fileStream, string fileName, string fieldName = "file", NameValueCollection? headers = null, NameValueCollection? query = null, IProgress<long>? progress = null, CancellationToken cancellationToken = default)
         {
             if (fileStream == null) throw new ArgumentNullException(nameof(fileStream));
             if (string.IsNullOrEmpty(fileName)) fileName = "file";
@@ -197,7 +156,6 @@ namespace Drx.Sdk.Network.V2.Web
             var requestUrl = BuildUrl(url, query);
             using var content = new MultipartFormDataContent();
 
-            // 包裹流以报告进度
             var progressContent = new ProgressableStreamContent(fileStream, 81920, progress, cancellationToken);
             var streamContent = new StreamContent(progressContent, 81920);
             streamContent.Headers.ContentDisposition = new ContentDispositionHeaderValue("form-data") { Name = $"\"{fieldName}\"", FileName = $"\"{fileName}\"" };
@@ -251,16 +209,16 @@ namespace Drx.Sdk.Network.V2.Web
             }
         }
 
-        //进度流包装器
+        //进度流包装：用于在流读取时上报进度（不会在 Dispose 时关闭底层流）。
         private class ProgressableStreamContent : Stream
         {
             private readonly Stream _inner;
             private readonly int _bufferSize;
-            private readonly IProgress<long> _progress;
+            private readonly IProgress<long>? _progress;
             private readonly CancellationToken _cancellation;
             private long _totalRead;
 
-            public ProgressableStreamContent(Stream inner, int bufferSize, IProgress<long> progress, CancellationToken cancellation)
+            public ProgressableStreamContent(Stream inner, int bufferSize, IProgress<long>? progress, CancellationToken cancellation)
             {
                 _inner = inner ?? throw new ArgumentNullException(nameof(inner));
                 _bufferSize = bufferSize;
@@ -305,20 +263,20 @@ namespace Drx.Sdk.Network.V2.Web
 
             public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
             public override Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken) => throw new NotSupportedException();
-            public override IAsyncResult BeginRead(byte[] buffer, int offset, int count, AsyncCallback callback, object state) => _inner.BeginRead(buffer, offset, count, callback, state);
+            public override IAsyncResult BeginRead(byte[] buffer, int offset, int count, AsyncCallback? callback, object? state) => _inner.BeginRead(buffer, offset, count, callback, state);
             public override int EndRead(IAsyncResult asyncResult) => _inner.EndRead(asyncResult);
             protected override void Dispose(bool disposing)
             {
-                // 不要在这里关闭底层流，调用方负责
+                // 不在此处关闭底层流，调用方负责管理流的生命周期
                 base.Dispose(disposing);
             }
         }
 
-        private async Task<HttpResponse> SendAsyncInternal(System.Net.Http.HttpMethod method, string url, string body, byte[] bodyBytes, object bodyObject, NameValueCollection headers, NameValueCollection query, HttpRequest.UploadFileDescriptor uploadFile)
+        private async Task<HttpResponse> SendAsyncInternal(System.Net.Http.HttpMethod method, string url, string? body, byte[]? bodyBytes, object? bodyObject, NameValueCollection? headers, NameValueCollection? query, HttpRequest.UploadFileDescriptor? uploadFile)
         {
             try
             {
-                // 如果提供了上传描述并且流不为空，则构造 multipart/form-data 请求
+                // 如果包含文件上传描述，则构造 multipart/form-data 并上传
                 if (uploadFile != null && uploadFile.Stream != null)
                 {
                     var requestUrl = BuildUrl(url, query);
@@ -331,6 +289,34 @@ namespace Drx.Sdk.Network.V2.Web
 
                     content.Add(streamContent, uploadFile.FieldName, uploadFile.FileName ?? "file");
 
+                    // 附加 metadata（body/bodyObject/bodyBytes）到 multipart 的 metadata 部分
+                    try
+                    {
+                        if (bodyBytes != null && bodyBytes.Length > 0)
+                        {
+                            var metaBytesContent = new ByteArrayContent(bodyBytes);
+                            metaBytesContent.Headers.ContentDisposition = new ContentDispositionHeaderValue("form-data") { Name = "metadata_bytes" };
+                            content.Add(metaBytesContent, "metadata_bytes");
+                        }
+                        else if (bodyObject != null)
+                        {
+                            var json = System.Text.Json.JsonSerializer.Serialize(bodyObject);
+                            var metaString = new StringContent(json, Encoding.UTF8, "application/json");
+                            metaString.Headers.ContentDisposition = new ContentDispositionHeaderValue("form-data") { Name = "metadata" };
+                            content.Add(metaString, "metadata");
+                        }
+                        else if (!string.IsNullOrEmpty(body))
+                        {
+                            var metaString = new StringContent(body, Encoding.UTF8, "application/json");
+                            metaString.Headers.ContentDisposition = new ContentDispositionHeaderValue("form-data") { Name = "metadata" };
+                            content.Add(metaString, "metadata");
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Warn($"附加 metadata 到 multipart 时发生错误: {ex}");
+                    }
+
                     var uploadRequestMessage = new HttpRequestMessage(method, requestUrl)
                     {
                         Content = content
@@ -340,7 +326,8 @@ namespace Drx.Sdk.Network.V2.Web
                     {
                         foreach (string key in headers)
                         {
-                            uploadRequestMessage.Headers.Add(key, EnsureAsciiHeaderValue(headers[key]));
+                            if (headers[key] != null)
+                                uploadRequestMessage.Headers.Add(key, EnsureAsciiHeaderValue(headers[key]));
                         }
                     }
 
@@ -348,7 +335,7 @@ namespace Drx.Sdk.Network.V2.Web
                     var uploadServerResponseBody = await uploadServerResponse.Content.ReadAsStringAsync().ConfigureAwait(false);
                     var uploadServerResponseBytes = await uploadServerResponse.Content.ReadAsByteArrayAsync().ConfigureAwait(false);
 
-                    var uploadHttpResponse = new HttpResponse((int)uploadServerResponse.StatusCode, uploadServerResponseBody, uploadServerResponse.ReasonPhrase);
+                    var uploadHttpResponse = new HttpResponse((int)uploadServerResponse.StatusCode, uploadServerResponseBody, uploadServerResponse.ReasonPhrase ?? "");
                     uploadHttpResponse.BodyBytes = uploadServerResponseBytes;
                     try
                     {
@@ -365,7 +352,6 @@ namespace Drx.Sdk.Network.V2.Web
                         uploadHttpResponse.Headers.Add(header.Key, string.Join(",", header.Value));
                     }
 
-                    Logger.Info($"上传文件完成: {url}, 文件: {uploadFile.FileName}, 状态码: {uploadServerResponse.StatusCode}");
                     return uploadHttpResponse;
                 }
 
@@ -399,20 +385,20 @@ namespace Drx.Sdk.Network.V2.Web
                 var responseBody = await response.Content.ReadAsStringAsync();
                 var responseBytes = await response.Content.ReadAsByteArrayAsync();
 
-                var httpResponse = new HttpResponse((int)response.StatusCode, responseBody, response.ReasonPhrase);
+                var httpResponse = new HttpResponse((int)response.StatusCode, responseBody, response.ReasonPhrase ?? "");
                 httpResponse.BodyBytes = responseBytes;
 
-                // 尝试反序列化为对象 (假设是 JSON)
+                // 尝试将响应反序列化为对象（假设 JSON）
                 try
                 {
                     httpResponse.BodyObject = System.Text.Json.JsonSerializer.Deserialize<object>(responseBody);
                 }
                 catch
                 {
-                    // 如果反序列化失败，保持为 null
+                    //解析失败则保持为 null
                 }
 
-                // 添加响应头
+                //复制响应头
                 foreach (var header in response.Headers)
                 {
                     httpResponse.Headers.Add(header.Key, string.Join(",", header.Value));
@@ -423,22 +409,21 @@ namespace Drx.Sdk.Network.V2.Web
                     httpResponse.Headers.Add(header.Key, string.Join(",", header.Value));
                 }
 
-                Logger.Info($"发送请求成功: {method} {url}, 状态码: {response.StatusCode}");
                 return httpResponse;
             }
             catch (HttpRequestException ex)
             {
-                Logger.Error($"发送 HTTP 请求时发生网络错误: {method} {url}, 错误: {ex.Message}");
+                Logger.Error($"发送 HTTP 请求时发生网络错误: {method}, 错误: {ex.Message}");
                 throw;
             }
             catch (TaskCanceledException ex)
             {
-                Logger.Error($"发送 HTTP 请求超时: {method} {url}, 错误: {ex.Message}");
+                Logger.Error($"发送 HTTP 请求超时: {method}, 错误: {ex.Message}");
                 throw;
             }
             catch (Exception ex)
             {
-                Logger.Error($"发送 HTTP 请求时发生未知错误: {method} {url}, 错误: {ex.Message}");
+                Logger.Error($"发送 HTTP 请求时发生未知错误: {method}, 错误: {ex.Message}");
                 throw;
             }
         }
@@ -456,7 +441,7 @@ namespace Drx.Sdk.Network.V2.Web
         {
             try
             {
-                // 如果有上传描述，执行 multipart 上传
+                // 支持队列化的上传请求
                 if (requestTask.UploadFile != null && requestTask.UploadFile.Stream != null)
                 {
                     var requestUrl = BuildUrl(requestTask.Url, requestTask.Query);
@@ -468,6 +453,33 @@ namespace Drx.Sdk.Network.V2.Web
                     streamContent.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
 
                     content.Add(streamContent, requestTask.UploadFile.FieldName, requestTask.UploadFile.FileName ?? "file");
+
+                    try
+                    {
+                        if (requestTask.BodyBytes != null && requestTask.BodyBytes.Length > 0)
+                        {
+                            var metaBytesContent = new ByteArrayContent(requestTask.BodyBytes);
+                            metaBytesContent.Headers.ContentDisposition = new ContentDispositionHeaderValue("form-data") { Name = "metadata_bytes" };
+                            content.Add(metaBytesContent, "metadata_bytes");
+                        }
+                        else if (requestTask.BodyObject != null)
+                        {
+                            var json = System.Text.Json.JsonSerializer.Serialize(requestTask.BodyObject);
+                            var metaString = new StringContent(json, Encoding.UTF8, "application/json");
+                            metaString.Headers.ContentDisposition = new ContentDispositionHeaderValue("form-data") { Name = "metadata" };
+                            content.Add(metaString, "metadata");
+                        }
+                        else if (!string.IsNullOrEmpty(requestTask.Body))
+                        {
+                            var metaString = new StringContent(requestTask.Body, Encoding.UTF8, "application/json");
+                            metaString.Headers.ContentDisposition = new ContentDispositionHeaderValue("form-data") { Name = "metadata" };
+                            content.Add(metaString, "metadata");
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Warn($"附加 metadata 到 multipart 时发生错误: {ex}");
+                    }
 
                     var uploadRequestMessage = new HttpRequestMessage(requestTask.Method, requestUrl)
                     {
@@ -486,7 +498,7 @@ namespace Drx.Sdk.Network.V2.Web
                     var serverResponseBody = await serverResponse.Content.ReadAsStringAsync();
                     var serverResponseBytes = await serverResponse.Content.ReadAsByteArrayAsync();
 
-                    var uploadResult = new HttpResponse((int)serverResponse.StatusCode, serverResponseBody, serverResponse.ReasonPhrase);
+                    var uploadResult = new HttpResponse((int)serverResponse.StatusCode, serverResponseBody, serverResponse.ReasonPhrase ?? "");
                     uploadResult.BodyBytes = serverResponseBytes;
 
                     try
@@ -539,20 +551,17 @@ namespace Drx.Sdk.Network.V2.Web
                 var responseBodyNormal = await responseNormal.Content.ReadAsStringAsync();
                 var responseBytesNormal = await responseNormal.Content.ReadAsByteArrayAsync();
 
-                var httpResponseNormal = new HttpResponse((int)responseNormal.StatusCode, responseBodyNormal, responseNormal.ReasonPhrase);
+                var httpResponseNormal = new HttpResponse((int)responseNormal.StatusCode, responseBodyNormal, responseNormal.ReasonPhrase ?? "");
                 httpResponseNormal.BodyBytes = responseBytesNormal;
 
-                // 尝试反序列化为对象 (假设是 JSON)
                 try
                 {
                     httpResponseNormal.BodyObject = System.Text.Json.JsonSerializer.Deserialize<object>(responseBodyNormal);
                 }
                 catch
                 {
-                    // 如果反序列化失败，保持为 null
                 }
 
-                // 添加响应头
                 foreach (var header in responseNormal.Headers)
                 {
                     httpResponseNormal.Headers.Add(header.Key, string.Join(",", header.Value));
@@ -584,13 +593,9 @@ namespace Drx.Sdk.Network.V2.Web
         }
 
         /// <summary>
-        /// 发送 GET 请求
+        ///发送 GET 请求
         /// </summary>
-        /// <param name="url">请求 URL</param>
-        /// <param name="headers">请求头</param>
-        /// <param name="query">查询参数</param>
-        /// <returns>HTTP 响应</returns>
-        public Task<HttpResponse> GetAsync(string url, NameValueCollection headers = null, NameValueCollection query = null)
+        public Task<HttpResponse> GetAsync(string url, NameValueCollection? headers = null, NameValueCollection? query = null)
         {
             try
             {
@@ -604,14 +609,9 @@ namespace Drx.Sdk.Network.V2.Web
         }
 
         /// <summary>
-        /// 发送 POST 请求
+        ///发送 POST 请求（支持 string/byte[]/object）
         /// </summary>
-        /// <param name="url">请求 URL</param>
-        /// <param name="body">请求体 (字符串、字节数组或对象)</param>
-        /// <param name="headers">请求头</param>
-        /// <param name="query">查询参数</param>
-        /// <returns>HTTP 响应</returns>
-        public Task<HttpResponse> PostAsync(string url, object body = null, NameValueCollection headers = null, NameValueCollection query = null)
+        public Task<HttpResponse> PostAsync(string url, object? body = null, NameValueCollection? headers = null, NameValueCollection? query = null)
         {
             try
             {
@@ -632,14 +632,9 @@ namespace Drx.Sdk.Network.V2.Web
         }
 
         /// <summary>
-        /// 发送 PUT 请求
+        ///发送 PUT 请求
         /// </summary>
-        /// <param name="url">请求 URL</param>
-        /// <param name="body">请求体 (字符串、字节数组或对象)</param>
-        /// <param name="headers">请求头</param>
-        /// <param name="query">查询参数</param>
-        /// <returns>HTTP 响应</returns>
-        public Task<HttpResponse> PutAsync(string url, object body = null, NameValueCollection headers = null, NameValueCollection query = null)
+        public Task<HttpResponse> PutAsync(string url, object? body = null, NameValueCollection? headers = null, NameValueCollection? query = null)
         {
             try
             {
@@ -660,13 +655,9 @@ namespace Drx.Sdk.Network.V2.Web
         }
 
         /// <summary>
-        /// 发送 DELETE 请求
+        ///发送 DELETE 请求
         /// </summary>
-        /// <param name="url">请求 URL</param>
-        /// <param name="headers">请求头</param>
-        /// <param name="query">查询参数</param>
-        /// <returns>HTTP 响应</returns>
-        public Task<HttpResponse> DeleteAsync(string url, NameValueCollection headers = null, NameValueCollection query = null)
+        public Task<HttpResponse> DeleteAsync(string url, NameValueCollection? headers = null, NameValueCollection? query = null)
         {
             try
             {
@@ -680,13 +671,9 @@ namespace Drx.Sdk.Network.V2.Web
         }
 
         /// <summary>
-        /// 下载文件到指定路径，支持进度报告、取消，并在完成后原子替换目标文件。
+        /// 下载文件到指定路径，支持进度与取消。完成后原子替换目标文件。
         /// </summary>
-        /// <param name="url">文件 URL</param>
-        /// <param name="destPath">目标路径（最终文件）</param>
-        /// <param name="progress">可选的进度（已接收字节数）</param>
-        /// <param name="cancellationToken">取消令牌</param>
-        public async Task DownloadFileAsync(string url, string destPath, IProgress<long> progress = null, CancellationToken cancellationToken = default)
+        public async Task DownloadFileAsync(string url, string destPath, IProgress<long>? progress = null, CancellationToken cancellationToken = default)
         {
             try
             {
@@ -697,7 +684,6 @@ namespace Drx.Sdk.Network.V2.Web
                 var total = response.Content.Headers.ContentLength ?? -1L;
                 var tempFile = destPath + ".download" + Guid.NewGuid().ToString("N");
 
-                // Ensure destination directory exists
                 var destDir = Path.GetDirectoryName(destPath);
                 if (!string.IsNullOrEmpty(destDir) && !Directory.Exists(destDir)) Directory.CreateDirectory(destDir);
 
@@ -715,14 +701,35 @@ namespace Drx.Sdk.Network.V2.Web
                     }
                 }
 
-                // 对目标文件执行原子替换
                 try
                 {
                     if (File.Exists(destPath))
                     {
-                        // 使用覆盖复制再删除临时文件，这在大多数环境下能替换目标
-                        File.Copy(tempFile, destPath, true);
-                        File.Delete(tempFile);
+                        try
+                        {
+                            // Prefer atomic replace when possible
+                            File.Replace(tempFile, destPath, null);
+                        }
+                        catch (PlatformNotSupportedException) // unlikely on Windows, but be defensive
+                        {
+                            // fallback to delete and move
+                            File.Delete(destPath);
+                            File.Move(tempFile, destPath);
+                        }
+                        catch (IOException)
+                        {
+                            // Could be file locked or race; try best-effort delete+move
+                            try
+                            {
+                                File.Delete(destPath);
+                                File.Move(tempFile, destPath);
+                            }
+                            catch (Exception inner)
+                            {
+                                Logger.Error($"替换文件失败（尝试 File.Delete+Move）: {inner.Message}");
+                                throw;
+                            }
+                        }
                     }
                     else
                     {
@@ -732,7 +739,6 @@ namespace Drx.Sdk.Network.V2.Web
                 catch (Exception ex)
                 {
                     Logger.Error($"下载完成后替换目标文件时发生错误: {ex.Message}");
-                    // 尝试清理临时文件
                     try { if (File.Exists(tempFile)) File.Delete(tempFile); } catch { }
                     throw;
                 }
@@ -752,10 +758,48 @@ namespace Drx.Sdk.Network.V2.Web
         }
 
         /// <summary>
+        /// 将远程文件流写入到目标流，支持进度与取消（不会关闭目标流）。
+        /// </summary>
+        public async Task DownloadToStreamAsync(string url, Stream destination, IProgress<long>? progress = null, CancellationToken cancellationToken = default)
+        {
+            if (destination == null) throw new ArgumentNullException(nameof(destination));
+
+            try
+            {
+                using var request = new HttpRequestMessage(System.Net.Http.HttpMethod.Get, url);
+                var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
+                response.EnsureSuccessStatusCode();
+
+                var total = response.Content.Headers.ContentLength ?? -1L;
+
+                using var contentStream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+                var buffer = new byte[81920];
+                long totalRead = 0;
+                int read;
+                while ((read = await contentStream.ReadAsync(buffer.AsMemory(0, buffer.Length), cancellationToken).ConfigureAwait(false)) > 0)
+                {
+                    await destination.WriteAsync(buffer.AsMemory(0, read), cancellationToken).ConfigureAwait(false);
+                    totalRead += read;
+                    progress?.Report(totalRead);
+                }
+
+                Logger.Info($"DownloadToStreamAsync 完成: {url} (总字节: {total})");
+            }
+            catch (OperationCanceledException)
+            {
+                Logger.Warn($"下载被取消: {url}");
+                throw;
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"下载流式文件失败: {url}, 错误: {ex.Message}");
+                throw;
+            }
+        }
+
+        /// <summary>
         /// 设置默认请求头
         /// </summary>
-        /// <param name="name">头名称</param>
-        /// <param name="value">头值</param>
         public void SetDefaultHeader(string name, string value)
         {
             try
@@ -772,7 +816,6 @@ namespace Drx.Sdk.Network.V2.Web
         /// <summary>
         /// 设置超时时间
         /// </summary>
-        /// <param name="timeout">超时时间</param>
         public void SetTimeout(TimeSpan timeout)
         {
             try
@@ -793,11 +836,9 @@ namespace Drx.Sdk.Network.V2.Web
         {
             try
             {
-                //先停止接收新请求，再取消正在进行的循环
                 _requestChannel.Writer.TryComplete();
                 _cts.Cancel();
 
-                // 等待后台处理任务结束，捕获取消异常
                 if (_processingTask != null)
                 {
                     try
@@ -806,7 +847,6 @@ namespace Drx.Sdk.Network.V2.Web
                     }
                     catch (OperationCanceledException)
                     {
-                        // 忽略取消导致的异常
                     }
                 }
             }
@@ -818,14 +858,14 @@ namespace Drx.Sdk.Network.V2.Web
             }
         }
 
-        private string BuildUrl(string url, NameValueCollection query)
+        private string BuildUrl(string url, NameValueCollection? query)
         {
             try
             {
                 if (query == null || query.Count == 0)
                     return url;
 
-                var queryString = string.Join("&", query.AllKeys.Select(key => $"{Uri.EscapeDataString(key)}={Uri.EscapeDataString(query[key])}"));
+                var queryString = string.Join("&", query.AllKeys.Where(k => k != null && query[k] != null).Select(key => $"{Uri.EscapeDataString(key!)}={Uri.EscapeDataString(query[key!]!)}"));
                 return url.Contains("?") ? $"{url}&{queryString}" : $"{url}?{queryString}";
             }
             catch (Exception ex)
@@ -836,36 +876,29 @@ namespace Drx.Sdk.Network.V2.Web
         }
 
         /// <summary>
-        ///发送 HTTP 请求（统一请求对象版本，接受库中的 `HttpRequest` 类型）
-        ///
-        ///说明: 如果需要上传文件，请在 `HttpRequest.UploadFile` 中设置上传信息（`Stream`、`FileName`、`FieldName` 等），
-        ///本方法会自动以 multipart/form-data 流式上传文件并保持进度/取消支持。
-        ///</summary>
-        /// <param name="request">请求对象，支持包含常见属性: Url, Method (HttpMethod 或 string), Body (string), BodyBytes (byte[]), BodyObject (object), BodyJson (string), ExtraDataPack (byte[]), Headers (NameValueCollection), Query (NameValueCollection), UploadFile (UploadFileDescriptor)</param>
-        /// <returns>HTTP 响应</returns>
+        ///统一的 SendAsync 接口，接受自定义 HttpRequest 对象。
+        /// 如果需要上传文件，请设置 `HttpRequest.UploadFile`。
+        /// </summary>
         public async Task<HttpResponse> SendAsync(HttpRequest request)
         {
             if (request == null) throw new ArgumentNullException(nameof(request));
 
-            // 如果调用方未显式提供 UploadFile，则尝试隐式创建
             try
             {
                 if (request.UploadFile == null)
                 {
-                    // 优先从 BodyObject 中获取 Stream
                     if (request.BodyObject is Stream bodyStream)
                     {
                         var fileName = request.Headers?[HttpHeaders.X_FILE_NAME];
-                        // 支持 Base64/Encoded头
                         if (string.IsNullOrEmpty(fileName) && request.Headers != null)
                         {
                             if (!string.IsNullOrEmpty(request.Headers[HttpHeaders.X_FILE_NAME_BASE64]))
                             {
-                                try { fileName = System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(request.Headers[HttpHeaders.X_FILE_NAME_BASE64])); } catch { fileName = request.Headers[HttpHeaders.X_FILE_NAME_BASE64]; }
+                                try { fileName = System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(request.Headers[HttpHeaders.X_FILE_NAME_BASE64]!)); } catch { fileName = request.Headers[HttpHeaders.X_FILE_NAME_BASE64]; }
                             }
                             else if (!string.IsNullOrEmpty(request.Headers[HttpHeaders.X_FILE_NAME_ENCODED]))
                             {
-                                fileName = Uri.UnescapeDataString(request.Headers[HttpHeaders.X_FILE_NAME_ENCODED]);
+                                fileName = Uri.UnescapeDataString(request.Headers[HttpHeaders.X_FILE_NAME_ENCODED]!);
                             }
                         }
 
@@ -877,10 +910,8 @@ namespace Drx.Sdk.Network.V2.Web
                             Progress = request.UploadFile?.Progress ?? null,
                             CancellationToken = request.UploadFile?.CancellationToken ?? CancellationToken.None
                         };
-                        // 清理原始载荷，避免重复使用
                         request.BodyObject = null;
                     }
-                    // 如果没有 Stream，但有 BodyBytes，则用 MemoryStream 包装
                     else if (request.BodyBytes != null && request.BodyBytes.Length > 0)
                     {
                         var ms = new MemoryStream(request.BodyBytes, writable: false);
@@ -894,7 +925,6 @@ namespace Drx.Sdk.Network.V2.Web
                         };
                         request.BodyBytes = null;
                     }
-                    // 如果 Body 字符串是一个存在的本地文件路径，则打开文件流
                     else if (!string.IsNullOrEmpty(request.Body) && System.IO.File.Exists(request.Body))
                     {
                         var fs = System.IO.File.OpenRead(request.Body);
@@ -912,7 +942,6 @@ namespace Drx.Sdk.Network.V2.Web
             }
             catch (Exception ex)
             {
-                // 不阻塞主流程，仅记录错误
                 try { Logger.Error($"构建隐式 UploadFile 时发生错误: {ex.Message}"); } catch { }
             }
 
@@ -942,5 +971,76 @@ namespace Drx.Sdk.Network.V2.Web
                 _ => new System.Net.Http.HttpMethod(method)
             };
         }
+
+        /// <summary>
+        ///便捷方法：上传本地文件并带可选 metadata（对象将被序列化为 JSON）。
+        /// </summary>
+        public async Task<HttpResponse> UploadFileWithMetadataAsync(string url, string filePath, object? metadata = null, NameValueCollection? headers = null, IProgress<long>? progress = null, CancellationToken cancellationToken = default)
+        {
+            if (string.IsNullOrEmpty(filePath) || !File.Exists(filePath)) throw new FileNotFoundException("上传文件不存在", filePath);
+
+            using var fs = File.OpenRead(filePath);
+            return await UploadFileWithMetadataAsync(url, fs, Path.GetFileName(filePath), metadata, headers, progress, cancellationToken).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        ///便捷方法：上传流并带可选 metadata（对象将被序列化为 JSON）。
+        /// 注意：不会在方法结束时关闭传入的流。
+        /// </summary>
+        public async Task<HttpResponse> UploadFileWithMetadataAsync(string url, Stream fileStream, string fileName, object? metadata = null, NameValueCollection? headers = null, IProgress<long>? progress = null, CancellationToken cancellationToken = default)
+        {
+            if (fileStream == null) throw new ArgumentNullException(nameof(fileStream));
+            if (string.IsNullOrEmpty(fileName)) fileName = "file";
+
+            string body = null;
+            if (metadata != null)
+            {
+                try
+                {
+                    if (metadata is JToken jToken)
+                    {
+                        body = jToken.ToString();
+                    }
+                    else
+                    {
+                        body = JsonSerializer.Serialize(metadata);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Logger.Warn($"序列化 metadata 时发生错误: {ex.Message}");
+                    body = metadata.ToString();
+                }
+            }
+
+
+            var req = new HttpRequest
+            {
+                Url = url,
+                Method = "POST",
+                Body = body,
+                Headers = headers ?? new NameValueCollection(),
+                UploadFile = new HttpRequest.UploadFileDescriptor
+                {
+                    Stream = fileStream,
+                    FileName = fileName,
+                    FieldName = "file",
+                    Progress = progress,
+                    CancellationToken = cancellationToken
+                }
+            };
+
+            try
+            {
+                if (string.IsNullOrEmpty(req.Headers[HttpHeaders.X_FILE_NAME]))
+                {
+                    req.Headers.Add(HttpHeaders.X_FILE_NAME, fileName);
+                }
+            }
+            catch { }
+
+            return await SendAsync(req).ConfigureAwait(false);
+        }
+
     }
 }

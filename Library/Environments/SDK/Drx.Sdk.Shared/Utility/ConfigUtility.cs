@@ -11,18 +11,40 @@ using System.Xml.Serialization;
 namespace Drx.Sdk.Shared.Utility
 {
     /// <summary>
-    /// 简单且线程安全的配置工具，支持 INI/JSON/XML 三种存储格式。
-    /// 用法示例：
+    /// 提供对磁盘上配置的简单读写封装，线程安全且支持三种持久化格式：INI、JSON、XML。
+    /// 本类将配置表示为 "section => (key => value)" 的嵌套字典（对键和分组名大小写不敏感）。
+    /// 主要设计要点：
+    /// - 以文件为粒度使用内部并发字典维护锁对象，避免并发写入导致的文件损坏（lock per file）。
+    /// - 写入以先在内存构建并写入临时文件，再以原子替换的方式覆盖目标文件，降低半写入风险。
+    /// - 默认使用 INI 格式以保持向后兼容；JSON 与 XML 作为可选格式互转和持久化。
+    /// - 所有公开 API 支持指定 Encoding；默认使用 UTF-8。
+    /// 示例：
+    /// <code>
     /// ConfigUtility.Push("config.ini", "key", "value", "group");
     /// var val = ConfigUtility.Read("config.ini", "key", "group");
-    /// 默认使用 INI 格式以保证向后兼容。
+    /// </code>
+    /// 注意事项：
+    /// - 对于不存在的文件，Read/TryRead/Get* 将返回空或空集合；Push 会在必要时创建目录并写入新文件。
+    /// - Push 会将传入的 null 值转换为空字符串写入。
     /// </summary>
     public static class ConfigUtility
     {
+        /// <summary>
+        /// 指定配置文件的存储格式。
+        /// </summary>
         public enum StorageFormat
         {
+            /// <summary>
+            /// 使用 JSON 存储，格式为 Dictionary<string, Dictionary<string, string>>（可读性好，支持缩进）。
+            /// </summary>
             JSON,
+            /// <summary>
+            /// 传统 INI 存储，支持 [section] 和 key=value 行解析（默认为该格式以兼容历史文件）。
+            /// </summary>
             INI,
+            /// <summary>
+            /// 使用 XML 序列化的中间表示，适合与其他系统交换结构化配置。
+            /// </summary>
             XML
         }
 
@@ -34,8 +56,25 @@ namespace Drx.Sdk.Shared.Utility
         private static object GetLock(string path) => FileLocks.GetOrAdd(path, _ => new object());
 
         /// <summary>
-        /// 将键值写入配置（支持 INI/JSON/XML）。val 为 null 则写入空字符串。
+        /// 将指定键写入到配置文件的指定分组（section）。
         /// </summary>
+        /// <param name="file">目标配置文件路径（相对或绝对）。不能为空或全空白；如果路径所指目录不存在会尝试创建。</param>
+        /// <param name="key">要写入的键名，不能为空。</param>
+        /// <param name="val">要写入的值；如果为 <c>null</c>，方法会写入空字符串。</param>
+        /// <param name="group">分组/节名，可选。为 <c>null</c> 时使用默认分组 "default"。</param>
+        /// <param name="encoding">文本编码，可选，默认为 <see cref="Encoding.UTF8"/>。</param>
+        /// <param name="format">存储格式，默认为 <see cref="StorageFormat.INI"/>。</param>
+        /// <remarks>
+        /// 方法流程：
+        /// 1. 解析并规范化目标路径（Path.GetFullPath）。
+        /// 2. 确保目录存在（必要时创建）。
+        /// 3. 获取文件级别的锁以保证并发安全。
+        /// 4. 加载现有配置（若文件不存在则开始于空结构），在内存中更新分组/键值。
+        /// 5. 以原子方式写回文件（先写入临时文件，再替换目标文件）。
+        /// 抛出异常：
+        /// - 若 <paramref name="file"/> 无效，会抛出 <see cref="ArgumentException"/>。
+        /// - 若 <paramref name="key"/> 为 <c>null</c>，会抛出 <see cref="ArgumentNullException"/>。
+        /// </remarks>
         public static void Push(string file, string key, string val, string? group = null, Encoding? encoding = null, StorageFormat format = StorageFormat.INI)
         {
             if (string.IsNullOrWhiteSpace(file)) throw new ArgumentException("file is required", nameof(file));
@@ -62,8 +101,17 @@ namespace Drx.Sdk.Shared.Utility
         }
 
         /// <summary>
-        ///读取键的值；不存在时返回空字符串。
+        /// 从配置文件中读取指定分组下的键值。
         /// </summary>
+        /// <param name="file">配置文件路径；若为空或文件不存在，方法返回空字符串。</param>
+        /// <param name="key">要读取的键名；若为 <c>null</c>，方法返回空字符串。</param>
+        /// <param name="group">分组名，可选；默认为 "default"。</param>
+        /// <param name="encoding">可选的文本编码，默认 UTF-8。</param>
+        /// <param name="format">指定文件格式（INI/JSON/XML），默认为 INI。</param>
+        /// <returns>找到则返回对应的字符串值；未找到或发生路径/参数问题时返回空字符串。</returns>
+        /// <remarks>
+        /// 本方法为只读操作，不会创建文件或目录。对于不存在的键/分组或解析失败，统一返回空字符串以便调用方简洁处理。
+        /// </remarks>
         public static string Read(string file, string key, string? group = null, Encoding? encoding = null, StorageFormat format = StorageFormat.INI)
         {
             if (string.IsNullOrWhiteSpace(file)) return string.Empty;
@@ -84,8 +132,16 @@ namespace Drx.Sdk.Shared.Utility
         }
 
         /// <summary>
-        /// 尝试读取键的值，返回是否成功。
+        /// 尝试从配置文件读取指定键的值，并以布尔值指示是否成功读取到有效值。
         /// </summary>
+        /// <param name="file">配置文件路径；若文件不存在或路径无效，返回 <c>false</c>。</param>
+        /// <param name="key">要读取的键名。</param>
+        /// <param name="value">当返回值为 <c>true</c> 时，包含读取到的值；未成功读取时为 <c>string.Empty</c>。</param>
+        /// <param name="group">分组名，默认为 "default"。</param>
+        /// <param name="encoding">文本编码，默认为 UTF-8。</param>
+        /// <param name="format">存储格式，默认为 INI。</param>
+        /// <returns>如果成功找到对应分组和键并赋值给 <paramref name="value"/>，则返回 <c>true</c>；否则返回 <c>false</c>。</returns>
+        /// <remarks>此方法不会抛出异常用于找不到文件或键，只会返回 false，便于调用方以条件分支处理。</remarks>
         public static bool TryRead(string file, string key, out string? value, string? group = null, Encoding? encoding = null, StorageFormat format = StorageFormat.INI)
         {
             value = string.Empty;
@@ -106,8 +162,15 @@ namespace Drx.Sdk.Shared.Utility
         }
 
         /// <summary>
-        /// 删除指定键，存在并删除成功返回 true，否则 false。
+        /// 从指定配置文件与分组中删除某个键。
         /// </summary>
+        /// <param name="file">配置文件路径；若文件不存在或路径无效方法返回 <c>false</c>。</param>
+        /// <param name="key">要删除的键名。</param>
+        /// <param name="group">分组名，默认为 "default"。</param>
+        /// <param name="encoding">文本编码，默认 UTF-8。</param>
+        /// <param name="format">存储格式，默认 INI。</param>
+        /// <returns>若文件存在且键被成功移除则返回 <c>true</c>；否则返回 <c>false</c>（例如分组或键不存在）。</returns>
+        /// <remarks>写操作在文件级别加锁并在内存中更新后以原子方式写回磁盘。</remarks>
         public static bool DeleteKey(string file, string key, string? group = null, Encoding? encoding = null, StorageFormat format = StorageFormat.INI)
         {
             if (string.IsNullOrWhiteSpace(file) || key is null) return false;
@@ -130,8 +193,14 @@ namespace Drx.Sdk.Shared.Utility
         }
 
         /// <summary>
-        /// 删除整个分组(section)，成功返回 true。
+        /// 删除整个分组（section）及其所有键。
         /// </summary>
+        /// <param name="file">配置文件路径；若文件不存在则返回 <c>false</c>。</param>
+        /// <param name="group">要删除的分组名。</param>
+        /// <param name="encoding">文本编码，默认 UTF-8。</param>
+        /// <param name="format">存储格式，默认 INI。</param>
+        /// <returns>若分组存在并被删除则返回 <c>true</c>；否则返回 <c>false</c>。</returns>
+        /// <remarks>该操作为写操作，会获取文件级锁并在成功删除后原子写回。</remarks>
         public static bool DeleteSection(string file, string group, Encoding? encoding = null, StorageFormat format = StorageFormat.INI)
         {
             if (string.IsNullOrWhiteSpace(file) || group is null) return false;
@@ -153,8 +222,13 @@ namespace Drx.Sdk.Shared.Utility
         }
 
         /// <summary>
-        /// 获取所有分组名
+        /// 获取配置文件中存在的所有分组（section）名。
         /// </summary>
+        /// <param name="file">配置文件路径；若文件不存在或路径无效，返回空集合。</param>
+        /// <param name="encoding">文本编码，默认 UTF-8。</param>
+        /// <param name="format">存储格式，默认 INI。</param>
+        /// <returns>分组名的枚举快照（List）。</returns>
+        /// <remarks>该方法为只读，不会创建文件或修改内容。</remarks>
         public static IEnumerable<string> GetSections(string file, Encoding? encoding = null, StorageFormat format = StorageFormat.INI)
         {
             if (string.IsNullOrWhiteSpace(file)) return Array.Empty<string>();
@@ -166,8 +240,13 @@ namespace Drx.Sdk.Shared.Utility
         }
 
         /// <summary>
-        /// 获取指定分组下的所有键
+        /// 返回指定分组下的所有键名列表。
         /// </summary>
+        /// <param name="file">配置文件路径，若文件不存在返回空集合。</param>
+        /// <param name="group">分组名，默认为 "default"。</param>
+        /// <param name="encoding">文本编码，默认 UTF-8。</param>
+        /// <param name="format">存储格式，默认 INI。</param>
+        /// <returns>指定分组下键名的枚举；若分组不存在返回空集合。</returns>
         public static IEnumerable<string> GetKeys(string file, string? group = null, Encoding? encoding = null, StorageFormat format = StorageFormat.INI)
         {
             if (string.IsNullOrWhiteSpace(file)) return Array.Empty<string>();
@@ -181,8 +260,13 @@ namespace Drx.Sdk.Shared.Utility
         }
 
         /// <summary>
-        ///读取整个配置为嵌套字典
+        /// 将整个配置文件读取为嵌套字典结构：Dictionary<section, Dictionary<key, value>>。
         /// </summary>
+        /// <param name="file">配置文件路径；若 <c>null</c> 或空则返回空字典。</param>
+        /// <param name="encoding">文本编码，默认 UTF-8。</param>
+        /// <param name="format">存储格式，默认 INI。</param>
+        /// <returns>返回包含所有分组及其键值对的字典；当文件缺失或解析失败时返回空字典。</returns>
+        /// <remarks>返回的字典对键与分组名采用不区分大小写的比较器（StringComparer.OrdinalIgnoreCase）。</remarks>
         public static Dictionary<string, Dictionary<string, string>> ReadAll(string file, Encoding? encoding = null, StorageFormat format = StorageFormat.INI)
         {
             if (string.IsNullOrWhiteSpace(file)) return new Dictionary<string, Dictionary<string, string>>(StringComparer.OrdinalIgnoreCase);
@@ -345,24 +429,48 @@ namespace Drx.Sdk.Shared.Utility
             File.Delete(temp);
         }
 
-        // 用于 XML 序列化的中间类
+        /// <summary>
+        /// 用于 XML 序列化/反序列化的中间文档表示。
+        /// 当使用 <see cref="StorageFormat.XML"/> 时，配置会映射为本类型的实例以进行 XmlSerializer 操作。
+        /// </summary>
         [Serializable]
         public class ConfigDocument
         {
+            /// <summary>
+            /// 配置中的分组集合，每项对应一个 <see cref="Section"/>。
+            /// </summary>
             public List<Section>? Sections { get; set; }
         }
 
+        /// <summary>
+        /// 表示 XML 中的一个分组（section），包含分组名和若干键值项。
+        /// </summary>
         [Serializable]
         public class Section
         {
+            /// <summary>
+            /// 分组名（Section name）。反序列化时可能为 null，但在转换为字典时会使用空字符串替代。
+            /// </summary>
             public string? Name { get; set; }
+            /// <summary>
+            /// 分组内的键值对集合。
+            /// </summary>
             public List<KeyValue>? Items { get; set; }
         }
 
+        /// <summary>
+        /// 表示单个键值对，用于 XML 序列化。
+        /// </summary>
         [Serializable]
         public class KeyValue
         {
+            /// <summary>
+            /// 键名；序列化/反序列化期间可能为 null，调用端会将 null 视为 empty string。
+            /// </summary>
             public string? Key { get; set; }
+            /// <summary>
+            /// 对应的字符串值；可能为 null，调用端会将 null 视为 empty string。
+            /// </summary>
             public string? Value { get; set; }
         }
     }

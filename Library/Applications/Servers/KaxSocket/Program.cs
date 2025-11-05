@@ -32,6 +32,21 @@ public class Program
 
         try
         {
+            var uploadToken = ConfigUtility.Read($"{AppDomain.CurrentDomain.BaseDirectory}configs.ini", "upload_token", "general");
+            var version = ConfigUtility.Read($"{AppDomain.CurrentDomain.BaseDirectory}configs.ini", "version", "general");
+
+            if (string.IsNullOrEmpty(uploadToken))
+            {
+                uploadToken = CommonUtility.GenerateGeneralCode("UPL", 8, 4, true, true);
+                ConfigUtility.Push($"{AppDomain.CurrentDomain.BaseDirectory}configs.ini", "upload_token", uploadToken, "general");
+            }
+
+            if (string.IsNullOrEmpty(version))
+            {
+                version = "1.0.0";
+                ConfigUtility.Push($"{AppDomain.CurrentDomain.BaseDirectory}configs.ini", "version", version, "general");
+            }
+
             await server.StartAsync();
         }
         catch (Exception ex)
