@@ -20,18 +20,18 @@ namespace Drx.Sdk.Network.V2.Web
 {
     public class HttpServer
     {
-    private HttpListener _listener;
-    private readonly List<(string Prefix, string RootDir)> _fileRoutes = new();
-    private readonly List<RouteEntry> _routes = new();
-    private readonly List<(string Template, Func<HttpListenerContext, Task> Handler)> _rawRoutes = new();
-    private readonly string? _staticFileRoot;
+        private HttpListener _listener;
+        private readonly List<(string Prefix, string RootDir)> _fileRoutes = new();
+        private readonly List<RouteEntry> _routes = new();
+        private readonly List<(string Template, Func<HttpListenerContext, Task> Handler)> _rawRoutes = new();
+        private readonly string? _staticFileRoot;
 
         private CancellationTokenSource _cts;
-    private readonly Channel<HttpListenerContext> _requestChannel;
-    private readonly SemaphoreSlim _semaphore;
-    private const int MaxConcurrentRequests = 100; // 最大并发请求数
-    private readonly MessageQueue<HttpListenerContext> _messageQueue;
-    private readonly ThreadPoolManager _threadPool;
+        private readonly Channel<HttpListenerContext> _requestChannel;
+        private readonly SemaphoreSlim _semaphore;
+        private const int MaxConcurrentRequests = 100; // 最大并发请求数
+        private readonly MessageQueue<HttpListenerContext> _messageQueue;
+        private readonly ThreadPoolManager _threadPool;
 
         private class RouteEntry
         {
@@ -1373,7 +1373,7 @@ namespace Drx.Sdk.Network.V2.Web
         /// <param name="contentType">Content-Type，默认为 application/octet-stream</param>
         /// <param name="bandwidthLimitKb">可选的带宽限制（KB/s），0 表示不限制</param>
         /// <returns>HttpResponse，若文件不存在返回404 响应</returns>
-    public static HttpResponse CreateFileResponse(string filePath, string? fileName = null, string contentType = "application/octet-stream", int bandwidthLimitKb = 0)
+        public static HttpResponse CreateFileResponse(string filePath, string? fileName = null, string contentType = "application/octet-stream", int bandwidthLimitKb = 0)
         {
             if (string.IsNullOrEmpty(filePath) || !File.Exists(filePath))
             {
@@ -1476,7 +1476,7 @@ namespace Drx.Sdk.Network.V2.Web
         public string Path { get; }
 
         /// <summary>
-    /// HTTP 方法字符串（例如 "GET"、"POST"）
+        /// HTTP 方法字符串（例如 "GET"、"POST"）
         /// </summary>
         public string Method { get; }
 

@@ -9,10 +9,17 @@ using System.Threading.Channels;
 namespace Drx.Sdk.Network.V2.Web
 {
     /// <summary>
-    /// HTTP 客户端，用于发送各类 HTTP 请求并支持流式上传/下载。
-    ///说明：上传功能已与 `SendAsync(HttpRequest)` 合并，调用方可通过 `HttpRequest.UploadFile` 提供流式上传信息。
-    /// 为兼容性仍保留部分便捷方法（如 UploadFileAsync / UploadFileWithMetadataAsync）。
+    /// HTTP 客户端，用于发送各类 HTTP 请求并支持流式上传与下载。
     /// </summary>
+    /// <remarks>
+    /// 本类封装了常见的异步 HTTP 操作，支持：
+    /// - 以字符串/字节数组/对象（序列化为 JSON）作为请求体发送；
+    /// - 流式文件上传（支持进度与取消），上传可通过 HttpRequest.UploadFile 指定或由方法根据 Body 隐式构建；
+    /// - 下载文件到本地或写入目标流（支持进度与取消，并尽量进行原子替换目标文件）。
+    /// 注意：字段与属性未在此处注释；调用方需负责传入流的生命周期管理。
+    /// </remarks>
+    /// <seealso cref="HttpRequest"/>
+    /// <seealso cref="HttpResponse"/>
     public class HttpClient : IAsyncDisposable
     {
         private readonly System.Net.Http.HttpClient _httpClient;
@@ -53,7 +60,9 @@ namespace Drx.Sdk.Network.V2.Web
         /// <summary>
         /// 指定基础地址的构造函数。
         /// </summary>
-        /// <param name="baseAddress">基础地址</param>
+        /// <param name="baseAddress">用于初始化内部 HttpClient 的基地址。</param>
+        /// <exception cref="System.ArgumentException">当 baseAddress 不是有效的 URI 时抛出。</exception>
+        /// <exception cref="System.Exception">初始化 HttpClient 发生其它错误时抛出并向上传播。</exception>
         public HttpClient(string baseAddress)
         {
             try
@@ -110,32 +119,59 @@ namespace Drx.Sdk.Network.V2.Web
         }
 
         /// <summary>
-        ///发送 HTTP 请求（字符串 body）。
+        /// 发送 HTTP 请求，使用字符串作为请求体（将以 application/json 发送）。
         /// </summary>
+        /// <param name="method">HTTP 方法（GET/POST/PUT/DELETE 等）。</param>
+        /// <param name="url">目标 URL 或相对路径。</param>
+        /// <param name="body">请求体字符串（可为 null）。</param>
+        /// <param name="headers">可选请求头集合（键值对）。</param>
+        /// <param name="query">可选查询参数集合（键值对）。</param>
+        /// <returns>返回包含状态码、响应文本、响应字节及反序列化对象（若为 JSON）的 <see cref="HttpResponse"/>。</returns>
         public async Task<HttpResponse> SendAsync(System.Net.Http.HttpMethod method, string url, string? body = null, NameValueCollection? headers = null, NameValueCollection? query = null)
         {
             return await SendAsyncInternal(method, url, body, null, null, headers, query, null);
         }
 
         /// <summary>
-        ///发送 HTTP 请求（字节数组 body）。
+        /// 发送 HTTP 请求，使用字节数组作为请求体。
         /// </summary>
+        /// <param name="method">HTTP 方法（GET/POST/PUT/DELETE 等）。</param>
+        /// <param name="url">目标 URL 或相对路径。</param>
+        /// <param name="bodyBytes">请求体字节数组（可为 null）。</param>
+        /// <param name="headers">可选请求头集合（键值对）。</param>
+        /// <param name="query">可选查询参数集合（键值对）。</param>
+        /// <returns>返回包含状态码、响应文本、响应字节及反序列化对象（若为 JSON）的 <see cref="HttpResponse"/>。</returns>
         public async Task<HttpResponse> SendAsync(System.Net.Http.HttpMethod method, string url, byte[]? bodyBytes, NameValueCollection? headers = null, NameValueCollection? query = null)
         {
             return await SendAsyncInternal(method, url, null, bodyBytes, null, headers, query, null);
         }
 
         /// <summary>
-        ///发送 HTTP 请求（对象 body，会被序列化为 JSON）。
+        /// 发送 HTTP 请求，使用对象作为请求体（将被序列化为 JSON）。
         /// </summary>
+        /// <param name="method">HTTP 方法（GET/POST/PUT/DELETE 等）。</param>
+        /// <param name="url">目标 URL 或相对路径。</param>
+        /// <param name="bodyObject">请求体对象（可为 null），在发送前会被序列化为 JSON。</param>
+        /// <param name="headers">可选请求头集合（键值对）。</param>
+        /// <param name="query">可选查询参数集合（键值对）。</param>
+        /// <returns>返回包含状态码、响应文本、响应字节及反序列化对象（若为 JSON）的 <see cref="HttpResponse"/>。</returns>
         public async Task<HttpResponse> SendAsync(System.Net.Http.HttpMethod method, string url, object? bodyObject, NameValueCollection? headers = null, NameValueCollection? query = null)
         {
             return await SendAsyncInternal(method, url, null, null, bodyObject, headers, query, null);
         }
 
         /// <summary>
-        ///便捷的文件上传（保持兼容，内部最终调用 SendAsync(HttpRequest)）。
+        /// 便捷的本地文件上传方法（兼容性封装，最终内部调用 SendAsync(HttpRequest)）。
         /// </summary>
+        /// <param name="url">上传目标 URL。</param>
+        /// <param name="filePath">本地文件路径，文件必须存在。</param>
+        /// <param name="fieldName">表单字段名，默认 file。</param>
+        /// <param name="headers">可选请求头集合。</param>
+        /// <param name="query">可选查询参数集合。</param>
+        /// <param name="progress">可选进度回调，报告已上传字节数。</param>
+        /// <param name="cancellationToken">可选取消令牌。</param>
+        /// <exception cref="System.IO.FileNotFoundException">当指定的本地文件不存在时抛出。</exception>
+        /// <returns>返回服务器响应的 <see cref="HttpResponse"/>。</returns>
         public async Task<HttpResponse> UploadFileAsync(string url, string filePath, string fieldName = "file", NameValueCollection? headers = null, NameValueCollection? query = null, IProgress<long>? progress = null, CancellationToken cancellationToken = default)
         {
             if (string.IsNullOrEmpty(filePath) || !File.Exists(filePath)) throw new FileNotFoundException("上传文件不存在", filePath);
@@ -146,8 +182,18 @@ namespace Drx.Sdk.Network.V2.Web
         }
 
         /// <summary>
-        /// 上传流并支持进度/取消。
+        /// 将给定的流作为文件上传到指定 URL，支持上传进度和取消操作。
         /// </summary>
+        /// <param name="url">上传目标 URL。</param>
+        /// <param name="fileStream">要上传的源流，不能为 null。调用方负责管理该流的生命周期，方法结束后不会自动关闭该流。</param>
+        /// <param name="fileName">上传时使用的文件名；若为空则使用默认 file。</param>
+        /// <param name="fieldName">表单字段名，默认 file。</param>
+        /// <param name="headers">可选请求头集合。</param>
+        /// <param name="query">可选查询参数集合。</param>
+        /// <param name="progress">可选进度回调，报告已上传字节数。</param>
+        /// <param name="cancellationToken">可选取消令牌。</param>
+        /// <returns>返回服务器响应的 <see cref="HttpResponse"/>。</returns>
+        /// <exception cref="System.ArgumentNullException">当 fileStream 为 null 时抛出。</exception>
         public async Task<HttpResponse> UploadFileAsync(string url, Stream fileStream, string fileName, string fieldName = "file", NameValueCollection? headers = null, NameValueCollection? query = null, IProgress<long>? progress = null, CancellationToken cancellationToken = default)
         {
             if (fileStream == null) throw new ArgumentNullException(nameof(fileStream));
@@ -593,8 +639,12 @@ namespace Drx.Sdk.Network.V2.Web
         }
 
         /// <summary>
-        ///发送 GET 请求
+        /// 发送 GET 请求。
         /// </summary>
+        /// <param name="url">目标 URL 或相对路径。</param>
+        /// <param name="headers">可选请求头集合。</param>
+        /// <param name="query">可选查询参数集合。</param>
+        /// <returns>返回 <see cref="HttpResponse"/> 包含服务器响应信息。</returns>
         public Task<HttpResponse> GetAsync(string url, NameValueCollection? headers = null, NameValueCollection? query = null)
         {
             try
@@ -609,8 +659,13 @@ namespace Drx.Sdk.Network.V2.Web
         }
 
         /// <summary>
-        ///发送 POST 请求（支持 string/byte[]/object）
+        /// 发送 POST 请求，支持传入 string/byte[]/object 类型的请求体。
         /// </summary>
+        /// <param name="url">目标 URL 或相对路径。</param>
+        /// <param name="body">请求体，可为 string/byte[]/object 或 null。</param>
+        /// <param name="headers">可选请求头集合。</param>
+        /// <param name="query">可选查询参数集合。</param>
+        /// <returns>返回 <see cref="HttpResponse"/> 包含服务器响应信息。</returns>
         public Task<HttpResponse> PostAsync(string url, object? body = null, NameValueCollection? headers = null, NameValueCollection? query = null)
         {
             try
@@ -632,8 +687,13 @@ namespace Drx.Sdk.Network.V2.Web
         }
 
         /// <summary>
-        ///发送 PUT 请求
+        /// 发送 PUT 请求，支持传入 string/byte[]/object 类型的请求体。
         /// </summary>
+        /// <param name="url">目标 URL 或相对路径。</param>
+        /// <param name="body">请求体，可为 string/byte[]/object 或 null。</param>
+        /// <param name="headers">可选请求头集合。</param>
+        /// <param name="query">可选查询参数集合。</param>
+        /// <returns>返回 <see cref="HttpResponse"/> 包含服务器响应信息。</returns>
         public Task<HttpResponse> PutAsync(string url, object? body = null, NameValueCollection? headers = null, NameValueCollection? query = null)
         {
             try
@@ -655,8 +715,12 @@ namespace Drx.Sdk.Network.V2.Web
         }
 
         /// <summary>
-        ///发送 DELETE 请求
+        /// 发送 DELETE 请求。
         /// </summary>
+        /// <param name="url">目标 URL 或相对路径。</param>
+        /// <param name="headers">可选请求头集合。</param>
+        /// <param name="query">可选查询参数集合。</param>
+        /// <returns>返回 <see cref="HttpResponse"/> 包含服务器响应信息。</returns>
         public Task<HttpResponse> DeleteAsync(string url, NameValueCollection? headers = null, NameValueCollection? query = null)
         {
             try
@@ -671,8 +735,15 @@ namespace Drx.Sdk.Network.V2.Web
         }
 
         /// <summary>
-        /// 下载文件到指定路径，支持进度与取消。完成后原子替换目标文件。
+        /// 下载远程文件到指定本地路径，支持进度回调和取消操作，并在可能时进行原子替换目标文件。
         /// </summary>
+        /// <param name="url">文件的远程 URL。</param>
+        /// <param name="destPath">本地目标路径，下载完成后会尝试原子替换该文件（若已存在）。</param>
+        /// <param name="progress">可选进度回调，报告已下载字节数。</param>
+        /// <param name="cancellationToken">可选取消令牌。</param>
+        /// <returns>异步任务，完成或抛出异常以指示失败。</returns>
+        /// <exception cref="OperationCanceledException">下载被取消时抛出。</exception>
+        /// <exception cref="System.Exception">下载或写入文件时发生错误会向上抛出。</exception>
         public async Task DownloadFileAsync(string url, string destPath, IProgress<long>? progress = null, CancellationToken cancellationToken = default)
         {
             try
@@ -758,8 +829,14 @@ namespace Drx.Sdk.Network.V2.Web
         }
 
         /// <summary>
-        /// 将远程文件流写入到目标流，支持进度与取消（不会关闭目标流）。
+        /// 将远程文件流写入到目标流，支持进度回调与取消操作。方法不会关闭传入的目标流，调用方负责流的生命周期。
         /// </summary>
+        /// <param name="url">文件的远程 URL。</param>
+        /// <param name="destination">目标写入流，不能为 null，方法结束后不会自动关闭该流。</param>
+        /// <param name="progress">可选进度回调，报告已下载字节数。</param>
+        /// <param name="cancellationToken">可选取消令牌。</param>
+        /// <returns>异步任务，完成或抛出异常以指示失败。</returns>
+        /// <exception cref="System.ArgumentNullException">当 destination 为 null 时抛出。</exception>
         public async Task DownloadToStreamAsync(string url, Stream destination, IProgress<long>? progress = null, CancellationToken cancellationToken = default)
         {
             if (destination == null) throw new ArgumentNullException(nameof(destination));
@@ -798,8 +875,10 @@ namespace Drx.Sdk.Network.V2.Web
         }
 
         /// <summary>
-        /// 设置默认请求头
+        /// 设置默认请求头，影响后续发送的请求。
         /// </summary>
+        /// <param name="name">头部名称。</param>
+        /// <param name="value">头部值（会确保为 ASCII，可自动转义不可 ASCII 字符）。</param>
         public void SetDefaultHeader(string name, string value)
         {
             try
@@ -814,8 +893,9 @@ namespace Drx.Sdk.Network.V2.Web
         }
 
         /// <summary>
-        /// 设置超时时间
+        /// 设置底层 HttpClient 的超时时间。
         /// </summary>
+        /// <param name="timeout">超时时间。</param>
         public void SetTimeout(TimeSpan timeout)
         {
             try
@@ -830,8 +910,9 @@ namespace Drx.Sdk.Network.V2.Web
         }
 
         /// <summary>
-        /// 异步释放资源
+        /// 异步释放本实例占用的资源并停止后台请求处理。
         /// </summary>
+        /// <returns>表示释放完成的可等待结构。</returns>
         public async ValueTask DisposeAsync()
         {
             try
@@ -876,9 +957,12 @@ namespace Drx.Sdk.Network.V2.Web
         }
 
         /// <summary>
-        ///统一的 SendAsync 接口，接受自定义 HttpRequest 对象。
-        /// 如果需要上传文件，请设置 `HttpRequest.UploadFile`。
+        /// 统一的 SendAsync 接口，接受自定义 <see cref="HttpRequest"/> 对象并返回 <see cref="HttpResponse"/>。
+        /// 如果需要上传文件，请设置 <see cref="HttpRequest.UploadFile"/> 或让方法根据 Body 隐式构建上传描述。
         /// </summary>
+        /// <param name="request">要发送的自定义请求对象，不能为 null。</param>
+        /// <returns>返回服务器响应的 <see cref="HttpResponse"/>。</returns>
+        /// <exception cref="System.ArgumentNullException">当 request 为 null 时抛出。</exception>
         public async Task<HttpResponse> SendAsync(HttpRequest request)
         {
             if (request == null) throw new ArgumentNullException(nameof(request));
@@ -973,8 +1057,16 @@ namespace Drx.Sdk.Network.V2.Web
         }
 
         /// <summary>
-        ///便捷方法：上传本地文件并带可选 metadata（对象将被序列化为 JSON）。
+        /// 便捷方法：上传本地文件并附带可选 metadata（metadata 对象将被序列化为 JSON）。
         /// </summary>
+        /// <param name="url">上传目标 URL。</param>
+        /// <param name="filePath">本地文件路径，文件必须存在。</param>
+        /// <param name="metadata">可选的元数据对象，将被序列化为 JSON 并作为 metadata 字段附加。</param>
+        /// <param name="headers">可选请求头集合。</param>
+        /// <param name="progress">可选进度回调。</param>
+        /// <param name="cancellationToken">可选取消令牌。</param>
+        /// <exception cref="System.IO.FileNotFoundException">当指定的本地文件不存在时抛出。</exception>
+        /// <returns>返回服务器响应的 <see cref="HttpResponse"/>。</returns>
         public async Task<HttpResponse> UploadFileWithMetadataAsync(string url, string filePath, object? metadata = null, NameValueCollection? headers = null, IProgress<long>? progress = null, CancellationToken cancellationToken = default)
         {
             if (string.IsNullOrEmpty(filePath) || !File.Exists(filePath)) throw new FileNotFoundException("上传文件不存在", filePath);
@@ -984,9 +1076,17 @@ namespace Drx.Sdk.Network.V2.Web
         }
 
         /// <summary>
-        ///便捷方法：上传流并带可选 metadata（对象将被序列化为 JSON）。
-        /// 注意：不会在方法结束时关闭传入的流。
+        /// 便捷方法：上传流并附带可选 metadata（metadata 对象将被序列化为 JSON）。
         /// </summary>
+        /// <param name="url">上传目标 URL。</param>
+        /// <param name="fileStream">要上传的源流，不能为 null。调用方负责流的生命周期，方法结束后不会关闭该流。</param>
+        /// <param name="fileName">上传时使用的文件名；若为空则使用默认 file。</param>
+        /// <param name="metadata">可选的元数据对象，将被序列化为 JSON 并作为 metadata 字段附加。</param>
+        /// <param name="headers">可选请求头集合。</param>
+        /// <param name="progress">可选进度回调。</param>
+        /// <param name="cancellationToken">可选取消令牌。</param>
+        /// <returns>返回服务器响应的 <see cref="HttpResponse"/>。</returns>
+        /// <exception cref="System.ArgumentNullException">当 fileStream 为 null 时抛出。</exception>
         public async Task<HttpResponse> UploadFileWithMetadataAsync(string url, Stream fileStream, string fileName, object? metadata = null, NameValueCollection? headers = null, IProgress<long>? progress = null, CancellationToken cancellationToken = default)
         {
             if (fileStream == null) throw new ArgumentNullException(nameof(fileStream));
