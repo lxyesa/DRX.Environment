@@ -1,4 +1,5 @@
 ﻿using System.Dynamic;
+using System.Text.Json.Nodes;
 using Drx.Sdk.Network.V2.Web;
 using Drx.Sdk.Shared;
 using Drx.Sdk.Shared.Serialization;
@@ -7,10 +8,10 @@ using Newtonsoft.Json.Linq;
 
 namespace KaxSocket
 {
-    public class Handles
+    public class DLTBModPackerHttp
     {
-        [HttpHandle("/api/test", "GET")]
-        public static HttpResponse GetTest(HttpRequest request)
+        [HttpHandle("/api/dltbmodpacker/version/check", "GET")]
+        public static HttpResponse GetCheckVersion(HttpRequest request)
         {
             var version = ConfigUtility.Read("configs.ini", "version", "general");
             if (string.IsNullOrEmpty(version))
@@ -20,20 +21,21 @@ namespace KaxSocket
                 ConfigUtility.Push("configs.ini", "version", version, "general");
             }
 
-            var dataSer = new DrxSerializationData
-             {
-                {"ver", version }
-             };
+            var body = new JsonObject
+            {
+                { "version", version }
+            };
+
             var response = new HttpResponse
             {
                 StatusCode = 200,
-                BodyBytes = dataSer.Serialize()
+                Body = body.ToJsonString()
             };
 
             return response;
         }
 
-        [HttpHandle("/api/init/", "POST")]
+        [HttpHandle("/api/dltbmodpacker/init/", "POST")]
         public static HttpResponse PostInit(HttpRequest request)
         {
             // 验证 User-Agent: DLTBModPacker/x.x.x
@@ -80,21 +82,7 @@ namespace KaxSocket
             };
         }
 
-        [HttpHandle("/api/user/register", "POST")]
-        public static HttpResponse PostRegister(HttpRequest request)
-        {
-            // todo
-            return null;
-        }
-
-        [HttpHandle("/api/user/login", "POST")]
-        public static HttpResponse PostLogin(HttpRequest request)
-        {
-            // todo
-            return null;
-        }
-
-        [HttpHandle("/api/mod/getall", "GET")]
+        [HttpHandle("/api/dltbmodpacker/mod/getall", "GET")]
         public static HttpResponse GetAllMod(HttpRequest request)
         {
             // 获取所有Mod信息，然后组装为json数组
@@ -122,7 +110,7 @@ namespace KaxSocket
             }
         }
 
-        [HttpHandle("/api/mod/upload", "POST")]
+        [HttpHandle("/api/dltbmodpacker/mod/upload", "POST")]
         public static HttpResponse PostUploadMod(HttpRequest request)
         {
             // 请求的 Body 与 UploadFile由 HttpServer.ParseRequestAsync解析并填充（包括 multipart 流式解析）
@@ -235,7 +223,7 @@ namespace KaxSocket
             }
         }
 
-        [HttpHandle("/api/mod/{modid}/download", "GET")]
+        [HttpHandle("/api/dltbmodpacker/mod/{modid}/download", "GET")]
         public static HttpResponse GetDownloadMod(HttpRequest request)
         {
             if (request.PathParameters.TryGetValue("modid", out var modid))
@@ -269,7 +257,7 @@ namespace KaxSocket
             }
         }
         
-        [HttpHandle("/api/mod/{modid}/filesize", "GET")]
+        [HttpHandle("/api/dltbmodpacker/mod/{modid}/filesize", "GET")]
         public static HttpResponse GetModFileSize(HttpRequest request)
         {
             if (request.PathParameters.TryGetValue("modid", out var modid))
@@ -307,7 +295,7 @@ namespace KaxSocket
             }
         }
 
-        [HttpHandle("/api/mod/{modid}/version", "GET")]
+        [HttpHandle("/api/dltbmodpacker/mod/{modid}/version", "GET")]
         public static HttpResponse GetModVersion(HttpRequest request)
         {
             if (request.PathParameters.TryGetValue("modid", out var modid))

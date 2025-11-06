@@ -30,6 +30,8 @@
 | RegisterHandlersFromAssembly | static void RegisterHandlersFromAssembly(Assembly assembly, HttpServer server) | 扫描并注册带 `HttpHandleAttribute` 的静态方法 | void | 反射异常会被捕获并记录 |
 | StartAsync | Task StartAsync() | 启动服务器并开始处理请求 | Task | 启动异常会抛出 |
 | Stop | void Stop() | 停止服务器并释放资源 | void | — |
+| SetPerMessageProcessingDelay | void SetPerMessageProcessingDelay(int ms) | 设置每条消息的最小处理延迟（毫秒），<=0 表示关闭 | void | 参数异常会被记录 |
+| GetPerMessageProcessingDelay | int GetPerMessageProcessingDelay() | 获取当前每条消息最小处理延迟（毫秒） | int | — |
 | SaveUploadFile | static HttpResponse SaveUploadFile(HttpRequest request, string savePath, string fileName = "upload_") | 将请求中的上传流保存为文件 | HttpResponse | IO 错误会返回 500 响应 |
 | CreateFileResponse | static HttpResponse CreateFileResponse(string filePath, string? fileName = null, string contentType = "application/octet-stream", int bandwidthLimitKb = 0) | 为流式下载创建 HttpResponse（带文件流） | HttpResponse | 文件不存在返回 404 |
 | GetFileStream | static Stream GetFileStream(string filePath) | 安全打开文件为只读流 | Stream 或 null | 文件打开失败返回 null |
@@ -140,6 +142,9 @@ server.AddRawRoute("/download/", async ctx =>
 1. 为 `StreamFileToResponseAsync` 添加单元测试，模拟 Range、断连和带宽限制场景。
 2. 在 `Examples/` 添加一个示例项目，展示 `RegisterHandlersFromAssembly` 与 `CreateFileResponse` 的完整流程。
 3. 考虑将路由与服务器配置项（最大并发、队列长度、默认带宽限制）参数化，方便运行时调整。
+4. 为新加入的“每消息最小处理延迟（SetPerMessageProcessingDelay）”特性增加测试：
+  - 单元测试验证在不同配置（0、200、500ms）下单条请求的最短耗时满足期望。
+  - 集成测试在并发场景下验证该配置能降低短时 CPU 峰值（可通过统计 worker 吞吐或示例应用的 CPU 使用率观察）。
 
 ## 质量门（快速校验）
 - Build: `dotnet build DRX.Environment.sln`
@@ -447,6 +452,33 @@ server.AddRoute(HttpMethod.Get, "/users/{id}", async req => {
 
 注意：调用方需负责关闭返回的流。
 
+### SetPerMessageProcessingDelay / GetPerMessageProcessingDelay
+
+签名：
+`void SetPerMessageProcessingDelay(int ms)`
+`int GetPerMessageProcessingDelay()`
+
+参数：
+- `ms`：以毫秒为单位的最小处理耗时阈值。设置为小于等于 0 的值将禁用该功能（默认禁用）。
+
+行为：
+- 当启用后，服务器在每条请求的实际处理（即调用 `HandleRequestAsync`）完成后会保证该请求从开始处理到最终完成至少耗时 `ms` 毫秒。实现上在工作线程中使用 `Stopwatch` 计时，并在 finally 块中等待剩余时间，然后释放信号量。
+- 该延迟是针对单个请求的额外等待，用于在突发并发下“平滑”请求处理速率，从而减轻短时的 CPU 峰值压力；但会增加单请求的响应延时。
+
+注意事项：
+- 延迟等待放在 finally 中，因此即便处理过程中发生异常也会等待并最终释放资源。
+- 该设置会增加每请求的延迟（延迟与处理时间的和），因此不适合对低延迟有严格要求的场景。建议用于批量/文件处理或内部服务以降低瞬时 CPU 峰值。
+
+示例：
+```csharp
+// 将每条消息的最小处理时间设置为 500 ms
+server.SetPerMessageProcessingDelay(500);
+
+// 读取当前配置
+var cur = server.GetPerMessageProcessingDelay();
+Console.WriteLine($"当前每消息最小处理延迟: {cur} ms");
+```
+
 ---
 
 ## 路由特性：HttpHandleAttribute
@@ -513,6 +545,18 @@ public static class Handlers {
 HttpServer.RegisterHandlersFromAssembly(typeof(Handlers).Assembly, server);
 ```
 
+5) 每消息最小处理延迟示例
+```csharp
+// 在服务器运行期间设置或调整每条消息的最小处理延迟
+server.SetPerMessageProcessingDelay(500); // 每条消息至少 500 ms
+
+// 查看当前设置
+Console.WriteLine($"当前每消息最小处理延迟: {server.GetPerMessageProcessingDelay()} ms");
+
+// 若需禁用
+server.SetPerMessageProcessingDelay(0);
+```
+
 ---
 
 ## 边界情况与注意事项
@@ -525,6 +569,7 @@ HttpServer.RegisterHandlersFromAssembly(typeof(Handlers).Assembly, server);
 - 文件名安全：为避免 HTTP 头注入或控制字符问题，文件名通过 `SanitizeFileNameForHeader` 清理控制字符与引号。
 - 日志：代码中多处有 `Logger` 调用以记录错误/警告/信息，排查时查看日志尤为重要。
 - Stop 是同步方法：会触发取消，但某些后台 IO 任务可能会继续完成后清理自身资源。
+ - 每消息最小处理延迟：如果启用 `SetPerMessageProcessingDelay`，会在请求处理完成后补足等待时间以达到设定阈值。这会平滑短时并发但会导致单次请求响应延迟增加，务必在低延迟敏感的场景谨慎使用。
 
 ---
 

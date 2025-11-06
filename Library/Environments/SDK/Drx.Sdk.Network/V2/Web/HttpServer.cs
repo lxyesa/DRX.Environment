@@ -32,6 +32,8 @@ namespace Drx.Sdk.Network.V2.Web
         private const int MaxConcurrentRequests = 100; // 最大并发请求数
         private readonly MessageQueue<HttpListenerContext> _messageQueue;
         private readonly ThreadPoolManager _threadPool;
+        // 每条消息至少处理耗时（毫秒）。若为 0 则不强制延迟。
+        private volatile int _perMessageProcessingDelayMs = 0;
 
         private class RouteEntry
         {
@@ -252,6 +254,36 @@ namespace Drx.Sdk.Network.V2.Web
         }
 
         /// <summary>
+        /// 设置每条消息的最小处理延迟（毫秒）。
+        /// 若设置为 500，则表示每条消息从开始处理到最终完成至少需要 500 毫秒，
+        /// 用于平滑短时高并发以减轻 CPU 峰值压力。
+        /// 传入小于等于 0 的值将关闭该功能（默认关闭）。
+        /// </summary>
+        /// <param name="ms">最小处理耗时，单位毫秒</param>
+        public void SetPerMessageProcessingDelay(int ms)
+        {
+            try
+            {
+                if (ms <= 0) ms = 0;
+                _perMessageProcessingDelayMs = ms;
+                Logger.Info($"设置每消息最小处理延迟: {ms} ms");
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"SetPerMessageProcessingDelay 失败: {ex}");
+            }
+        }
+
+        /// <summary>
+        /// 获取当前每条消息的最小处理延迟（毫秒）。
+        /// </summary>
+        /// <returns>延迟毫秒数（0 表示未设置）</returns>
+        public int GetPerMessageProcessingDelay()
+        {
+            return _perMessageProcessingDelayMs;
+        }
+
+        /// <summary>
         /// 从程序集中注册带有 HttpHandle 特性的方法
         /// </summary>
         /// <param name="assembly">要扫描的程序集</param>
@@ -468,12 +500,36 @@ namespace Drx.Sdk.Network.V2.Web
                 await _semaphore.WaitAsync(token);
                 _threadPool?.QueueWork(async () =>
                 {
+                    var sw = Stopwatch.StartNew();
                     try
                     {
                         await HandleRequestAsync(context).ConfigureAwait(false);
                     }
                     finally
                     {
+                        // 强制每条消息至少等待指定的最小处理时间，以降低短时高并发对 CPU 的冲击
+                        try
+                        {
+                            var delayMs = _perMessageProcessingDelayMs; // 读取为本地值以避免竞态
+                            if (delayMs > 0)
+                            {
+                                var elapsed = (int)sw.ElapsedMilliseconds;
+                                if (elapsed < delayMs)
+                                {
+                                    var toWait = delayMs - elapsed;
+                                    if (toWait > 0)
+                                    {
+                                        await Task.Delay(toWait).ConfigureAwait(false);
+                                    }
+                                }
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            // 延迟等待不应影响请求清理；仅记录警告
+                            Logger.Warn($"应用每消息最小处理延迟时发生错误: {ex.Message}");
+                        }
+
                         _semaphore.Release();
                     }
                 });
