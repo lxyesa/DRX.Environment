@@ -20,7 +20,7 @@ namespace Drx.Sdk.Network.V2.Web
     /// </remarks>
     /// <seealso cref="HttpRequest"/>
     /// <seealso cref="HttpResponse"/>
-    public class HttpClient : IAsyncDisposable
+    public class DrxHttpClient : IAsyncDisposable
     {
         private readonly System.Net.Http.HttpClient _httpClient;
         private readonly Channel<HttpRequestTask> _requestChannel;
@@ -45,7 +45,7 @@ namespace Drx.Sdk.Network.V2.Web
         /// <summary>
         /// 默认构造函数，使用内部 HttpClient 并启动请求处理通道。
         /// </summary>
-        public HttpClient()
+        public DrxHttpClient()
         {
             _httpClient = new System.Net.Http.HttpClient();
             _requestChannel = Channel.CreateBounded<HttpRequestTask>(new BoundedChannelOptions(100)
@@ -63,7 +63,7 @@ namespace Drx.Sdk.Network.V2.Web
         /// <param name="baseAddress">用于初始化内部 HttpClient 的基地址。</param>
         /// <exception cref="System.ArgumentException">当 baseAddress 不是有效的 URI 时抛出。</exception>
         /// <exception cref="System.Exception">初始化 HttpClient 发生其它错误时抛出并向上传播。</exception>
-        public HttpClient(string baseAddress)
+        public DrxHttpClient(string baseAddress)
         {
             try
             {

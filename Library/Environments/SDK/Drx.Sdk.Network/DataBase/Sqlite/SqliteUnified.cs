@@ -736,7 +736,8 @@ namespace Drx.Sdk.Network.DataBase.Sqlite
                 }
             }
 
-            var properties = childType.GetProperties().Where(p => p.CanRead && p.CanWrite);
+            // 使用缓存的属性数组，避免每次都通过反射枚举
+            var properties = ChildTypePropertiesCache.GetOrAdd(childType, t => t.GetProperties().Where(p => p.CanRead && p.CanWrite).ToArray());
 
             var columns = string.Join(", ", properties.Select(p => $"[{p.Name}]"));
             var parameters = string.Join(", ", properties.Select(p => $"@{p.Name}"));
@@ -745,15 +746,10 @@ namespace Drx.Sdk.Network.DataBase.Sqlite
 
             using var command = new SqliteCommand(sql, connection, transaction);
 
-            var type = childEntity.GetType();
+            // 确保 getter/setter 已缓存
+            if (!GetterCache.ContainsKey(childType)) CacheAccessors(childType);
+            var getterDict = GetterCache[childType];
 
-            // 确保子类型的 getter/setter 已被缓存
-            if (!GetterCache.ContainsKey(type))
-            {
-                CacheAccessors(type);
-            }
-
-            var getterDict = GetterCache[type];
             foreach (var prop in properties)
             {
                 var rawValue = getterDict[prop.Name](childEntity);
@@ -903,6 +899,175 @@ namespace Drx.Sdk.Network.DataBase.Sqlite
         }
 
         /// <summary>
+        /// 根据属性名和值异步更新所有匹配的实体（不修改 Id 字段）
+        /// </summary>
+        /// <param name="propertyName">属性名</param>
+        /// <param name="propertyValue">属性值</param>
+        /// <param name="entity">用于更新的实体对象</param>
+        /// <param name="cancellationToken">取消令牌</param>
+        /// <returns>受影响的实体数量</returns>
+        public async Task<int> EditWhereAsync(string propertyName, object propertyValue, T entity, CancellationToken cancellationToken = default)
+        {
+            if (string.IsNullOrEmpty(propertyName)) throw new ArgumentNullException(nameof(propertyName));
+            if (!_properties.ContainsKey(propertyName))
+                throw new ArgumentException($"属性 {propertyName} 不存在于类型 {typeof(T).Name} 中");
+
+            var ids = new List<int>();
+            using (var connection = new SqliteConnection(_connectionString))
+            {
+                await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+                var sql = $"SELECT [Id] FROM [{_tableName}] WHERE [{propertyName}] = @value";
+                using var cmd = new SqliteCommand(sql, connection);
+                cmd.Parameters.AddWithValue("@value", propertyValue ?? DBNull.Value);
+                using var reader = await cmd.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+                while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+                {
+                    if (reader[0] != DBNull.Value)
+                        ids.Add(Convert.ToInt32(reader[0]));
+                }
+            }
+
+            foreach (var id in ids)
+            {
+                await EditByIdAsync(id, entity, cancellationToken).ConfigureAwait(false);
+            }
+
+            return ids.Count;
+        }
+
+        /// <summary>
+        /// 根据任意 SQL 条件异步更新所有匹配的实体（不修改 Id 字段）
+        /// 注意：condition 是 SQL WHERE 子句（不包含 WHERE 关键字），请确保参数安全以防注入
+        /// </summary>
+        /// <param name="condition">SQL 条件（不含 WHERE）</param>
+        /// <param name="entity">用于更新的实体对象</param>
+        /// <param name="cancellationToken">取消令牌</param>
+        /// <returns>受影响的实体数量</returns>
+        public async Task<int> EditWhereAsync(string condition, T entity, CancellationToken cancellationToken = default)
+        {
+            if (string.IsNullOrEmpty(condition)) throw new ArgumentNullException(nameof(condition));
+
+            var ids = new List<int>();
+            using (var connection = new SqliteConnection(_connectionString))
+            {
+                await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+                var sql = $"SELECT [Id] FROM [{_tableName}] WHERE {condition}";
+                using var cmd = new SqliteCommand(sql, connection);
+                using var reader = await cmd.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+                while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+                {
+                    if (reader[0] != DBNull.Value)
+                        ids.Add(Convert.ToInt32(reader[0]));
+                }
+            }
+
+            foreach (var id in ids)
+            {
+                await EditByIdAsync(id, entity, cancellationToken).ConfigureAwait(false);
+            }
+
+            return ids.Count;
+        }
+
+        /// <summary>
+        /// 根据 Linq 表达式异步更新所有匹配的实体（不修改 Id 字段）
+        /// </summary>
+        /// <param name="predicate">匹配条件表达式</param>
+        /// <param name="entity">用于更新的实体对象</param>
+        /// <param name="cancellationToken">取消令牌</param>
+        /// <returns>受影响的实体数量</returns>
+        public async Task<int> EditWhereAsync(Expression<Func<T, bool>> predicate, T entity, CancellationToken cancellationToken = default)
+        {
+            if (predicate == null) throw new ArgumentNullException(nameof(predicate));
+
+            if (TryTranslatePredicate(predicate.Body, out var whereClause, out var parameters))
+            {
+                var ids = new List<int>();
+                using (var connection = new SqliteConnection(_connectionString))
+                {
+                    await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+                    var sql = $"SELECT [Id] FROM [{_tableName}] WHERE {whereClause}";
+                    using var cmd = new SqliteCommand(sql, connection);
+                    foreach (var kv in parameters)
+                    {
+                        cmd.Parameters.AddWithValue(kv.Key, kv.Value ?? DBNull.Value);
+                    }
+                    using var reader = await cmd.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+                    while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+                    {
+                        if (reader[0] != DBNull.Value)
+                            ids.Add(Convert.ToInt32(reader[0]));
+                    }
+                }
+
+                foreach (var id in ids)
+                {
+                    await EditByIdAsync(id, entity, cancellationToken).ConfigureAwait(false);
+                }
+                return ids.Count;
+            }
+            else
+            {
+                // 回退到内存过滤
+                var all = await GetAllAsync(cancellationToken).ConfigureAwait(false);
+                var func = predicate.Compile();
+                var matchingIds = all.Where(func).Select(e => e.Id).ToList();
+                foreach (var id in matchingIds)
+                {
+                    await EditByIdAsync(id, entity, cancellationToken).ConfigureAwait(false);
+                }
+                return matchingIds.Count;
+            }
+        }
+
+        /// <summary>
+        /// 按指定 ID 异步编辑实体（不会修改 Id 字段）
+        /// </summary>
+        /// <param name="id">实体ID</param>
+        /// <param name="entity">用于更新的实体对象</param>
+        /// <param name="cancellationToken">取消令牌</param>
+        /// <returns>异步任务</returns>
+        public async Task EditByIdAsync(int id, T entity, CancellationToken cancellationToken = default)
+        {
+            if (entity == null) throw new ArgumentNullException(nameof(entity));
+            var mainProperties = _properties.Where(kvp =>
+                !_dataTableProperties.ContainsKey(kvp.Key) &&
+                !_dataTableListProperties.ContainsKey(kvp.Key) &&
+                !_arrayProperties.ContainsKey(kvp.Key) &&
+                !_dictionaryProperties.ContainsKey(kvp.Key) &&
+                !_linkedListProperties.ContainsKey(kvp.Key) &&
+                IsSimpleType(kvp.Value.PropertyType) &&
+                kvp.Key != "Id");
+
+            if (!mainProperties.Any()) return;
+
+            using var connection = new SqliteConnection(_connectionString);
+            await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+            using var transaction = await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+            try
+            {
+                var sets = string.Join(", ", mainProperties.Select(kvp => $"[{kvp.Key}] = @{kvp.Key}"));
+                var sql = $"UPDATE [{_tableName}] SET {sets} WHERE [Id] = @id";
+                using var cmd = new SqliteCommand(sql, connection, (SqliteTransaction)transaction);
+                var getterDict = GetterCache[typeof(T)];
+                foreach (var prop in mainProperties)
+                {
+                    var rawValue = getterDict[prop.Key](entity);
+                    var value = ToDbDateTimeString(rawValue, prop.Value.PropertyType) ?? DBNull.Value;
+                    cmd.Parameters.AddWithValue($"@{prop.Key}", value);
+                }
+                cmd.Parameters.AddWithValue("@id", id);
+                await cmd.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+
+                await ((SqliteTransaction)transaction).CommitAsync(cancellationToken).ConfigureAwait(false);
+            }
+            catch
+            {
+                await ((SqliteTransaction)transaction).RollbackAsync(cancellationToken).ConfigureAwait(false);
+                throw;
+            }
+        }
+        /// <summary>
         /// 根据任意 SQL 条件更新所有匹配的实体（不修改 Id 字段）
         /// 注意：condition 是 SQL WHERE 子句（不包含 WHERE 关键字），请确保参数安全以防注入
         /// </summary>
@@ -930,6 +1095,56 @@ namespace Drx.Sdk.Network.DataBase.Sqlite
             }
 
             return ids.Count;
+        }
+
+        /// <summary>
+        /// 根据 Linq 表达式更新所有匹配的实体（不修改 Id 字段）
+        /// </summary>
+        /// <param name="predicate">匹配条件表达式</param>
+        /// <param name="entity">用于更新的实体对象</param>
+        /// <returns>受影响的实体数量</returns>
+        public int EditWhere(Expression<Func<T, bool>> predicate, T entity)
+        {
+            if (predicate == null) throw new ArgumentNullException(nameof(predicate));
+
+            if (TryTranslatePredicate(predicate.Body, out var whereClause, out var parameters))
+            {
+                var ids = new List<int>();
+                using (var connection = new SqliteConnection(_connectionString))
+                {
+                    connection.Open();
+                    var sql = $"SELECT [Id] FROM [{_tableName}] WHERE {whereClause}";
+                    using var cmd = new SqliteCommand(sql, connection);
+                    foreach (var kv in parameters)
+                    {
+                        cmd.Parameters.AddWithValue(kv.Key, kv.Value ?? DBNull.Value);
+                    }
+                    using var reader = cmd.ExecuteReader();
+                    while (reader.Read())
+                    {
+                        if (reader[0] != DBNull.Value)
+                            ids.Add(Convert.ToInt32(reader[0]));
+                    }
+                }
+
+                foreach (var id in ids)
+                {
+                    EditById(id, entity);
+                }
+                return ids.Count;
+            }
+            else
+            {
+                // 回退到内存过滤
+                var all = GetAll();
+                var func = predicate.Compile();
+                var matchingIds = all.Where(func).Select(e => e.Id).ToList();
+                foreach (var id in matchingIds)
+                {
+                    EditById(id, entity);
+                }
+                return matchingIds.Count;
+            }
         }
 
         /// <summary>
@@ -973,20 +1188,27 @@ namespace Drx.Sdk.Network.DataBase.Sqlite
         }
 
         /// <summary>
-        /// 根据任意 SQL 条件删除所有匹配的实体及其关联数据
+        /// 根据属性名和值异步删除所有匹配的实体及其关联数据
         /// </summary>
-        public int DeleteWhere(string condition)
+        /// <param name="propertyName">属性名</param>
+        /// <param name="propertyValue">属性值</param>
+        /// <param name="cancellationToken">取消令牌</param>
+        /// <returns>删除的实体数量</returns>
+        public async Task<int> DeleteWhereAsync(string propertyName, object propertyValue, CancellationToken cancellationToken = default)
         {
-            if (string.IsNullOrEmpty(condition)) throw new ArgumentNullException(nameof(condition));
+            if (string.IsNullOrEmpty(propertyName)) throw new ArgumentNullException(nameof(propertyName));
+            if (!_properties.ContainsKey(propertyName))
+                throw new ArgumentException($"属性 {propertyName} 不存在于类型 {typeof(T).Name} 中");
 
             var ids = new List<int>();
             using (var connection = new SqliteConnection(_connectionString))
             {
-                connection.Open();
-                var sql = $"SELECT [Id] FROM [{_tableName}] WHERE {condition}";
+                await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+                var sql = $"SELECT [Id] FROM [{_tableName}] WHERE [{propertyName}] = @value";
                 using var cmd = new SqliteCommand(sql, connection);
-                using var reader = cmd.ExecuteReader();
-                while (reader.Read())
+                cmd.Parameters.AddWithValue("@value", propertyValue ?? DBNull.Value);
+                using var reader = await cmd.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+                while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
                 {
                     if (reader[0] != DBNull.Value)
                         ids.Add(Convert.ToInt32(reader[0]));
@@ -996,9 +1218,144 @@ namespace Drx.Sdk.Network.DataBase.Sqlite
             var deleted = 0;
             foreach (var id in ids)
             {
-                if (Delete(id)) deleted++;
+                if (await DeleteAsync(id, cancellationToken).ConfigureAwait(false)) deleted++;
             }
             return deleted;
+        }
+
+        /// <summary>
+        /// 根据任意 SQL 条件异步删除所有匹配的实体及其关联数据
+        /// </summary>
+        /// <param name="condition">SQL 条件（不含 WHERE）</param>
+        /// <param name="cancellationToken">取消令牌</param>
+        /// <returns>删除的实体数量</returns>
+        public async Task<int> DeleteWhereAsync(string condition, CancellationToken cancellationToken = default)
+        {
+            if (string.IsNullOrEmpty(condition)) throw new ArgumentNullException(nameof(condition));
+
+            var ids = new List<int>();
+            using (var connection = new SqliteConnection(_connectionString))
+            {
+                await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+                var sql = $"SELECT [Id] FROM [{_tableName}] WHERE {condition}";
+                using var cmd = new SqliteCommand(sql, connection);
+                using var reader = await cmd.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+                while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+                {
+                    if (reader[0] != DBNull.Value)
+                        ids.Add(Convert.ToInt32(reader[0]));
+                }
+            }
+
+            var deleted = 0;
+            foreach (var id in ids)
+            {
+                if (await DeleteAsync(id, cancellationToken).ConfigureAwait(false)) deleted++;
+            }
+            return deleted;
+        }
+
+        /// <summary>
+        /// 根据 Linq 表达式异步删除所有匹配的实体及其关联数据
+        /// </summary>
+        /// <param name="predicate">匹配条件表达式</param>
+        /// <param name="cancellationToken">取消令牌</param>
+        /// <returns>删除的实体数量</returns>
+        public async Task<int> DeleteWhereAsync(Expression<Func<T, bool>> predicate, CancellationToken cancellationToken = default)
+        {
+            if (predicate == null) throw new ArgumentNullException(nameof(predicate));
+
+            if (TryTranslatePredicate(predicate.Body, out var whereClause, out var parameters))
+            {
+                var ids = new List<int>();
+                using (var connection = new SqliteConnection(_connectionString))
+                {
+                    await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+                    var sql = $"SELECT [Id] FROM [{_tableName}] WHERE {whereClause}";
+                    using var cmd = new SqliteCommand(sql, connection);
+                    foreach (var kv in parameters)
+                    {
+                        cmd.Parameters.AddWithValue(kv.Key, kv.Value ?? DBNull.Value);
+                    }
+                    using var reader = await cmd.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+                    while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+                    {
+                        if (reader[0] != DBNull.Value)
+                            ids.Add(Convert.ToInt32(reader[0]));
+                    }
+                }
+
+                var deleted = 0;
+                foreach (var id in ids)
+                {
+                    if (await DeleteAsync(id, cancellationToken).ConfigureAwait(false)) deleted++;
+                }
+                return deleted;
+            }
+            else
+            {
+                // 回退到内存过滤
+                var all = await GetAllAsync(cancellationToken).ConfigureAwait(false);
+                var func = predicate.Compile();
+                var matchingIds = all.Where(func).Select(e => e.Id).ToList();
+                var deleted = 0;
+                foreach (var id in matchingIds)
+                {
+                    if (await DeleteAsync(id, cancellationToken).ConfigureAwait(false)) deleted++;
+                }
+                return deleted;
+            }
+        }
+
+        /// <summary>
+        /// 根据 Linq 表达式删除所有匹配的实体及其关联数据
+        /// </summary>
+        /// <param name="predicate">匹配条件表达式</param>
+        /// <returns>删除的实体数量</returns>
+        public int DeleteWhere(Expression<Func<T, bool>> predicate)
+        {
+            if (predicate == null) throw new ArgumentNullException(nameof(predicate));
+
+            if (TryTranslatePredicate(predicate.Body, out var whereClause, out var parameters))
+            {
+                var ids = new List<int>();
+                using (var connection = new SqliteConnection(_connectionString))
+                {
+                    connection.Open();
+                    var sql = $"SELECT [Id] FROM [{_tableName}] WHERE {whereClause}";
+                    using var cmd = new SqliteCommand(sql, connection);
+                    foreach (var kv in parameters)
+                    {
+                        cmd.Parameters.AddWithValue(kv.Key, kv.Value ?? DBNull.Value);
+                    }
+                    using var reader = cmd.ExecuteReader();
+                    while (reader.Read())
+                    {
+                        if (reader[0] != DBNull.Value)
+                            ids.Add(Convert.ToInt32(reader[0]));
+                    }
+                }
+
+                var deleted = 0;
+                foreach (var id in ids)
+                {
+                    if (Delete(id)) deleted++;
+                }
+                return deleted;
+            }
+            else
+            {
+                // 回退到内存过滤
+                var all = GetAll();
+                var func = predicate.Compile();
+                var matchingIds = all.Where(func).Select(e => e.Id).ToList();
+                var deleted = 0;
+                foreach (var id in matchingIds)
+                {
+                    if (Delete(id)) deleted++;
+                }
+                return deleted;
+            }
         }
 
         /// <summary>
@@ -1010,6 +1367,9 @@ namespace Drx.Sdk.Network.DataBase.Sqlite
 
             var type = typeof(T);
             var setterDict = SetterCache[type];
+            // 预先获取 reader 的列集合，避免在循环内重复调用 GetName
+            var readerColumns = GetReaderColumns(reader);
+
             foreach (var prop in _properties.Where(kvp =>
                 !_dataTableProperties.ContainsKey(kvp.Key) &&
                 !_dataTableListProperties.ContainsKey(kvp.Key) &&
@@ -1019,7 +1379,7 @@ namespace Drx.Sdk.Network.DataBase.Sqlite
                 IsSimpleType(kvp.Value.PropertyType))) // 只处理简单类型
             {
                 var columnName = prop.Key;
-                if (HasColumn(reader, columnName))
+                if (readerColumns.Contains(columnName))
                 {
                     var value = reader[columnName];
                     if (value != DBNull.Value)
@@ -1052,14 +1412,25 @@ namespace Drx.Sdk.Network.DataBase.Sqlite
                 using var reader = command.ExecuteReader();
                 if (reader.Read())
                 {
-                    var childEntity = Activator.CreateInstance(childType) as IDataTable;
+                    // 缓存工厂用于快速实例化
+                    var childFactory = ChildTypeFactoryCache.GetOrAdd(childType, t =>
+                    {
+                        var ctor = t.GetConstructor(Type.EmptyTypes);
+                        if (ctor == null) throw new InvalidOperationException($"类型 {t.FullName} 缺少无参构造函数");
+                        var exp = System.Linq.Expressions.Expression.Lambda<Func<object>>(System.Linq.Expressions.Expression.New(ctor));
+                        return exp.Compile();
+                    });
+
+                    var childEntity = childFactory() as IDataTable;
                     if (childEntity != null)
                     {
-                        // 设置子表属性值
-                        var childProperties = childType.GetProperties().Where(p => p.CanRead && p.CanWrite);
+                        // 预取列集合和缓存属性列表
+                        var readerColumns = GetReaderColumns(reader);
+                        var childProperties = ChildTypePropertiesCache.GetOrAdd(childType, t => t.GetProperties().Where(p => p.CanRead && p.CanWrite).ToArray());
+
                         foreach (var prop in childProperties)
                         {
-                            if (HasColumn(reader, prop.Name))
+                            if (readerColumns.Contains(prop.Name))
                             {
                                 var value = reader[prop.Name];
                                 if (value != DBNull.Value)
@@ -1082,7 +1453,7 @@ namespace Drx.Sdk.Network.DataBase.Sqlite
                             }
                         }
 
-                        // 用setter委托赋值
+                        // 用 setter 委托赋值主表属性
                         var setterDict = SetterCache[entity.GetType()];
                         setterDict[dataTableProp.Key](entity, childEntity);
                     }
@@ -1106,16 +1477,25 @@ namespace Drx.Sdk.Network.DataBase.Sqlite
                 if (childList != null)
                 {
                     using var reader = command.ExecuteReader();
+                    // 预取列集合、实例工厂与属性缓存
+                    var readerColumns = GetReaderColumns(reader);
+                    var childFactory = ChildTypeFactoryCache.GetOrAdd(childType, t =>
+                    {
+                        var ctor = t.GetConstructor(Type.EmptyTypes);
+                        if (ctor == null) throw new InvalidOperationException($"类型 {t.FullName} 缺少无参构造函数");
+                        var exp = System.Linq.Expressions.Expression.Lambda<Func<object>>(System.Linq.Expressions.Expression.New(ctor));
+                        return exp.Compile();
+                    });
+                    var childProperties = ChildTypePropertiesCache.GetOrAdd(childType, t => t.GetProperties().Where(p => p.CanRead && p.CanWrite).ToArray());
+
                     while (reader.Read())
                     {
-                        var childEntity = Activator.CreateInstance(childType) as IDataTable;
+                        var childEntity = childFactory() as IDataTable;
                         if (childEntity != null)
                         {
-                            // 设置子表属性值
-                            var childProperties = childType.GetProperties().Where(p => p.CanRead && p.CanWrite);
                             foreach (var prop in childProperties)
                             {
-                                if (HasColumn(reader, prop.Name))
+                                if (readerColumns.Contains(prop.Name))
                                 {
                                     var value = reader[prop.Name];
                                     if (value != DBNull.Value)
@@ -1157,17 +1537,24 @@ namespace Drx.Sdk.Network.DataBase.Sqlite
         /// </summary>
         private bool HasColumn(SqliteDataReader reader, string columnName)
         {
-            for (int i = 0; i < reader.FieldCount; i++)
-            {
-                if (reader.GetName(i).Equals(columnName, StringComparison.OrdinalIgnoreCase))
-                    return true;
-            }
-            return false;
+            // 兼容旧调用：构建字段集合并检查
+            var cols = GetReaderColumns(reader);
+            return cols.Contains(columnName);
         }
 
         /// <summary>
-        /// 值类型转换
+        /// 将 reader 的字段名构建为 HashSet（忽略大小写），调用方应尽量复用返回值以提升性能
         /// </summary>
+        private HashSet<string> GetReaderColumns(SqliteDataReader reader)
+        {
+            var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            for (int i = 0; i < reader.FieldCount; i++)
+            {
+                set.Add(reader.GetName(i));
+            }
+            return set;
+        }
+
         /// <summary>
         /// 值类型转换（支持 DateTime 字段反序列化）
         /// </summary>
@@ -1428,7 +1815,7 @@ namespace Drx.Sdk.Network.DataBase.Sqlite
             {
                 entity.Id = (int)(DateTime.UtcNow.Ticks % int.MaxValue);
             }
-        
+
             // 新增：同步一对一子表被 [Publish] 标记且同名字段到主表
             foreach (var dataTableProp in _dataTableProperties)
             {
@@ -1477,7 +1864,7 @@ namespace Drx.Sdk.Network.DataBase.Sqlite
                     }
                 }
             }
-        
+
             await using var connection = new SqliteConnection(_connectionString);
             await connection.OpenAsync(cancellationToken);
             await using var transactionObj = await connection.BeginTransactionAsync(cancellationToken);
@@ -1829,7 +2216,185 @@ namespace Drx.Sdk.Network.DataBase.Sqlite
                 throw;
             }
         }
-        
+
+        /// <summary>
+        /// 异步查询并返回匹配的第一个实体（不会返回列表）。
+        /// </summary>
+        /// <param name="propertyName">主表要匹配的属性名</param>
+        /// <param name="propertyValue">要匹配的属性值</param>
+        /// <param name="cancellationToken">取消令牌</param>
+        /// <returns>匹配到的实体或 null</returns>
+        public async Task<T?> QueryFirstAsync(string propertyName, object propertyValue, CancellationToken cancellationToken = default)
+        {
+            if (string.IsNullOrEmpty(propertyName)) throw new ArgumentNullException(nameof(propertyName));
+            if (!_properties.ContainsKey(propertyName))
+                throw new ArgumentException($"属性 {propertyName} 不存在于类型 {typeof(T).Name} 中");
+
+            await using var connection = new SqliteConnection(_connectionString);
+            await connection.OpenAsync(cancellationToken);
+
+            // 使用 LIMIT 1 优化，只读取第一条匹配记录
+            var sql = $"SELECT * FROM [{_tableName}] WHERE [{propertyName}] = @value LIMIT 1";
+            await using var command = new SqliteCommand(sql, connection);
+            command.Parameters.AddWithValue("@value", propertyValue ?? DBNull.Value);
+
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+            if (await reader.ReadAsync(cancellationToken))
+            {
+                var entity = CreateEntityFromReader(reader);
+                // 加载关联表数据（一对一/一对多等）
+                await LoadChildEntitiesAsync(connection, entity, cancellationToken);
+                return entity;
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// 支持传入表达式的异步查询（尝试将简单表达式翻译为 SQL，否则回退到内存过滤）
+        /// </summary>
+        public async Task<T?> QueryFirstAsync(System.Linq.Expressions.Expression<Func<T, bool>> predicate, CancellationToken cancellationToken = default)
+        {
+            if (predicate == null) throw new ArgumentNullException(nameof(predicate));
+
+            // 尝试翻译表达式为 SQL 条件和参数
+            if (TryTranslatePredicate(predicate.Body, out var whereClause, out var parameters))
+            {
+                await using var connection = new SqliteConnection(_connectionString);
+                await connection.OpenAsync(cancellationToken);
+                var sql = $"SELECT * FROM [{_tableName}] WHERE {whereClause} LIMIT 1";
+                await using var command = new SqliteCommand(sql, connection);
+                foreach (var kv in parameters)
+                {
+                    command.Parameters.AddWithValue(kv.Key, kv.Value ?? DBNull.Value);
+                }
+                await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+                if (await reader.ReadAsync(cancellationToken))
+                {
+                    var entity = CreateEntityFromReader(reader);
+                    await LoadChildEntitiesAsync(connection, entity, cancellationToken);
+                    return entity;
+                }
+                return null;
+            }
+
+            // 无法翻译为 SQL：回退到加载所有数据并使用表达式在内存中过滤
+            var all = await GetAllAsync(cancellationToken);
+            var func = predicate.Compile();
+            return all.FirstOrDefault(func);
+        }
+
+        /// <summary>
+        /// 尝试把表达式树翻译为 SQL WHERE 子句（支持简单的 等于/不等 与 &&/|| 组合，右侧可为捕获变量）
+        /// 返回 where 子句和参数字典（参数名以 @pN 形式）
+        /// </summary>
+        private bool TryTranslatePredicate(System.Linq.Expressions.Expression expr, out string whereClause, out Dictionary<string, object?> parameters)
+        {
+            whereClause = string.Empty;
+            parameters = new Dictionary<string, object?>();
+            try
+            {
+                var sb = new System.Text.StringBuilder();
+                int paramIndex = 0;
+                if (!BuildClause(expr, sb, ref paramIndex, parameters))
+                {
+                    return false;
+                }
+                whereClause = sb.ToString();
+                return true;
+            }
+            catch
+            {
+                whereClause = string.Empty;
+                parameters = new Dictionary<string, object?>();
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// 递归构建 SQL 子句，支持 Equal, NotEqual, AndAlso, OrElse
+        /// </summary>
+        private bool BuildClause(System.Linq.Expressions.Expression expr, System.Text.StringBuilder sb, ref int paramIndex, Dictionary<string, object?> parameters)
+        {
+            if (expr is System.Linq.Expressions.BinaryExpression be)
+            {
+                if (be.NodeType == System.Linq.Expressions.ExpressionType.AndAlso || be.NodeType == System.Linq.Expressions.ExpressionType.OrElse)
+                {
+                    sb.Append('(');
+                    if (!BuildClause(be.Left, sb, ref paramIndex, parameters)) return false;
+                    sb.Append(be.NodeType == System.Linq.Expressions.ExpressionType.AndAlso ? " AND " : " OR ");
+                    if (!BuildClause(be.Right, sb, ref paramIndex, parameters)) return false;
+                    sb.Append(')');
+                    return true;
+                }
+
+                if (be.NodeType == System.Linq.Expressions.ExpressionType.Equal || be.NodeType == System.Linq.Expressions.ExpressionType.NotEqual)
+                {
+                    // 支持 左为 param.Property, 右为 常量/捕获变量，或反过来
+                    var left = be.Left;
+                    var right = be.Right;
+                    string column = null;
+                    object? value = null;
+                    // helper to evaluate expression to object
+                    object? Eval(System.Linq.Expressions.Expression e)
+                    {
+                        var lambda = System.Linq.Expressions.Expression.Lambda<Func<object>>(System.Linq.Expressions.Expression.Convert(e, typeof(object)));
+                        var func = lambda.Compile();
+                        return func();
+                    }
+
+                    if (IsMemberAccessToParameter(left, out var leftName))
+                    {
+                        column = leftName;
+                        value = Eval(right);
+                    }
+                    else if (IsMemberAccessToParameter(right, out var rightName))
+                    {
+                        column = rightName;
+                        value = Eval(left);
+                    }
+                    else
+                    {
+                        return false; // 无法识别的格式
+                    }
+
+                    if (column == null) return false;
+                    var paramName = $"@p{paramIndex++}";
+                    parameters[paramName] = value;
+                    sb.Append($"[{column}] ");
+                    sb.Append(be.NodeType == System.Linq.Expressions.ExpressionType.Equal ? "= " : "<> ");
+                    sb.Append(paramName);
+                    return true;
+                }
+            }
+
+            return false; // 其它类型暂不支持
+        }
+
+        /// <summary>
+        /// 判断表达式是否为参数的成员访问（例如 u.UserName），若是返回属性名
+        /// </summary>
+        private bool IsMemberAccessToParameter(System.Linq.Expressions.Expression expr, out string? propertyName)
+        {
+            propertyName = null;
+            if (expr is System.Linq.Expressions.MemberExpression me)
+            {
+                // 要求 MemberExpression.Expression 是参数或经过 Convert 的参数
+                var inner = me.Expression;
+                if (inner is System.Linq.Expressions.ParameterExpression)
+                {
+                    propertyName = me.Member.Name;
+                    return true;
+                }
+                if (inner is System.Linq.Expressions.UnaryExpression ue && ue.Operand is System.Linq.Expressions.ParameterExpression)
+                {
+                    propertyName = me.Member.Name;
+                    return true;
+                }
+            }
+            return false;
+        }
+
         #endregion
     }
 }

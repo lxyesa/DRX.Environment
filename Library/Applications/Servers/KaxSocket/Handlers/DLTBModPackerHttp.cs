@@ -86,7 +86,7 @@ namespace KaxSocket
         public static HttpResponse GetAllMod(HttpRequest request)
         {
             // 获取所有Mod信息，然后组装为json数组
-            var modInfoDb = Global.Instance.GetModInfoDataBase();
+            var modInfoDb = DLTBModPackerGlobal.Instance.GetModInfoDataBase();
             if (modInfoDb != null)
             {
                 var allMods = modInfoDb.GetAll();
@@ -184,22 +184,22 @@ namespace KaxSocket
 
                 try
                 {
-                    var result = HttpServer.SaveUploadFile(request, "mods", $"{modId}.dltbmodpak");
+                    var result = DrxHttpServer.SaveUploadFile(request, "mods", $"{modId}.dltbmodpak");
 
                     // 检测数据库内是否已存在该Mod信息，若不存在则保存，而是更新
-                    var existingMod = Global.Instance.GetModInfoDataBase().Query("ModId", modId);
+                    var existingMod = DLTBModPackerGlobal.Instance.GetModInfoDataBase().Query("ModId", modId);
                     if (existingMod.Count > 0)
                     {
                         Logger.Info($"Mod {modId} 已存在，更新信息");
-                        Global.Instance.GetModInfoDataBase().EditWhere("ModId", modId, modInfo);
+                        DLTBModPackerGlobal.Instance.GetModInfoDataBase().EditWhere("ModId", modId, modInfo);
                     }
                     else
                     {
                         Logger.Info($"保存新的Mod信息：{modId}");
-                        Global.Instance.GetModInfoDataBase().Push(modInfo);
+                        DLTBModPackerGlobal.Instance.GetModInfoDataBase().Push(modInfo);
                     }
 
-                    Logger.Info($"完成操作，mod数量统计：{Global.Instance.GetModInfoDataBase().QueryAll().Count}");
+                    Logger.Info($"完成操作，mod数量统计：{DLTBModPackerGlobal.Instance.GetModInfoDataBase().QueryAll().Count}");
 
                     return result;
                 }
@@ -244,7 +244,7 @@ namespace KaxSocket
                     };
                 }
 
-                var result = HttpServer.CreateFileResponse(filePath, $"{modid}.dltbmodpak", bandwidthLimitKb: 5120);
+                var result = DrxHttpServer.CreateFileResponse(filePath, $"{modid}.dltbmodpak", bandwidthLimitKb: 5120);
                 return result;
             }
             else

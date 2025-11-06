@@ -17,7 +17,7 @@ namespace Drx.Sdk.Network.V2.Web
     /// - 会自动填充默认的模型与温度字段（可被传入的 body 覆盖）
     /// - 提供基于 IAsyncEnumerable 的流式读取接口，适用于模型的实时输出（SSE / chunked 等）
     /// </summary>
-    public class LLMHttpClient : HttpClient
+    public class LLMHttpClient : DrxHttpClient
     {
         public LLMHttpClient() : base()
         {

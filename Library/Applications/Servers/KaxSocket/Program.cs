@@ -27,8 +27,8 @@ public class Program
         }
 
         var prefixes = new[] { "http://+:8462/" };
-        var server = new HttpServer(prefixes);
-        HttpServer.RegisterHandlersFromAssembly(typeof(Program).Assembly, server);
+        var server = new DrxHttpServer(prefixes);
+        DrxHttpServer.RegisterHandlersFromAssembly(typeof(Program).Assembly, server);
 
         try
         {

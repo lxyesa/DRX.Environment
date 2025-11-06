@@ -158,4 +158,37 @@ public static class CommonUtility
         }
         return code;
     }
+
+    /// <summary>
+    /// 计算字符串的 SHA256 哈希值
+    /// </summary>
+    /// <param name="input">待计算哈希的字符串</param>
+    /// <returns>SHA256 哈希值</returns>
+    public static string ComputeSHA256Hash(string input)
+    {
+        using (var sha256 = System.Security.Cryptography.SHA256.Create())
+        {
+            byte[] bytes = System.Text.Encoding.UTF8.GetBytes(input);
+            byte[] hashBytes = sha256.ComputeHash(bytes);
+            return BitConverter.ToString(hashBytes).Replace("-", "").ToLowerInvariant();
+        }
+    }
+
+    /// <summary>
+    /// 验证电子邮件地址格式是否有效
+    /// </summary>
+    /// <param name="email">电子邮件地址字符串</param>
+    /// <returns>如果格式有效则返回 true，否则返回 false</returns>
+    public static bool IsValidEmail(string email)
+    {
+        try
+        {
+            var addr = new System.Net.Mail.MailAddress(email);
+            return addr.Address == email;
+        }
+        catch
+        {
+            return false;
+        }
+    }
 }

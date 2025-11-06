@@ -21,4 +21,14 @@ namespace KaxSocket
         public string ModDescription { get; set; }
         public long LastUpdatedAt { get; set; }
     }
+
+    public class UserData : DataModel
+    {
+        public string UserName { get; set; }
+        public string PasswordHash { get; set; }
+        public string Email { get; set; }
+        public long RegisteredAt { get; set; }
+        public long LastLoginAt { get; set; }
+        public string LoginToken { get; set; }  // 通过时间戳、随机数、Base64 以及Hash生成一个登录令牌
+    }
 }

@@ -49,11 +49,11 @@ namespace Drx.Sdk.Network.V2.Web
         /// </summary>
         public string? Body { get; set; }
 
-    /// <summary>
-    /// 请求内容的便捷字段（Content），为动态对象，调用者可使用 Content.XYZ 任意扩展字段。
-    /// 默认实现为 ExpandoObject，解析器会在解析到文本体时将其赋值到 Content.Text。
-    /// </summary>
-    public dynamic Content { get; set; } = new ExpandoObject();
+        /// <summary>
+        /// 请求内容的便捷字段（Content），为动态对象，调用者可使用 Content.XYZ 任意扩展字段。
+        /// 默认实现为 ExpandoObject，解析器会在解析到文本体时将其赋值到 Content.Text。
+        /// </summary>
+        public dynamic Content { get; set; } = new ExpandoObject();
 
         /// <summary>
         /// 请求体（字节数组形式）

@@ -15,7 +15,7 @@ if (processes.Length > 0)
 }
 
 Logger.Info("正在请求最新版本...");
-await using var client = new Drx.Sdk.Network.V2.Web.HttpClient();
+await using var client = new Drx.Sdk.Network.V2.Web.DrxHttpClient();
 
 var request = new HttpRequest()
 {

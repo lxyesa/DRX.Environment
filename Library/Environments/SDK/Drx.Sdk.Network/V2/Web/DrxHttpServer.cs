@@ -18,12 +18,13 @@ using Microsoft.Net.Http.Headers;
 
 namespace Drx.Sdk.Network.V2.Web
 {
-    public class HttpServer
+    public class DrxHttpServer : IAsyncDisposable
     {
         private HttpListener _listener;
         private readonly List<(string Prefix, string RootDir)> _fileRoutes = new();
         private readonly List<RouteEntry> _routes = new();
-        private readonly List<(string Template, Func<HttpListenerContext, Task> Handler)> _rawRoutes = new();
+        // raw route entries 包含可选的速率限制字段
+        private readonly System.Collections.Generic.List<(string Template, Func<HttpListenerContext, Task> Handler, int RateLimitMaxRequests, int RateLimitWindowSeconds)> _rawRoutes = new();
         private readonly string? _staticFileRoot;
 
         private CancellationTokenSource _cts;
@@ -35,12 +36,24 @@ namespace Drx.Sdk.Network.V2.Web
         // 每条消息至少处理耗时（毫秒）。若为 0 则不强制延迟。
         private volatile int _perMessageProcessingDelayMs = 0;
 
+        // 请求拦截机制：基于IP的速率限制（全局）
+        private readonly System.Collections.Concurrent.ConcurrentDictionary<string, System.Collections.Generic.Queue<DateTime>> _ipRequestHistory = new();
+        private int _rateLimitMaxRequests = 0; // 0 表示无限制
+        private TimeSpan _rateLimitWindow = TimeSpan.Zero;
+        private readonly object _rateLimitLock = new object();
+
+        // 路由级速率限制：按 (ip + routeKey) 跟踪请求时间戳
+        private readonly System.Collections.Concurrent.ConcurrentDictionary<string, System.Collections.Generic.Queue<DateTime>> _ipRouteRequestHistory = new();
+
         private class RouteEntry
         {
             public string Template { get; set; }
             public HttpMethod Method { get; set; }
             public Func<HttpRequest, Task<HttpResponse>> Handler { get; set; }
             public Func<string, Dictionary<string, string>> ExtractParameters { get; set; }
+            // 可选的路由级速率限制（默认为0表示无限制）
+            public int RateLimitMaxRequests { get; set; }
+            public int RateLimitWindowSeconds { get; set; }
         }
 
         /// <summary>
@@ -48,7 +61,7 @@ namespace Drx.Sdk.Network.V2.Web
         /// </summary>
         /// <param name="prefixes">监听前缀，如 "http://localhost:8080/"</param>
         /// <param name="staticFileRoot">静态文件根目录（可为 null）</param>
-        public HttpServer(IEnumerable<string> prefixes, string? staticFileRoot = null)
+        public DrxHttpServer(IEnumerable<string> prefixes, string? staticFileRoot = null)
         {
             _listener = new HttpListener();
             foreach (var prefix in prefixes)
@@ -57,7 +70,7 @@ namespace Drx.Sdk.Network.V2.Web
             }
             _staticFileRoot = staticFileRoot;
             _fileRoutes = new List<(string Prefix, string RootDir)>();
-            _rawRoutes = new List<(string Template, Func<HttpListenerContext, Task> Handler)>();
+            _rawRoutes = new System.Collections.Generic.List<(string Template, Func<HttpListenerContext, Task> Handler, int RateLimitMaxRequests, int RateLimitWindowSeconds)>();
             _requestChannel = Channel.CreateBounded<HttpListenerContext>(new BoundedChannelOptions(1000)
             {
                 FullMode = BoundedChannelFullMode.DropOldest
@@ -72,22 +85,22 @@ namespace Drx.Sdk.Network.V2.Web
         /// </summary>
         /// <param name="path">路径前缀</param>
         /// <param name="handler">处理委托，接收 HttpListenerContext</param>
-        public void AddRawRoute(string path, Func<HttpListenerContext, Task> handler)
+        public void AddRawRoute(string path, Func<HttpListenerContext, Task> handler, int rateLimitMaxRequests = 0, int rateLimitWindowSeconds = 0)
         {
             if (string.IsNullOrEmpty(path) || handler == null) return;
             if (!path.StartsWith("/")) path = "/" + path;
-            _raw_routes_add(path, handler);
+            _raw_routes_add(path, handler, rateLimitMaxRequests, rateLimitWindowSeconds);
             Logger.Info($"添加原始路由: {path}");
         }
 
-        private void _raw_routes_add(string path, Func<HttpListenerContext, Task> handler)
+        private void _raw_routes_add(string path, Func<HttpListenerContext, Task> handler, int rateLimitMaxRequests, int rateLimitWindowSeconds)
         {
-            _raw_routes_internal_add(path, handler);
+            _raw_routes_internal_add(path, handler, rateLimitMaxRequests, rateLimitWindowSeconds);
         }
 
-        private void _raw_routes_internal_add(string path, Func<HttpListenerContext, Task> handler)
+        private void _raw_routes_internal_add(string path, Func<HttpListenerContext, Task> handler, int rateLimitMaxRequests, int rateLimitWindowSeconds)
         {
-            _rawRoutes.Add((path, handler));
+            _rawRoutes.Add((path, handler, rateLimitMaxRequests, rateLimitWindowSeconds));
         }
 
         /// <summary>
@@ -96,7 +109,7 @@ namespace Drx.Sdk.Network.V2.Web
         /// </summary>
         /// <param name="path">路径前缀</param>
         /// <param name="handler">处理委托</param>
-        public void AddStreamUploadRoute(string path, Func<HttpRequest, Task<HttpResponse>> handler)
+        public void AddStreamUploadRoute(string path, Func<HttpRequest, Task<HttpResponse>> handler, int rateLimitMaxRequests = 0, int rateLimitWindowSeconds = 0)
         {
             if (string.IsNullOrEmpty(path) || handler == null) return;
             if (!path.StartsWith("/")) path = "/" + path;
@@ -148,7 +161,7 @@ namespace Drx.Sdk.Network.V2.Web
                 }
             };
 
-            _raw_routes_add(path, rawHandler);
+            _raw_routes_add(path, rawHandler, rateLimitMaxRequests, rateLimitWindowSeconds);
             Logger.Info($"添加流式上传路由: {path}");
         }
 
@@ -227,6 +240,29 @@ namespace Drx.Sdk.Network.V2.Web
             }
         }
 
+        // 同步路由的可选速率限制重载
+        public void AddRoute(HttpMethod method, string path, Func<HttpRequest, HttpResponse> handler, int rateLimitMaxRequests = 0, int rateLimitWindowSeconds = 0)
+        {
+            try
+            {
+                var route = new RouteEntry
+                {
+                    Template = path,
+                    Method = method,
+                    Handler = async (request) => await Task.FromResult(handler(request)),
+                    ExtractParameters = CreateParameterExtractor(path),
+                    RateLimitMaxRequests = rateLimitMaxRequests,
+                    RateLimitWindowSeconds = rateLimitWindowSeconds
+                };
+                _routes.Add(route);
+                Logger.Info($"添加路由: {method} {path} (rate={rateLimitMaxRequests}/{rateLimitWindowSeconds}s)");
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"添加路由 {method} {path} 时发生错误: {ex}");
+            }
+        }
+
         /// <summary>
         /// 添加异步路由
         /// </summary>
@@ -242,10 +278,35 @@ namespace Drx.Sdk.Network.V2.Web
                     Template = path,
                     Method = method,
                     Handler = handler,
-                    ExtractParameters = CreateParameterExtractor(path)
+                    ExtractParameters = CreateParameterExtractor(path),
+                    RateLimitMaxRequests = 0,
+                    RateLimitWindowSeconds = 0
                 };
                 _routes.Add(route);
                 Logger.Info($"添加异步路由: {method} {path}");
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"添加异步路由 {method} {path} 时发生错误: {ex}");
+            }
+        }
+
+        // 异步路由的可选速率限制重载
+        public void AddRoute(HttpMethod method, string path, Func<HttpRequest, Task<HttpResponse>> handler, int rateLimitMaxRequests = 0, int rateLimitWindowSeconds = 0)
+        {
+            try
+            {
+                var route = new RouteEntry
+                {
+                    Template = path,
+                    Method = method,
+                    Handler = handler,
+                    ExtractParameters = CreateParameterExtractor(path),
+                    RateLimitMaxRequests = rateLimitMaxRequests,
+                    RateLimitWindowSeconds = rateLimitWindowSeconds
+                };
+                _routes.Add(route);
+                Logger.Info($"添加异步路由: {method} {path} (rate={rateLimitMaxRequests}/{rateLimitWindowSeconds}s)");
             }
             catch (Exception ex)
             {
@@ -284,11 +345,60 @@ namespace Drx.Sdk.Network.V2.Web
         }
 
         /// <summary>
+        /// 设置基于IP的请求速率限制。
+        /// 每个IP在指定时间窗口内最多允许的请求数。若超出则返回429 Too Many Requests。
+        /// </summary>
+        /// <param name="maxRequests">最大请求数，0表示无限制</param>
+        /// <param name="timeValue">时间值</param>
+        /// <param name="timeUnit">时间单位，支持 "seconds", "minutes", "hours", "days"</param>
+        public void SetRateLimit(int maxRequests, int timeValue, string timeUnit)
+        {
+            if (maxRequests < 0) maxRequests = 0;
+            if (timeValue < 0) timeValue = 0;
+            TimeSpan window;
+            switch (timeUnit.ToLower())
+            {
+                case "seconds":
+                    window = TimeSpan.FromSeconds(timeValue);
+                    break;
+                case "minutes":
+                    window = TimeSpan.FromMinutes(timeValue);
+                    break;
+                case "hours":
+                    window = TimeSpan.FromHours(timeValue);
+                    break;
+                case "days":
+                    window = TimeSpan.FromDays(timeValue);
+                    break;
+                default:
+                    throw new ArgumentException("无效的时间单位。支持: seconds, minutes, hours, days", nameof(timeUnit));
+            }
+            lock (_rateLimitLock)
+            {
+                _rateLimitMaxRequests = maxRequests;
+                _rateLimitWindow = window;
+            }
+            Logger.Info($"设置速率限制: 每{timeValue} {timeUnit} 最多 {maxRequests} 个请求");
+        }
+
+        /// <summary>
+        /// 获取当前速率限制设置。
+        /// </summary>
+        /// <returns>元组 (maxRequests, window)</returns>
+        public (int maxRequests, TimeSpan window) GetRateLimit()
+        {
+            lock (_rateLimitLock)
+            {
+                return (_rateLimitMaxRequests, _rateLimitWindow);
+            }
+        }
+
+        /// <summary>
         /// 从程序集中注册带有 HttpHandle 特性的方法
         /// </summary>
         /// <param name="assembly">要扫描的程序集</param>
         /// <param name="server">HttpServer 实例</param>
-        public static void RegisterHandlersFromAssembly(Assembly assembly, HttpServer server)
+        public static void RegisterHandlersFromAssembly(Assembly assembly, DrxHttpServer server)
         {
             try
             {
@@ -314,12 +424,12 @@ namespace Drx.Sdk.Network.V2.Web
                                 if (returnType == typeof(void))
                                 {
                                     Func<HttpListenerContext, Task> handler = ctx => { method.Invoke(null, new object[] { ctx }); return Task.CompletedTask; };
-                                    server.AddRawRoute(attr.Path, handler);
+                                    server.AddRawRoute(attr.Path, handler, attr.RateLimitMaxRequests, attr.RateLimitWindowSeconds);
                                 }
                                 else if (returnType == typeof(Task))
                                 {
                                     Func<HttpListenerContext, Task> handler = ctx => (Task)method.Invoke(null, new object[] { ctx });
-                                    server.AddRawRoute(attr.Path, handler);
+                                    server.AddRawRoute(attr.Path, handler, attr.RateLimitMaxRequests, attr.RateLimitWindowSeconds);
                                 }
                                 else if (returnType == typeof(HttpResponse))
                                 {
@@ -384,7 +494,7 @@ namespace Drx.Sdk.Network.V2.Web
                             if (handler != null)
                             {
                                 // 使用专用注册器将 handler 包装为 raw handler，传入 HttpRequest.Stream 和 ListenerContext
-                                server.AddStreamUploadRoute(attr.Path, handler);
+                                server.AddStreamUploadRoute(attr.Path, handler, attr.RateLimitMaxRequests, attr.RateLimitWindowSeconds);
                             }
                             else
                             {
@@ -399,7 +509,7 @@ namespace Drx.Sdk.Network.V2.Web
                                 var handler = CreateHandlerDelegate(method);
                                 if (handler != null)
                                 {
-                                    server.AddRoute(httpMethod, attr.Path, handler);
+                                    server.AddRoute(httpMethod, attr.Path, handler, attr.RateLimitMaxRequests, attr.RateLimitWindowSeconds);
                                 }
                             }
                             else
@@ -540,20 +650,39 @@ namespace Drx.Sdk.Network.V2.Web
         {
             try
             {
+                var clientIP = context.Request.RemoteEndPoint?.Address.ToString();
+
                 // 优先尝试以流方式服务文件下载（支持大文件与 Range）
                 if (TryServeFileStream(context))
                 {
                     return; // 已直接响应（流异步在后台执行，不阻塞本线程）
                 }
-
                 // 尝试原始路由（raw handlers），这些处理器可以直接操作 HttpListenerContext 用于流式上传/下载
                 var rawPath = context.Request.Url?.AbsolutePath ?? "/";
-                foreach (var (Template, Handler) in _raw_routes_reader())
+                foreach (var (Template, Handler, RateLimitMaxRequests, RateLimitWindowSeconds) in _raw_routes_reader())
                 {
                     if (rawPath.StartsWith(Template, StringComparison.OrdinalIgnoreCase))
                     {
                         try
                         {
+                            // 路由级速率限制优先
+                            if (!string.IsNullOrEmpty(clientIP) && RateLimitMaxRequests > 0 && RateLimitWindowSeconds > 0)
+                            {
+                                var routeKey = $"RAW:{Template}";
+                                if (IsRateLimitExceededForRoute(clientIP, routeKey, RateLimitMaxRequests, RateLimitWindowSeconds))
+                                {
+                                    SendResponse(context.Response, new HttpResponse(429, "Too Many Requests"));
+                                    return;
+                                }
+                            }
+
+                            // 若没有路由级超限，则检查全局限流（如果设置）
+                            if (!string.IsNullOrEmpty(clientIP) && RateLimitMaxRequests <= 0 && IsRateLimitExceeded(clientIP))
+                            {
+                                SendResponse(context.Response, new HttpResponse(429, "Too Many Requests"));
+                                return;
+                            }
+
                             await Handler(context).ConfigureAwait(false);
                         }
                         catch (Exception ex)
@@ -579,6 +708,24 @@ namespace Drx.Sdk.Network.V2.Web
                             if (parameters != null)
                             {
                                 request.PathParameters = parameters;
+                                // 路由级速率限制优先
+                                if (!string.IsNullOrEmpty(clientIP) && route.RateLimitMaxRequests > 0 && route.RateLimitWindowSeconds > 0)
+                                {
+                                    var routeKey = $"ROUTE:{route.Method}:{route.Template}";
+                                    if (IsRateLimitExceededForRoute(clientIP, routeKey, route.RateLimitMaxRequests, route.RateLimitWindowSeconds))
+                                    {
+                                        response = new HttpResponse(429, "Too Many Requests");
+                                        goto respond;
+                                    }
+                                }
+
+                                // 若未命中路由级限制，则检查全局限流
+                                if (!string.IsNullOrEmpty(clientIP) && (route.RateLimitMaxRequests == 0) && IsRateLimitExceeded(clientIP))
+                                {
+                                    response = new HttpResponse(429, "Too Many Requests");
+                                    goto respond;
+                                }
+
                                 response = await route.Handler(request);
                                 goto respond;
                             }
@@ -607,7 +754,7 @@ namespace Drx.Sdk.Network.V2.Web
             }
         }
 
-        private IEnumerable<(string Template, Func<HttpListenerContext, Task> Handler)> _raw_routes_reader() => _rawRoutes;
+        private IEnumerable<(string Template, Func<HttpListenerContext, Task> Handler, int RateLimitMaxRequests, int RateLimitWindowSeconds)> _raw_routes_reader() => _rawRoutes;
 
         /// <summary>
         /// 添加文件路由，将 URL 前缀映射到本地目录。例如 AddFileRoute("/download/", "C:\\wwwroot")
@@ -1517,6 +1664,80 @@ namespace Drx.Sdk.Network.V2.Web
             if (string.IsNullOrEmpty(result)) result = "file";
             return result;
         }
+
+        /// <summary>
+        /// 检查指定IP是否超出速率限制。
+        /// 如果未设置限制或未超出，返回false；否则返回true并记录请求。
+        /// </summary>
+        private bool IsRateLimitExceeded(string ip)
+        {
+            int maxRequests;
+            TimeSpan window;
+            lock (_rateLimitLock)
+            {
+                maxRequests = _rateLimitMaxRequests;
+                window = _rateLimitWindow;
+            }
+            if (maxRequests <= 0 || window == TimeSpan.Zero) return false;
+
+            var now = DateTime.UtcNow;
+            var cutoff = now - window;
+
+            var queue = _ipRequestHistory.GetOrAdd(ip, _ => new System.Collections.Generic.Queue<DateTime>());
+
+            // 清理过期请求
+            while (queue.Count > 0 && queue.Peek() < cutoff)
+            {
+                queue.Dequeue();
+            }
+
+            // 检查是否超出
+            if (queue.Count >= maxRequests)
+            {
+                return true;
+            }
+
+            // 记录当前请求
+            queue.Enqueue(now);
+            return false;
+        }
+
+        /// <summary>
+        /// 检查指定IP在指定路由（routeKey）上是否超出速率限制。
+        /// routeKey 是唯一标识某路由的字符串（例如: "ROUTE:GET:/api/foo" 或 "RAW:/upload"）。
+        /// 如果未设置限制返回 false；否则在检查并记录请求后返回是否超出。
+        /// </summary>
+        private bool IsRateLimitExceededForRoute(string ip, string routeKey, int maxRequests, int windowSeconds)
+        {
+            if (maxRequests <= 0 || windowSeconds <= 0) return false;
+
+            var now = DateTime.UtcNow;
+            var window = TimeSpan.FromSeconds(windowSeconds);
+            var cutoff = now - window;
+
+            var dictKey = ip + "#" + routeKey;
+            var queue = _ipRouteRequestHistory.GetOrAdd(dictKey, _ => new System.Collections.Generic.Queue<DateTime>());
+
+            // 清理过期请求
+            while (queue.Count > 0 && queue.Peek() < cutoff)
+            {
+                queue.Dequeue();
+            }
+
+            if (queue.Count >= maxRequests)
+            {
+                return true;
+            }
+
+            queue.Enqueue(now);
+            return false;
+        }
+
+        public ValueTask DisposeAsync()
+        {
+            Stop();
+            return ValueTask.CompletedTask;
+        }
     }
 
     /// <summary>
@@ -1552,6 +1773,19 @@ namespace Drx.Sdk.Network.V2.Web
         /// 相当于 Raw 的语义扩展
         /// </summary>
         public bool StreamDownload { get; set; }
+
+        /// <summary>
+        /// 可选：为该处理器设置路由级速率限制（最大请求数）。
+        /// 默认 0 表示不启用路由级限流。
+        /// 使用示例： [HttpHandle("/api/foo", "GET", RateLimitMaxRequests = 10, RateLimitWindowSeconds = 60)]
+        /// </summary>
+        public int RateLimitMaxRequests { get; set; }
+
+        /// <summary>
+        /// 可选：路由级速率限制的时间窗口，单位为秒。
+        /// 与 RateLimitMaxRequests 一起使用表示在该时间窗内最多允许的请求数。
+        /// </summary>
+        public int RateLimitWindowSeconds { get; set; }
 
         /// <summary>
         /// 构造函数

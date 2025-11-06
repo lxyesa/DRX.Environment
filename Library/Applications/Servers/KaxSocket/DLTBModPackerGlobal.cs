@@ -7,18 +7,18 @@ using System.Threading.Tasks;
 
 namespace KaxSocket
 {
-    public class Global
+    public class DLTBModPackerGlobal
     {
         private readonly SqliteUnified<ModInfo> modInfoDb;
-        private readonly static Global inst = new Global();
-        public readonly static Global Instance = inst;
+        private readonly static DLTBModPackerGlobal inst = new DLTBModPackerGlobal();
+        public readonly static DLTBModPackerGlobal Instance = inst;
 
-        public readonly string DatabaseFile = "KaxSocketData.db";
+        public readonly string DLTB_DatabaseFile = "dltb_database.db";
         public List<ModInfo> ModInfos = new List<ModInfo>();
 
-        private Global()
+        private DLTBModPackerGlobal()
         {
-            modInfoDb = new SqliteUnified<ModInfo>(DatabaseFile);
+            modInfoDb = new SqliteUnified<ModInfo>(DLTB_DatabaseFile);
             Init();
         }
 
