@@ -179,4 +179,46 @@ public class KaxHttp
             };
         }
     }
+
+    /*
+    * 测试用的受保护路由，需提供有效的登录令牌才能访问
+    * 用于测试登录令牌的有效性
+    */
+    [HttpHandle("/api/hello/{token}", "GET")]
+    public static HttpResponse Get_SayHello(HttpRequest request)
+    {
+        var token = request.PathParameters["token"];
+        if (string.IsNullOrEmpty(token))
+        {
+            return new HttpResponse()
+            {
+                StatusCode = 400,
+                Body = "Token 不能为空。",
+            };
+        }
+
+        var userExists = KaxGlobal.UserDatabase.QueryFirstAsync(u => u.LoginToken == token).Result;
+        if (userExists == null)
+        {
+            return new HttpResponse()
+            {
+                StatusCode = 401,
+                Body = "无效的登录令牌。",
+            };
+        }
+        else if (userExists.LoginToken != token)
+        {
+            return new HttpResponse()
+            {
+                StatusCode = 401,
+                Body = "无效的登录令牌。",
+            };
+        }
+
+        return new HttpResponse()
+        {
+            StatusCode = 200,
+            Body = $"Hello, your token is: {token}",
+        };
+    }
 }

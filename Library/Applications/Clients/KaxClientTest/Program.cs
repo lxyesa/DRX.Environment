@@ -24,6 +24,12 @@ var loginResponse = await client.SendAsync(new HttpRequest()
     }",
 });
 
+var sayHelloResponse = await client.SendAsync(new HttpRequest()
+{
+    Method = "GET",
+    Url = $"http://127.0.0.1:8462/api/hello/{JsonNode.Parse(loginResponse.Body)!["login_token"]!.ToString()}",
+});
+
 Logger.Info($"注册响应状态码: {registerResponse.StatusCode}");
 Logger.Info($"注册响应内容: {registerResponse.Body}");
 
@@ -33,4 +39,7 @@ Logger.Info($"登录响应状态码: {loginResponse.StatusCode}");
 Logger.Info($"登录响应内容: {JsonNode.Parse(loginResponse.Body)!["message"]}");
 Logger.Info($"登录令牌: {JsonNode.Parse(loginResponse.Body)!["login_token"]}");
 
-Console.ReadLine();
+Console.WriteLine("==================================================");
+
+Logger.Info($"问候响应状态码: {sayHelloResponse.StatusCode}");
+Logger.Info($"问候响应内容: {sayHelloResponse.Body}");
