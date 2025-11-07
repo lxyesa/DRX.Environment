@@ -86,6 +86,11 @@ namespace Drx.Sdk.Network.V2.Web
         public Dictionary<string, string> PathParameters { get; set; } = new Dictionary<string, string>();
 
         /// <summary>
+        /// 会话对象（如果启用了会话中间件）
+        /// </summary>
+        public Session? Session { get; set; }
+
+        /// <summary>
         /// 表单字段集合，multipart/form-data 或 application/x-www-form-urlencoded 场景使用
         /// </summary>
         public NameValueCollection Form { get; set; } = new NameValueCollection();

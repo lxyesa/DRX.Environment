@@ -193,7 +193,7 @@ public class KaxHttp
             return new HttpResponse()
             {
                 StatusCode = 400,
-                Body = "Token 不能为空。",
+                Body = "无效的登录令牌。",
             };
         }
 

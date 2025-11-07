@@ -18,6 +18,20 @@ using Microsoft.Net.Http.Headers;
 
 namespace Drx.Sdk.Network.V2.Web
 {
+    /// <summary>
+    /// Cookie选项类
+    /// </summary>
+    public class CookieOptions
+    {
+        public bool HttpOnly { get; set; } = true;
+        public bool Secure { get; set; } = false;
+        public string? SameSite { get; set; } = "Lax";
+        public string? Path { get; set; } = "/";
+        public string? Domain { get; set; }
+        public DateTime? Expires { get; set; }
+        public TimeSpan? MaxAge { get; set; }
+    }
+
     public class DrxHttpServer : IAsyncDisposable
     {
         private HttpListener _listener;
@@ -26,6 +40,10 @@ namespace Drx.Sdk.Network.V2.Web
         // raw route entries 包含可选的速率限制字段
         private readonly System.Collections.Generic.List<(string Template, Func<HttpListenerContext, Task> Handler, int RateLimitMaxRequests, int RateLimitWindowSeconds)> _rawRoutes = new();
         private readonly string? _staticFileRoot;
+        private readonly List<MiddlewareEntry> _middlewares = new();
+        private int _middlewareCounter = 0;
+        private readonly SessionManager _sessionManager;
+        private readonly System.Threading.AsyncLocal<Session?> _currentSession = new();
 
         private CancellationTokenSource _cts;
         private readonly Channel<HttpListenerContext> _requestChannel;
@@ -56,12 +74,22 @@ namespace Drx.Sdk.Network.V2.Web
             public int RateLimitWindowSeconds { get; set; }
         }
 
+        private class MiddlewareEntry
+        {
+            public Func<HttpListenerContext, Task> Handler { get; set; }
+            public string? Path { get; set; } // null for global
+            public int Priority { get; set; }
+            public bool OverrideGlobal { get; set; }
+            public int AddOrder { get; set; }
+        }
+
         /// <summary>
         /// 构造函数
         /// </summary>
         /// <param name="prefixes">监听前缀，如 "http://localhost:8080/"</param>
         /// <param name="staticFileRoot">静态文件根目录（可为 null）</param>
-        public DrxHttpServer(IEnumerable<string> prefixes, string? staticFileRoot = null)
+        /// <param name="sessionTimeoutMinutes">会话超时时间（分钟），默认30分钟</param>
+        public DrxHttpServer(IEnumerable<string> prefixes, string? staticFileRoot = null, int sessionTimeoutMinutes = 30)
         {
             _listener = new HttpListener();
             foreach (var prefix in prefixes)
@@ -78,6 +106,7 @@ namespace Drx.Sdk.Network.V2.Web
             _semaphore = new SemaphoreSlim(MaxConcurrentRequests);
             _messageQueue = new MessageQueue<HttpListenerContext>(1000);
             _threadPool = new ThreadPoolManager(Environment.ProcessorCount);
+            _sessionManager = new SessionManager(sessionTimeoutMinutes);
         }
 
         /// <summary>
@@ -91,6 +120,41 @@ namespace Drx.Sdk.Network.V2.Web
             if (!path.StartsWith("/")) path = "/" + path;
             _raw_routes_add(path, handler, rateLimitMaxRequests, rateLimitWindowSeconds);
             Logger.Info($"添加原始路由: {path}");
+        }
+
+        /// <summary>
+        /// 添加中间件
+        /// </summary>
+        /// <param name="middleware">中间件处理委托</param>
+        /// <param name="path">路径前缀，为 null 表示全局中间件</param>
+        /// <param name="priority">优先级，-1 表示使用默认</param>
+        /// <param name="overrideGlobal">是否覆盖全局优先级</param>
+        public void AddMiddleware(Func<HttpListenerContext, Task> middleware, string? path = null, int priority = -1, bool overrideGlobal = false)
+        {
+            if (middleware == null) return;
+            if (path != null && !path.StartsWith("/")) path = "/" + path;
+
+            if (priority == -1)
+            {
+                priority = (path == null) ? 0 : 100; // 默认全局 0，路由 100
+            }
+
+            if (overrideGlobal)
+            {
+                priority = -1; // 覆盖时设为最高优先级
+            }
+
+            var entry = new MiddlewareEntry
+            {
+                Handler = middleware,
+                Path = path,
+                Priority = priority,
+                OverrideGlobal = overrideGlobal,
+                AddOrder = _middlewareCounter++
+            };
+
+            _middlewares.Add(entry);
+            Logger.Info($"添加中间件: {path ?? "全局"} (优先级: {priority})");
         }
 
         private void _raw_routes_add(string path, Func<HttpListenerContext, Task> handler, int rateLimitMaxRequests, int rateLimitWindowSeconds)
@@ -520,7 +584,46 @@ namespace Drx.Sdk.Network.V2.Web
                     }
                 }
 
-                Logger.Info($"从程序集 {assembly.FullName} 注册了 {methods.Count} 个 HTTP处理方法");
+                // 注册中间件
+                var middlewareMethods = assembly.GetTypes()
+                    .SelectMany(t => t.GetMethods(BindingFlags.Public | BindingFlags.Static))
+                    .Where(m => m.GetCustomAttributes(typeof(HttpMiddlewareAttribute), false).Length > 0)
+                    .ToList();
+
+                foreach (var method in middlewareMethods)
+                {
+                    var attributes = method.GetCustomAttributes<HttpMiddlewareAttribute>();
+                    foreach (var attr in attributes)
+                    {
+                        var parameters = method.GetParameters();
+                        if (parameters.Length == 1 && parameters[0].ParameterType == typeof(HttpListenerContext))
+                        {
+                            var returnType = method.ReturnType;
+                            Func<HttpListenerContext, Task> middlewareHandler;
+                            if (returnType == typeof(void))
+                            {
+                                middlewareHandler = ctx => { method.Invoke(null, new object[] { ctx }); return Task.CompletedTask; };
+                            }
+                            else if (returnType == typeof(Task))
+                            {
+                                middlewareHandler = ctx => (Task)method.Invoke(null, new object[] { ctx });
+                            }
+                            else
+                            {
+                                Logger.Warn($"不能注册中间件: 方法 {method.Name} 返回类型不受支持: {returnType}");
+                                continue;
+                            }
+
+                            server.AddMiddleware(middlewareHandler, attr.Path, attr.Priority, attr.OverrideGlobal);
+                        }
+                        else
+                        {
+                            Logger.Warn($"标注为中间件的方法 {method.Name} 必须接受一个 HttpListenerContext 参数");
+                        }
+                    }
+                }
+
+                Logger.Info($"从程序集 {assembly.FullName} 注册了 {methods.Count} 个 HTTP处理方法和 {middlewareMethods.Count} 个中间件");
             }
             catch (Exception ex)
             {
@@ -646,11 +749,53 @@ namespace Drx.Sdk.Network.V2.Web
             }
         }
 
+        private async Task ExecuteMiddlewaresAsync(HttpListenerContext context)
+        {
+            var rawPath = context.Request.Url?.AbsolutePath ?? "/";
+
+            // 收集适用的中间件
+            var applicableMiddlewares = new List<MiddlewareEntry>();
+
+            // 添加全局中间件
+            applicableMiddlewares.AddRange(_middlewares.Where(m => m.Path == null));
+
+            // 添加路由特定中间件
+            var routeMiddlewares = _middlewares.Where(m => m.Path != null && rawPath.StartsWith(m.Path, StringComparison.OrdinalIgnoreCase));
+            applicableMiddlewares.AddRange(routeMiddlewares);
+
+            // 排序：优先级升序（低优先级先执行），然后按添加顺序
+            applicableMiddlewares.Sort((a, b) =>
+            {
+                int aPriority = a.OverrideGlobal ? -1 : a.Priority;
+                int bPriority = b.OverrideGlobal ? -1 : b.Priority;
+                int priorityCompare = aPriority.CompareTo(bPriority);
+                if (priorityCompare != 0) return priorityCompare;
+                return a.AddOrder.CompareTo(b.AddOrder);
+            });
+
+            // 执行中间件
+            foreach (var mw in applicableMiddlewares)
+            {
+                try
+                {
+                    await mw.Handler(context).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    Logger.Error($"执行中间件时发生错误: {ex}");
+                    // 中间件错误不阻止后续处理
+                }
+            }
+        }
+
         private async Task HandleRequestAsync(HttpListenerContext context)
         {
             try
             {
                 var clientIP = context.Request.RemoteEndPoint?.Address.ToString();
+
+                // 执行中间件
+                await ExecuteMiddlewaresAsync(context);
 
                 // 优先尝试以流方式服务文件下载（支持大文件与 Range）
                 if (TryServeFileStream(context))
@@ -1155,6 +1300,7 @@ namespace Drx.Sdk.Network.V2.Web
                         throw;
                     }
 
+                    httpRequest.Session = _currentSession.Value;
                     return httpRequest;
                 }
 
@@ -1170,6 +1316,7 @@ namespace Drx.Sdk.Network.V2.Web
                 httpRequest.BodyBytes = bodyBytes;
                 httpRequest.Content = new System.Dynamic.ExpandoObject();
                 try { ((System.Collections.Generic.IDictionary<string, object>)httpRequest.Content)["Text"] = body; } catch { }
+                httpRequest.Session = _currentSession.Value;
                 return httpRequest;
             }
             catch (Exception ex)
@@ -1733,9 +1880,58 @@ namespace Drx.Sdk.Network.V2.Web
             return false;
         }
 
+        /// <summary>
+        /// 添加会话中间件（便捷方法）
+        /// 该中间件会自动管理会话Cookie和会话数据
+        /// </summary>
+        /// <param name="cookieName">会话Cookie名称，默认"session_id"</param>
+        /// <param name="cookieOptions">Cookie选项</param>
+        public void AddSessionMiddleware(string cookieName = "session_id", CookieOptions? cookieOptions = null)
+        {
+            cookieOptions ??= new CookieOptions
+            {
+                HttpOnly = true,
+                Secure = false, // 本地开发设为false，生产环境应为true
+                Path = "/",
+                MaxAge = TimeSpan.FromMinutes(30)
+            };
+
+            AddMiddleware(async ctx =>
+            {
+                // 从请求Cookie获取会话ID
+                var sessionId = ctx.Request.Cookies[cookieName]?.Value;
+
+                // 获取或创建会话
+                var session = _sessionManager.GetOrCreateSession(sessionId);
+
+                // 将会话存储到AsyncLocal
+                _currentSession.Value = session;
+
+                // 如果是新会话或ID不同，设置Cookie
+                if (session.IsNew || sessionId != session.Id)
+                {
+                    var cookie = new Cookie(cookieName, session.Id)
+                    {
+                        HttpOnly = cookieOptions.HttpOnly,
+                        Secure = cookieOptions.Secure,
+                        Path = cookieOptions.Path ?? "/",
+                        Domain = cookieOptions.Domain,
+                        Expires = cookieOptions.Expires ?? DateTime.UtcNow.Add(cookieOptions.MaxAge ?? TimeSpan.FromMinutes(30))
+                    };
+                    ctx.Response.Cookies.Add(cookie);
+                }
+            });
+        }
+
+        /// <summary>
+        /// 获取会话管理器
+        /// </summary>
+        public SessionManager SessionManager => _sessionManager;
+
         public ValueTask DisposeAsync()
         {
             Stop();
+            _sessionManager?.Dispose();
             return ValueTask.CompletedTask;
         }
     }
@@ -1796,6 +1992,200 @@ namespace Drx.Sdk.Network.V2.Web
         {
             Path = path;
             Method = method;
+        }
+    }
+
+    /// <summary>
+    /// HTTP中间件特性
+    /// 支持通过属性标注该方法为中间件处理。
+    /// </summary>
+    [AttributeUsage(AttributeTargets.Method, AllowMultiple = true)]
+    public class HttpMiddlewareAttribute : Attribute
+    {
+        /// <summary>
+        /// 请求路径前缀，为 null 或空表示全局中间件
+        /// </summary>
+        public string? Path { get; set; }
+
+        /// <summary>
+        /// 优先级，-1 表示使用默认
+        /// </summary>
+        public int Priority { get; set; } = -1;
+
+        /// <summary>
+        /// 是否覆盖全局优先级
+        /// </summary>
+        public bool OverrideGlobal { get; set; }
+
+        /// <summary>
+        /// 构造函数
+        /// </summary>
+        /// <param name="path">路径前缀，可为 null</param>
+        public HttpMiddlewareAttribute(string? path = null)
+        {
+            Path = path;
+        }
+    }
+
+    /// <summary>
+    /// 会话数据类
+    /// </summary>
+    public class Session
+    {
+        /// <summary>
+        /// 会话ID
+        /// </summary>
+        public string Id { get; set; }
+
+        /// <summary>
+        /// 会话数据存储
+        /// </summary>
+        public System.Collections.Concurrent.ConcurrentDictionary<string, object> Data { get; } = new();
+
+        /// <summary>
+        /// 最后访问时间
+        /// </summary>
+        public DateTime LastAccess { get; set; }
+
+        /// <summary>
+        /// 创建时间
+        /// </summary>
+        public DateTime Created { get; set; }
+
+        /// <summary>
+        /// 是否为新会话
+        /// </summary>
+        public bool IsNew { get; set; }
+
+        /// <summary>
+        /// 构造函数
+        /// </summary>
+        /// <param name="id">会话ID</param>
+        public Session(string id)
+        {
+            Id = id;
+            Created = DateTime.UtcNow;
+            LastAccess = Created;
+            IsNew = true;
+        }
+
+        /// <summary>
+        /// 更新最后访问时间
+        /// </summary>
+        public void UpdateAccess()
+        {
+            LastAccess = DateTime.UtcNow;
+            IsNew = false;
+        }
+    }
+
+    /// <summary>
+    /// 会话管理器
+    /// </summary>
+    public class SessionManager
+    {
+        private readonly System.Collections.Concurrent.ConcurrentDictionary<string, Session> _sessions = new();
+        private readonly TimeSpan _timeout;
+        private readonly Timer _cleanupTimer;
+
+        /// <summary>
+        /// 构造函数
+        /// </summary>
+        /// <param name="timeoutMinutes">会话超时时间（分钟），默认30分钟</param>
+        public SessionManager(int timeoutMinutes = 30)
+        {
+            _timeout = TimeSpan.FromMinutes(timeoutMinutes);
+            // 每5分钟清理一次过期会话
+            _cleanupTimer = new Timer(CleanupExpiredSessions, null, TimeSpan.FromMinutes(5), TimeSpan.FromMinutes(5));
+        }
+
+        /// <summary>
+        /// 创建新会话
+        /// </summary>
+        /// <returns>新会话</returns>
+        public Session CreateSession()
+        {
+            var id = GenerateSessionId();
+            var session = new Session(id);
+            _sessions[id] = session;
+            return session;
+        }
+
+        /// <summary>
+        /// 获取会话，如果不存在则返回null
+        /// </summary>
+        /// <param name="id">会话ID</param>
+        /// <returns>会话对象或null</returns>
+        public Session? GetSession(string id)
+        {
+            if (_sessions.TryGetValue(id, out var session))
+            {
+                session.UpdateAccess();
+                return session;
+            }
+            return null;
+        }
+
+        /// <summary>
+        /// 获取或创建会话
+        /// </summary>
+        /// <param name="id">会话ID，如果为null或空则创建新会话</param>
+        /// <returns>会话对象</returns>
+        public Session GetOrCreateSession(string? id)
+        {
+            if (!string.IsNullOrEmpty(id) && _sessions.TryGetValue(id, out var existing))
+            {
+                existing.UpdateAccess();
+                return existing;
+            }
+            return CreateSession();
+        }
+
+        /// <summary>
+        /// 移除会话
+        /// </summary>
+        /// <param name="id">会话ID</param>
+        public void RemoveSession(string id)
+        {
+            _sessions.TryRemove(id, out _);
+        }
+
+        /// <summary>
+        /// 清理过期会话
+        /// </summary>
+        private void CleanupExpiredSessions(object? state)
+        {
+            var cutoff = DateTime.UtcNow - _timeout;
+            var expiredKeys = _sessions.Where(kvp => kvp.Value.LastAccess < cutoff)
+                                      .Select(kvp => kvp.Key)
+                                      .ToList();
+
+            foreach (var key in expiredKeys)
+            {
+                _sessions.TryRemove(key, out _);
+            }
+
+            if (expiredKeys.Count > 0)
+            {
+                Logger.Info($"清理了 {expiredKeys.Count} 个过期会话");
+            }
+        }
+
+        /// <summary>
+        /// 生成唯一会话ID
+        /// </summary>
+        /// <returns>会话ID</returns>
+        private string GenerateSessionId()
+        {
+            return Guid.NewGuid().ToString("N") + DateTime.UtcNow.Ticks.ToString();
+        }
+
+        /// <summary>
+        /// 释放资源
+        /// </summary>
+        public void Dispose()
+        {
+            _cleanupTimer?.Dispose();
         }
     }
 }

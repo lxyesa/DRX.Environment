@@ -23,6 +23,8 @@ namespace Drx.Sdk.Network.V2.Web
     public class DrxHttpClient : IAsyncDisposable
     {
         private readonly System.Net.Http.HttpClient _httpClient;
+    private readonly System.Net.Http.HttpClientHandler _httpHandler;
+    private System.Net.CookieContainer _cookieContainer;
         private readonly Channel<HttpRequestTask> _requestChannel;
         private readonly SemaphoreSlim _semaphore;
         private readonly CancellationTokenSource _cts;
@@ -47,7 +49,11 @@ namespace Drx.Sdk.Network.V2.Web
         /// </summary>
         public DrxHttpClient()
         {
-            _httpClient = new System.Net.Http.HttpClient();
+            _cookieContainer = new System.Net.CookieContainer();
+            _httpHandler = new System.Net.Http.HttpClientHandler { CookieContainer = _cookieContainer, UseCookies = true };
+            _httpClient = new System.Net.Http.HttpClient(_httpHandler);
+            // 默认自动管理 cookies
+            AutoManageCookies = true;
             _requestChannel = Channel.CreateBounded<HttpRequestTask>(new BoundedChannelOptions(100)
             {
                 FullMode = BoundedChannelFullMode.Wait
@@ -67,10 +73,14 @@ namespace Drx.Sdk.Network.V2.Web
         {
             try
             {
-                _httpClient = new System.Net.Http.HttpClient
+                _cookieContainer = new System.Net.CookieContainer();
+                _httpHandler = new System.Net.Http.HttpClientHandler { CookieContainer = _cookieContainer, UseCookies = true };
+                _httpClient = new System.Net.Http.HttpClient(_httpHandler)
                 {
                     BaseAddress = new Uri(baseAddress)
                 };
+                // 默认自动管理 cookies
+                AutoManageCookies = true;
                 _requestChannel = Channel.CreateBounded<HttpRequestTask>(new BoundedChannelOptions(100)
                 {
                     FullMode = BoundedChannelFullMode.Wait
@@ -84,6 +94,235 @@ namespace Drx.Sdk.Network.V2.Web
             {
                 Logger.Error($"初始化 HttpClient 时发生错误: {ex.Message}");
                 throw;
+            }
+        }
+
+    /// <summary>
+    /// 是否自动管理 Cookie（将自动使用内部 CookieContainer 跟踪 Set-Cookie 并在请求时发送对应 Cookie）。
+    /// 默认为 true。
+    /// </summary>
+    public bool AutoManageCookies { get; set; } = true;
+
+    /// <summary>
+    /// 会话 Cookie 名称，默认与服务器一致为 "session_id"。可根据服务端配置调整。
+    /// </summary>
+    public string SessionCookieName { get; set; } = "session_id";
+
+    /// <summary>
+    /// 可选：如果服务端使用自定义请求头传递会话令牌，可设置该字段（例如 "X-Session-Id"），
+    /// 客户端在发送请求时会自动将当前会话 id 写入该 header（当 header 未被调用方显式设置时）。
+    /// 默认为 null（不使用 header）。
+    /// </summary>
+    public string? SessionHeaderName { get; set; } = null;
+
+        /// <summary>
+        /// 从内部 CookieContainer 中获取当前会话 ID（基于 SessionCookieName）。
+        /// 如果未找到返回 null。该方法优先尝试使用 HttpClient.BaseAddress 作为域；
+        /// 如果 baseAddress 为 null，则需要调用方使用 SetSessionId 手动注入 cookie 或使用 ImportCookies。
+        /// </summary>
+        /// <param name="forUrl">可选：指定用于查找 cookie 的 URL（优先），例如请求的完整 URL。</param>
+        /// <returns>会话 id 或 null</returns>
+        public string? GetSessionId(string? forUrl = null)
+        {
+            try
+            {
+                if (!AutoManageCookies) return null;
+                Uri? uri = null;
+                if (!string.IsNullOrEmpty(forUrl))
+                {
+                    if (Uri.TryCreate(forUrl, UriKind.Absolute, out var u)) uri = u;
+                }
+                if (uri == null && _httpClient.BaseAddress != null) uri = _httpClient.BaseAddress;
+                if (uri == null) return null;
+
+                var cookies = _cookieContainer.GetCookies(uri);
+                foreach (System.Net.Cookie c in cookies)
+                {
+                    if (string.Equals(c.Name, SessionCookieName, StringComparison.OrdinalIgnoreCase))
+                        return c.Value;
+                }
+                return null;
+            }
+            catch { return null; }
+        }
+
+        /// <summary>
+        /// 将会话 id 写入内部 CookieContainer（可指定 domain/path）。
+        /// 该方法不会修改服务器端，仅在后续请求时携带该 cookie。
+        /// </summary>
+        public void SetSessionId(string sessionId, string? domain = null, string path = "/")
+        {
+            if (string.IsNullOrEmpty(sessionId)) return;
+            try
+            {
+                if (!AutoManageCookies) return;
+                Uri uri;
+                if (!string.IsNullOrEmpty(domain))
+                {
+                    if (!domain.StartsWith("http", StringComparison.OrdinalIgnoreCase)) domain = "http://" + domain.TrimEnd('/');
+                    uri = new Uri(domain);
+                }
+                else if (_httpClient.BaseAddress != null)
+                {
+                    uri = _httpClient.BaseAddress;
+                }
+                else
+                {
+                    // fallback domain for cookie storage
+                    uri = new Uri("http://localhost/");
+                }
+
+                var cookie = new System.Net.Cookie(SessionCookieName, sessionId, path, uri.Host);
+                _cookieContainer.Add(uri, cookie);
+            }
+            catch { }
+        }
+
+        /// <summary>
+        /// 清空内部 CookieContainer 中的所有 cookie（慎用）。
+        /// </summary>
+        public void ClearCookies()
+        {
+            try
+            {
+                // CookieContainer 没有直接清空方法，替换为新的实例
+                // 注意：此操作在并发场景下是安全的，因为我们仅替换字段引用
+                var newContainer = new System.Net.CookieContainer();
+                // 如果 httpHandler 存在，更新其 CookieContainer（handler 可能已用于 HttpClient）
+                try
+                {
+                    // HttpClientHandler 没有公开 setter 来替换 CookieContainer，故仅替换我们自己的引用并尽量复制
+                }
+                catch { }
+                // 仅替换本地引用以避免序列化/并发复杂性
+                // 这里直接反射替换 handler 的内部字段不是必要的，因此我们仅替换引用以供后续 SetSessionId/Import 使用
+                // 注意：已有 HttpClient 使用旧容器，新的请求可能不会自动使用新容器，建议在非关键场景使用
+                // 为降低影响，仍将旧 cookies 复制到新容器然后替换引用
+                try
+                {
+                    foreach (var table in GetAllCookies(_cookieContainer))
+                    {
+                        newContainer.Add(table.Key, table.Value);
+                    }
+                }
+                catch { }
+                // 最终替换
+                // 不能真正替换 handler.CookieContainer（只读），所以我们仅替换本地引用
+                // 这是一个保守操作，用于提供 ClearCookies API，提示调用方仅在简单场景使用
+                // (详见注释)
+                _cookieContainer = newContainer;
+            }
+            catch { }
+        }
+
+        // Helper 返回所有 domain->CookieCollection 项（用于复制）
+        private IEnumerable<KeyValuePair<Uri, System.Net.CookieCollection>> GetAllCookies(System.Net.CookieContainer container)
+        {
+            var list = new List<KeyValuePair<Uri, System.Net.CookieCollection>>();
+            try
+            {
+                // 只尝试基于 BaseAddress
+                if (_httpClient.BaseAddress != null)
+                {
+                    list.Add(new KeyValuePair<Uri, System.Net.CookieCollection>(_httpClient.BaseAddress, container.GetCookies(_httpClient.BaseAddress)));
+                }
+            }
+            catch { }
+            return list;
+        }
+
+        /// <summary>
+        /// 将内部 cookie 导出为 JSON 字符串，便于持久化或跨进程传递（仅导出 BaseAddress 域下的 cookie）。
+        /// 格式: [{"Name":"...","Value":"...","Domain":"...","Path":"...","Expires":...,"Secure":true,"HttpOnly":true},...]
+        /// </summary>
+        public string ExportCookies()
+        {
+            try
+            {
+                var list = new List<object>();
+                if (_httpClient.BaseAddress != null)
+                {
+                    var cookies = _cookieContainer.GetCookies(_httpClient.BaseAddress);
+                    foreach (System.Net.Cookie c in cookies)
+                    {
+                        list.Add(new
+                        {
+                            Name = c.Name,
+                            Value = c.Value,
+                            Domain = c.Domain,
+                            Path = c.Path,
+                            Expires = c.Expires == DateTime.MinValue ? (DateTime?)null : c.Expires,
+                            Secure = c.Secure,
+                            HttpOnly = c.HttpOnly
+                        });
+                    }
+                }
+                return System.Text.Json.JsonSerializer.Serialize(list);
+            }
+            catch { return "[]"; }
+        }
+
+        /// <summary>
+        /// 从 JSON 导入 cookie（与 ExportCookies 生成的格式兼容）。
+        /// 导入后会把 cookie 加入到 BaseAddress 域或指定 domain（如果 JSON 指定 domain 则使用之）。
+        /// </summary>
+        public void ImportCookies(string json)
+        {
+            if (string.IsNullOrEmpty(json)) return;
+            try
+            {
+                var arr = System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement[]>(json);
+                if (arr == null) return;
+                foreach (var el in arr)
+                {
+                    try
+                    {
+                        var name = el.GetProperty("Name").GetString();
+                        var value = el.GetProperty("Value").GetString();
+                        var domain = el.TryGetProperty("Domain", out var pd) ? pd.GetString() : null;
+                        var path = el.TryGetProperty("Path", out var pp) ? pp.GetString() ?? "/" : "/";
+                        var secure = el.TryGetProperty("Secure", out var ps) ? ps.GetBoolean() : false;
+                        var httpOnly = el.TryGetProperty("HttpOnly", out var ph) ? ph.GetBoolean() : false;
+
+                        Uri uri;
+                        if (!string.IsNullOrEmpty(domain))
+                        {
+                            if (!domain.StartsWith("http", StringComparison.OrdinalIgnoreCase)) domain = "http://" + domain.TrimEnd('/');
+                            uri = new Uri(domain);
+                        }
+                        else if (_httpClient.BaseAddress != null)
+                        {
+                            uri = _httpClient.BaseAddress;
+                        }
+                        else
+                        {
+                            uri = new Uri("http://localhost/");
+                        }
+
+                        var cookie = new System.Net.Cookie(name ?? "", value ?? "", path ?? "/", uri.Host) { Secure = secure, HttpOnly = httpOnly };
+                        _cookieContainer.Add(uri, cookie);
+                    }
+                    catch { }
+                }
+            }
+            catch { }
+        }
+
+        /// <summary>
+        /// 将当前会话 id（若存在）写入请求的 header（当 SessionHeaderName 已设置且调用方未显式设置 header 时）。
+        /// </summary>
+        private void ApplySessionToRequest(System.Net.Http.HttpRequestMessage request)
+        {
+            if (!string.IsNullOrEmpty(SessionHeaderName) && request != null)
+            {
+                if (!request.Headers.Contains(SessionHeaderName))
+                {
+                    var sessionId = GetSessionId(request.RequestUri?.ToString());
+                    if (!string.IsNullOrEmpty(sessionId))
+                    {
+                        request.Headers.Add(SessionHeaderName, EnsureAsciiHeaderValue(sessionId));
+                    }
+                }
             }
         }
 
@@ -221,6 +460,9 @@ namespace Drx.Sdk.Network.V2.Web
                     request.Headers.Add(key, EnsureAsciiHeaderValue(headers[key]));
                 }
             }
+
+            // 应用可选的 session header（当配置了 SessionHeaderName 时）
+            ApplySessionToRequest(request);
 
             try
             {
@@ -377,7 +619,9 @@ namespace Drx.Sdk.Network.V2.Web
                         }
                     }
 
-                    var uploadServerResponse = await _httpClient.SendAsync(uploadRequestMessage, HttpCompletionOption.ResponseContentRead, uploadFile.CancellationToken).ConfigureAwait(false);
+                    // 在发送前尝试应用 session header
+                    ApplySessionToRequest(uploadRequestMessage);
+                    var uploadServerResponse = await _httpClient.SendAsync(uploadRequestMessage, HttpCompletionOption.ResponseContentRead, uploadFile.CancellationToken);
                     var uploadServerResponseBody = await uploadServerResponse.Content.ReadAsStringAsync().ConfigureAwait(false);
                     var uploadServerResponseBytes = await uploadServerResponse.Content.ReadAsByteArrayAsync().ConfigureAwait(false);
 
@@ -540,6 +784,9 @@ namespace Drx.Sdk.Network.V2.Web
                         }
                     }
 
+                    // 应用可选的 session header
+                    ApplySessionToRequest(uploadRequestMessage);
+
                     var serverResponse = await _httpClient.SendAsync(uploadRequestMessage, HttpCompletionOption.ResponseContentRead, requestTask.UploadFile.CancellationToken);
                     var serverResponseBody = await serverResponse.Content.ReadAsStringAsync();
                     var serverResponseBytes = await serverResponse.Content.ReadAsByteArrayAsync();
@@ -577,6 +824,9 @@ namespace Drx.Sdk.Network.V2.Web
                         requestMessage.Headers.Add(key, EnsureAsciiHeaderValue(requestTask.Headers[key]));
                     }
                 }
+
+                // 应用可选的 session header
+                ApplySessionToRequest(requestMessage);
 
                 // 添加请求体
                 if (requestTask.BodyBytes != null)

@@ -35,6 +35,7 @@ DrxHttpServer 是 DRX.Environment 框架中的高性能 HTTP 服务器，基于 
 | SaveUploadFile | static HttpResponse SaveUploadFile(HttpRequest, string, string) | 保存上传流为文件 | HttpResponse | Exception |
 | CreateFileResponse | static HttpResponse CreateFileResponse(string, string?, string, int) | 创建流式下载响应 | HttpResponse | Exception |
 | GetFileStream | static Stream GetFileStream(string) | 获取文件流 | Stream/null | Exception |
+| AddSessionMiddleware | void AddSessionMiddleware(string cookieName = "session_id", CookieOptions? cookieOptions = null) | 添加会话中间件，自动管理会话 Cookie 和会话数据 | void | - |
 | DisposeAsync | ValueTask DisposeAsync() | 释放资源 | ValueTask | - |
 
 ## Methods (detailed)
@@ -118,6 +119,45 @@ server.AddStreamUploadRoute("/upload", async req => DrxHttpServer.SaveUploadFile
 ```csharp
 server.AddFileRoute("/download/", "C:/files");
 ```
+
+### AddSessionMiddleware(string cookieName = "session_id", CookieOptions? cookieOptions = null)
+
+- **Purpose**: 添加一个会话中间件，用于自动管理会话 Cookie（写入/续期）以及服务器端会话数据（通过 SessionManager）。默认的 cookie 名称为 "session_id"。
+- **Parameters**:
+  - `cookieName`: 会话 Cookie 名称，默认 "session_id"，可定制以配合客户端或现有系统。
+  - `cookieOptions`: 可选的 `CookieOptions`，用于控制 HttpOnly/Secure/SameSite/Path/Domain/Expires 等属性。
+- **Behavior**: 中间件会在请求中读取指定名称的 cookie（如存在则尝试加载对应 session），并在响应中设置或续期 cookie；同时可在 `SessionManager` 中创建或获取会话对象，方便路由处理方法读取/写入会话数据。
+- **Example**:
+```csharp
+// 使用默认会话 cookie 名称
+server.AddSessionMiddleware();
+
+// 使用自定义 cookie 名称与选项
+var opts = new CookieOptions { HttpOnly = true, Secure = true, SameSite = "Lax", Path = "/" };
+server.AddSessionMiddleware("my_session", opts);
+```
+
+注意：客户端通常只需在请求中携带由服务器设置的会话 cookie（默认名为 `session_id`），或者将会话令牌放入 header（例如 `X-Session-Id`）以兼容没有 cookie 的客户端场景。若客户端使用 `DrxHttpClient`，建议启用 `AutoManageCookies = true` 或在需要时使用 `SetSessionId`/`ImportCookies` 恢复会话。
+
+### SessionManager
+
+服务器内置 `SessionManager` 用于管理服务器端会话对象（`Session`）。`DrxHttpServer.AddSessionMiddleware` 会使用 `SessionManager` 来创建/读取/维护会话。
+
+公开方法（可通过 `DrxHttpServer.SessionManager` 访问）:
+
+- `Session CreateSession()` — 创建并返回一个新的 `Session`，包含新生成的会话 id。
+- `Session? GetSession(string id)` — 根据会话 id 返回会话对象，找不到返回 null。
+- `Session GetOrCreateSession(string? id)` — 如果 id 为 null 或不存在则创建新会话，否则返回已有会话并更新访问时间。
+- `void RemoveSession(string id)` — 移除指定会话。
+
+示例（在路由处理方法中使用）:
+```csharp
+// 假设中间件已将当前 session id 放入请求上下文或 cookie
+var session = server.SessionManager.GetOrCreateSession(sessionIdFromCookie);
+session.Data["userId"] = 123;
+```
+
+实现注意事项：SessionManager 会自动清理过期会话（基于构造时传入的超时时间），并提供线程安全的并发字典用于会话数据存储。
 
 ### SetPerMessageProcessingDelay(int ms)
 - **Parameters**: 延迟毫秒数。
