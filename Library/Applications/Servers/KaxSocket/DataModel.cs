@@ -29,6 +29,19 @@ namespace KaxSocket
         public string Email { get; set; }
         public long RegisteredAt { get; set; }
         public long LastLoginAt { get; set; }
-        public string LoginToken { get; set; }  // 通过时间戳、随机数、Base64 以及Hash生成一个登录令牌
+        public string LoginToken { get; set; }
+        public string DisplayName { get; set; }
+        public UserStatus Status { get; set; } = new UserStatus();
+    }
+
+    public class UserStatus : IDataTable
+    {
+        public int ParentId { get; set; }
+        public bool IsBanned { get; set; }
+        public long BannedAt { get; set; }
+        public long BanExpiresAt { get; set; }
+        public string BanReason { get; set; }   // 封禁原因
+        public string TableName => nameof(UserStatus);
+        public int Id { get; set; }
     }
 }

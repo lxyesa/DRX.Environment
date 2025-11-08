@@ -10,7 +10,7 @@ namespace KaxSocket
 {
     public class DLTBModPackerHttp
     {
-        [HttpHandle("/api/dltbmodpacker/version/check", "GET")]
+        [HttpHandle("/api/dltbmodpacker/version/check", "GET", RateLimitMaxRequests = 10, RateLimitWindowSeconds = 60)]
         public static HttpResponse GetCheckVersion(HttpRequest request)
         {
             var version = ConfigUtility.Read("configs.ini", "version", "general");
@@ -82,9 +82,18 @@ namespace KaxSocket
             };
         }
 
-        [HttpHandle("/api/dltbmodpacker/mod/getall", "GET")]
+        [HttpHandle("/api/dltbmodpacker/mod/getall", "GET", RateLimitMaxRequests = 10, RateLimitWindowSeconds = 60)]
         public static HttpResponse GetAllMod(HttpRequest request)
         {
+            if (JwtHelper.ValidateTokenFromRequest(request) == null)
+            {
+                return new HttpResponse
+                {
+                    StatusCode = 401,
+                    Body = "无效用户，请重新登录"
+                };
+            }
+            
             // 获取所有Mod信息，然后组装为json数组
             var modInfoDb = DLTBModPackerGlobal.Instance.GetModInfoDataBase();
             if (modInfoDb != null)
@@ -110,11 +119,18 @@ namespace KaxSocket
             }
         }
 
-        [HttpHandle("/api/dltbmodpacker/mod/upload", "POST")]
+        [HttpHandle("/api/dltbmodpacker/mod/upload", "POST", RateLimitMaxRequests = 5, RateLimitWindowSeconds = 60)]
         public static HttpResponse PostUploadMod(HttpRequest request)
         {
-            // 请求的 Body 与 UploadFile由 HttpServer.ParseRequestAsync解析并填充（包括 multipart 流式解析）
             var reqBody = request.Body;
+            if (JwtHelper.ValidateTokenFromRequest(request) == null)
+            {
+                return new HttpResponse
+                {
+                    StatusCode = 401,
+                    Body = "无效用户，请重新登录"
+                };
+            }
 
             if (string.IsNullOrEmpty(reqBody) && (request.UploadFile == null || request.UploadFile.Stream == null))
             {
@@ -223,7 +239,7 @@ namespace KaxSocket
             }
         }
 
-        [HttpHandle("/api/dltbmodpacker/mod/{modid}/download", "GET")]
+        [HttpHandle("/api/dltbmodpacker/mod/{modid}/download", "GET", RateLimitMaxRequests = 10, RateLimitWindowSeconds = 60)]
         public static HttpResponse GetDownloadMod(HttpRequest request)
         {
             if (request.PathParameters.TryGetValue("modid", out var modid))
@@ -257,7 +273,7 @@ namespace KaxSocket
             }
         }
         
-        [HttpHandle("/api/dltbmodpacker/mod/{modid}/filesize", "GET")]
+        [HttpHandle("/api/dltbmodpacker/mod/{modid}/filesize", "GET", RateLimitMaxRequests = 10, RateLimitWindowSeconds = 60)]
         public static HttpResponse GetModFileSize(HttpRequest request)
         {
             if (request.PathParameters.TryGetValue("modid", out var modid))
@@ -295,7 +311,7 @@ namespace KaxSocket
             }
         }
 
-        [HttpHandle("/api/dltbmodpacker/mod/{modid}/version", "GET")]
+        [HttpHandle("/api/dltbmodpacker/mod/{modid}/version", "GET", RateLimitMaxRequests = 10, RateLimitWindowSeconds = 60)]
         public static HttpResponse GetModVersion(HttpRequest request)
         {
             if (request.PathParameters.TryGetValue("modid", out var modid))

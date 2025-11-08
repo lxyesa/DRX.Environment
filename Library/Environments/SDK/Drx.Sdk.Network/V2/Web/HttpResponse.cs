@@ -29,7 +29,7 @@ namespace Drx.Sdk.Network.V2.Web
         /// <summary>
         /// 响应头
         /// </summary>
-        public NameValueCollection Headers { get; set; }
+        public NameValueCollection Headers { get; set; } = new NameValueCollection();
 
         /// <summary>
         /// 响应体 (字符串形式)

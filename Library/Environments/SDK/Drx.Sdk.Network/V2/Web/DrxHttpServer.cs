@@ -32,13 +32,40 @@ namespace Drx.Sdk.Network.V2.Web
         public TimeSpan? MaxAge { get; set; }
     }
 
+    /// <summary>
+    /// 当路由级回调需要放弃自定义处理并让框架执行默认限流行为时，可调用此对象的 Default() 返回值（返回 null 表示使用默认行为）。
+    /// 包含一些上下文信息，供回调参考或记录（只读）。
+    /// </summary>
+    public class OverrideContext
+    {
+        public string RouteKey { get; }
+        public int MaxRequests { get; }
+        public int WindowSeconds { get; }
+        public DateTime TimestampUtc { get; }
+
+        public OverrideContext(string routeKey, int maxRequests, int windowSeconds)
+        {
+            RouteKey = routeKey;
+            MaxRequests = maxRequests;
+            WindowSeconds = windowSeconds;
+            TimestampUtc = DateTime.UtcNow;
+        }
+
+        /// <summary>
+        /// 回调可以返回此方法的返回值以告知框架使用默认行为（即返回 429）。
+        /// 返回值类型为 HttpResponse?（null 表示默认行为）。
+        /// </summary>
+        public HttpResponse? Default() => null;
+    }
+
     public class DrxHttpServer : IAsyncDisposable
     {
         private HttpListener _listener;
         private readonly List<(string Prefix, string RootDir)> _fileRoutes = new();
         private readonly List<RouteEntry> _routes = new();
         // raw route entries 包含可选的速率限制字段
-        private readonly System.Collections.Generic.List<(string Template, Func<HttpListenerContext, Task> Handler, int RateLimitMaxRequests, int RateLimitWindowSeconds)> _rawRoutes = new();
+        // 最后一项为可选的路由级速率触发回调（见 RouteEntry.RateLimitCallback 签名）
+        private readonly System.Collections.Generic.List<(string Template, Func<HttpListenerContext, Task> Handler, int RateLimitMaxRequests, int RateLimitWindowSeconds, Func<int, HttpRequest, OverrideContext, Task<HttpResponse?>>? RateLimitCallback)> _rawRoutes = new();
         private readonly string? _staticFileRoot;
         private readonly List<MiddlewareEntry> _middlewares = new();
         private int _middlewareCounter = 0;
@@ -60,6 +87,13 @@ namespace Drx.Sdk.Network.V2.Web
         private TimeSpan _rateLimitWindow = TimeSpan.Zero;
         private readonly object _rateLimitLock = new object();
 
+        // 触发回调：当全局速率限制被触发时调用（参数：触发次数, HttpRequest）
+        // 如果用户需要异步处理，设置为一个返回 Task 的委托；若为 null 则不调用
+        public Func<int, HttpRequest, Task>? OnGlobalRateLimitExceeded { get; set; }
+
+        // 路由级触发回调（参数：触发次数, HttpRequest, routeKey）
+        public Func<int, HttpRequest, string, Task>? OnRouteRateLimitExceeded { get; set; }
+
         // 路由级速率限制：按 (ip + routeKey) 跟踪请求时间戳
         private readonly System.Collections.Concurrent.ConcurrentDictionary<string, System.Collections.Generic.Queue<DateTime>> _ipRouteRequestHistory = new();
 
@@ -72,6 +106,9 @@ namespace Drx.Sdk.Network.V2.Web
             // 可选的路由级速率限制（默认为0表示无限制）
             public int RateLimitMaxRequests { get; set; }
             public int RateLimitWindowSeconds { get; set; }
+            // 可选的路由级触发回调（若设置则在该路由触发限流时优先调用）
+            // 签名: (int triggeredCount, HttpRequest req, OverrideContext ctx) -> Task<HttpResponse?>
+            public Func<int, HttpRequest, OverrideContext, Task<HttpResponse?>>? RateLimitCallback { get; set; }
         }
 
         private class MiddlewareEntry
@@ -81,6 +118,8 @@ namespace Drx.Sdk.Network.V2.Web
             public int Priority { get; set; }
             public bool OverrideGlobal { get; set; }
             public int AddOrder { get; set; }
+            // 可选：基于 HttpRequest 的中间件实现，签名为 (HttpRequest, Func<HttpRequest, Task<HttpResponse?>>) -> Task<HttpResponse?>
+            public Func<HttpRequest, Func<HttpRequest, Task<HttpResponse?>>, Task<HttpResponse?>>? RequestMiddleware { get; set; }
         }
 
         /// <summary>
@@ -98,7 +137,7 @@ namespace Drx.Sdk.Network.V2.Web
             }
             _staticFileRoot = staticFileRoot;
             _fileRoutes = new List<(string Prefix, string RootDir)>();
-            _rawRoutes = new System.Collections.Generic.List<(string Template, Func<HttpListenerContext, Task> Handler, int RateLimitMaxRequests, int RateLimitWindowSeconds)>();
+            _rawRoutes = new System.Collections.Generic.List<(string Template, Func<HttpListenerContext, Task> Handler, int RateLimitMaxRequests, int RateLimitWindowSeconds, Func<int, HttpRequest, OverrideContext, Task<HttpResponse?>>? RateLimitCallback)>();
             _requestChannel = Channel.CreateBounded<HttpListenerContext>(new BoundedChannelOptions(1000)
             {
                 FullMode = BoundedChannelFullMode.DropOldest
@@ -164,7 +203,8 @@ namespace Drx.Sdk.Network.V2.Web
 
         private void _raw_routes_internal_add(string path, Func<HttpListenerContext, Task> handler, int rateLimitMaxRequests, int rateLimitWindowSeconds)
         {
-            _rawRoutes.Add((path, handler, rateLimitMaxRequests, rateLimitWindowSeconds));
+            // 新增的第五项为路由级速率触发回调，默认 null（稍后在注册时可通过属性绑定）
+            _rawRoutes.Add((path, handler, rateLimitMaxRequests, rateLimitWindowSeconds, null));
         }
 
         /// <summary>
@@ -192,6 +232,7 @@ namespace Drx.Sdk.Network.V2.Web
                         Query = listenerReq.QueryString,
                         Headers = listenerReq.Headers,
                         RemoteEndPoint = listenerReq.RemoteEndPoint,
+                        ClientAddress = HttpRequest.Address.FromEndPoint(listenerReq.RemoteEndPoint, listenerReq.Headers),
                         ListenerContext = ctx
                     };
 
@@ -355,8 +396,8 @@ namespace Drx.Sdk.Network.V2.Web
             }
         }
 
-        // 异步路由的可选速率限制重载
-        public void AddRoute(HttpMethod method, string path, Func<HttpRequest, Task<HttpResponse>> handler, int rateLimitMaxRequests = 0, int rateLimitWindowSeconds = 0)
+        // 异步路由的可选速率限制重载（带可选回调）
+        public void AddRoute(HttpMethod method, string path, Func<HttpRequest, Task<HttpResponse>> handler, int rateLimitMaxRequests = 0, int rateLimitWindowSeconds = 0, Func<int, HttpRequest, OverrideContext, Task<HttpResponse?>>? rateLimitCallback = null)
         {
             try
             {
@@ -367,7 +408,8 @@ namespace Drx.Sdk.Network.V2.Web
                     Handler = handler,
                     ExtractParameters = CreateParameterExtractor(path),
                     RateLimitMaxRequests = rateLimitMaxRequests,
-                    RateLimitWindowSeconds = rateLimitWindowSeconds
+                    RateLimitWindowSeconds = rateLimitWindowSeconds,
+                    RateLimitCallback = rateLimitCallback
                 };
                 _routes.Add(route);
                 Logger.Info($"添加异步路由: {method} {path} (rate={rateLimitMaxRequests}/{rateLimitWindowSeconds}s)");
@@ -573,7 +615,9 @@ namespace Drx.Sdk.Network.V2.Web
                                 var handler = CreateHandlerDelegate(method);
                                 if (handler != null)
                                 {
-                                    server.AddRoute(httpMethod, attr.Path, handler, attr.RateLimitMaxRequests, attr.RateLimitWindowSeconds);
+                                    // 绑定路由级速率限制回调（如果属性中指定了）
+                                    var rateLimitCallback = BindRateLimitCallback(method.DeclaringType!, attr);
+                                    server.AddRoute(httpMethod, attr.Path, handler, attr.RateLimitMaxRequests, attr.RateLimitWindowSeconds, rateLimitCallback);
                                 }
                             }
                             else
@@ -596,6 +640,7 @@ namespace Drx.Sdk.Network.V2.Web
                     foreach (var attr in attributes)
                     {
                         var parameters = method.GetParameters();
+                        // 支持两种中间件签名：老的 (HttpListenerContext) 或新的 (HttpRequest, Func<HttpRequest, HttpResponse>) / (HttpRequest, Func<HttpRequest, Task<HttpResponse>>)
                         if (parameters.Length == 1 && parameters[0].ParameterType == typeof(HttpListenerContext))
                         {
                             var returnType = method.ReturnType;
@@ -616,9 +661,154 @@ namespace Drx.Sdk.Network.V2.Web
 
                             server.AddMiddleware(middlewareHandler, attr.Path, attr.Priority, attr.OverrideGlobal);
                         }
+                        else if (parameters.Length == 2 && parameters[0].ParameterType == typeof(HttpRequest))
+                        {
+                            // 支持第二个参数为同步或异步的 next 委托
+                            var secondParam = parameters[1].ParameterType;
+                            var returnType = method.ReturnType;
+
+                            // 创建一个通用的 RequestMiddleware 包装器
+                            Func<HttpRequest, Func<HttpRequest, Task<HttpResponse?>>, Task<HttpResponse?>> requestMiddleware = null;
+
+                            if (secondParam == typeof(Func<HttpRequest, HttpResponse>))
+                            {
+                                if (returnType == typeof(HttpResponse))
+                                {
+                                    requestMiddleware = async (req, next) =>
+                                    {
+                                        try
+                                        {
+                                            // 将异步 next 包装为同步调用（阻塞），以适配方法期望的签名
+                                            Func<HttpRequest, HttpResponse> nextSync = r => next(r).GetAwaiter().GetResult();
+                                            var resp = (HttpResponse)method.Invoke(null, new object[] { req, nextSync })!;
+                                            return resp ?? new HttpResponse(500, "Internal Server Error");
+                                        }
+                                        catch (TargetInvocationException tie)
+                                        {
+                                            Logger.Error($"执行中间件方法 {method.Name} 时发生错误: {tie.InnerException?.Message ?? tie.Message}");
+                                            return new HttpResponse(500, $"Internal Server Error: {tie.InnerException?.Message ?? tie.Message}");
+                                        }
+                                        catch (Exception ex)
+                                        {
+                                            Logger.Error($"执行中间件方法 {method.Name} 时发生错误: {ex}");
+                                            return new HttpResponse(500, $"Internal Server Error: {ex.Message}");
+                                        }
+                                    };
+                                }
+                                else if (returnType == typeof(Task<HttpResponse>))
+                                {
+                                    requestMiddleware = async (req, next) =>
+                                    {
+                                        try
+                                        {
+                                            Func<HttpRequest, HttpResponse> nextSync = r => next(r).GetAwaiter().GetResult();
+                                            var task = (Task<HttpResponse>)method.Invoke(null, new object[] { req, nextSync })!;
+                                            var resp = await task.ConfigureAwait(false);
+                                            return resp ?? new HttpResponse(500, "Internal Server Error");
+                                        }
+                                        catch (TargetInvocationException tie)
+                                        {
+                                            Logger.Error($"执行中间件方法 {method.Name} 时发生错误: {tie.InnerException?.Message ?? tie.Message}");
+                                            return new HttpResponse(500, $"Internal Server Error: {tie.InnerException?.Message ?? tie.Message}");
+                                        }
+                                        catch (Exception ex)
+                                        {
+                                            Logger.Error($"执行中间件方法 {method.Name} 时发生错误: {ex}");
+                                            return new HttpResponse(500, $"Internal Server Error: {ex.Message}");
+                                        }
+                                    };
+                                }
+                                else
+                                {
+                                    Logger.Warn($"不能注册中间件: 方法 {method.Name} 返回类型不受支持: {returnType}");
+                                    continue;
+                                }
+                            }
+                            else if (secondParam == typeof(Func<HttpRequest, Task<HttpResponse>>))
+                            {
+                                if (returnType == typeof(HttpResponse))
+                                {
+                                    requestMiddleware = async (req, next) =>
+                                    {
+                                        try
+                                        {
+                                            Func<HttpRequest, Task<HttpResponse?>> nextAsync = r => next(r);
+                                            var resp = (HttpResponse)method.Invoke(null, new object[] { req, nextAsync })!;
+                                            return resp ?? new HttpResponse(500, "Internal Server Error");
+                                        }
+                                        catch (TargetInvocationException tie)
+                                        {
+                                            Logger.Error($"执行中间件方法 {method.Name} 时发生错误: {tie.InnerException?.Message ?? tie.Message}");
+                                            return new HttpResponse(500, $"Internal Server Error: {tie.InnerException?.Message ?? tie.Message}");
+                                        }
+                                        catch (Exception ex)
+                                        {
+                                            Logger.Error($"执行中间件方法 {method.Name} 时发生错误: {ex}");
+                                            return new HttpResponse(500, $"Internal Server Error: {ex.Message}");
+                                        }
+                                    };
+                                }
+                                else if (returnType == typeof(Task<HttpResponse>))
+                                {
+                                    requestMiddleware = async (req, next) =>
+                                    {
+                                        try
+                                        {
+                                            Func<HttpRequest, Task<HttpResponse?>> nextAsync = r => next(r);
+                                            var task = (Task<HttpResponse>)method.Invoke(null, new object[] { req, nextAsync })!;
+                                            var resp = await task.ConfigureAwait(false);
+                                            return resp ?? new HttpResponse(500, "Internal Server Error");
+                                        }
+                                        catch (TargetInvocationException tie)
+                                        {
+                                            Logger.Error($"执行中间件方法 {method.Name} 时发生错误: {tie.InnerException?.Message ?? tie.Message}");
+                                            return new HttpResponse(500, $"Internal Server Error: {tie.InnerException?.Message ?? tie.Message}");
+                                        }
+                                        catch (Exception ex)
+                                        {
+                                            Logger.Error($"执行中间件方法 {method.Name} 时发生错误: {ex}");
+                                            return new HttpResponse(500, $"Internal Server Error: {ex.Message}");
+                                        }
+                                    };
+                                }
+                                else
+                                {
+                                    Logger.Warn($"不能注册中间件: 方法 {method.Name} 返回类型不受支持: {returnType}");
+                                    continue;
+                                }
+                            }
+                            else
+                            {
+                                Logger.Warn($"标注为中间件的方法 {method.Name} 的第二个参数类型不支持: {secondParam}");
+                                continue;
+                            }
+
+                            var priority = attr.Priority;
+                            if (priority == -1)
+                            {
+                                priority = (attr.Path == null) ? 0 : 100;
+                            }
+                            if (attr.OverrideGlobal)
+                            {
+                                priority = -1;
+                            }
+
+                            var entry = new MiddlewareEntry
+                            {
+                                Path = attr.Path,
+                                Priority = priority,
+                                OverrideGlobal = attr.OverrideGlobal,
+                                AddOrder = server._middlewareCounter++,
+                                Handler = ctx => Task.CompletedTask,
+                                RequestMiddleware = requestMiddleware
+                            };
+
+                            // 使用内部添加以保持排序逻辑
+                            server._middlewares.Add(entry);
+                        }
                         else
                         {
-                            Logger.Warn($"标注为中间件的方法 {method.Name} 必须接受一个 HttpListenerContext 参数");
+                            Logger.Warn($"标注为中间件的方法 {method.Name} 必须接受 HttpListenerContext 或 (HttpRequest, next) 签名");
                         }
                     }
                 }
@@ -677,6 +867,130 @@ namespace Drx.Sdk.Network.V2.Web
             catch (Exception ex)
             {
                 Logger.Error($"创建处理委托时发生错误: {ex}");
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// 绑定路由级速率限制回调（从属性中指定的方法名解析为编译委托，以优化性能）
+        /// </summary>
+        /// <param name="declaringType">声明路由方法的类型（默认在此类型中查找回调方法）</param>
+        /// <param name="attr">HttpHandle 属性</param>
+        /// <returns>编译后的回调委托，签名为 (int, HttpRequest, OverrideContext) -> Task<HttpResponse?>；若解析失败则返回 null</returns>
+        private static Func<int, HttpRequest, OverrideContext, Task<HttpResponse?>>? BindRateLimitCallback(Type declaringType, HttpHandleAttribute attr)
+        {
+            try
+            {
+                var callbackMethodName = attr.RateLimitCallbackMethodName;
+                if (string.IsNullOrEmpty(callbackMethodName))
+                    return null;
+
+                var targetType = attr.RateLimitCallbackType ?? declaringType;
+                var method = targetType.GetMethod(callbackMethodName, BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
+
+                if (method == null)
+                {
+                    Logger.Warn($"未找到速率限制回调方法: {targetType.FullName}.{callbackMethodName}");
+                    return null;
+                }
+
+                var parameters = method.GetParameters();
+                if (parameters.Length != 3
+                    || parameters[0].ParameterType != typeof(int)
+                    || parameters[1].ParameterType != typeof(HttpRequest)
+                    || parameters[2].ParameterType != typeof(OverrideContext))
+                {
+                    Logger.Warn($"速率限制回调方法 {targetType.FullName}.{callbackMethodName} 的签名不匹配，应为 (int, HttpRequest, OverrideContext)");
+                    return null;
+                }
+
+                var returnType = method.ReturnType;
+                var returnsTask = typeof(Task).IsAssignableFrom(returnType);
+                var returnsHttpResponse = returnType == typeof(HttpResponse);
+                var returnsTaskHttpResponse = returnType == typeof(Task<HttpResponse>) || returnType.IsGenericType && returnType.GetGenericTypeDefinition() == typeof(Task<>) && Nullable.GetUnderlyingType(returnType.GetGenericArguments()[0]) == typeof(HttpResponse);
+
+                if (!returnsHttpResponse && !returnsTaskHttpResponse)
+                {
+                    Logger.Warn($"速率限制回调方法 {targetType.FullName}.{callbackMethodName} 的返回类型不受支持，应为 HttpResponse、HttpResponse?、Task<HttpResponse> 或 Task<HttpResponse?>");
+                    return null;
+                }
+
+                // 使用编译委托（compiled delegate）避免反射调用开销
+                if (returnsTaskHttpResponse)
+                {
+                    // 异步方法，直接创建委托
+                    var compiledDelegate = (Func<int, HttpRequest, OverrideContext, Task<HttpResponse?>>)Delegate.CreateDelegate(
+                        typeof(Func<int, HttpRequest, OverrideContext, Task<HttpResponse?>>), method, throwOnBindFailure: false);
+
+                    if (compiledDelegate != null)
+                    {
+                        return async (count, req, ctx) =>
+                        {
+                            try
+                            {
+                                return await compiledDelegate(count, req, ctx).ConfigureAwait(false);
+                            }
+                            catch (Exception ex)
+                            {
+                                Logger.Error($"执行速率限制回调 {targetType.FullName}.{callbackMethodName} 时发生错误: {ex.Message}");
+                                return null; // 异常时返回 null，使用默认行为
+                            }
+                        };
+                    }
+                }
+                else if (returnsHttpResponse)
+                {
+                    // 同步方法，包装为 Task
+                    var compiledDelegate = (Func<int, HttpRequest, OverrideContext, HttpResponse?>)Delegate.CreateDelegate(
+                        typeof(Func<int, HttpRequest, OverrideContext, HttpResponse?>), method, throwOnBindFailure: false);
+
+                    if (compiledDelegate != null)
+                    {
+                        return (count, req, ctx) =>
+                        {
+                            try
+                            {
+                                var result = compiledDelegate(count, req, ctx);
+                                return Task.FromResult(result);
+                            }
+                            catch (Exception ex)
+                            {
+                                Logger.Error($"执行速率限制回调 {targetType.FullName}.{callbackMethodName} 时发生错误: {ex.Message}");
+                                return Task.FromResult<HttpResponse?>(null);
+                            }
+                        };
+                    }
+                }
+
+                // 如果编译委托失败，回退到反射调用（兼容性保障）
+                Logger.Warn($"无法为 {targetType.FullName}.{callbackMethodName} 创建编译委托，使用反射调用");
+                return async (count, req, ctx) =>
+                {
+                    try
+                    {
+                        var result = method.Invoke(null, new object[] { count, req, ctx });
+                        if (result is Task<HttpResponse?> taskResp)
+                            return await taskResp.ConfigureAwait(false);
+                        else if (result is Task<HttpResponse> taskResp2)
+                            return await taskResp2.ConfigureAwait(false);
+                        else
+                            return (HttpResponse?)result;
+                    }
+                    catch (TargetInvocationException tie)
+                    {
+                        Logger.Error($"执行速率限制回调 {targetType.FullName}.{callbackMethodName} 时发生错误: {tie.InnerException?.Message ?? tie.Message}");
+                        return null;
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Error($"执行速率限制回调 {targetType.FullName}.{callbackMethodName} 时发生错误: {ex.Message}");
+                        return null;
+                    }
+                };
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"绑定速率限制回调时发生错误: {ex}");
                 return null;
             }
         }
@@ -749,7 +1063,7 @@ namespace Drx.Sdk.Network.V2.Web
             }
         }
 
-        private async Task ExecuteMiddlewaresAsync(HttpListenerContext context)
+        private async Task<HttpResponse?> ExecuteMiddlewarePipelineAsync(HttpListenerContext context, HttpRequest request, Func<HttpRequest, Task<HttpResponse?>> finalHandler)
         {
             var rawPath = context.Request.Url?.AbsolutePath ?? "/";
 
@@ -773,122 +1087,164 @@ namespace Drx.Sdk.Network.V2.Web
                 return a.AddOrder.CompareTo(b.AddOrder);
             });
 
-            // 执行中间件
-            foreach (var mw in applicableMiddlewares)
+            // 从最后一个中间件向前组合管道
+            Func<HttpRequest, Task<HttpResponse?>> pipeline = finalHandler;
+            for (int i = applicableMiddlewares.Count - 1; i >= 0; i--)
             {
-                try
+                var mw = applicableMiddlewares[i];
+                var next = pipeline;
+                pipeline = async (req) =>
                 {
-                    await mw.Handler(context).ConfigureAwait(false);
-                }
-                catch (Exception ex)
-                {
-                    Logger.Error($"执行中间件时发生错误: {ex}");
-                    // 中间件错误不阻止后续处理
-                }
+                    if (mw.RequestMiddleware != null)
+                    {
+                        try
+                        {
+                            return await mw.RequestMiddleware(req, next).ConfigureAwait(false);
+                        }
+                        catch (Exception ex)
+                        {
+                            Logger.Error($"执行基于请求的中间件时发生错误: {ex}");
+                            return new HttpResponse(500, $"Internal Server Error: {ex.Message}");
+                        }
+                    }
+                    else
+                    {
+                        try
+                        {
+                            await mw.Handler(context).ConfigureAwait(false);
+                        }
+                        catch (Exception ex)
+                        {
+                            Logger.Error($"执行基于上下文的中间件时发生错误: {ex}");
+                        }
+                        return await next(req).ConfigureAwait(false);
+                    }
+                };
             }
+
+            return await pipeline(request).ConfigureAwait(false);
         }
 
         private async Task HandleRequestAsync(HttpListenerContext context)
         {
             try
             {
-                var clientIP = context.Request.RemoteEndPoint?.Address.ToString();
-
-                // 执行中间件
-                await ExecuteMiddlewaresAsync(context);
-
-                // 优先尝试以流方式服务文件下载（支持大文件与 Range）
-                if (TryServeFileStream(context))
-                {
-                    return; // 已直接响应（流异步在后台执行，不阻塞本线程）
-                }
-                // 尝试原始路由（raw handlers），这些处理器可以直接操作 HttpListenerContext 用于流式上传/下载
-                var rawPath = context.Request.Url?.AbsolutePath ?? "/";
-                foreach (var (Template, Handler, RateLimitMaxRequests, RateLimitWindowSeconds) in _raw_routes_reader())
-                {
-                    if (rawPath.StartsWith(Template, StringComparison.OrdinalIgnoreCase))
-                    {
-                        try
-                        {
-                            // 路由级速率限制优先
-                            if (!string.IsNullOrEmpty(clientIP) && RateLimitMaxRequests > 0 && RateLimitWindowSeconds > 0)
-                            {
-                                var routeKey = $"RAW:{Template}";
-                                if (IsRateLimitExceededForRoute(clientIP, routeKey, RateLimitMaxRequests, RateLimitWindowSeconds))
-                                {
-                                    SendResponse(context.Response, new HttpResponse(429, "Too Many Requests"));
-                                    return;
-                                }
-                            }
-
-                            // 若没有路由级超限，则检查全局限流（如果设置）
-                            if (!string.IsNullOrEmpty(clientIP) && RateLimitMaxRequests <= 0 && IsRateLimitExceeded(clientIP))
-                            {
-                                SendResponse(context.Response, new HttpResponse(429, "Too Many Requests"));
-                                return;
-                            }
-
-                            await Handler(context).ConfigureAwait(false);
-                        }
-                        catch (Exception ex)
-                        {
-                            Logger.Error($"Raw handler 错误: {ex}");
-                            try { context.Response.StatusCode = 500; using var sw = new StreamWriter(context.Response.OutputStream, Encoding.UTF8, leaveOpen: false); sw.Write("Internal Server Error"); } catch { }
-                        }
-                        return;
-                    }
-                }
-
+                // 先解析请求，以便基于 HttpRequest 的中间件能访问
                 var request = await ParseRequestAsync(context.Request);
-                HttpResponse response;
+                request.ListenerContext = context;
 
-                var method = ParseHttpMethod(request.Method);
-                if (method != null)
+                // 最终处理器：包含文件流、原始路由、常规模式路由与静态文件回退的逻辑
+                Func<HttpRequest, Task<HttpResponse?>> finalHandler = async (req) =>
                 {
-                    foreach (var route in _routes)
+                    // 优先尝试以流方式服务文件下载（支持大文件与 Range）
+                    if (TryServeFileStream(context))
                     {
-                        if (route.Method == method)
+                        return null; // 已直接响应
+                    }
+
+                    var clientIP = req.ClientAddress.Ip ?? context.Request.RemoteEndPoint?.Address.ToString();
+
+                    // 尝试原始路由（raw handlers）
+                    var rawPath = context.Request.Url?.AbsolutePath ?? "/";
+                    foreach (var (Template, Handler, RateLimitMaxRequests, RateLimitWindowSeconds, RateLimitCallback) in _raw_routes_reader())
+                    {
+                        if (rawPath.StartsWith(Template, StringComparison.OrdinalIgnoreCase))
                         {
-                            var parameters = route.ExtractParameters(request.Path);
-                            if (parameters != null)
+                            try
                             {
-                                request.PathParameters = parameters;
-                                // 路由级速率限制优先
-                                if (!string.IsNullOrEmpty(clientIP) && route.RateLimitMaxRequests > 0 && route.RateLimitWindowSeconds > 0)
+                                // 路由级速率限制优先（支持自定义回调）
+                                if (!string.IsNullOrEmpty(clientIP) && RateLimitMaxRequests > 0 && RateLimitWindowSeconds > 0)
                                 {
-                                    var routeKey = $"ROUTE:{route.Method}:{route.Template}";
-                                    if (IsRateLimitExceededForRoute(clientIP, routeKey, route.RateLimitMaxRequests, route.RateLimitWindowSeconds))
+                                    var routeKey = $"RAW:{Template}";
+                                    var (isExceeded, customResponse) = await CheckRateLimitForRouteAsync(clientIP, routeKey, RateLimitMaxRequests, RateLimitWindowSeconds, req, RateLimitCallback).ConfigureAwait(false);
+                                    
+                                    if (isExceeded)
                                     {
-                                        response = new HttpResponse(429, "Too Many Requests");
-                                        goto respond;
+                                        // 如果有自定义响应，使用它；否则返回默认 429
+                                        return customResponse ?? new HttpResponse(429, "Too Many Requests");
                                     }
                                 }
 
-                                // 若未命中路由级限制，则检查全局限流
-                                if (!string.IsNullOrEmpty(clientIP) && (route.RateLimitMaxRequests == 0) && IsRateLimitExceeded(clientIP))
+                                // 若没有路由级超限，则检查全局限流（如果设置）
+                                if (!string.IsNullOrEmpty(clientIP) && RateLimitMaxRequests <= 0 && IsRateLimitExceeded(clientIP, req))
                                 {
-                                    response = new HttpResponse(429, "Too Many Requests");
-                                    goto respond;
+                                    return new HttpResponse(429, "Too Many Requests");
                                 }
 
-                                response = await route.Handler(request);
-                                goto respond;
+                                await Handler(context).ConfigureAwait(false);
+                                return null; // raw handler 已直接写入响应
+                            }
+                            catch (Exception ex)
+                            {
+                                Logger.Error($"Raw handler 错误: {ex}");
+                                return new HttpResponse(500, "Internal Server Error");
+                            }
+                        }
+                    }                    // 常规模式路由匹配
+                    var method = ParseHttpMethod(req.Method);
+                    if (method != null)
+                    {
+                        foreach (var route in _routes)
+                        {
+                            if (route.Method == method)
+                            {
+                                var parameters = route.ExtractParameters(req.Path);
+                                if (parameters != null)
+                                {
+                                    req.PathParameters = parameters;
+
+                                    // 路由级速率限制优先（支持自定义回调）
+                                    if (!string.IsNullOrEmpty(clientIP) && route.RateLimitMaxRequests > 0 && route.RateLimitWindowSeconds > 0)
+                                    {
+                                        var routeKey = $"ROUTE:{route.Method}:{route.Template}";
+                                        var (isExceeded, customResponse) = await CheckRateLimitForRouteAsync(clientIP, routeKey, route.RateLimitMaxRequests, route.RateLimitWindowSeconds, req, route.RateLimitCallback).ConfigureAwait(false);
+
+                                        if (isExceeded)
+                                        {
+                                            // 如果有自定义响应，使用它；否则返回默认 429
+                                            return customResponse ?? new HttpResponse(429, "Too Many Requests");
+                                        }
+                                    }
+
+                                    // 若未命中路由级限制，则检查全局限流
+                                    if (!string.IsNullOrEmpty(clientIP) && (route.RateLimitMaxRequests == 0) && IsRateLimitExceeded(clientIP, req))
+                                    {
+                                        return new HttpResponse(429, "Too Many Requests");
+                                    }
+
+                                    try
+                                    {
+                                        var resp = await route.Handler(req).ConfigureAwait(false);
+                                        return resp;
+                                    }
+                                    catch (Exception ex)
+                                    {
+                                        Logger.Error($"执行路由处理器时发生错误: {ex}");
+                                        return new HttpResponse(500, $"Internal Server Error: {ex.Message}");
+                                    }
+                                }
                             }
                         }
                     }
+
+                    // 如果没有匹配的路由，尝试静态文件
+                    if (_staticFileRoot != null && TryServeStaticFile(req.Path, out var fileResponse))
+                    {
+                        return fileResponse ?? new HttpResponse(500, "Internal Server Error");
+                    }
+
+                    return new HttpResponse(404, "Not Found");
+                };
+
+                // 组合并执行中间件管道
+                var response = await ExecuteMiddlewarePipelineAsync(context, request, finalHandler).ConfigureAwait(false);
+
+                if (response == null)
+                {
+                    // 中间件或 raw/file 已经直接响应
+                    return;
                 }
 
-                // 如果没有匹配的路由，尝试静态文件
-                if (_staticFileRoot != null && TryServeStaticFile(request.Path, out var fileResponse))
-                {
-                    response = fileResponse ?? new HttpResponse(500, "Internal Server Error");
-                }
-                else
-                {
-                    response = new HttpResponse(404, "Not Found");
-                }
-
-            respond:
                 SendResponse(context.Response, response);
             }
             catch (Exception ex)
@@ -899,7 +1255,7 @@ namespace Drx.Sdk.Network.V2.Web
             }
         }
 
-        private IEnumerable<(string Template, Func<HttpListenerContext, Task> Handler, int RateLimitMaxRequests, int RateLimitWindowSeconds)> _raw_routes_reader() => _rawRoutes;
+        private IEnumerable<(string Template, Func<HttpListenerContext, Task> Handler, int RateLimitMaxRequests, int RateLimitWindowSeconds, Func<int, HttpRequest, OverrideContext, Task<HttpResponse?>>? RateLimitCallback)> _raw_routes_reader() => _rawRoutes;
 
         /// <summary>
         /// 添加文件路由，将 URL 前缀映射到本地目录。例如 AddFileRoute("/download/", "C:\\wwwroot")
@@ -1190,7 +1546,8 @@ namespace Drx.Sdk.Network.V2.Web
                     Body = body,
                     BodyBytes = bodyBytes,
                     Content = body,
-                    RemoteEndPoint = request.RemoteEndPoint
+                    RemoteEndPoint = request.RemoteEndPoint,
+                    ClientAddress = HttpRequest.Address.FromEndPoint(request.RemoteEndPoint, request.Headers)
                 };
             }
             catch (Exception ex)
@@ -1212,7 +1569,8 @@ namespace Drx.Sdk.Network.V2.Web
                     Path = request.Url!.AbsolutePath,
                     Query = request.QueryString,
                     Headers = request.Headers,
-                    RemoteEndPoint = request.RemoteEndPoint
+                    RemoteEndPoint = request.RemoteEndPoint,
+                    ClientAddress = HttpRequest.Address.FromEndPoint(request.RemoteEndPoint, request.Headers)
                 };
 
                 var contentType = request.Headers["Content-Type"] ?? request.Headers["content-type"];
@@ -1816,7 +2174,7 @@ namespace Drx.Sdk.Network.V2.Web
         /// 检查指定IP是否超出速率限制。
         /// 如果未设置限制或未超出，返回false；否则返回true并记录请求。
         /// </summary>
-        private bool IsRateLimitExceeded(string ip)
+        private bool IsRateLimitExceeded(string ip, HttpRequest? request = null)
         {
             int maxRequests;
             TimeSpan window;
@@ -1841,6 +2199,24 @@ namespace Drx.Sdk.Network.V2.Web
             // 检查是否超出
             if (queue.Count >= maxRequests)
             {
+                // 触发次数 = 当前队列中的请求数 + 本次尝试
+                int triggeredCount = queue.Count + 1;
+                if (request != null && OnGlobalRateLimitExceeded != null)
+                {
+                    var cb = OnGlobalRateLimitExceeded;
+                    _ = Task.Run(async () =>
+                    {
+                        try
+                        {
+                            await cb(triggeredCount, request).ConfigureAwait(false);
+                        }
+                        catch (Exception ex)
+                        {
+                            Logger.Warn($"执行全局速率限制回调时发生错误: {ex.Message}");
+                        }
+                    });
+                }
+
                 return true;
             }
 
@@ -1854,7 +2230,7 @@ namespace Drx.Sdk.Network.V2.Web
         /// routeKey 是唯一标识某路由的字符串（例如: "ROUTE:GET:/api/foo" 或 "RAW:/upload"）。
         /// 如果未设置限制返回 false；否则在检查并记录请求后返回是否超出。
         /// </summary>
-        private bool IsRateLimitExceededForRoute(string ip, string routeKey, int maxRequests, int windowSeconds)
+        private bool IsRateLimitExceededForRoute(string ip, string routeKey, int maxRequests, int windowSeconds, HttpRequest? request = null)
         {
             if (maxRequests <= 0 || windowSeconds <= 0) return false;
 
@@ -1873,11 +2249,111 @@ namespace Drx.Sdk.Network.V2.Web
 
             if (queue.Count >= maxRequests)
             {
+                int triggeredCount = queue.Count + 1;
+                // 记录此次超限请求，使得 count 能够继续增长
+                queue.Enqueue(now);
+                
+                if (request != null && OnRouteRateLimitExceeded != null)
+                {
+                    var cb = OnRouteRateLimitExceeded;
+                    _ = Task.Run(async () =>
+                    {
+                        try
+                        {
+                            await cb(triggeredCount, request, routeKey).ConfigureAwait(false);
+                        }
+                        catch (Exception ex)
+                        {
+                            Logger.Warn($"执行路由速率限制回调时发生错误: {ex.Message}");
+                        }
+                    });
+                }
+
                 return true;
             }
 
             queue.Enqueue(now);
             return false;
+        }
+
+        /// <summary>
+        /// 检查路由级速率限制，如果超限则优先调用路由级回调并返回其响应（若有）；否则返回特定响应表示处理结果。
+        /// 带回调的版本：支持路由自定义超限响应。
+        /// </summary>
+        /// <param name="ip">客户端 IP</param>
+        /// <param name="routeKey">路由标识符</param>
+        /// <param name="maxRequests">最大请求数</param>
+        /// <param name="windowSeconds">时间窗口（秒）</param>
+        /// <param name="request">当前请求</param>
+        /// <param name="rateLimitCallback">路由级回调（可选），如果设置且触发限流，将调用此回调获取自定义响应</param>
+        /// <returns>返回元组 (isExceeded, customResponse)：isExceeded 表示是否超限，customResponse 为自定义响应（若回调设置且返回非 null）</returns>
+        private async Task<(bool isExceeded, HttpResponse? customResponse)> CheckRateLimitForRouteAsync(string ip, string routeKey, int maxRequests, int windowSeconds, HttpRequest request, Func<int, HttpRequest, OverrideContext, Task<HttpResponse?>>? rateLimitCallback)
+        {
+            if (maxRequests <= 0 || windowSeconds <= 0) return (false, null);
+
+            var now = DateTime.UtcNow;
+            var window = TimeSpan.FromSeconds(windowSeconds);
+            var cutoff = now - window;
+
+            var dictKey = ip + "#" + routeKey;
+            var queue = _ipRouteRequestHistory.GetOrAdd(dictKey, _ => new System.Collections.Generic.Queue<DateTime>());
+
+            // 清理过期请求
+            while (queue.Count > 0 && queue.Peek() < cutoff)
+            {
+                queue.Dequeue();
+            }
+
+            if (queue.Count >= maxRequests)
+            {
+                int triggeredCount = queue.Count + 1;
+                // 记录此次超限请求，使得 count 能够继续增长
+                queue.Enqueue(now);
+
+                // 优先调用路由级回调（如果设置）
+                if (rateLimitCallback != null)
+                {
+                    try
+                    {
+                        var ctx = new OverrideContext(routeKey, maxRequests, windowSeconds);
+                        var customResponse = await rateLimitCallback(triggeredCount, request, ctx).ConfigureAwait(false);
+
+                        // 触发全局通知回调（如果设置）
+                        if (OnRouteRateLimitExceeded != null)
+                        {
+                            var cb = OnRouteRateLimitExceeded;
+                            _ = Task.Run(async () =>
+                            {
+                                try { await cb(triggeredCount, request, routeKey).ConfigureAwait(false); }
+                                catch (Exception ex) { Logger.Warn($"执行路由速率限制通知回调时发生错误: {ex.Message}"); }
+                            });
+                        }
+
+                        // 如果回调返回 null（或调用了 context.Default()），表示使用默认行为
+                        return (true, customResponse); // 返回超限 + 自定义响应（可能为 null）
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Error($"执行路由级速率限制回调时发生错误: {ex.Message}，回退到默认行为");
+                    }
+                }
+
+                // 如果没有回调或回调抛异常，触发全局通知
+                if (OnRouteRateLimitExceeded != null)
+                {
+                    var cb = OnRouteRateLimitExceeded;
+                    _ = Task.Run(async () =>
+                    {
+                        try { await cb(triggeredCount, request, routeKey).ConfigureAwait(false); }
+                        catch (Exception ex) { Logger.Warn($"执行路由速率限制通知回调时发生错误: {ex.Message}"); }
+                    });
+                }
+
+                return (true, null); // 超限且无自定义响应，使用默认 429
+            }
+
+            queue.Enqueue(now);
+            return (false, null); // 未超限
         }
 
         /// <summary>
@@ -1982,6 +2458,31 @@ namespace Drx.Sdk.Network.V2.Web
         /// 与 RateLimitMaxRequests 一起使用表示在该时间窗内最多允许的请求数。
         /// </summary>
         public int RateLimitWindowSeconds { get; set; }
+
+        /// <summary>
+        /// 可选：指定用于路由级速率触发回调的方法名（字符串）。
+        /// 若指定，`RegisterHandlersFromAssembly` 会尝试在声明此属性的类型或通过 RateLimitCallbackType 指定的类型中查找此静态方法并绑定为回调。
+        /// </summary>
+        public string? RateLimitCallbackMethodName { get; set; }
+
+        /// <summary>
+        /// 可选：指定回调方法所在的类型（当回调方法不在声明该路由的方法所在类型中时使用）。
+        /// </summary>
+        public Type? RateLimitCallbackType { get; set; }
+
+        /// <summary>
+        /// 新的构造重载，允许通过字符串直接指定回调方法名（在同一类型内查找）。
+        /// 使用示例： [HttpHandle("/api/hello", "GET", "TestRateLimit")]（将在当前定义类型中查找静态方法 TestRateLimit）
+        /// </summary>
+        /// <param name="path"></param>
+        /// <param name="method"></param>
+        /// <param name="rateLimitCallbackMethodName"></param>
+        public HttpHandleAttribute(string path, string method, string rateLimitCallbackMethodName)
+        {
+            Path = path;
+            Method = method;
+            RateLimitCallbackMethodName = rateLimitCallbackMethodName;
+        }
 
         /// <summary>
         /// 构造函数

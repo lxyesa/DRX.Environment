@@ -1,4 +1,5 @@
 using System;
+using System.Security.Claims;
 using System.Text.Json.Nodes;
 using System.Threading.Tasks;
 using Drx.Sdk.Network.V2.Web;
@@ -9,10 +10,135 @@ namespace KaxSocket.Handlers;
 
 public class KaxHttp
 {
+    #region 辅助方法
+
+    static KaxHttp()
+    {
+        // 配置 JWT
+        JwtHelper.Configure(new JwtHelper.JwtConfig
+        {
+            SecretKey = "A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6", // 建议使用环境变量
+            Issuer = "KaxSocket",
+            Audience = "KaxUsers",
+            Expiration = TimeSpan.FromHours(1)
+        });
+    }
+
     private static string GenerateLoginToken(UserData user)
     {
-        var tokenSource = $"{user.UserName}:{DateTimeOffset.UtcNow.ToUnixTimeSeconds()}:{Guid.NewGuid()}";
-        return Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(CommonUtility.ComputeSHA256Hash(tokenSource)));
+        return JwtHelper.GenerateToken(user.Id.ToString(), user.UserName, user.Email);
+    }
+
+    private static ClaimsPrincipal ValidateToken(string token)
+    {
+        return JwtHelper.ValidateToken(token);
+    }
+    
+    
+    private static bool IsUserBanned(string userName)
+    {
+        var user = KaxGlobal.UserDatabase.QueryFirstAsync(u => u.UserName == userName).Result;
+        if (user != null)
+        {
+            Logger.Info($"检查用户 {userName} 的封禁状态: IsBanned={user.Status.IsBanned}");
+            Logger.Info($"封禁过期时间: {user.Status.BanExpiresAt}, 当前时间: {DateTimeOffset.UtcNow.ToUnixTimeSeconds()}");
+            Logger.Info($"封禁原因: {user.Status.BanReason}");
+
+            if (user.Status.IsBanned)
+            {
+                // 检查封禁是否已过期
+                var currentTime = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+                if (user.Status.BanExpiresAt > 0 && currentTime >= user.Status.BanExpiresAt)
+                {
+                    // 封禁已过期，解除封禁
+                    user.Status.IsBanned = false;
+                    user.Status.BanExpiresAt = 0;
+                    user.Status.BanReason = string.Empty;
+                    _ = KaxGlobal.UserDatabase.EditWhereAsync(u => u.Id == user.Id, user);
+                    Logger.Info($"用户 {user.UserName} 的封禁已过期，已自动解除封禁。");
+                    return false;
+                }
+                return true;
+            }
+        }
+        else
+        {
+            Logger.Warn($"检查封禁状态时未找到用户：{userName}");
+        }
+        return false;
+    }
+
+    private static async Task BanUser(string userName, string reason, long durationSeconds)
+    {
+        var user = KaxGlobal.UserDatabase.QueryFirstAsync(u => u.UserName == userName).Result;
+        if (user != null && !user.Status.IsBanned)
+        {
+            user.Status.IsBanned = true;
+            user.Status.BannedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+            user.Status.BanExpiresAt = user.Status.BannedAt + durationSeconds;
+            user.Status.BanReason = reason;
+            _ = await KaxGlobal.UserDatabase.EditWhereAsync(u => u.Id == user.Id, user);
+            Logger.Info($"已封禁用户 {user.UserName}，原因：{reason}，持续时间：{durationSeconds} 秒。");
+        }
+    }
+
+    private static async Task UnBanUser(string userName)
+    {
+        var user = await KaxGlobal.UserDatabase.QueryFirstAsync(u => u.UserName == userName);
+        if (user != null && user.Status.IsBanned)
+        {
+            user.Status.IsBanned = false;
+            user.Status.BanExpiresAt = 0;
+            user.Status.BanReason = string.Empty;
+            _ = KaxGlobal.UserDatabase.EditWhereAsync(u => u.Id == user.Id, user);
+            Logger.Info($"已解除用户 {user.UserName} 的封禁状态。");
+        }
+    }
+
+    #endregion
+
+
+
+
+
+
+
+    #region Rate Limit Callback
+
+
+    public static HttpResponse RateLimitCallback(int count, HttpRequest request, OverrideContext overrideContext)
+    {
+        if (count > 5)
+        {
+            var userToken = request.Headers[HttpHeaders.Authorization]?.Replace("Bearer ", "");
+            var userName = JwtHelper.ValidateToken(userToken!)?.Identity?.Name ?? "未知用户";
+            _ = BanUser(userName, "短时间内请求过于频繁，自动封禁。", 3600); // 封禁 1 小时
+            return new HttpResponse(429, "请求过于频繁，您的账号暂时被封禁。");
+        }
+        else
+        {
+            return new HttpResponse(429, "请求过于频繁，请稍后再试。");
+        }
+    }
+
+    #endregion
+
+
+
+
+
+
+
+
+    #region HTTP Handlers
+
+
+    [HttpMiddleware]
+    public static HttpResponse Echo(HttpRequest request, Func<HttpRequest, HttpResponse> next)
+    {
+        Logger.Info($"收到 HTTP 请求: {request.Method} {request.Path} from {request.ClientAddress.Ip}:{request.ClientAddress.Port}");
+        // 继续处理请求
+        return next(request);
     }
 
     [HttpHandle("/api/user/register", "POST", RateLimitMaxRequests = 3, RateLimitWindowSeconds = 60)]
@@ -73,13 +199,10 @@ public class KaxHttp
             }
 
             // 处理注册逻辑
-            Logger.Info($"用户注册请求：{userName}, {email}");
-
             // 检查用户名或邮箱是否已被注册
             var userExists = KaxGlobal.UserDatabase.QueryFirstAsync(u => u.UserName == userName || u.Email == email).Result;
             if (userExists != null)
             {
-                Logger.Warn($"用户注册失败，用户名或电子邮箱已被注册：{userName}, {email}");
                 return new HttpResponse()
                 {
                     StatusCode = 409,
@@ -95,7 +218,6 @@ public class KaxHttp
                 Email = email,
             });
 
-            Logger.Info($"用户注册成功：{userName}, {email}");
             return new HttpResponse()
             {
                 StatusCode = 201,
@@ -153,19 +275,17 @@ public class KaxHttp
         var userExists = KaxGlobal.UserDatabase.QueryFirstAsync(u => u.UserName == userName && u.PasswordHash == CommonUtility.ComputeSHA256Hash(password)).Result;
         if (userExists != null)
         {
-            userExists.LoginToken = GenerateLoginToken(userExists);
+            var token = GenerateLoginToken(userExists);
             userExists.LastLoginAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
             await KaxGlobal.UserDatabase.EditWhereAsync(u => u.Id == userExists.Id, userExists);
 
-            Logger.Info($"生成登录令牌：{userExists.LoginToken}");
-            Logger.Info($"用户登录成功：{userName}");
             return new HttpResponse()
             {
                 StatusCode = 200,
                 Body = new JsonObject
                 {
                     ["message"] = "登录成功。",
-                    ["login_token"] = userExists.LoginToken,
+                    ["login_token"] = token,
                 }.ToJsonString(),
             };
         }
@@ -184,41 +304,79 @@ public class KaxHttp
     * 测试用的受保护路由，需提供有效的登录令牌才能访问
     * 用于测试登录令牌的有效性
     */
-    [HttpHandle("/api/hello/{token}", "GET")]
+    [HttpHandle("/api/hello", "GET", RateLimitMaxRequests = 1, RateLimitWindowSeconds = 60, RateLimitCallbackMethodName = nameof(RateLimitCallback))]
     public static HttpResponse Get_SayHello(HttpRequest request)
     {
-        var token = request.PathParameters["token"];
-        if (string.IsNullOrEmpty(token))
+        try
         {
-            return new HttpResponse()
+            var principal = JwtHelper.ValidateTokenFromRequest(request);
+            if (principal == null)
             {
-                StatusCode = 400,
-                Body = "无效的登录令牌。",
-            };
-        }
+                return new HttpResponse()
+                {
+                    StatusCode = 401,
+                    Body = "无效的登录令牌。",
+                };
+            }
 
-        var userExists = KaxGlobal.UserDatabase.QueryFirstAsync(u => u.LoginToken == token).Result;
-        if (userExists == null)
-        {
+            var userName = principal.Identity?.Name;
+            if (IsUserBanned(userName!))
+            {
+                return new HttpResponse()
+                {
+                    StatusCode = 403,
+                    Body = "您的账号已被封禁，无法访问此资源。",
+                };
+            }
             return new HttpResponse()
             {
-                StatusCode = 401,
-                Body = "无效的登录令牌。",
+                StatusCode = 200,
+                Body = $"Hello, {userName}! Your token is valid.",
             };
         }
-        else if (userExists.LoginToken != token)
+        catch (Exception ex)
         {
+            Logger.Error("验证令牌时发生异常: " + ex.Message);
             return new HttpResponse()
             {
-                StatusCode = 401,
-                Body = "无效的登录令牌。",
+                StatusCode = 500,
+                Body = "服务器错误，无法处理请求。",
             };
         }
-
-        return new HttpResponse()
-        {
-            StatusCode = 200,
-            Body = $"Hello, your token is: {token}",
-        };
     }
+
+    [HttpHandle("/api/user/unban?{userName}?{dev_code}", "POST")]
+    public static HttpResponse Post_UnBanUser(HttpRequest request)
+    {
+        try
+        {
+            var userName = request.PathParameters["userName"];
+            var devCode = request.PathParameters["dev_code"];
+            if (devCode != "yuerzuikeai001")
+            {
+                return new HttpResponse()
+                {
+                    StatusCode = 403,
+                    Body = "无效的开发者代码，无法解除封禁。",
+                };
+            }
+            _ = UnBanUser(userName);
+            return new HttpResponse()
+            {
+                StatusCode = 200,
+                Body = $"已解除用户 {userName} 的封禁状态。",
+            };
+        }
+        catch (Exception ex)
+        {
+            Logger.Error("解除封禁时发生异常: " + ex.Message);
+            return new HttpResponse()
+            {
+                StatusCode = 500,
+                Body = "服务器错误，无法处理请求。",
+            };
+        }
+    }
+
+    #endregion
 }

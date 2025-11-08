@@ -37,12 +37,12 @@ namespace Drx.Sdk.Network.V2.Web
         /// <summary>
         /// 查询参数
         /// </summary>
-        public NameValueCollection Query { get; set; }
+        public NameValueCollection Query { get; set; } = new NameValueCollection();
 
         /// <summary>
         /// 请求头
         /// </summary>
-        public NameValueCollection Headers { get; set; }
+        public NameValueCollection Headers { get; set; } = new NameValueCollection();
 
         /// <summary>
         /// 请求体（字符串形式）
@@ -79,6 +79,72 @@ namespace Drx.Sdk.Network.V2.Web
         /// 远端终结点信息（可用于记录来源或回传）
         /// </summary>
         public IPEndPoint RemoteEndPoint { get; set; }
+
+        /// <summary>
+        /// 客户端地址信息的便捷结构体，包含 IP、Port、EndPoint、Host 等字段，路由可直接使用该字段获取客户端网络信息。
+        /// </summary>
+        public Address ClientAddress { get; set; }
+
+        /// <summary>
+        /// 表示客户端地址信息的结构体
+        /// </summary>
+        public struct Address
+        {
+            /// <summary>
+            /// IP 地址字符串（例如 192.168.1.1 或 ::1）
+            /// </summary>
+            public string? Ip { get; set; }
+
+            /// <summary>
+            /// 远端端口号
+            /// </summary>
+            public int Port { get; set; }
+
+            /// <summary>
+            /// 原始的 IPEndPoint（如果可用）
+            /// </summary>
+            public IPEndPoint? EndPoint { get; set; }
+
+            /// <summary>
+            /// 请求头中的 Host 字段（如果存在）
+            /// </summary>
+            public string? Host { get; set; }
+
+            /// <summary>
+            /// 是否为 IPv6 地址
+            /// </summary>
+            public bool IsIPv6 { get; set; }
+
+            /// <summary>
+            /// 返回可读的字符串表示
+            /// </summary>
+            /// <returns>优先返回 EndPoint.ToString，否则返回 Ip</returns>
+            public override string ToString()
+            {
+                if (EndPoint != null) return EndPoint.ToString();
+                return Ip ?? string.Empty;
+            }
+
+            /// <summary>
+            /// 从 IPEndPoint 与 Headers 构造 Address 实例
+            /// </summary>
+            /// <param name="ep">远端终结点（可能为 null）</param>
+            /// <param name="headers">请求头（可能为 null）</param>
+            /// <returns>填充好的 Address 结构体</returns>
+            public static Address FromEndPoint(IPEndPoint? ep, System.Collections.Specialized.NameValueCollection? headers)
+            {
+                var a = new Address();
+                if (ep != null)
+                {
+                    a.EndPoint = ep;
+                    a.Ip = ep.Address.ToString();
+                    a.Port = ep.Port;
+                    try { a.IsIPv6 = ep.AddressFamily == System.Net.Sockets.AddressFamily.InterNetworkV6; } catch { a.IsIPv6 = false; }
+                }
+                try { a.Host = headers?[("Host")] ?? headers?[("host")]; } catch { a.Host = null; }
+                return a;
+            }
+        }
 
         /// <summary>
         /// 路径参数（从模板化路径中提取的命名参数）

@@ -7,6 +7,7 @@ namespace Drx.Sdk.Network.DataBase.Sqlite
     /// </summary>
     public interface IDataTable
     {
+        int Id { get; set; }
         /// <summary>
         /// 父表主键ID
         /// </summary>

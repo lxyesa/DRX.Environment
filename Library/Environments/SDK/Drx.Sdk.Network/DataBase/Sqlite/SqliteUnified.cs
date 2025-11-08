@@ -836,7 +836,6 @@ namespace Drx.Sdk.Network.DataBase.Sqlite
                 kvp.Key != "Id");
 
             if (!mainProperties.Any()) return;
-
             using var connection = new SqliteConnection(_connectionString);
             connection.Open();
             using var transaction = connection.BeginTransaction();
@@ -844,17 +843,194 @@ namespace Drx.Sdk.Network.DataBase.Sqlite
             {
                 var sets = string.Join(", ", mainProperties.Select(kvp => $"[{kvp.Key}] = @{kvp.Key}"));
                 var sql = $"UPDATE [{_tableName}] SET {sets} WHERE [Id] = @id";
-                using var cmd = new SqliteCommand(sql, connection, transaction);
-                // 使用缓存 getter 获取传入实体的值（但不允许修改 Id）
-                var getterDict = GetterCache[typeof(T)];
-                foreach (var prop in mainProperties)
+                using (var cmd = new SqliteCommand(sql, connection, transaction))
                 {
-                    var rawValue = getterDict[prop.Key](entity);
-                    var value = ToDbDateTimeString(rawValue, prop.Value.PropertyType) ?? DBNull.Value;
-                    cmd.Parameters.AddWithValue($"@{prop.Key}", value);
+                    // 使用缓存 getter 获取传入实体的值（但不允许修改 Id）
+                    var getterDict = GetterCache[typeof(T)];
+                    foreach (var prop in mainProperties)
+                    {
+                        var rawValue = getterDict[prop.Key](entity);
+                        var value = ToDbDateTimeString(rawValue, prop.Value.PropertyType) ?? DBNull.Value;
+                        cmd.Parameters.AddWithValue($"@{prop.Key}", value);
+                    }
+                    cmd.Parameters.AddWithValue("@id", id);
+                    cmd.ExecuteNonQuery();
                 }
-                cmd.Parameters.AddWithValue("@id", id);
-                cmd.ExecuteNonQuery();
+
+                // 同步一对一子表（删除旧的再插入）
+                foreach (var dataTableProp in _dataTableProperties)
+                {
+                    var childTable = $"{_tableName}_{dataTableProp.Key}";
+                    var deleteSql = $"DELETE FROM [{childTable}] WHERE [ParentId] = @parentId";
+                    using (var deleteCmd = new SqliteCommand(deleteSql, connection, transaction))
+                    {
+                        deleteCmd.Parameters.AddWithValue("@parentId", id);
+                        deleteCmd.ExecuteNonQuery();
+                    }
+
+                    var childEntity = dataTableProp.Value.GetValue(entity) as IDataTable;
+                    if (childEntity != null)
+                    {
+                        childEntity.ParentId = id;
+                        InsertChildEntity(connection, transaction, childEntity, childTable);
+                    }
+                }
+
+                // 同步一对多子表
+                foreach (var dataTableListProp in _dataTableListProperties)
+                {
+                    var childList = dataTableListProp.Value.GetValue(entity) as IEnumerable;
+                    if (childList != null)
+                    {
+                        var tableName = $"{_tableName}_{dataTableListProp.Key}";
+                        var deleteSql = $"DELETE FROM [{tableName}] WHERE [ParentId] = @parentId";
+                        using (var deleteCommand = new SqliteCommand(deleteSql, connection, transaction))
+                        {
+                            deleteCommand.Parameters.AddWithValue("@parentId", id);
+                            deleteCommand.ExecuteNonQuery();
+                        }
+
+                        foreach (IDataTable childEntity in childList)
+                        {
+                            if (childEntity != null)
+                            {
+                                childEntity.ParentId = id;
+                                InsertChildEntity(connection, transaction, childEntity, tableName);
+                            }
+                        }
+                    }
+                }
+
+                // 处理数组属性
+                foreach (var arrayProp in _arrayProperties)
+                {
+                    var arr = arrayProp.Value.GetValue(entity) as Array;
+                    if (arr != null)
+                    {
+                        var tableName = $"{_tableName}_{arrayProp.Key}";
+                        var deleteSql = $"DELETE FROM [{tableName}] WHERE [ParentId] = @parentId";
+                        using (var deleteCommand = new SqliteCommand(deleteSql, connection, transaction))
+                        {
+                            deleteCommand.Parameters.AddWithValue("@parentId", id);
+                            deleteCommand.ExecuteNonQuery();
+                        }
+
+                        foreach (var elem in arr)
+                        {
+                            if (elem != null)
+                            {
+                                if (IsComplexType(elem.GetType()))
+                                {
+                                    var pi = elem.GetType().GetProperty("ParentId");
+                                    if (pi != null) pi.SetValue(elem, id);
+                                }
+                                if (elem is IDataTable dtElem)
+                                {
+                                    InsertChildEntity(connection, transaction, dtElem, tableName);
+                                }
+                                else
+                                {
+                                    var surrogate = new DictionaryEntrySurrogate
+                                    {
+                                        ParentId = id,
+                                        DictKey = "",
+                                        DictValue = elem?.ToString() ?? ""
+                                    };
+                                    InsertChildEntity(connection, transaction, surrogate, tableName);
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // 处理链表属性
+                foreach (var linkedProp in _linkedListProperties)
+                {
+                    var linked = linkedProp.Value.GetValue(entity) as System.Collections.IEnumerable;
+                    if (linked != null)
+                    {
+                        var tableName = $"{_tableName}_{linkedProp.Key}";
+                        var elemType = linkedProp.Value.PropertyType.GetGenericArguments()[0];
+
+                        var deleteSql = $"DELETE FROM [{tableName}] WHERE [ParentId] = @parentId";
+                        using (var deleteCommand = new SqliteCommand(deleteSql, connection, transaction))
+                        {
+                            deleteCommand.Parameters.AddWithValue("@parentId", id);
+                            deleteCommand.ExecuteNonQuery();
+                        }
+
+                        foreach (var elem in linked)
+                        {
+                            if (elem != null)
+                            {
+                                if (IsSimpleType(elemType))
+                                {
+                                    InsertSimpleTypeCollectionElement(connection, transaction, tableName, id, elem);
+                                }
+                                else if (elem is IDataTable dtElem)
+                                {
+                                    dtElem.ParentId = id;
+                                    InsertChildEntity(connection, transaction, dtElem, tableName);
+                                }
+                                else if (IsComplexType(elem.GetType()))
+                                {
+                                    var pi = elem.GetType().GetProperty("ParentId");
+                                    if (pi != null) pi.SetValue(elem, id);
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // 处理字典属性
+                foreach (var dictProp in _dictionaryProperties)
+                {
+                    var dict = dictProp.Value.GetValue(entity);
+                    if (dict is System.Collections.IDictionary idict)
+                    {
+                        var tableName = $"{_tableName}_{dictProp.Key}";
+                        var deleteSql = $"DELETE FROM [{tableName}] WHERE [ParentId] = @parentId";
+                        using (var deleteCommand = new SqliteCommand(deleteSql, connection, transaction))
+                        {
+                            deleteCommand.Parameters.AddWithValue("@parentId", id);
+                            deleteCommand.ExecuteNonQuery();
+                        }
+
+                        foreach (System.Collections.DictionaryEntry entry in idict)
+                        {
+                            var surrogate = new DictionaryEntrySurrogate
+                            {
+                                ParentId = id,
+                                DictKey = entry.Key?.ToString() ?? "",
+                                DictValue = entry.Value?.ToString() ?? ""
+                            };
+                            InsertChildEntity(connection, transaction, surrogate, tableName);
+
+                            if (entry.Value != null && IsComplexType(entry.Value.GetType()))
+                            {
+                                var valueTableName = $"{tableName}_Value";
+                                if (entry.Value.GetType().GetProperty("ParentId") != null)
+                                {
+                                    entry.Value.GetType().GetProperty("ParentId")?.SetValue(entry.Value, id);
+                                }
+                                if (entry.Value is IDataTable dtVal)
+                                {
+                                    InsertChildEntity(connection, transaction, dtVal, valueTableName);
+                                }
+                                else
+                                {
+                                    var surrogateVal = new DictionaryEntrySurrogate
+                                    {
+                                        ParentId = id,
+                                        DictKey = entry.Key?.ToString() ?? "",
+                                        DictValue = entry.Value?.ToString() ?? ""
+                                    };
+                                    InsertChildEntity(connection, transaction, surrogateVal, valueTableName);
+                                }
+                            }
+                        }
+                    }
+                }
 
                 transaction.Commit();
             }
@@ -1043,27 +1219,201 @@ namespace Drx.Sdk.Network.DataBase.Sqlite
 
             using var connection = new SqliteConnection(_connectionString);
             await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
-            using var transaction = await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+            using var transactionObj = await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+            var transaction = transactionObj as SqliteTransaction ?? throw new InvalidOperationException("SqliteTransaction 获取失败");
             try
             {
                 var sets = string.Join(", ", mainProperties.Select(kvp => $"[{kvp.Key}] = @{kvp.Key}"));
                 var sql = $"UPDATE [{_tableName}] SET {sets} WHERE [Id] = @id";
-                using var cmd = new SqliteCommand(sql, connection, (SqliteTransaction)transaction);
-                var getterDict = GetterCache[typeof(T)];
-                foreach (var prop in mainProperties)
+                await using (var cmd = new SqliteCommand(sql, connection, transaction))
                 {
-                    var rawValue = getterDict[prop.Key](entity);
-                    var value = ToDbDateTimeString(rawValue, prop.Value.PropertyType) ?? DBNull.Value;
-                    cmd.Parameters.AddWithValue($"@{prop.Key}", value);
+                    var getterDict = GetterCache[typeof(T)];
+                    foreach (var prop in mainProperties)
+                    {
+                        var rawValue = getterDict[prop.Key](entity);
+                        var value = ToDbDateTimeString(rawValue, prop.Value.PropertyType) ?? DBNull.Value;
+                        cmd.Parameters.AddWithValue($"@{prop.Key}", value);
+                    }
+                    cmd.Parameters.AddWithValue("@id", id);
+                    await cmd.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
                 }
-                cmd.Parameters.AddWithValue("@id", id);
-                await cmd.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
 
-                await ((SqliteTransaction)transaction).CommitAsync(cancellationToken).ConfigureAwait(false);
+                // 同步一对一子表（先删除旧的，再插入新的，确保一致性）
+                foreach (var dataTableProp in _dataTableProperties)
+                {
+                    var childTable = $"{_tableName}_{dataTableProp.Key}";
+                    // 删除旧记录
+                    var deleteSql = $"DELETE FROM [{childTable}] WHERE [ParentId] = @parentId";
+                    await using (var deleteCmd = new SqliteCommand(deleteSql, connection, transaction))
+                    {
+                        deleteCmd.Parameters.AddWithValue("@parentId", id);
+                        await deleteCmd.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+                    }
+
+                    var childEntity = dataTableProp.Value.GetValue(entity) as IDataTable;
+                    if (childEntity != null)
+                    {
+                        childEntity.ParentId = id;
+                        await InsertChildEntityAsync(connection, transaction, childEntity, childTable, cancellationToken).ConfigureAwait(false);
+                    }
+                }
+
+                // 同步一对多子表（删除旧的再插入）
+                foreach (var dataTableListProp in _dataTableListProperties)
+                {
+                    var childList = dataTableListProp.Value.GetValue(entity) as IEnumerable;
+                    if (childList != null)
+                    {
+                        var tableName = $"{_tableName}_{dataTableListProp.Key}";
+                        var deleteSql = $"DELETE FROM [{tableName}] WHERE [ParentId] = @parentId";
+                        await using (var deleteCommand = new SqliteCommand(deleteSql, connection, transaction))
+                        {
+                            deleteCommand.Parameters.AddWithValue("@parentId", id);
+                            await deleteCommand.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+                        }
+
+                        foreach (IDataTable childEntity in childList)
+                        {
+                            if (childEntity != null)
+                            {
+                                childEntity.ParentId = id;
+                                await InsertChildEntityAsync(connection, transaction, childEntity, tableName, cancellationToken).ConfigureAwait(false);
+                            }
+                        }
+                    }
+                }
+
+                // 处理数组属性（同样删除旧的再插入）
+                foreach (var arrayProp in _arrayProperties)
+                {
+                    var arr = arrayProp.Value.GetValue(entity) as Array;
+                    if (arr != null)
+                    {
+                        var tableName = $"{_tableName}_{arrayProp.Key}";
+                        var deleteSql = $"DELETE FROM [{tableName}] WHERE [ParentId] = @parentId";
+                        await using (var deleteCommand = new SqliteCommand(deleteSql, connection, transaction))
+                        {
+                            deleteCommand.Parameters.AddWithValue("@parentId", id);
+                            await deleteCommand.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+                        }
+
+                        foreach (var elem in arr)
+                        {
+                            if (elem != null)
+                            {
+                                if (IsComplexType(elem.GetType()))
+                                {
+                                    var pi = elem.GetType().GetProperty("ParentId");
+                                    if (pi != null) pi.SetValue(elem, id);
+                                }
+                                if (elem is IDataTable dtElem)
+                                {
+                                    await InsertChildEntityAsync(connection, transaction, dtElem, tableName, cancellationToken).ConfigureAwait(false);
+                                }
+                                else
+                                {
+                                    // 基础类型或未实现IDataTable，使用代理表插入
+                                    InsertSimpleTypeCollectionElement(connection, transaction, tableName, id, elem);
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // 处理链表属性
+                foreach (var linkedProp in _linkedListProperties)
+                {
+                    var linked = linkedProp.Value.GetValue(entity) as System.Collections.IEnumerable;
+                    if (linked != null)
+                    {
+                        var tableName = $"{_tableName}_{linkedProp.Key}";
+                        var elemType = linkedProp.Value.PropertyType.GetGenericArguments()[0];
+
+                        var deleteSql = $"DELETE FROM [{tableName}] WHERE [ParentId] = @parentId";
+                        await using (var deleteCommand = new SqliteCommand(deleteSql, connection, transaction))
+                        {
+                            deleteCommand.Parameters.AddWithValue("@parentId", id);
+                            await deleteCommand.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+                        }
+
+                        foreach (var elem in linked)
+                        {
+                            if (elem != null)
+                            {
+                                if (IsSimpleType(elemType))
+                                {
+                                    InsertSimpleTypeCollectionElement(connection, transaction, tableName, id, elem);
+                                }
+                                else if (elem is IDataTable dtElem)
+                                {
+                                    dtElem.ParentId = id;
+                                    await InsertChildEntityAsync(connection, transaction, dtElem, tableName, cancellationToken).ConfigureAwait(false);
+                                }
+                                else if (IsComplexType(elem.GetType()))
+                                {
+                                    var pi = elem.GetType().GetProperty("ParentId");
+                                    if (pi != null) pi.SetValue(elem, id);
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // 处理字典属性
+                foreach (var dictProp in _dictionaryProperties)
+                {
+                    var dict = dictProp.Value.GetValue(entity);
+                    if (dict is System.Collections.IDictionary idict)
+                    {
+                        var tableName = $"{_tableName}_{dictProp.Key}";
+                        var deleteSql = $"DELETE FROM [{tableName}] WHERE [ParentId] = @parentId";
+                        await using (var deleteCommand = new SqliteCommand(deleteSql, connection, transaction))
+                        {
+                            deleteCommand.Parameters.AddWithValue("@parentId", id);
+                            await deleteCommand.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+                        }
+
+                        foreach (System.Collections.DictionaryEntry entry in idict)
+                        {
+                            var surrogate = new DictionaryEntrySurrogate
+                            {
+                                ParentId = id,
+                                DictKey = entry.Key?.ToString() ?? "",
+                                DictValue = entry.Value?.ToString() ?? ""
+                            };
+                            InsertChildEntity(connection, transaction, surrogate, tableName);
+
+                            if (entry.Value != null && IsComplexType(entry.Value.GetType()))
+                            {
+                                var valueTableName = $"{tableName}_Value";
+                                if (entry.Value.GetType().GetProperty("ParentId") != null)
+                                {
+                                    entry.Value.GetType().GetProperty("ParentId")?.SetValue(entry.Value, id);
+                                }
+                                if (entry.Value is IDataTable dtVal)
+                                {
+                                    await InsertChildEntityAsync(connection, transaction, dtVal, valueTableName, cancellationToken).ConfigureAwait(false);
+                                }
+                                else
+                                {
+                                    var surrogateVal = new DictionaryEntrySurrogate
+                                    {
+                                        ParentId = id,
+                                        DictKey = entry.Key?.ToString() ?? "",
+                                        DictValue = entry.Value?.ToString() ?? ""
+                                    };
+                                    InsertChildEntity(connection, transaction, surrogateVal, valueTableName);
+                                }
+                            }
+                        }
+                    }
+                }
+
+                await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
             }
             catch
             {
-                await ((SqliteTransaction)transaction).RollbackAsync(cancellationToken).ConfigureAwait(false);
+                await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
                 throw;
             }
         }
