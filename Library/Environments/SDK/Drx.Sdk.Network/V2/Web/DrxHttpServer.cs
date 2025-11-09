@@ -19,6 +19,21 @@ using Microsoft.Net.Http.Headers;
 namespace Drx.Sdk.Network.V2.Web
 {
     /// <summary>
+    /// 动作结果接口：允许处理器返回一个可被框架执行为 HttpResponse 的对象
+    /// 实现类应负责把自身转换为 HttpResponse（异步或同步）。
+    /// </summary>
+    public interface IActionResult
+    {
+        /// <summary>
+        /// 将当前 ActionResult 转换为 HttpResponse。
+        /// </summary>
+        /// <param name="request">当前请求信息（可能包含 ListenerContext）</param>
+        /// <param name="server">服务器实例，供实现者访问辅助方法或配置</param>
+        /// <returns>HttpResponse 对象</returns>
+        Task<HttpResponse> ExecuteAsync(HttpRequest request, DrxHttpServer server);
+    }
+
+    /// <summary>
     /// Cookie选项类
     /// </summary>
     public class CookieOptions
@@ -596,7 +611,7 @@ namespace Drx.Sdk.Network.V2.Web
                         else if (attr.StreamUpload)
                         {
                             // StreamUpload 路由会自动将 HttpListenerContext 的请求流传递给处理方法，签名可为 (HttpRequest) -> HttpResponse/Task<HttpResponse>
-                            var handler = CreateHandlerDelegate(method);
+                            var handler = CreateHandlerDelegate(method, server);
                             if (handler != null)
                             {
                                 // 使用专用注册器将 handler 包装为 raw handler，传入 HttpRequest.Stream 和 ListenerContext
@@ -612,12 +627,61 @@ namespace Drx.Sdk.Network.V2.Web
                             var httpMethod = ParseHttpMethod(attr.Method);
                             if (httpMethod != null)
                             {
-                                var handler = CreateHandlerDelegate(method);
-                                if (handler != null)
+                                // 如果方法声明需要 HttpListenerContext 或 返回 void/Task，则将其作为 raw 路由注册，
+                                // 以便方法可以直接通过 server.Response(...) 写入响应并控制流式场景。
+                                var parameters = method.GetParameters();
+                                var returnType = method.ReturnType;
+                                var shouldRegisterAsRaw = parameters.Any(p => p.ParameterType == typeof(HttpListenerContext))
+                                                       || returnType == typeof(void)
+                                                       || returnType == typeof(Task);
+
+                                if (shouldRegisterAsRaw)
                                 {
-                                    // 绑定路由级速率限制回调（如果属性中指定了）
-                                    var rateLimitCallback = BindRateLimitCallback(method.DeclaringType!, attr);
-                                    server.AddRoute(httpMethod, attr.Path, handler, attr.RateLimitMaxRequests, attr.RateLimitWindowSeconds, rateLimitCallback);
+                                    Func<HttpListenerContext, Task> rawHandler = async ctx =>
+                                    {
+                                        try
+                                        {
+                                            // 构建参数列表：支持 HttpRequest、DrxHttpServer、HttpListenerContext
+                                            var req = await server.ParseRequestAsync(ctx.Request).ConfigureAwait(false);
+                                            var args = new List<object?>();
+                                            foreach (var p in parameters)
+                                            {
+                                                if (p.ParameterType == typeof(HttpRequest)) args.Add(req);
+                                                else if (p.ParameterType == typeof(DrxHttpServer)) args.Add(server);
+                                                else if (p.ParameterType == typeof(HttpListenerContext)) args.Add(ctx);
+                                                else args.Add(null);
+                                            }
+
+                                            var result = method.Invoke(null, args.ToArray());
+                                            if (result is Task t)
+                                            {
+                                                await t.ConfigureAwait(false);
+                                            }
+                                            // 方法被视为自行处理响应（通过 server.Response 等）
+                                        }
+                                        catch (TargetInvocationException tie)
+                                        {
+                                            Logger.Error($"注册的原始方法 {method.Name} 调用失败: {tie.InnerException?.Message ?? tie.Message}\n{tie.InnerException?.StackTrace ?? tie.StackTrace}");
+                                            try { ctx.Response.StatusCode = 500; using var sw = new StreamWriter(ctx.Response.OutputStream, Encoding.UTF8, leaveOpen: false); sw.Write("Internal Server Error"); } catch { }
+                                        }
+                                        catch (Exception ex)
+                                        {
+                                            Logger.Error($"注册的原始方法 {method.Name} 执行时发生错误: {ex}");
+                                            try { ctx.Response.StatusCode = 500; using var sw = new StreamWriter(ctx.Response.OutputStream, Encoding.UTF8, leaveOpen: false); sw.Write("Internal Server Error"); } catch { }
+                                        }
+                                    };
+
+                                    server.AddRawRoute(attr.Path, rawHandler, attr.RateLimitMaxRequests, attr.RateLimitWindowSeconds);
+                                }
+                                else
+                                {
+                                    var handler = CreateHandlerDelegate(method, server);
+                                    if (handler != null)
+                                    {
+                                        // 绑定路由级速率限制回调（如果属性中指定了）
+                                        var rateLimitCallback = BindRateLimitCallback(method.DeclaringType!, attr);
+                                        server.AddRoute(httpMethod, attr.Path, handler, attr.RateLimitMaxRequests, attr.RateLimitWindowSeconds, rateLimitCallback);
+                                    }
                                 }
                             }
                             else
@@ -821,21 +885,32 @@ namespace Drx.Sdk.Network.V2.Web
             }
         }
 
-        private static Func<HttpRequest, Task<HttpResponse>> CreateHandlerDelegate(MethodInfo method)
+        private static Func<HttpRequest, Task<HttpResponse>> CreateHandlerDelegate(MethodInfo method, DrxHttpServer server)
         {
             try
             {
                 var parameters = method.GetParameters();
-                if (parameters.Length != 1 || parameters[0].ParameterType != typeof(HttpRequest))
+
+                // 支持方法参数包含 HttpRequest、DrxHttpServer（注入 server）和可选的 HttpListenerContext（不推荐用于此路径）
+                foreach (var p in parameters)
                 {
-                    Logger.Warn($"方法 {method.Name} 的签名不正确，应为 (HttpRequest) -> HttpResponse");
-                    return null;
+                    if (p.ParameterType != typeof(HttpRequest) && p.ParameterType != typeof(DrxHttpServer) && p.ParameterType != typeof(HttpListenerContext))
+                    {
+                        Logger.Warn($"方法 {method.Name} 的参数类型不受支持: {p.ParameterType}");
+                        return null;
+                    }
                 }
 
                 var returnType = method.ReturnType;
-                if (returnType != typeof(HttpResponse) && returnType != typeof(Task<HttpResponse>))
+                var returnsHttpResponse = returnType == typeof(HttpResponse);
+                var returnsTaskHttpResponse = returnType == typeof(Task<HttpResponse>) || (returnType.IsGenericType && returnType.GetGenericTypeDefinition() == typeof(Task<>) && returnType.GetGenericArguments()[0] == typeof(HttpResponse));
+                var returnsActionResult = typeof(IActionResult).IsAssignableFrom(returnType);
+                var returnsTaskActionResult = returnType.IsGenericType && returnType.GetGenericTypeDefinition() == typeof(Task<>) && typeof(IActionResult).IsAssignableFrom(returnType.GetGenericArguments()[0]);
+
+                // 允许 HttpResponse / Task<HttpResponse> / IActionResult / Task<IActionResult>
+                if (!returnsHttpResponse && !returnsTaskHttpResponse && !returnsActionResult && !returnsTaskActionResult)
                 {
-                    Logger.Warn($"方法 {method.Name} 的返回类型不正确，应为 HttpResponse 或 Task<HttpResponse>");
+                    Logger.Warn($"方法 {method.Name} 的返回类型不受支持，应为 HttpResponse/Task<HttpResponse>/IActionResult/Task<IActionResult}}");
                     return null;
                 }
 
@@ -843,14 +918,56 @@ namespace Drx.Sdk.Network.V2.Web
                 {
                     try
                     {
-                        if (returnType == typeof(HttpResponse))
+                        // 构建参数列表
+                        var args = new List<object?>();
+                        foreach (var p in parameters)
                         {
-                            return (HttpResponse)method.Invoke(null, new object[] { request })!;
+                            if (p.ParameterType == typeof(HttpRequest)) args.Add(request);
+                            else if (p.ParameterType == typeof(DrxHttpServer)) args.Add(server);
+                            else if (p.ParameterType == typeof(HttpListenerContext)) args.Add(request.ListenerContext);
+                            else args.Add(null);
                         }
-                        else
+
+                        var result = method.Invoke(null, args.ToArray());
+
+                        // 异步 Task<T> 返回
+                        if (result is Task task)
                         {
-                            return await (Task<HttpResponse>)method.Invoke(null, new object[] { request })!;
+                            await task.ConfigureAwait(false);
+
+                            if (returnsTaskHttpResponse)
+                            {
+                                var prop = task.GetType().GetProperty("Result");
+                                var resp = (HttpResponse)prop!.GetValue(task)!;
+                                return resp ?? new HttpResponse(500, "Internal Server Error");
+                            }
+
+                            if (returnsTaskActionResult)
+                            {
+                                var prop = task.GetType().GetProperty("Result");
+                                var action = (IActionResult)prop!.GetValue(task)!;
+                                if (action == null) return new HttpResponse(500, "Internal Server Error");
+                                return await action.ExecuteAsync(request, server).ConfigureAwait(false);
+                            }
+
+                            // 如果是 Task 且不含返回值（应已被视为 raw），则返回 204
+                            return new HttpResponse(204, "");
                         }
+
+                        // 同步返回
+                        if (returnsHttpResponse)
+                        {
+                            return (HttpResponse)result!;
+                        }
+
+                        if (returnsActionResult)
+                        {
+                            var action = (IActionResult)result!;
+                            return await action.ExecuteAsync(request, server).ConfigureAwait(false);
+                        }
+
+                        // 不应到达此处，但为了安全返回 500
+                        return new HttpResponse(500, "Internal Server Error");
                     }
                     catch (TargetInvocationException tie)
                     {
@@ -1157,7 +1274,7 @@ namespace Drx.Sdk.Network.V2.Web
                                 {
                                     var routeKey = $"RAW:{Template}";
                                     var (isExceeded, customResponse) = await CheckRateLimitForRouteAsync(clientIP, routeKey, RateLimitMaxRequests, RateLimitWindowSeconds, req, RateLimitCallback).ConfigureAwait(false);
-                                    
+
                                     if (isExceeded)
                                     {
                                         // 如果有自定义响应，使用它；否则返回默认 429
@@ -1882,6 +1999,43 @@ namespace Drx.Sdk.Network.V2.Web
             }
         }
 
+        /// <summary>
+        /// 允许处理器直接通过 server.Response(ctx, resp) 发送响应（同步 HttpResponse）
+        /// </summary>
+        /// <param name="ctx">当前 HttpListenerContext</param>
+        /// <param name="resp">要发送的 HttpResponse</param>
+        public void Response(HttpListenerContext ctx, HttpResponse resp)
+        {
+            try
+            {
+                SendResponse(ctx.Response, resp ?? new HttpResponse(204, ""));
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"通过 server.Response 发送响应时发生错误: {ex}");
+            }
+        }
+
+        /// <summary>
+        /// 允许处理器直接通过 server.Response(ctx, actionResult) 异步发送响应
+        /// </summary>
+        /// <param name="ctx">当前 HttpListenerContext</param>
+        /// <param name="action">实现 IActionResult 的结果对象</param>
+        public async Task ResponseAsync(HttpListenerContext ctx, IActionResult action)
+        {
+            try
+            {
+                var req = await ParseRequestAsync(ctx.Request).ConfigureAwait(false);
+                var resp = await action.ExecuteAsync(req, this).ConfigureAwait(false);
+                SendResponse(ctx.Response, resp ?? new HttpResponse(500, "Internal Server Error"));
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"通过 server.ResponseAsync 发送响应时发生错误: {ex}");
+                try { ctx.Response.StatusCode = 500; using var sw = new StreamWriter(ctx.Response.OutputStream, Encoding.UTF8, leaveOpen: false); sw.Write("Internal Server Error"); } catch { }
+            }
+        }
+
         // 提供一个本地的默认状态描述，以防 HttpResponse 没有提供
         private string GetDefaultStatusDescription(int statusCode)
         {
@@ -2252,7 +2406,7 @@ namespace Drx.Sdk.Network.V2.Web
                 int triggeredCount = queue.Count + 1;
                 // 记录此次超限请求，使得 count 能够继续增长
                 queue.Enqueue(now);
-                
+
                 if (request != null && OnRouteRateLimitExceeded != null)
                 {
                     var cb = OnRouteRateLimitExceeded;

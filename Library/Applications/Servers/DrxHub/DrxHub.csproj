@@ -10,8 +10,4 @@
     <ProjectReference Include="..\..\..\Environments\SDK\Drx.Sdk.Network\Drx.Sdk.Network.csproj" />
   </ItemGroup>
 
-  <ItemGroup>
-    <PackageReference Include="RazorLight" Version="2.0.0-rc.3" />
-  </ItemGroup>
-
 </Project>
