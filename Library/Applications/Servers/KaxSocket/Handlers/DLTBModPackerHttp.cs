@@ -1,4 +1,5 @@
-﻿using System.Dynamic;
+﻿using System.Diagnostics.CodeAnalysis;
+using System.Dynamic;
 using System.Text.Json.Nodes;
 using Drx.Sdk.Network.V2.Web;
 using Drx.Sdk.Shared;
@@ -10,6 +11,12 @@ namespace KaxSocket
 {
     public class DLTBModPackerHttp
     {
+        [DynamicDependency(DynamicallyAccessedMemberTypes.All, typeof(DLTBModPackerHttp))]
+        public DLTBModPackerHttp()
+        {
+        }
+
+
         [HttpHandle("/api/dltbmodpacker/version/check", "GET", RateLimitMaxRequests = 10, RateLimitWindowSeconds = 60)]
         public static HttpResponse GetCheckVersion(HttpRequest request)
         {

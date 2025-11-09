@@ -7,7 +7,7 @@ var client = new DrxHttpClient();
 var registerResponse = await client.SendAsync(new HttpRequest()
 {
     Method = "POST",
-    Url = "http://127.0.0.1:8462/api/user/register",
+    Url = "http://26.154.48.195:8462/api/user/register",
     Body = @"{
         ""username"": ""testuser"",
         ""password"": ""securepassword"",
@@ -18,7 +18,7 @@ var registerResponse = await client.SendAsync(new HttpRequest()
 var loginResponse = await client.SendAsync(new HttpRequest()
 {
     Method = "POST",
-    Url = "http://127.0.0.1:8462/api/user/login",
+    Url = "http://26.154.48.195:8462/api/user/login",
     Body = @"{
         ""username"": ""testuser"",
         ""password"": ""securepassword""
@@ -28,18 +28,7 @@ var loginResponse = await client.SendAsync(new HttpRequest()
 var token = JsonNode.Parse(loginResponse.Body)!["login_token"]!.ToString();
 for (int i = 0; i < 50; i++)
 {
-    var sayHelloResponse = await client.SendAsync(new HttpRequest()
-    {
-        Method = "GET",
-        Url = $"http://127.0.0.1:8462/api/hello",
-        Headers =
-        {
-            { HttpHeaders.Authorization, $"Bearer {token}" }
-        }
-    });
-
-    Logger.Info($"问候响应状态码: {sayHelloResponse.StatusCode}");
-    Logger.Info($"问候响应内容: {sayHelloResponse.Body}");
+    
 }
 
 Logger.Info($"注册响应状态码: {registerResponse.StatusCode}");
@@ -52,3 +41,19 @@ Logger.Info($"登录响应内容: {JsonNode.Parse(loginResponse.Body)!["message"
 Logger.Info($"登录令牌: {JsonNode.Parse(loginResponse.Body)!["login_token"]}");
 
 Console.WriteLine("==================================================");
+
+var sayHelloResponse = await client.SendAsync(new HttpRequest()
+{
+    Method = "GET",
+    Url = $"http://26.154.48.195:8462/api/hello",
+    Headers =
+        {
+            { HttpHeaders.Authorization, $"Bearer {token}" }
+        }
+});
+
+Logger.Info($"问候响应状态码: {sayHelloResponse.StatusCode}");
+Logger.Info($"问候响应内容: {sayHelloResponse.Body}");
+
+Logger.Info("测试完成，按任意键退出...");
+Console.ReadKey();

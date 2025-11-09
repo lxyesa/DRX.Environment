@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics.CodeAnalysis;
 using System.Security.Claims;
 using System.Text.Json.Nodes;
 using System.Threading.Tasks;
@@ -10,6 +11,13 @@ namespace KaxSocket.Handlers;
 
 public class KaxHttp
 {
+    [DynamicDependency(DynamicallyAccessedMemberTypes.All, typeof(KaxHttp))]
+    public KaxHttp()
+    {
+    }
+
+
+
     #region 辅助方法
 
     static KaxHttp()
@@ -33,8 +41,8 @@ public class KaxHttp
     {
         return JwtHelper.ValidateToken(token);
     }
-    
-    
+
+
     private static bool IsUserBanned(string userName)
     {
         var user = KaxGlobal.UserDatabase.QueryFirstAsync(u => u.UserName == userName).Result;
@@ -48,13 +56,10 @@ public class KaxHttp
             {
                 // 检查封禁是否已过期
                 var currentTime = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+                Logger.Info($"当前时间戳: {currentTime}, 用户封禁到期时间戳: {user.Status.BanExpiresAt}");
                 if (user.Status.BanExpiresAt > 0 && currentTime >= user.Status.BanExpiresAt)
                 {
-                    // 封禁已过期，解除封禁
-                    user.Status.IsBanned = false;
-                    user.Status.BanExpiresAt = 0;
-                    user.Status.BanReason = string.Empty;
-                    _ = KaxGlobal.UserDatabase.EditWhereAsync(u => u.Id == user.Id, user);
+                    UnBanUser(userName).Wait();
                     Logger.Info($"用户 {user.UserName} 的封禁已过期，已自动解除封禁。");
                     return false;
                 }
@@ -108,15 +113,16 @@ public class KaxHttp
 
     public static HttpResponse RateLimitCallback(int count, HttpRequest request, OverrideContext overrideContext)
     {
-        if (count > 5)
+        if (count > 20)
         {
             var userToken = request.Headers[HttpHeaders.Authorization]?.Replace("Bearer ", "");
             var userName = JwtHelper.ValidateToken(userToken!)?.Identity?.Name ?? "未知用户";
-            _ = BanUser(userName, "短时间内请求过于频繁，自动封禁。", 3600); // 封禁 1 小时
+            _ = BanUser(userName, "短时间内请求过于频繁，自动封禁。", 60); // 封禁 1 分钟
             return new HttpResponse(429, "请求过于频繁，您的账号暂时被封禁。");
         }
         else
         {
+            Logger.Warn($"请求过于频繁: {request.Method} {request.Path} from {request.ClientAddress.Ip}:{request.ClientAddress.Port}");
             return new HttpResponse(429, "请求过于频繁，请稍后再试。");
         }
     }
@@ -298,6 +304,35 @@ public class KaxHttp
                 Body = "用户名或密码错误。",
             };
         }
+    }
+
+    [HttpHandle("/api/token/test", "POST", RateLimitMaxRequests = 5, RateLimitWindowSeconds = 60, RateLimitCallbackMethodName = nameof(RateLimitCallback))]
+    public static IActionResult Post_TestToken(HttpRequest request)
+    {
+        var token = request.Headers[HttpHeaders.Authorization]?.Replace("Bearer ", "");
+        var principal = ValidateToken(token!);
+        if (principal == null)
+        {
+            return new JsonResult(new
+            {
+                message = "无效的登录令牌。",
+            }, 401);
+        }
+
+        var userName = principal.Identity?.Name;
+        if (IsUserBanned(userName!))
+        {
+            return new JsonResult(new
+            {
+                message = "您的账号已被封禁，无法访问此资源。",
+            }, 403);
+        }
+
+        return new JsonResult(new
+        {
+            message = "令牌有效，欢迎您！",
+            user = userName,
+        });
     }
 
     /*

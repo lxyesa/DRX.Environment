@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KaxHub - 游戏模组平台（开发中）</title>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Poppins', sans-serif;
+            background: #0f0f0f;
+            color: #ffffff;
+            overflow-x: hidden;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        .hero {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            position: relative;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .hero-content {
+            max-width: 700px;
+            padding: 0 20px;
+        }
+
+        .hero h1 {
+            font-size: 3.5rem;
+            font-weight: 600;
+            margin-bottom: 1.5rem;
+            letter-spacing: -1px;
+            color: #ffffff;
+        }
+
+        .hero p {
+            font-size: 1.1rem;
+            margin-bottom: 2.5rem;
+            opacity: 0.75;
+            line-height: 1.7;
+            font-weight: 300;
+        }
+
+        .cta-button {
+            display: inline-block;
+            padding: 12px 32px;
+            background: #ffffff;
+            color: #0f0f0f;
+            text-decoration: none;
+            border-radius: 4px;
+            font-weight: 600;
+            font-size: 1rem;
+            transition: all 0.15s ease;
+            border: 1px solid #ffffff;
+        }
+
+        .cta-button:hover {
+            background: transparent;
+            color: #ffffff;
+        }
+
+        /* 新增：禁用状态样式，使用 pointer-events 阻止点击并降低可见性 */
+        .cta-button.kax-disabled {
+            pointer-events: none;
+            opacity: 0.6;
+            cursor: default;
+        }
+
+        .features {
+            padding: 100px 20px;
+            background: #0f0f0f;
+        }
+
+        .features h2 {
+            text-align: center;
+            font-size: 2.2rem;
+            margin-bottom: 4rem;
+            color: #ffffff;
+            font-weight: 600;
+        }
+
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 3rem;
+            max-width: 1100px;
+            margin: 0 auto;
+        }
+
+        .feature-card {
+            padding: 2rem;
+            text-align: center;
+            transition: all 0.25s ease;
+            border-left: 3px solid rgba(255, 255, 255, 0);
+        }
+
+        .feature-card:hover {
+            border-left-color: #ffffff;
+            transform: translateX(5px);
+        }
+
+        .feature-icon {
+            font-size: 2.2rem;
+            margin-bottom: 1rem;
+            display: block;
+            opacity: 0.85;
+        }
+
+        .feature-card h3 {
+            font-size: 1.15rem;
+            margin-bottom: 0.6rem;
+            color: #ffffff;
+            font-weight: 600;
+        }
+
+        .feature-card p {
+            opacity: 0.65;
+            line-height: 1.6;
+            font-size: 0.95rem;
+            font-weight: 300;
+        }
+
+        @media (max-width: 768px) {
+            .hero h1 {
+                font-size: 2.2rem;
+            }
+
+            .hero p {
+                font-size: 1rem;
+            }
+
+            .features h2 {
+                font-size: 1.8rem;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <section class="hero">
+        <div class="hero-content">
+            <h1>KaxHub <span style="font-size:0.6rem; opacity:0.7; margin-left:10px; font-weight:400;">开发中</span>
+            </h1>
+            <p>一个面向游戏模组的管理与分发平台，当前处于开发阶段，功能有限。欢迎参与测试与反馈。</p>
+            <!-- 修改：保留 a 标签但增加无障碍属性，脚本将通过类和 aria-disabled 管理禁用状态 -->
+            <a href="login" class="cta-button" id="joinBtn" role="button" aria-disabled="false">加入测试</a>
+        </div>
+    </section>
+
+    <section class="features" id="features">
+        <h2>当前功能（开发中）</h2>
+        <div class="features-grid">
+            <div class="feature-card">
+                <span class="feature-icon">📂</span>
+                <h3>Mod 浏览</h3>
+                <p>浏览与查看可用模组的基本信息与版本说明。</p>
+            </div>
+            <div class="feature-card">
+                <span class="feature-icon">⬇️</span>
+                <h3>Mod 安装</h3>
+                <p>支持简单的安装流程（当前为手动/半自动安装，后续会完善）。</p>
+            </div>
+            <div class="feature-card">
+                <span class="feature-icon">🧩</span>
+                <h3>模组管理</h3>
+                <p>启用/禁用与版本切换的基础管理功能。</p>
+            </div>
+            <div class="feature-card">
+                <span class="feature-icon">💬</span>
+                <h3>社区与反馈</h3>
+                <p>提供反馈通道，收集用户建议以优先完善核心功能。</p>
+            </div>
+            <div class="feature-card">
+                <span class="feature-icon">🔒</span>
+                <h3>兼容性检查</h3>
+                <p>基础的模组兼容提示，帮助避免常见冲突（逐步增强）。</p>
+            </div>
+            <div class="feature-card">
+                <span class="feature-icon">⏳</span>
+                <h3>更多功能（即将推出）</h3>
+                <p>云端同步、自动安装器、模组市场等功能正在规划中。</p>
+            </div>
+        </div>
+    </section>
+
+    <footer
+        style="padding:24px 20px; text-align:center; color:rgba(255,255,255,0.6); font-size:0.9rem; border-top:1px solid rgba(255,255,255,0.04);">
+        开发中 • 功能有限 — 欢迎在 GitHub 提交问题与建议（<a href="#" style="color:inherit; text-decoration:underline;">仓库</a>）。
+    </footer>
+
+    <script>
+        // 平滑滚动到锚点
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                document.querySelector(this.getAttribute('href')).scrollIntoView({
+                    behavior: 'smooth'
+                });
+            });
+        });
+    </script>
+    <script>
+        // 如果本地存储中存在登录 token，则点击“加入测试”不再跳转到登录页
+        (function () {
+            var btn = document.getElementById('joinBtn');
+            if (!btn) return;
+
+            /**
+             * 设置按钮禁用状态（兼容 <a> 元素）
+             * @param {HTMLElement} el - 按钮元素
+             * @param {boolean} disabled - 是否禁用
+             */
+            function setBtnDisabled(el, disabled) {
+                // ...中文注释：将禁用状态以类和 aria 属性表示，避免使用 el.disabled（<a> 不支持）
+                if (disabled) {
+                    el.classList.add('kax-disabled');
+                    el.setAttribute('aria-disabled', 'true');
+                    el.setAttribute('tabindex', '-1');
+                } else {
+                    el.classList.remove('kax-disabled');
+                    el.setAttribute('aria-disabled', 'false');
+                    el.removeAttribute('tabindex');
+                }
+            }
+
+            btn.addEventListener('click', async function (e) {
+                // 控制位：在某些分支（例如 429 倒计时）下，阻止 finally 将按钮恢复为可用状态
+                var keepDisabled = false;
+                try {
+                    // 若按钮由前端标记为禁用，则阻止一切行为，避免重复触发或跳转
+                    if (btn.classList.contains('kax-disabled') || btn.getAttribute('aria-disabled') === 'true') {
+                        e.preventDefault();
+                        return;
+                    }
+
+                    var token = localStorage.getItem('kax_login_token');
+                    if (!token) {
+                        // 无 token：保持默认跳转到登录页
+                        return;
+                    }
+
+                    // 阻止默认跳转，先验证 token 是否有效
+                    e.preventDefault();
+                    var originalText = btn.textContent;
+                    btn.textContent = '验证中...';
+                    setBtnDisabled(btn, true);
+
+                    // 使用 AbortController 提供超时保护
+                    var controller = new AbortController();
+                    var timeoutId = setTimeout(function () { controller.abort(); }, 8000);
+
+                    var resp = await fetch('/api/token/test', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': 'Bearer ' + token
+                        },
+                        signal: controller.signal,
+                    });
+                    clearTimeout(timeoutId);
+
+                    if (resp.status === 200) {
+                        // token 有效：滚动到功能区
+                        var features = document.getElementById('features');
+                        if (features) { features.scrollIntoView({ behavior: 'smooth' }); }
+                        else { alert('检测到您已登录，已为您保留在当前页面。'); }
+                        return;
+                    }
+
+                    // 速率限制（请求过于频繁），不清除 token 也不跳转登录，提示用户并在前端短暂禁用操作按钮
+                    if (resp.status === 429) {
+                        try {
+                            // 解析 Retry-After 头（可能为秒数或 HTTP 日期），或尝试从响应体读取重试秒数
+                            var retrySeconds = 60; // 默认等待 60 秒
+                            var ra = resp.headers.get('Retry-After');
+                            if (ra) {
+                                var n = parseInt(ra, 10);
+                                if (!isNaN(n)) {
+                                    retrySeconds = n;
+                                } else {
+                                    var t = Date.parse(ra);
+                                    if (!isNaN(t)) {
+                                        retrySeconds = Math.max(1, Math.ceil((t - Date.now()) / 1000));
+                                    }
+                                }
+                            } else {
+                                try {
+                                    var body = await resp.json();
+                                    if (body) {
+                                        if (body.retry_after) {
+                                            var rn = parseInt(body.retry_after, 10);
+                                            if (!isNaN(rn)) retrySeconds = rn;
+                                        }
+                                        // 记录服务器提示以便调试
+                                        if (body.message) console.warn('服务器提示：', body.message);
+                                    }
+                                } catch (_) { /* 非 JSON 响应或解析失败，保持默认 */ }
+                            }
+
+                            // 前端用户提示，不清除 token、不跳转登录
+                            alert('操作过于频繁，请在 ' + retrySeconds + ' 秒后重试。');
+                            try {
+                                // 将 keepDisabled 标记为 true，告知 finally 不要恢复按钮
+                                keepDisabled = true;
+                                // 临时禁止按钮并显示倒计时提示（防止用户重复触发）
+                                setBtnDisabled(btn, true);
+                                var remaining = retrySeconds;
+                                var original = originalText;
+                                btn.textContent = '请稍后重试 (' + remaining + 's)';
+                                var intervalId = setInterval(function () {
+                                    remaining--;
+                                    if (remaining <= 0) {
+                                        clearInterval(intervalId);
+                                        try { setBtnDisabled(btn, false); btn.textContent = original; } catch (_) { }
+                                        // 倒计时结束，允许 finally 在后续执行中恢复按钮（如果需要）
+                                        keepDisabled = false;
+                                    } else {
+                                        try { btn.textContent = '请稍后重试 (' + remaining + 's)'; } catch (_) { }
+                                    }
+                                }, 1000);
+                            } catch (_) { /* 按钮更新失败也不影响主流程 */ }
+                        } catch (err429) {
+                            console.error('处理 429 响应时出错：', err429);
+                        }
+                        return;
+                    }
+
+                    if (resp.status === 401) {
+                        // token 无效或过期：清除并跳转登录
+                        localStorage.removeItem('kax_login_token');
+                        location.href = 'login';
+                        return;
+                    }
+
+                    if (resp.status === 403) {
+                        // 被封禁或无权限
+                        try { var j = await resp.json(); if (j && j.message) alert(j.message); }
+                        catch (_) { alert('您的账号无法访问此资源。'); }
+                        localStorage.removeItem('kax_login_token');
+                        location.href = 'login';
+                        return;
+                    }
+
+                    // 其他非 200 的响应，尝试读取信息并提示，然后跳转登录以重新认证
+                    try { var txt = await resp.text(); if (txt) console.warn('token test 返回：', txt); }
+                    catch (_) { }
+                    localStorage.removeItem('kax_login_token');
+                    location.href = 'login';
+
+                } catch (err) {
+                    // 网络错误或超时：清理 token 并跳转登录以保证一致性
+                    console.error('验证登录令牌时出错', err);
+                    try { localStorage.removeItem('kax_login_token'); } catch (_) { }
+                    // 若是被中断(超时)，为用户提供提示
+                    alert('无法验证登录状态，请重新登录。');
+                    location.href = 'login';
+                } finally {
+                    // 仅在未被 429 处理逻辑标记为长期禁用时恢复按钮
+                    try {
+                        if (!keepDisabled) {
+                            setBtnDisabled(btn, false);
+                            btn.textContent = originalText;
+                        }
+                    } catch (_) { }
+                }
+            });
+        })();
+    </script>
+</body>
+
+</html>

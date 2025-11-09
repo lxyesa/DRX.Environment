@@ -6,6 +6,9 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using Microsoft.AspNetCore.WebUtilities;
+using Microsoft.Net.Http.Headers;
+using Microsoft.Extensions.Primitives;
 using System.Collections.Specialized;
 using System.Dynamic;
 using System.Collections.Generic;
@@ -266,6 +269,138 @@ namespace Drx.Sdk.Network.V2.Web
         public void Dispose()
         {
             // 如果需要，在此处释放 UploadFile.Stream 等资源（目前保留给调用方管理流生命周期）
+        }
+
+        /// <summary>
+        /// 解析表单数据（支持 application/x-www-form-urlencoded 与 multipart/form-data），
+        /// 并把结果填充到 HttpRequest.Form 与 UploadFile 中。
+        /// 该方法会读取传入的 bodyStream（可能为 request.InputStream），因此调用方应在调用后
+        /// 不要再重复读取该流。
+        /// 对于 multipart 的文件部分，当前实现会把第一个文件内容复制到内存流并设置到 UploadFile（内存占用请注意）。
+        /// </summary>
+        /// <param name="contentType">Content-Type 头（可为 null 或空）</param>
+        /// <param name="bodyStream">请求体流（例如 HttpListenerRequest.InputStream）</param>
+        /// <param name="encoding">文本编码，默认 UTF8</param>
+        /// <returns>Task</returns>
+        public async Task ParseFormAsync(string? contentType, Stream bodyStream, Encoding? encoding = null)
+        {
+            encoding ??= Encoding.UTF8;
+            if (string.IsNullOrEmpty(contentType) || bodyStream == null)
+                return;
+
+            try
+            {
+                if (contentType.IndexOf("application/x-www-form-urlencoded", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    using var sr = new StreamReader(bodyStream, encoding, detectEncodingFromByteOrderMarks: true, bufferSize: 8192, leaveOpen: true);
+                    var body = await sr.ReadToEndAsync().ConfigureAwait(false);
+                    // 填充 Body 与 BodyBytes
+                    Body = body;
+                    BodyBytes = encoding.GetBytes(body);
+                    Content = new System.Dynamic.ExpandoObject();
+                    try { ((System.Collections.Generic.IDictionary<string, object>)Content)["Text"] = body; } catch { }
+
+                    // 使用 QueryHelpers 解析 urlencoded body
+                    try
+                    {
+                        var parsed = QueryHelpers.ParseQuery(body);
+                        var form = new NameValueCollection();
+                        foreach (var kv in parsed)
+                        {
+                            StringValues vals = kv.Value;
+                            for (int i = 0; i < vals.Count; i++)
+                            {
+                                try { form.Add(kv.Key, vals[i]); } catch { }
+                            }
+                        }
+                        Form = form;
+                    }
+                    catch
+                    {
+                        // 容错：解析失败则保持原有 Form
+                    }
+
+                    return;
+                }
+
+                if (contentType.IndexOf("multipart/", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    var mediaType = MediaTypeHeaderValue.Parse(contentType);
+                    var boundary = HeaderUtilities.RemoveQuotes(mediaType.Boundary).ToString();
+                    var reader = new MultipartReader(boundary, bodyStream);
+
+                    NameValueCollection form = new NameValueCollection();
+
+                    MultipartSection section;
+                    while ((section = await reader.ReadNextSectionAsync().ConfigureAwait(false)) != null)
+                    {
+                        var hasContentDispositionHeader = ContentDispositionHeaderValue.TryParse(section.ContentDisposition, out var contentDisposition);
+                        if (!hasContentDispositionHeader || contentDisposition == null) continue;
+
+                        // 文件部分
+                        var fileNameSegment = contentDisposition.FileName.HasValue ? contentDisposition.FileName : contentDisposition.FileNameStar;
+                        var nameSegment = contentDisposition.Name;
+                        var fieldName = nameSegment.HasValue ? HeaderUtilities.RemoveQuotes(nameSegment).ToString() : "file";
+
+                        if (!StringSegment.IsNullOrEmpty(fileNameSegment))
+                        {
+                            var fileName = HeaderUtilities.RemoveQuotes(fileNameSegment).ToString();
+                            var ms = new MemoryStream();
+                            await section.Body.CopyToAsync(ms).ConfigureAwait(false);
+                            ms.Position = 0;
+                            UploadFile = new UploadFileDescriptor
+                            {
+                                Stream = ms,
+                                FileName = string.IsNullOrEmpty(fileName) ? "file" : fileName,
+                                FieldName = fieldName,
+                                CancellationToken = CancellationToken.None,
+                                Progress = null
+                            };
+                        }
+                        else
+                        {
+                            // 普通表单字段
+                            using var sr = new StreamReader(section.Body, encoding, detectEncodingFromByteOrderMarks: true, bufferSize: 8192, leaveOpen: true);
+                            var value = await sr.ReadToEndAsync().ConfigureAwait(false);
+                            try { form.Add(fieldName, value); } catch { }
+                        }
+                    }
+
+                    if (form.Count > 0) Form = form;
+                }
+            }
+            catch (Exception)
+            {
+                // 不抛异常以免影响请求流程，调用者可检测 Form/UploadFile 是否被填充
+            }
+        }
+
+        /// <summary>
+        /// 从 Form 中安全获取第一个值（若不存在返回空字符串）。
+        /// </summary>
+        public string GetFormValue(string key)
+        {
+            if (string.IsNullOrEmpty(key)) return string.Empty;
+            try
+            {
+                var v = Form[key];
+                return v ?? string.Empty;
+            }
+            catch { return string.Empty; }
+        }
+
+        /// <summary>
+        /// 从 Form 中获取所有值（若不存在返回空数组）。
+        /// </summary>
+        public string[] GetFormValues(string key)
+        {
+            if (string.IsNullOrEmpty(key)) return Array.Empty<string>();
+            try
+            {
+                var vals = Form.GetValues(key);
+                return vals ?? Array.Empty<string>();
+            }
+            catch { return Array.Empty<string>(); }
         }
     }
 }

@@ -3,11 +3,14 @@ using Drx.Sdk.Network.V2.Web;
 using Drx.Sdk.Shared;
 using Drx.Sdk.Shared.Serialization;
 using Drx.Sdk.Shared.Utility;
+using KaxSocket;
+using KaxSocket.Handlers;
 using System;
 using System.Diagnostics;
 using System.Net;
 using System.Text;
 using System.Threading.Tasks;
+using System.Web;
 using HttpMethod = System.Net.Http.HttpMethod;
 
 public class Program
@@ -28,7 +31,9 @@ public class Program
 
         var prefixes = new[] { "http://+:8462/" };
         var server = new DrxHttpServer(prefixes);
-        DrxHttpServer.RegisterHandlersFromAssembly(typeof(Program).Assembly, server);
+
+
+        DrxHttpServer.RegisterHandlersFromAssembly(typeof(KaxHttp).Assembly, server);
 
         try
         {
@@ -46,6 +51,10 @@ public class Program
                 version = "1.0.0";
                 ConfigUtility.Push($"{AppDomain.CurrentDomain.BaseDirectory}configs.ini", "version", version, "general");
             }
+
+            server.AddRoute(HttpMethod.Get, "/", req => new HtmlResultFromFile($"{AppDomain.CurrentDomain.BaseDirectory}Views/index.html"));
+            server.AddRoute(HttpMethod.Get, "/login", req => new HtmlResultFromFile($"{AppDomain.CurrentDomain.BaseDirectory}Views/login.html"));
+            server.AddRoute(HttpMethod.Get, "/register", req => new HtmlResultFromFile($"{AppDomain.CurrentDomain.BaseDirectory}Views/register.html"));
 
             await server.StartAsync();
         }

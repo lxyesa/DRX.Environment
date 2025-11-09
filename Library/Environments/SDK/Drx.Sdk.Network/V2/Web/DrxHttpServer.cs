@@ -9,6 +9,7 @@ using System.Collections.Specialized;
 using Drx.Sdk.Shared;
 using System.Net.Http;
 using System.Threading.Channels;
+using System.Xml.Linq;
 using System.Threading;
 using System.Reflection;
 using System.Text.RegularExpressions;
@@ -75,6 +76,56 @@ namespace Drx.Sdk.Network.V2.Web
 
     public class DrxHttpServer : IAsyncDisposable
     {
+        /// <summary>
+        /// 文件根目录路径，供结果类型（如 HtmlResultFromFile / FileResult）以相对路径定位文件。
+        /// 如果为 null 或空，表示不启用基于根目录的相对路径解析，处理者应使用绝对路径或 AddFileRoute。
+        /// 默认为 null。
+        /// </summary>
+        public string? FileRootPath { get; set; }
+
+        /// <summary>
+        /// 将用户传入的文件指示符解析为磁盘上的绝对路径：
+        /// - 如果传入的是以 '/' 或 '\\' 开头的相对路径且 FileRootPath 已设置，则把它解释为相对于 FileRootPath 的路径；
+        /// - 否则如果是相对路径（不以盘符开头），也尝试相对于 FileRootPath 解析；
+        /// - 否则返回原始路径（可能为绝对路径）。
+        /// 方法不会抛出异常；若无法解析或文件不存在返回 null。
+        /// </summary>
+        /// <param name="pathOrIndicator">相对或绝对路径指示（例如 "/index.html" 或 "C:\\wwwroot\\index.html"）</param>
+        /// <returns>存在的绝对文件路径或 null</returns>
+        public string? ResolveFilePath(string pathOrIndicator)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(pathOrIndicator)) return null;
+
+                // 如果已经是绝对路径并存在，直接返回
+                if (Path.IsPathRooted(pathOrIndicator))
+                {
+                    var abs = Path.GetFullPath(pathOrIndicator);
+                    return File.Exists(abs) ? abs : null;
+                }
+
+                // 尝试使用 FileRootPath
+                if (!string.IsNullOrEmpty(FileRootPath))
+                {
+                    // 去除前导 '/' 或 '\\'
+                    var trimmed = pathOrIndicator.TrimStart('/', '\\');
+                    var candidate = Path.Combine(FileRootPath, trimmed);
+                    var full = Path.GetFullPath(candidate);
+                    if (File.Exists(full)) return full;
+                }
+
+                // 最后尝试以当前工作目录解析
+                var cwdCandidate = Path.GetFullPath(pathOrIndicator);
+                if (File.Exists(cwdCandidate)) return cwdCandidate;
+
+                return null;
+            }
+            catch
+            {
+                return null;
+            }
+        }
         private HttpListener _listener;
         private readonly List<(string Prefix, string RootDir)> _fileRoutes = new();
         private readonly List<RouteEntry> _routes = new();
@@ -436,6 +487,107 @@ namespace Drx.Sdk.Network.V2.Web
         }
 
         /// <summary>
+        /// 添加返回 IActionResult 的同步路由（框架会执行 IActionResult 并把结果转换为 HttpResponse）
+        /// </summary>
+        /// <param name="method">HTTP 方法</param>
+        /// <param name="path">路径</param>
+        /// <param name="handler">处理委托，返回 IActionResult</param>
+        public void AddRoute(HttpMethod method, string path, Func<HttpRequest, IActionResult> handler)
+        {
+            if (handler == null) return;
+            try
+            {
+                var route = new RouteEntry
+                {
+                    Template = path,
+                    Method = method,
+                    Handler = async (request) =>
+                    {
+                        var action = handler(request);
+                        if (action == null)
+                            return await Task.FromResult(new HttpResponse(204, string.Empty));
+                        return await action.ExecuteAsync(request, this).ConfigureAwait(false);
+                    },
+                    ExtractParameters = CreateParameterExtractor(path)
+                };
+                _routes.Add(route);
+                Logger.Info($"添加 IActionResult 同步路由: {method} {path}");
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"添加 IActionResult 同步路由 {method} {path} 时发生错误: {ex}");
+            }
+        }
+
+        /// <summary>
+        /// 添加返回 IActionResult 的异步路由（框架会执行 IActionResult 并把结果转换为 HttpResponse）
+        /// </summary>
+        /// <param name="method">HTTP 方法</param>
+        /// <param name="path">路径</param>
+        /// <param name="handler">异步处理委托，返回 Task&lt;IActionResult&gt;</param>
+        public void AddRoute(HttpMethod method, string path, Func<HttpRequest, Task<IActionResult>> handler)
+        {
+            if (handler == null) return;
+            try
+            {
+                var route = new RouteEntry
+                {
+                    Template = path,
+                    Method = method,
+                    Handler = async (request) =>
+                    {
+                        var action = await handler(request).ConfigureAwait(false);
+                        if (action == null)
+                            return new HttpResponse(204, string.Empty);
+                        return await action.ExecuteAsync(request, this).ConfigureAwait(false);
+                    },
+                    ExtractParameters = CreateParameterExtractor(path),
+                    RateLimitMaxRequests = 0,
+                    RateLimitWindowSeconds = 0
+                };
+                _routes.Add(route);
+                Logger.Info($"添加 IActionResult 异步路由: {method} {path}");
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"添加 IActionResult 异步路由 {method} {path} 时发生错误: {ex}");
+            }
+        }
+
+        /// <summary>
+        /// 添加返回 Task&lt;IActionResult&gt; 的异步路由（带速率限制重载）
+        /// </summary>
+        public void AddRoute(HttpMethod method, string path, Func<HttpRequest, Task<IActionResult>> handler, int rateLimitMaxRequests = 0, int rateLimitWindowSeconds = 0, Func<int, HttpRequest, OverrideContext, Task<HttpResponse?>>? rateLimitCallback = null)
+        {
+            if (handler == null) return;
+            try
+            {
+                var route = new RouteEntry
+                {
+                    Template = path,
+                    Method = method,
+                    Handler = async (request) =>
+                    {
+                        var action = await handler(request).ConfigureAwait(false);
+                        if (action == null)
+                            return new HttpResponse(204, string.Empty);
+                        return await action.ExecuteAsync(request, this).ConfigureAwait(false);
+                    },
+                    ExtractParameters = CreateParameterExtractor(path),
+                    RateLimitMaxRequests = rateLimitMaxRequests,
+                    RateLimitWindowSeconds = rateLimitWindowSeconds,
+                    RateLimitCallback = rateLimitCallback
+                };
+                _routes.Add(route);
+                Logger.Info($"添加 IActionResult 异步路由: {method} {path} (rate={rateLimitMaxRequests}/{rateLimitWindowSeconds}s)");
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"添加 IActionResult 异步路由 {method} {path} 时发生错误: {ex}");
+            }
+        }
+
+        /// <summary>
         /// 设置每条消息的最小处理延迟（毫秒）。
         /// 若设置为 500，则表示每条消息从开始处理到最终完成至少需要 500 毫秒，
         /// 用于平滑短时高并发以减轻 CPU 峰值压力。
@@ -519,7 +671,15 @@ namespace Drx.Sdk.Network.V2.Web
         /// </summary>
         /// <param name="assembly">要扫描的程序集</param>
         /// <param name="server">HttpServer 实例</param>
-        public static void RegisterHandlersFromAssembly(Assembly assembly, DrxHttpServer server)
+        /// <summary>
+        /// 从程序集中注册带有 HttpHandle 特性的方法
+        /// 可选：将扫描到的 handler 类型写入 linker 描述文件（用于在启用 PublishTrimmed 时保留反射目标）。
+        /// </summary>
+        /// <param name="assembly">要扫描的程序集</param>
+        /// <param name="server">HttpServer 实例</param>
+        /// <param name="emitLinkerDescriptor">是否生成 linker 描述文件（linker.xml），以便在裁剪时保留被反射访问的类型</param>
+        /// <param name="descriptorPath">可选的输出路径；若为空则写到应用目录下的 linker.{assemblyName}.xml</param>
+        public static void RegisterHandlersFromAssembly(Assembly assembly, DrxHttpServer server, bool emitLinkerDescriptor = false, string? descriptorPath = null)
         {
             try
             {
@@ -878,10 +1038,88 @@ namespace Drx.Sdk.Network.V2.Web
                 }
 
                 Logger.Info($"从程序集 {assembly.FullName} 注册了 {methods.Count} 个 HTTP处理方法和 {middlewareMethods.Count} 个中间件");
+
+                // 可选：生成 linker 描述文件，供 ILLink/Trim 使用以保留反射访问的类型和成员
+                if (emitLinkerDescriptor)
+                {
+                    try
+                    {
+                        GenerateLinkerDescriptorForAssembly(assembly, descriptorPath);
+                        Logger.Info($"已生成 linker 描述文件，用于保留 {assembly.GetName().Name} 中的反射目标");
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Warn($"生成 linker 描述文件失败: {ex.Message}");
+                    }
+                }
             }
             catch (Exception ex)
             {
                 Logger.Error($"注册 HTTP处理方法时发生错误: {ex}");
+            }
+        }
+
+        /// <summary>
+        /// 基于程序集内带有 HttpHandleAttribute 或 HttpMiddlewareAttribute 的类型，生成一个 linker 描述文件（linker.xml），
+        /// 用于在发布时告知裁剪器保留这些类型的所有成员（preserve="all"）。
+        /// 注意：此文件需在发布/裁剪之前被 MSBuild 项目包含（通过 &lt;TrimmerRootDescriptor Include="..." /&gt;），
+        /// 或者你可以将它手动放到项目并在 csproj 中引用。
+        /// </summary>
+        private static void GenerateLinkerDescriptorForAssembly(Assembly assembly, string? descriptorPath)
+        {
+            if (assembly == null) throw new ArgumentNullException(nameof(assembly));
+
+            // 收集包含 HttpHandleAttribute 或 HttpMiddlewareAttribute 的声明类型
+            var types = assembly.GetTypes()
+                .Where(t => t.GetMethods(BindingFlags.Public | BindingFlags.Static)
+                    .Any(m => m.GetCustomAttributes(typeof(HttpHandleAttribute), false).Length > 0 || m.GetCustomAttributes(typeof(HttpMiddlewareAttribute), false).Length > 0))
+                .Select(t => t.FullName)
+                .Where(n => !string.IsNullOrEmpty(n))
+                .Distinct()
+                .ToList();
+
+            if (types.Count == 0)
+            {
+                // 仍然生成一个最小文件以避免构建错误（可选）
+            }
+
+            var assemblyName = assembly.GetName().Name ?? "UnknownAssembly";
+
+            var root = new XElement("linker");
+            var asmElem = new XElement("assembly", new XAttribute("fullname", assemblyName));
+
+            foreach (var t in types)
+            {
+                asmElem.Add(new XElement("type", new XAttribute("fullname", t!), new XAttribute("preserve", "all")));
+            }
+
+            // 如果没有类型也把 assembly 元素写出（可按需保留整个程序集）
+            root.Add(asmElem);
+
+            var doc = new XDocument(new XComment(" Auto-generated by DrxHttpServer.RegisterHandlersFromAssembly - contains types to preserve for ILLink trimming "), root);
+
+            string outPath;
+            if (!string.IsNullOrEmpty(descriptorPath))
+            {
+                outPath = descriptorPath!;
+            }
+            else
+            {
+                var fileName = $"linker.{assemblyName}.xml";
+                outPath = Path.Combine(AppContext.BaseDirectory ?? Directory.GetCurrentDirectory(), fileName);
+            }
+
+            // 确保目录存在
+            var dir = Path.GetDirectoryName(outPath);
+            if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
+
+            using (var fs = new FileStream(outPath, FileMode.Create, FileAccess.Write, FileShare.None))
+            {
+                var settings = new System.Xml.XmlWriterSettings { Indent = true, Encoding = Encoding.UTF8 };
+                using (var xw = System.Xml.XmlWriter.Create(fs, settings))
+                {
+                    doc.WriteTo(xw);
+                }
             }
         }
 
@@ -1691,87 +1929,19 @@ namespace Drx.Sdk.Network.V2.Web
                 };
 
                 var contentType = request.Headers["Content-Type"] ?? request.Headers["content-type"];
-                if (!string.IsNullOrEmpty(contentType) && contentType.IndexOf("multipart/", StringComparison.OrdinalIgnoreCase) >= 0)
+                // 将表单解析逻辑委托到 HttpRequest.ParseFormAsync，以便集中处理表单解析（包括 multipart 与 urlencoded）
+                if (!string.IsNullOrEmpty(contentType) && (contentType.IndexOf("multipart/", StringComparison.OrdinalIgnoreCase) >= 0 || contentType.IndexOf("application/x-www-form-urlencoded", StringComparison.OrdinalIgnoreCase) >= 0))
                 {
                     try
                     {
-                        var mediaType = MediaTypeHeaderValue.Parse(contentType);
-                        var boundary = HeaderUtilities.RemoveQuotes(mediaType.Boundary).ToString();
-                        var reader = new MultipartReader(boundary, request.InputStream);
-
-                        MultipartSection section;
-                        while ((section = await reader.ReadNextSectionAsync().ConfigureAwait(false)) != null)
+                        if (request.HasEntityBody && request.InputStream != null)
                         {
-                            var hasContentDispositionHeader = ContentDispositionHeaderValue.TryParse(section.ContentDisposition, out var contentDisposition);
-                            if (!hasContentDispositionHeader) continue;
-
-                            if (contentDisposition != null && contentDisposition.IsFileDisposition())
-                            {
-                                var fileName = HeaderUtilities.RemoveQuotes(contentDisposition.FileName).ToString();
-                                var name = HeaderUtilities.RemoveQuotes(contentDisposition.Name).ToString();
-
-                                var ms = new MemoryStream();
-                                await section.Body.CopyToAsync(ms).ConfigureAwait(false);
-                                ms.Position = 0;
-
-                                httpRequest.UploadFile = new HttpRequest.UploadFileDescriptor
-                                {
-                                    Stream = ms,
-                                    FileName = string.IsNullOrEmpty(fileName) ? "file" : fileName,
-                                    FieldName = string.IsNullOrEmpty(name) ? "file" : name,
-                                    CancellationToken = CancellationToken.None,
-                                    Progress = null
-                                };
-                            }
-                            else if (contentDisposition != null && contentDisposition.IsFormDisposition())
-                            {
-                                var name = HeaderUtilities.RemoveQuotes(contentDisposition.Name).ToString();
-                                using var sr = new StreamReader(section.Body, Encoding.UTF8);
-                                var value = await sr.ReadToEndAsync().ConfigureAwait(false);
-                                if (string.Equals(name, "metadata", StringComparison.OrdinalIgnoreCase) || string.Equals(name, "body", StringComparison.OrdinalIgnoreCase))
-                                {
-                                    body = value;
-                                    try
-                                    {
-                                        httpRequest.Headers.Add(name, value);
-                                    }
-                                    catch (Exception)
-                                    {
-                                        try
-                                        {
-                                            httpRequest.Form.Add(name, value);
-                                        }
-                                        catch
-                                        {
-                                            if (string.IsNullOrEmpty(httpRequest.Body)) httpRequest.Body = value; else httpRequest.Body += "\n" + value;
-                                        }
-                                    }
-                                }
-                                else
-                                {
-                                    try { httpRequest.Form.Add(name, value); } catch { }
-                                    try
-                                    {
-                                        httpRequest.Headers.Add(name, value);
-                                    }
-                                    catch
-                                    {
-                                    }
-                                }
-                            }
-                        }
-
-                        if (!string.IsNullOrEmpty(body))
-                        {
-                            httpRequest.Body = body;
-                            httpRequest.BodyBytes = Encoding.UTF8.GetBytes(body);
-                            httpRequest.Content = new System.Dynamic.ExpandoObject();
-                            try { ((System.Collections.Generic.IDictionary<string, object>)httpRequest.Content)["Text"] = body; } catch { }
+                            await httpRequest.ParseFormAsync(contentType, request.InputStream, Encoding.UTF8).ConfigureAwait(false);
                         }
                     }
                     catch (Exception ex)
                     {
-                        Logger.Error($"Multipart解析失败: {ex}");
+                        Logger.Error($"解析请求表单时发生错误: {ex}");
                         throw;
                     }
 

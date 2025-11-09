@@ -34,6 +34,8 @@ DrxHttpServer 是 DRX.Environment 框架中的高性能 HTTP 服务器，基于 
 | OnGlobalRateLimitExceeded | Func<int, HttpRequest, Task>? OnGlobalRateLimitExceeded { get; set; } | 全局速率限制触发时的异步回调（参数：触发次数, HttpRequest） | settable async callback | - |
 | OnRouteRateLimitExceeded | Func<int, HttpRequest, string, Task>? OnRouteRateLimitExceeded { get; set; } | 路由级速率限制触发时的异步回调（参数：触发次数, HttpRequest, routeKey） | settable async callback | - |
 | RegisterHandlersFromAssembly | static void RegisterHandlersFromAssembly(Assembly, DrxHttpServer) | 动态注册带特性的方法 | void | Exception |
+| Response | void Response(HttpListenerContext, HttpResponse) | 由处理器直接同步发送响应的便利方法 | void | - |
+| ResponseAsync | Task ResponseAsync(HttpListenerContext, IActionResult) | 由处理器异步发送 IActionResult 的便利方法 | Task | - |
 | SaveUploadFile | static HttpResponse SaveUploadFile(HttpRequest, string, string) | 保存上传流为文件 | HttpResponse | Exception |
 | CreateFileResponse | static HttpResponse CreateFileResponse(string, string?, string, int) | 创建流式下载响应 | HttpResponse | Exception |
 | GetFileStream | static Stream GetFileStream(string) | 获取文件流 | Stream/null | Exception |
@@ -705,6 +707,78 @@ await server.DisposeAsync();
 ```csharp
 server.AddRoute(HttpMethod.Get, "/hello", req => new HttpResponse(200, "world"));
 ```
+
+### IActionResult 与 新签名示例
+
+下面示例展示如何使用框架新增的 `IActionResult` 签名（同步/异步）以及何时使用原始 `HttpListenerContext` 签名。它们可以直接通过 `RegisterHandlersFromAssembly` 自动注册，或者以编程方式通过 `AddRoute` / `AddRawRoute` 注册。
+
+1) 同步返回 HTML 页面（使用 `HtmlResult` 简便构造）
+
+```csharp
+// 直接在路由中返回 HTML
+server.AddRoute(HttpMethod.Get, "/page", req =>
+  new HtmlResult("<!doctype html><html><body><h1>Hello from DrxHttpServer</h1></body></html>"));
+
+// 或使用路径返回 HTML
+server.AddRoute(HttpMethod.Get, "/page2", req =>
+  new HtmlResultFromFile("/index.html")); // <-- 使用 "/index.html" 的时候需要使用 server.FileRootPath = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot"); 来指定根目录
+```
+
+2) 异步返回 JSON（Task<IActionResult>）
+
+```csharp
+[HttpHandle("/api/hello-async", "GET")]
+public static async Task<IActionResult> HelloAsync(HttpRequest req, DrxHttpServer server)
+{
+  // 异步场景下可以访问 server 注入对象（例如用于读取共享资源或服务）
+  await Task.Yield();
+  return new JsonResult(new { message = "hello", path = req.Path });
+}
+```
+
+3) 在路由中返回文件下载（推荐使用 `IActionResult` 的 `FileResult`，保持与旧 API 兼容）
+
+```csharp
+// 使用 IActionResult/ FileResult 返回文件下载（推荐）
+server.AddRoute(HttpMethod.Get, "/download/{name}", req =>
+{
+    var filePath = Path.Combine("C:/files", req.PathParameters["name"]);
+    var downloadName = Path.GetFileName(filePath);
+    // FileResult 是 IActionResult 的实现，框架会在执行时把文件流和头正确写出并支持 Range
+    return new FileResult(filePath, downloadName, "application/octet-stream", bandwidthLimitKbps: 0);
+});
+
+// 兼容旧版：仍可直接返回 HttpResponse（CreateFileResponse），框架会继续支持此写法
+// return DrxHttpServer.CreateFileResponse(filePath, downloadName, "application/octet-stream", 0);
+```
+
+4) 原始/低级处理器示例（直接操作 `HttpListenerContext`，并使用 `ResponseAsync` 便捷地发送 `IActionResult`）
+
+```csharp
+[HttpHandle("/raw-echo", "POST", Raw = true)]
+public static async Task RawEcho(HttpListenerContext ctx, DrxHttpServer server)
+{
+  // 读取请求体并直接写回
+  using var ms = new MemoryStream();
+  await ctx.Request.InputStream.CopyToAsync(ms);
+  var body = System.Text.Encoding.UTF8.GetString(ms.ToArray());
+
+  // 使用框架提供的便捷方法把 IActionResult 写回到 HttpListenerContext
+  await server.ResponseAsync(ctx, new ContentResult($"You said: {body}", "text/plain; charset=utf-8"));
+}
+```
+
+5) 通过属性批量注册：把带 `HttpHandle` 的类所在程序集注册到服务器
+
+```csharp
+// 在启动处把 API 类所在程序集注册到 server
+DrxHttpServer.RegisterHandlersFromAssembly(typeof(MyApi).Assembly, server);
+```
+
+说明：
+- 推荐在大多数业务路由中使用 `IActionResult`（或 `HttpResponse`）签名，便于框架统一处理 Content-Type、Status、流响应与异步行为。 
+- 仅在需要直接控制底层流、实现自定义协议或 WebSocket 握手时使用 Raw (`HttpListenerContext`) 签名。
+
 
 ### 流式上传
 ```csharp
