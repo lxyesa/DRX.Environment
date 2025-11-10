@@ -12,6 +12,7 @@ using System.Threading.Channels;
 using System.Xml.Linq;
 using System.Threading;
 using System.Reflection;
+using System.Diagnostics.CodeAnalysis;
 using System.Text.RegularExpressions;
 using System.Diagnostics;
 using Microsoft.AspNetCore.WebUtilities;
@@ -403,11 +404,11 @@ namespace Drx.Sdk.Network.V2.Web
                     ExtractParameters = CreateParameterExtractor(path)
                 };
                 _routes.Add(route);
-                Logger.Info($"添加路由: {method} {path}");
+                Logger.Info($"添加同步路由: {method} {path}");
             }
             catch (Exception ex)
             {
-                Logger.Error($"添加路由 {method} {path} 时发生错误: {ex}");
+                Logger.Error($"添加同步路由 {method} {path} 时发生错误: {ex}");
             }
         }
 
@@ -426,11 +427,11 @@ namespace Drx.Sdk.Network.V2.Web
                     RateLimitWindowSeconds = rateLimitWindowSeconds
                 };
                 _routes.Add(route);
-                Logger.Info($"添加路由: {method} {path} (rate={rateLimitMaxRequests}/{rateLimitWindowSeconds}s)");
+                Logger.Info($"添加同步路由: {method} {path} (rate={rateLimitMaxRequests}/{rateLimitWindowSeconds}s)");
             }
             catch (Exception ex)
             {
-                Logger.Error($"添加路由 {method} {path} 时发生错误: {ex}");
+                Logger.Error($"添加同步路由 {method} {path} 时发生错误: {ex}");
             }
         }
 
@@ -511,11 +512,11 @@ namespace Drx.Sdk.Network.V2.Web
                     ExtractParameters = CreateParameterExtractor(path)
                 };
                 _routes.Add(route);
-                Logger.Info($"添加 IActionResult 同步路由: {method} {path}");
+                Logger.Info($"添加同步路由: {method} {path}");
             }
             catch (Exception ex)
             {
-                Logger.Error($"添加 IActionResult 同步路由 {method} {path} 时发生错误: {ex}");
+                Logger.Error($"添加同步路由 {method} {path} 时发生错误: {ex}");
             }
         }
 
@@ -546,11 +547,11 @@ namespace Drx.Sdk.Network.V2.Web
                     RateLimitWindowSeconds = 0
                 };
                 _routes.Add(route);
-                Logger.Info($"添加 IActionResult 异步路由: {method} {path}");
+                Logger.Info($"添加异步路由: {method} {path}");
             }
             catch (Exception ex)
             {
-                Logger.Error($"添加 IActionResult 异步路由 {method} {path} 时发生错误: {ex}");
+                Logger.Error($"添加异步路由 {method} {path} 时发生错误: {ex}");
             }
         }
 
@@ -579,11 +580,11 @@ namespace Drx.Sdk.Network.V2.Web
                     RateLimitCallback = rateLimitCallback
                 };
                 _routes.Add(route);
-                Logger.Info($"添加 IActionResult 异步路由: {method} {path} (rate={rateLimitMaxRequests}/{rateLimitWindowSeconds}s)");
+                Logger.Info($"添加异步路由: {method} {path} (rate={rateLimitMaxRequests}/{rateLimitWindowSeconds}s)");
             }
             catch (Exception ex)
             {
-                Logger.Error($"添加 IActionResult 异步路由 {method} {path} 时发生错误: {ex}");
+                Logger.Error($"添加异步路由 {method} {path} 时发生错误: {ex}");
             }
         }
 
@@ -667,22 +668,20 @@ namespace Drx.Sdk.Network.V2.Web
         }
 
         /// <summary>
-        /// 从程序集中注册带有 HttpHandle 特性的方法
-        /// </summary>
-        /// <param name="assembly">要扫描的程序集</param>
-        /// <param name="server">HttpServer 实例</param>
-        /// <summary>
-        /// 从程序集中注册带有 HttpHandle 特性的方法
+        /// 基于提供的类型标记（marker type）所在的程序集，注册带有 HttpHandle 特性的方法。
+        /// 使用 Type 而非 Assembly 可以在框架 API 层上应用裁剪注解（DynamicallyAccessedMembers），
+        /// 告知裁剪器保留通过反射访问的成员。
         /// 可选：将扫描到的 handler 类型写入 linker 描述文件（用于在启用 PublishTrimmed 时保留反射目标）。
         /// </summary>
-        /// <param name="assembly">要扫描的程序集</param>
-        /// <param name="server">HttpServer 实例</param>
+        /// <param name="markerType">用于标识目标程序集的类型。此参数带有裁剪注解以便保留成员。</param>
         /// <param name="emitLinkerDescriptor">是否生成 linker 描述文件（linker.xml），以便在裁剪时保留被反射访问的类型</param>
         /// <param name="descriptorPath">可选的输出路径；若为空则写到应用目录下的 linker.{assemblyName}.xml</param>
-        public static void RegisterHandlersFromAssembly(Assembly assembly, DrxHttpServer server, bool emitLinkerDescriptor = false, string? descriptorPath = null)
+        public void RegisterHandlersFromAssembly([DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicMethods | DynamicallyAccessedMemberTypes.PublicConstructors | DynamicallyAccessedMemberTypes.PublicNestedTypes)] Type markerType, bool emitLinkerDescriptor = false, string? descriptorPath = null, bool emitPreserveSource = false, string? preserveSourcePath = null)
         {
             try
             {
+                var assembly = markerType.Assembly;
+
                 var methods = assembly.GetTypes()
                     .SelectMany(t => t.GetMethods(BindingFlags.Public | BindingFlags.Static))
                     .Where(m => m.GetCustomAttributes(typeof(HttpHandleAttribute), false).Length > 0)
@@ -705,12 +704,12 @@ namespace Drx.Sdk.Network.V2.Web
                                 if (returnType == typeof(void))
                                 {
                                     Func<HttpListenerContext, Task> handler = ctx => { method.Invoke(null, new object[] { ctx }); return Task.CompletedTask; };
-                                    server.AddRawRoute(attr.Path, handler, attr.RateLimitMaxRequests, attr.RateLimitWindowSeconds);
+                                    this.AddRawRoute(attr.Path, handler, attr.RateLimitMaxRequests, attr.RateLimitWindowSeconds);
                                 }
                                 else if (returnType == typeof(Task))
                                 {
                                     Func<HttpListenerContext, Task> handler = ctx => (Task)method.Invoke(null, new object[] { ctx });
-                                    server.AddRawRoute(attr.Path, handler, attr.RateLimitMaxRequests, attr.RateLimitWindowSeconds);
+                                    this.AddRawRoute(attr.Path, handler, attr.RateLimitMaxRequests, attr.RateLimitWindowSeconds);
                                 }
                                 else if (returnType == typeof(HttpResponse))
                                 {
@@ -719,7 +718,7 @@ namespace Drx.Sdk.Network.V2.Web
                                         try
                                         {
                                             var resp = (HttpResponse)method.Invoke(null, new object[] { ctx })!;
-                                            server.SendResponse(ctx.Response, resp ?? new HttpResponse(500, "Internal Server Error"));
+                                            this.SendResponse(ctx.Response, resp ?? new HttpResponse(500, "Internal Server Error"));
                                         }
                                         catch (TargetInvocationException tie)
                                         {
@@ -733,7 +732,7 @@ namespace Drx.Sdk.Network.V2.Web
                                         }
                                         await Task.CompletedTask;
                                     };
-                                    server.AddRawRoute(attr.Path, handler);
+                                    this.AddRawRoute(attr.Path, handler);
                                 }
                                 else if (returnType == typeof(Task<HttpResponse>))
                                 {
@@ -743,7 +742,7 @@ namespace Drx.Sdk.Network.V2.Web
                                         {
                                             var task = (Task<HttpResponse>)method.Invoke(null, new object[] { ctx })!;
                                             var resp = await task.ConfigureAwait(false) ?? new HttpResponse(500, "Internal Server Error");
-                                            server.SendResponse(ctx.Response, resp);
+                                            this.SendResponse(ctx.Response, resp);
                                         }
                                         catch (TargetInvocationException tie)
                                         {
@@ -756,7 +755,7 @@ namespace Drx.Sdk.Network.V2.Web
                                             try { ctx.Response.StatusCode = 500; using var sw = new StreamWriter(ctx.Response.OutputStream, Encoding.UTF8, leaveOpen: false); sw.Write("Internal Server Error"); } catch { }
                                         }
                                     };
-                                    server.AddRawRoute(attr.Path, handler);
+                                    this.AddRawRoute(attr.Path, handler);
                                 }
                                 else
                                 {
@@ -771,11 +770,11 @@ namespace Drx.Sdk.Network.V2.Web
                         else if (attr.StreamUpload)
                         {
                             // StreamUpload 路由会自动将 HttpListenerContext 的请求流传递给处理方法，签名可为 (HttpRequest) -> HttpResponse/Task<HttpResponse>
-                            var handler = CreateHandlerDelegate(method, server);
+                            var handler = CreateHandlerDelegate(method);
                             if (handler != null)
                             {
                                 // 使用专用注册器将 handler 包装为 raw handler，传入 HttpRequest.Stream 和 ListenerContext
-                                server.AddStreamUploadRoute(attr.Path, handler, attr.RateLimitMaxRequests, attr.RateLimitWindowSeconds);
+                                this.AddStreamUploadRoute(attr.Path, handler, attr.RateLimitMaxRequests, attr.RateLimitWindowSeconds);
                             }
                             else
                             {
@@ -802,12 +801,12 @@ namespace Drx.Sdk.Network.V2.Web
                                         try
                                         {
                                             // 构建参数列表：支持 HttpRequest、DrxHttpServer、HttpListenerContext
-                                            var req = await server.ParseRequestAsync(ctx.Request).ConfigureAwait(false);
+                                            var req = await this.ParseRequestAsync(ctx.Request).ConfigureAwait(false);
                                             var args = new List<object?>();
                                             foreach (var p in parameters)
                                             {
                                                 if (p.ParameterType == typeof(HttpRequest)) args.Add(req);
-                                                else if (p.ParameterType == typeof(DrxHttpServer)) args.Add(server);
+                                                else if (p.ParameterType == typeof(DrxHttpServer)) args.Add(this);
                                                 else if (p.ParameterType == typeof(HttpListenerContext)) args.Add(ctx);
                                                 else args.Add(null);
                                             }
@@ -831,16 +830,16 @@ namespace Drx.Sdk.Network.V2.Web
                                         }
                                     };
 
-                                    server.AddRawRoute(attr.Path, rawHandler, attr.RateLimitMaxRequests, attr.RateLimitWindowSeconds);
+                                    this.AddRawRoute(attr.Path, rawHandler, attr.RateLimitMaxRequests, attr.RateLimitWindowSeconds);
                                 }
                                 else
                                 {
-                                    var handler = CreateHandlerDelegate(method, server);
+                                    var handler = CreateHandlerDelegate(method);
                                     if (handler != null)
                                     {
                                         // 绑定路由级速率限制回调（如果属性中指定了）
                                         var rateLimitCallback = BindRateLimitCallback(method.DeclaringType!, attr);
-                                        server.AddRoute(httpMethod, attr.Path, handler, attr.RateLimitMaxRequests, attr.RateLimitWindowSeconds, rateLimitCallback);
+                                        this.AddRoute(httpMethod, attr.Path, handler, attr.RateLimitMaxRequests, attr.RateLimitWindowSeconds, rateLimitCallback);
                                     }
                                 }
                             }
@@ -883,7 +882,7 @@ namespace Drx.Sdk.Network.V2.Web
                                 continue;
                             }
 
-                            server.AddMiddleware(middlewareHandler, attr.Path, attr.Priority, attr.OverrideGlobal);
+                            this.AddMiddleware(middlewareHandler, attr.Path, attr.Priority, attr.OverrideGlobal);
                         }
                         else if (parameters.Length == 2 && parameters[0].ParameterType == typeof(HttpRequest))
                         {
@@ -1022,13 +1021,15 @@ namespace Drx.Sdk.Network.V2.Web
                                 Path = attr.Path,
                                 Priority = priority,
                                 OverrideGlobal = attr.OverrideGlobal,
-                                AddOrder = server._middlewareCounter++,
+                                AddOrder = this._middlewareCounter++,
                                 Handler = ctx => Task.CompletedTask,
                                 RequestMiddleware = requestMiddleware
                             };
 
                             // 使用内部添加以保持排序逻辑
-                            server._middlewares.Add(entry);
+                            this._middlewares.Add(entry);
+                            // 保持与 AddMiddleware 相同的日志输出，确保反射注册的中间件在日志中可见且格式一致
+                            Logger.Info($"添加中间件: {attr.Path ?? "全局"} (优先级: {priority})");
                         }
                         else
                         {
@@ -1050,6 +1051,19 @@ namespace Drx.Sdk.Network.V2.Web
                     catch (Exception ex)
                     {
                         Logger.Warn($"生成 linker 描述文件失败: {ex.Message}");
+                    }
+                }
+
+                if (emitPreserveSource)
+                {
+                    try
+                    {
+                        GeneratePreserveSourceForAssembly(assembly, preserveSourcePath);
+                        Logger.Info($"已生成 Preserve 源文件，用于在编译时通过 DynamicDependency 保留 {assembly.GetName().Name} 的处理器类型");
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Warn($"生成 Preserve 源文件失败: {ex.Message}");
                     }
                 }
             }
@@ -1123,7 +1137,68 @@ namespace Drx.Sdk.Network.V2.Web
             }
         }
 
-        private static Func<HttpRequest, Task<HttpResponse>> CreateHandlerDelegate(MethodInfo method, DrxHttpServer server)
+        /// <summary>
+        /// 为需要通过反射访问的类型生成一个 C# 源文件，包含一个私有静态方法，方法上带有一系列
+        /// [DynamicDependency(DynamicallyAccessedMemberTypes.All, "Full.Type.Name", "AssemblyName")] 注解。
+        /// 将生成文件加入项目后，编译器/裁剪器会根据这些注解保留对应类型的元数据。
+        /// </summary>
+        /// <param name="assembly">目标程序集</param>
+        /// <param name="outputPath">输出的 .cs 文件路径；若为空则写入应用目录下 PreserveHandlers.{assemblyName}.Generated.cs</param>
+        private static void GeneratePreserveSourceForAssembly(Assembly assembly, string? outputPath)
+        {
+            if (assembly == null) throw new ArgumentNullException(nameof(assembly));
+
+            var assemblyName = assembly.GetName().Name ?? "UnknownAssembly";
+
+            // 收集包含 HttpHandleAttribute 或 HttpMiddlewareAttribute 的声明类型
+            var types = assembly.GetTypes()
+                .Where(t => t.GetMethods(BindingFlags.Public | BindingFlags.Static)
+                    .Any(m => m.GetCustomAttributes(typeof(HttpHandleAttribute), false).Length > 0 || m.GetCustomAttributes(typeof(HttpMiddlewareAttribute), false).Length > 0))
+                .Select(t => t.FullName)
+                .Where(n => !string.IsNullOrEmpty(n))
+                .Distinct()
+                .ToList();
+
+            var sb = new StringBuilder();
+            sb.AppendLine("// Auto-generated by DrxHttpServer.GeneratePreserveSourceForAssembly");
+            sb.AppendLine("// Purpose: provide DynamicDependency annotations so ILLink preserves handler types accessed by reflection");
+            sb.AppendLine("using System.Diagnostics.CodeAnalysis;");
+            sb.AppendLine();
+
+            // Use a safe namespace for generated file
+            var safeNamespace = assemblyName.Replace('-', '_').Replace('.', '_');
+            sb.AppendLine($"namespace {safeNamespace}");
+            sb.AppendLine("{");
+            sb.AppendLine("    internal static class PreserveHandlersGenerated");
+            sb.AppendLine("    {");
+
+            if (types.Count == 0)
+            {
+                sb.AppendLine("        // 没有发现带 HttpHandle/HttpMiddleware 的类型，保留方法为空");
+            }
+            else
+            {
+                foreach (var t in types)
+                {
+                    // 使用字符串形式的 DynamicDependency（程序集名作为第三个参数）
+                    sb.AppendLine($"        [DynamicDependency(DynamicallyAccessedMemberTypes.All, \"{t}\", \"{assemblyName}\")] ");
+                }
+            }
+
+            sb.AppendLine("        private static void Preserve() { /* for trimmer */ }");
+            sb.AppendLine("    }");
+            sb.AppendLine("}");
+
+            string outPath;
+            if (!string.IsNullOrEmpty(outputPath)) outPath = outputPath!;
+            else outPath = Path.Combine(AppContext.BaseDirectory ?? Directory.GetCurrentDirectory(), $"PreserveHandlers.{assemblyName}.Generated.cs");
+
+            var dir = Path.GetDirectoryName(outPath);
+            if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
+
+            File.WriteAllText(outPath, sb.ToString(), Encoding.UTF8);
+        }
+        private Func<HttpRequest, Task<HttpResponse>> CreateHandlerDelegate(MethodInfo method)
         {
             try
             {
@@ -1161,7 +1236,7 @@ namespace Drx.Sdk.Network.V2.Web
                         foreach (var p in parameters)
                         {
                             if (p.ParameterType == typeof(HttpRequest)) args.Add(request);
-                            else if (p.ParameterType == typeof(DrxHttpServer)) args.Add(server);
+                            else if (p.ParameterType == typeof(DrxHttpServer)) args.Add(this);
                             else if (p.ParameterType == typeof(HttpListenerContext)) args.Add(request.ListenerContext);
                             else args.Add(null);
                         }
@@ -1185,7 +1260,7 @@ namespace Drx.Sdk.Network.V2.Web
                                 var prop = task.GetType().GetProperty("Result");
                                 var action = (IActionResult)prop!.GetValue(task)!;
                                 if (action == null) return new HttpResponse(500, "Internal Server Error");
-                                return await action.ExecuteAsync(request, server).ConfigureAwait(false);
+                                return await action.ExecuteAsync(request, this).ConfigureAwait(false);
                             }
 
                             // 如果是 Task 且不含返回值（应已被视为 raw），则返回 204
@@ -1201,7 +1276,7 @@ namespace Drx.Sdk.Network.V2.Web
                         if (returnsActionResult)
                         {
                             var action = (IActionResult)result!;
-                            return await action.ExecuteAsync(request, server).ConfigureAwait(false);
+                            return await action.ExecuteAsync(request, this).ConfigureAwait(false);
                         }
 
                         // 不应到达此处，但为了安全返回 500

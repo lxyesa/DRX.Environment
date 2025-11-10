@@ -6,6 +6,8 @@
     <Nullable>enable</Nullable>
     <RootNamespace>Drx.Sdk.Network</RootNamespace>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <!-- 使用代码裁剪-->
+    <PublishTrimmed>true</PublishTrimmed>
   </PropertyGroup>
 
   <!-- Release 开启 NativeAOT，Debug 关闭 -->

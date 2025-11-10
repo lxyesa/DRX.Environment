@@ -340,43 +340,39 @@ public class KaxHttp
     * 用于测试登录令牌的有效性
     */
     [HttpHandle("/api/hello", "GET", RateLimitMaxRequests = 1, RateLimitWindowSeconds = 60, RateLimitCallbackMethodName = nameof(RateLimitCallback))]
-    public static HttpResponse Get_SayHello(HttpRequest request)
+    public static IActionResult Get_SayHello(HttpRequest request)
     {
         try
         {
             var principal = JwtHelper.ValidateTokenFromRequest(request);
             if (principal == null)
             {
-                return new HttpResponse()
+                return new JsonResult(new
                 {
-                    StatusCode = 401,
-                    Body = "无效的登录令牌。",
-                };
+                    message = "无效的登录令牌。",
+                }, 401);
             }
 
             var userName = principal.Identity?.Name;
             if (IsUserBanned(userName!))
             {
-                return new HttpResponse()
+                return new JsonResult(new
                 {
-                    StatusCode = 403,
-                    Body = "您的账号已被封禁，无法访问此资源。",
-                };
+                    message = "您的账号已被封禁，无法访问此资源。",
+                }, 403);
             }
-            return new HttpResponse()
+            return new JsonResult(new
             {
-                StatusCode = 200,
-                Body = $"Hello, {userName}! Your token is valid.",
-            };
+                message = $"Hello, {userName}! Your token is valid.",
+            }, 200);
         }
         catch (Exception ex)
         {
             Logger.Error("验证令牌时发生异常: " + ex.Message);
-            return new HttpResponse()
+            return new JsonResult(new
             {
-                StatusCode = 500,
-                Body = "服务器错误，无法处理请求。",
-            };
+                message = "服务器错误，无法处理请求。",
+            }, 500);
         }
     }
 

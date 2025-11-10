@@ -33,7 +33,7 @@ DrxHttpServer 是 DRX.Environment 框架中的高性能 HTTP 服务器，基于 
 | GetRateLimit | (int maxRequests, TimeSpan window) GetRateLimit() | 获取当前速率限制设置 | (int, TimeSpan) | - |
 | OnGlobalRateLimitExceeded | Func<int, HttpRequest, Task>? OnGlobalRateLimitExceeded { get; set; } | 全局速率限制触发时的异步回调（参数：触发次数, HttpRequest） | settable async callback | - |
 | OnRouteRateLimitExceeded | Func<int, HttpRequest, string, Task>? OnRouteRateLimitExceeded { get; set; } | 路由级速率限制触发时的异步回调（参数：触发次数, HttpRequest, routeKey） | settable async callback | - |
-| RegisterHandlersFromAssembly | static void RegisterHandlersFromAssembly(Assembly, DrxHttpServer) | 动态注册带特性的方法 | void | Exception |
+| RegisterHandlersFromAssembly | void RegisterHandlersFromAssembly(Typeof) | 动态注册带特性的方法 | void | Exception |
 | Response | void Response(HttpListenerContext, HttpResponse) | 由处理器直接同步发送响应的便利方法 | void | - |
 | ResponseAsync | Task ResponseAsync(HttpListenerContext, IActionResult) | 由处理器异步发送 IActionResult 的便利方法 | Task | - |
 | SaveUploadFile | static HttpResponse SaveUploadFile(HttpRequest, string, string) | 保存上传流为文件 | HttpResponse | Exception |
@@ -772,7 +772,7 @@ public static async Task RawEcho(HttpListenerContext ctx, DrxHttpServer server)
 
 ```csharp
 // 在启动处把 API 类所在程序集注册到 server
-DrxHttpServer.RegisterHandlersFromAssembly(typeof(MyApi).Assembly, server);
+server.RegisterHandlersFromAssembly(typeof(MyApi));
 ```
 
 说明：
@@ -792,7 +792,7 @@ server.AddFileRoute("/download/", "C:/files");
 
 ### 动态注册 API
 ```csharp
-DrxHttpServer.RegisterHandlersFromAssembly(typeof(MyApi).Assembly, server);
+server.RegisterHandlersFromAssembly(typeof(MyApi).Assembly);
 ```
 
 ### 设置速率限制

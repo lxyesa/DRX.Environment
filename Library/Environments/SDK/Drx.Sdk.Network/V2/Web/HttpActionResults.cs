@@ -301,5 +301,13 @@ namespace Drx.Sdk.Network.V2.Web
             return Task.FromResult(resp);
         }
     }
+
+    public class OkResult : IActionResult
+    {
+        public Task<HttpResponse> ExecuteAsync(HttpRequest request, DrxHttpServer server)
+        {
+            var resp = new HttpResponse(200);
+            return Task.FromResult(resp);
+        }
+    }
 }
-        /// <summary>

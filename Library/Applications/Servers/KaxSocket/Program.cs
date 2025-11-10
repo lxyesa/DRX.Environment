@@ -7,6 +7,7 @@ using KaxSocket;
 using KaxSocket.Handlers;
 using System;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Net;
 using System.Text;
 using System.Threading.Tasks;
@@ -15,6 +16,7 @@ using HttpMethod = System.Net.Http.HttpMethod;
 
 public class Program
 {
+
     // 简单测试：启动 HttpServer 并注册处理方法
     public static async Task Main(string[] args)
     {
@@ -31,9 +33,6 @@ public class Program
 
         var prefixes = new[] { "http://+:8462/" };
         var server = new DrxHttpServer(prefixes);
-
-
-        DrxHttpServer.RegisterHandlersFromAssembly(typeof(KaxHttp).Assembly, server);
 
         try
         {
@@ -55,6 +54,7 @@ public class Program
             server.AddRoute(HttpMethod.Get, "/", req => new HtmlResultFromFile($"{AppDomain.CurrentDomain.BaseDirectory}Views/index.html"));
             server.AddRoute(HttpMethod.Get, "/login", req => new HtmlResultFromFile($"{AppDomain.CurrentDomain.BaseDirectory}Views/login.html"));
             server.AddRoute(HttpMethod.Get, "/register", req => new HtmlResultFromFile($"{AppDomain.CurrentDomain.BaseDirectory}Views/register.html"));
+            server.RegisterHandlersFromAssembly(typeof(KaxHttp));
 
             await server.StartAsync();
         }
