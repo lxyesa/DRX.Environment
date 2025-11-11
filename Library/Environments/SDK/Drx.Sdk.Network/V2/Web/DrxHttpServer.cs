@@ -86,6 +86,13 @@ namespace Drx.Sdk.Network.V2.Web
         public string? FileRootPath { get; set; }
 
         /// <summary>
+        /// 页面根目录（与 FileRootPath 分离）
+        /// - 用于存放服务器端渲染或页面模板（如 .html/.htm/.css/.js 等）的目录
+        /// - 在解析相对页面路径时优先从 ViewRoot 查找，找不到再回退到 FileRootPath
+        /// </summary>
+        public string? ViewRoot { get; set; }
+
+        /// <summary>
         /// 配置全局 JSON 序列化策略
         /// 默认为链式回退模式（先反射，后安全模式）
         /// </summary>
@@ -142,7 +149,16 @@ namespace Drx.Sdk.Network.V2.Web
                     return File.Exists(abs) ? abs : null;
                 }
 
-                // 尝试使用 FileRootPath
+                // 优先尝试使用 ViewRoot（页面根目录），使页面资源与通用文件目录分离
+                if (!string.IsNullOrEmpty(ViewRoot))
+                {
+                    var trimmedView = pathOrIndicator.TrimStart('/', '\\');
+                    var candidateView = Path.Combine(ViewRoot, trimmedView);
+                    var fullView = Path.GetFullPath(candidateView);
+                    if (File.Exists(fullView)) return fullView;
+                }
+
+                // 尝试使用 FileRootPath（通用文件根）
                 if (!string.IsNullOrEmpty(FileRootPath))
                 {
                     // 去除前导 '/' 或 '\\'
@@ -174,7 +190,7 @@ namespace Drx.Sdk.Network.V2.Web
         private int _middlewareCounter = 0;
         private readonly SessionManager _sessionManager;
         private readonly AuthorizationManager _authorizationManager;
-    private readonly DataPersistentManager _dataPersistentManager;
+        private readonly DataPersistentManager _dataPersistentManager;
         private readonly System.Threading.AsyncLocal<Session?> _currentSession = new();
 
         private CancellationTokenSource _cts;
@@ -1567,14 +1583,14 @@ namespace Drx.Sdk.Network.V2.Web
 
                     // 如果没有匹配的路由，优先尝试从 FileRootPath 提供静态文件（当用户通过 FileRootPath 设置了根目录时）
                     // 这允许像 /xxx.html 这样未经注册的路径仍然能被访问到（受限于目录穿越防护）。
-                    if (!string.IsNullOrEmpty(FileRootPath))
+                    if (!string.IsNullOrEmpty(FileRootPath) || !string.IsNullOrEmpty(ViewRoot))
                     {
                         try
                         {
                             var relPath = req.Path ?? "/";
                             if (relPath.StartsWith("/")) relPath = relPath.Substring(1);
 
-                            // 仅当请求带有文件名（包含扩展名）时才尝试直接从 FileRootPath 提供
+                            // 仅当请求带有文件名（包含扩展名）时才尝试直接从根目录提供
                             if (!string.IsNullOrEmpty(relPath) && relPath.Contains('.'))
                             {
                                 // 防止路径穿越
@@ -1584,17 +1600,52 @@ namespace Drx.Sdk.Network.V2.Web
                                     return new HttpResponse(403, "Forbidden");
                                 }
 
-                                var filePath = Path.Combine(FileRootPath, safeRel);
-                                if (File.Exists(filePath))
+                                // 对于页面/文本类文件，优先从 ViewRoot 查找（若配置），否则回退到 FileRootPath
+                                var ext = Path.GetExtension(safeRel).ToLowerInvariant();
+                                bool isTextLike = ext == ".html" || ext == ".htm" || ext == ".css" || ext == ".js" || ext == ".json" || ext == ".txt";
+
+                                string? filePath = null;
+
+                                if (isTextLike)
+                                {
+                                    if (!string.IsNullOrEmpty(ViewRoot))
+                                    {
+                                        var candidateView = Path.Combine(ViewRoot, safeRel);
+                                        if (File.Exists(candidateView)) filePath = candidateView;
+                                    }
+
+                                    if (filePath == null && !string.IsNullOrEmpty(FileRootPath))
+                                    {
+                                        var candidateFileRoot = Path.Combine(FileRootPath, safeRel);
+                                        if (File.Exists(candidateFileRoot)) filePath = candidateFileRoot;
+                                    }
+                                }
+                                else
+                                {
+                                    // 二进制类文件优先使用 FileRootPath（与原有行为一致）
+                                    if (!string.IsNullOrEmpty(FileRootPath))
+                                    {
+                                        var candidateFileRoot = Path.Combine(FileRootPath, safeRel);
+                                        if (File.Exists(candidateFileRoot)) filePath = candidateFileRoot;
+                                    }
+
+                                    // 如果 FileRootPath 未配置或未找到，也尝试 ViewRoot 作为回退（以提高鲁棒性）
+                                    if (filePath == null && !string.IsNullOrEmpty(ViewRoot))
+                                    {
+                                        var candidateView = Path.Combine(ViewRoot, safeRel);
+                                        if (File.Exists(candidateView)) filePath = candidateView;
+                                    }
+                                }
+
+                                if (filePath != null)
                                 {
                                     var clientIp = req.ClientAddress.Ip ?? context.Request.RemoteEndPoint?.Address.ToString();
-                                    Logger.Info($"通过 FileRootPath 提供静态文件: {relPath} (客户端: {clientIp})");
+                                    Logger.Info($"通过根目录提供静态文件: {relPath} (客户端: {clientIp})");
 
-                                    var ext = Path.GetExtension(filePath).ToLowerInvariant();
                                     var mime = GetMimeType(ext);
 
                                     // 对于文本类小文件直接读取返回以获得更好的兼容性（例如 html/css/js）
-                                    if (ext == ".html" || ext == ".htm" || ext == ".css" || ext == ".js" || ext == ".json" || ext == ".txt")
+                                    if (isTextLike)
                                     {
                                         try
                                         {
@@ -1605,7 +1656,7 @@ namespace Drx.Sdk.Network.V2.Web
                                         }
                                         catch (Exception ex)
                                         {
-                                            Logger.Error($"从 FileRootPath 读取文件时出错: {ex}");
+                                            Logger.Error($"从根目录读取文件时出错: {ex}");
                                             return new HttpResponse(500, "Internal Server Error");
                                         }
                                     }
@@ -1620,7 +1671,7 @@ namespace Drx.Sdk.Network.V2.Web
                         }
                         catch (Exception ex)
                         {
-                            Logger.Error($"尝试从 FileRootPath 提供静态文件时发生错误: {ex}");
+                            Logger.Error($"尝试从根目录提供静态文件时发生错误: {ex}");
                             return new HttpResponse(500, "Internal Server Error");
                         }
                     }
@@ -1708,12 +1759,12 @@ namespace Drx.Sdk.Network.V2.Web
         /// 将指定 id 的分组持久化为 {id}.db（同步阻塞）。
         /// 存储路径优先使用服务器的 FileRootPath（若不为空），否则传入的 basePath，最后 SqliteUnified 的默认行为。
         /// </summary>
-        public void UpdateOrCreateDataPersistent(string id, string? basePath = null)
+        public void UpdateOrCreateDataPersistent<T>(string id, string? basePath = null) where T : Models.DataModelBase, new()
         {
             try
             {
                 var path = string.IsNullOrEmpty(FileRootPath) ? basePath : FileRootPath;
-                _dataPersistentManager.Save(id, path);
+                _dataPersistentManager.Save<T>(id, path);
             }
             catch (Exception ex)
             {
@@ -2223,57 +2274,6 @@ namespace Drx.Sdk.Network.V2.Web
                         if (string.IsNullOrEmpty(response.ContentType))
                             response.ContentType = "application/json";
                     }
-                    else
-                    {
-                        // 序列化失败：返回错误响应
-                        Logger.Warn($"无法序列化对象（类型: {httpResponse.BodyObject.GetType().FullName}），使用错误响应");
-                        var errorJson = System.Text.Json.JsonSerializer.Serialize(new
-                        {
-                            error = "服务器内部错误：无法序列化响应对象",
-                            type = httpResponse.BodyObject.GetType().FullName
-                        });
-                        responseBytes = Encoding.UTF8.GetBytes(errorJson);
-                        response.StatusCode = 500;
-                        if (string.IsNullOrEmpty(response.ContentType))
-                            response.ContentType = "application/json";
-                    }
-                }
-                else if (!string.IsNullOrEmpty(httpResponse.Body))
-                {
-                    responseBytes = Encoding.UTF8.GetBytes(httpResponse.Body);
-                }
-
-                if (responseBytes != null)
-                {
-                    try
-                    {
-                        response.ContentLength64 = responseBytes.Length;
-                    }
-                    catch (InvalidOperationException ioe)
-                    {
-                        // 如果响应头已发送，无法设置 ContentLength64，记录警告并继续写入（可能使用分块传输）
-                        Logger.Warn($"无法设置 ContentLength64（响应头可能已发送）: {ioe.Message}");
-                    }
-                    try
-                    {
-                        response.OutputStream.Write(responseBytes, 0, responseBytes.Length);
-                    }
-                    catch (Exception)
-                    {
-                    }
-                }
-                else
-                {
-                    response.ContentLength64 = 0;
-                }
-
-                try
-                {
-                    response.OutputStream.Close();
-                }
-                catch (Exception ex)
-                {
-                    Logger.Warn($"关闭响应流时发生错误: {ex}");
                 }
             }
             catch (Exception ex)

@@ -27,6 +27,9 @@ DrxHttpServer 是 DRX.Environment 框架中的高性能 HTTP 服务器，基于 
 | AddRawRoute | void AddRawRoute(string, Func<HttpListenerContext, Task>) | 注册原始路由（流式处理） | void | - |
 | AddStreamUploadRoute | void AddStreamUploadRoute(string, Func<HttpRequest, Task<HttpResponse>>) | 注册流式上传路由 | void | - |
 | AddFileRoute | void AddFileRoute(string, string) | 注册文件路由 | void | - |
+| AddDataPersistent | void AddDataPersistent<T>(T entity, string id) where T : Models.DataModelBase | 向服务器内存分组添加实体（按 id 分组），随后可调用持久化接口保存为 {id}.db | void | ArgumentException, InvalidOperationException |
+| GetDataPersistent | List<T> GetDataPersistent<T>(string id) where T : Models.DataModelBase | 获取指定 id 的分组数据（浅拷贝），若不存在返回空列表 | List<T> | ArgumentException, InvalidOperationException |
+| UpdateOrCreateDataPersistent | void UpdateOrCreateDataPersistent<T>(string id, string? basePath = null) | 将指定 id 的分组持久化为 {id}.db（同步阻塞），优先使用 server.FileRootPath 或传入的 basePath | void | IOException, InvalidOperationException |
 | SetPerMessageProcessingDelay | void SetPerMessageProcessingDelay(int ms) | 设置每消息最小处理延迟 | void | - |
 | GetPerMessageProcessingDelay | int GetPerMessageProcessingDelay() | 获取当前消息延迟 | int | - |
 | SetRateLimit | void SetRateLimit(int maxRequests, int timeValue, string timeUnit) | 设置基于IP的请求速率限制 | void | ArgumentException |
@@ -789,6 +792,47 @@ public static async Task<IActionResult> HelloAsync(HttpRequest req, DrxHttpServe
 }
 ```
 
+### DataPersistent 管理器（DataPersistentManager）
+
+- 目的：在服务器内存中按字符串 id 分组保存 `Models.DataModelBase` 派生对象列表，并提供把某个分组持久化到磁盘的能力，文件名默认为 `{id}.db`。
+- 存储实现：内存集合（线程安全） + 持久化使用 `SqliteUnified<T>`（详见 `Library/Environments/SDK/Drx.Sdk.Network/DataBase/Sqlite/SqliteUnified.DEVGUIDE.md`）。
+
+公开 API（DrxHttpServer 对外暴露的简易包装）：
+
+- `void AddDataPersistent<T>(T entity, string id) where T : Models.DataModelBase` — 将实体加入指定分组；若分组不存在则创建。要求同一分组内元素类型一致，否则抛出 `InvalidOperationException`。
+- `List<T> GetDataPersistent<T>(string id) where T : Models.DataModelBase` — 返回指定分组的浅拷贝列表（若分组不存在返回空列表）。
+- `void UpdateOrCreateDataPersistent(string id, string? basePath = null)` — 将分组持久化为 `{id}.db`，同步阻塞。存储路径优先使用 `DrxHttpServer.FileRootPath`（若已设置），否则使用 `basePath`（若传入），最后由 `SqliteUnified` 决定默认位置。
+
+行为说明与注意事项：
+
+- 类型一致性：向同一个 `id` 分组添加不同具体类型（例如 `UserData` 与 `OrderData`）会引发异常；请确保分组语义一致。
+- 持久化策略：当前实现为同步阻塞：`UpdateOrCreateDataPersistent` 会先清空目标数据库表（调用 `SqliteUnified.ClearAsync`），再逐条 `Push` 当前内存列表。若需要非阻塞或批量优化，可考虑在后台任务中异步执行或实现批量插入。
+- 并发策略：内存集合对每个分组使用锁保护以保证并发安全。对于高并发写场景，建议将写入操作先缓存在队列并由单独持久化线程串行化处理，以降低 SQLite 写锁冲突。
+- 错误与回退：持久化过程中若发生异常（文件权限、IO 错误或 SqliteException），当前实现会把异常向上抛出；调用方（或上层路由）应捕获并记录，或实现重试/退避策略。
+
+示例：在启动或路由中使用（同步示例）
+
+```csharp
+// 假设 UserData : Models.DataModelBase
+var server = new DrxHttpServer(new[] { "http://localhost:8080/" }, staticFileRoot: "C:/wwwroot");
+
+// 添加用户数据到名为 "users" 的分组
+server.AddDataPersistent(new UserData { /* ... */ }, "users");
+
+// 获取当前分组（浅拷贝）
+var users = server.GetDataPersistent<UserData>("users");
+
+// 持久化到 C:/wwwroot/users.db（如果 server.FileRootPath 已设置）
+server.UpdateOrCreateDataPersistent<T>("users");
+```
+
+改进建议：
+
+- 提供异步版本 `UpdateOrCreateDataPersistentAsync(string id, string? basePath = null, CancellationToken token)`，避免在请求线程上阻塞。可在内部使用 `SqliteUnified<T>.PushAsync` 与批量事务优化。
+- 在服务器关闭时自动把所有分组持久化（作为优雅关闭流程的一部分），或提供定时器周期性保存功能以降低数据丢失风险。
+- 为每个分组支持按需合并而非先 Clear 的策略（例如基于 Id 更新/插入），以保留数据库中已存在但当前未加载到内存的条目。
+
+
 3) 在路由中返回文件下载（推荐使用 `IActionResult` 的 `FileResult`，保持与旧 API 兼容）
 
 ```csharp
@@ -876,9 +920,3 @@ public static async Task<HttpResponse> UploadHandler(HttpRequest req)
 - **Path**: `Library/Environments/SDK/Drx.Sdk.Network/V2/Web/DrxHttpServer.cs`
 - **Namespace**: `Drx.Sdk.Network.V2.Web`
 - **Dependencies**: `System.Net.HttpListener`, `Drx.Sdk.Shared`, `Microsoft.AspNetCore.WebUtilities`
-
-## Next Steps
-- **Tests**: 增加单元测试覆盖路由、上传、下载、异常。
-- **Examples**: 在 `Examples/` 目录添加服务端 Demo。
-- **Benchmarks**: 测试高并发与大文件性能。
-- **CI**: 集成自动化测试与构建。

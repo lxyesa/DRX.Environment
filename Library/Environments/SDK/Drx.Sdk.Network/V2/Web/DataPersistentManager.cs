@@ -33,6 +33,18 @@ namespace Drx.Sdk.Network.V2.Web
 
         // key => DataBucket
         private readonly ConcurrentDictionary<string, DataBucket> _storage = new();
+        // elementType => reflection cache
+        private readonly ConcurrentDictionary<Type, ReflectionCacheEntry> _reflectionCache = new();
+
+        // 反射缓存条目，缓存构造函数与方法信息以减少高频反射开销
+        private class ReflectionCacheEntry
+        {
+            public Type SqliteGenericType { get; set; } = null!;
+            public ConstructorInfo? Constructor { get; set; }
+            public MethodInfo? ClearAsyncWithCt { get; set; }
+            public MethodInfo? ClearAsyncNoArgs { get; set; }
+            public MethodInfo? PushMethod { get; set; }
+        }
 
         /// <summary>
         /// 将实体添加到指定 id 的分组中（线程安全）。若该 id 尚未注册则自动创建分组。
@@ -85,13 +97,75 @@ namespace Drx.Sdk.Network.V2.Web
         /// <param name="basePath">可选：存储基路径（传入 null 则使用当前工作目录或 SqliteUnified 的默认行为）</param>
         public void Save(string id, string? basePath = null)
         {
+            // 复用异步实现，避免重复反射逻辑
+            SaveAsync(id, basePath, CancellationToken.None).GetAwaiter().GetResult();
+        }
+
+        /// <summary>
+        /// 泛型同步版本 Save：在调用方知道实体类型时使用此方法可避免反射。
+        /// </summary>
+        /// <typeparam name="T">实体类型，需继承 Models.DataModelBase 且有无参构造</typeparam>
+        /// <param name="id">分组标识</param>
+        /// <param name="basePath">可选基路径</param>
+        public void Save<T>(string id, string? basePath = null) where T : Models.DataModelBase, new()
+        {
+            SaveAsync<T>(id, basePath, CancellationToken.None).GetAwaiter().GetResult();
+        }
+
+        /// <summary>
+        /// 泛型异步版本 Save：在调用方知道实体类型时使用此方法可避免反射。
+        /// </summary>
+        /// <typeparam name="T">实体类型，需继承 Models.DataModelBase 且有无参构造</typeparam>
+        /// <param name="id">分组标识</param>
+        /// <param name="basePath">可选基路径</param>
+        /// <param name="ct">取消令牌</param>
+        public async Task SaveAsync<T>(string id, string? basePath = null, CancellationToken ct = default) where T : Models.DataModelBase, new()
+        {
             if (string.IsNullOrEmpty(id)) throw new ArgumentException("id 不能为空", nameof(id));
 
             if (!_storage.TryGetValue(id, out var bucket)) return; // 无数据，无操作
 
-            // 构造 SqliteUnified<T>
+            if (bucket.ElementType != typeof(T))
+                throw new InvalidOperationException($"请求类型与分组实际元素类型不匹配：{bucket.ElementType.FullName}");
+
+            // 文件名使用 id.db
+            var dbFileName = id.EndsWith(".db") ? id : id + ".db";
+
+            var sqlite = new SqliteUnified<T>(dbFileName, basePath);
+
+            // 先清空目标表
+            await sqlite.ClearAsync(ct).ConfigureAwait(false);
+
+            // 复制集合以缩短锁持有时间
+            List<T> items;
+            lock (bucket.LockObj)
+            {
+                items = ((IEnumerable<T>)bucket.List.Cast<T>()).ToList();
+            }
+
+            // 逐条 Push（SqliteUnified.Push 为同步方法）
+            foreach (var item in items)
+            {
+                sqlite.Push(item);
+            }
+        }
+
+        /// <summary>
+        /// 异步版本的 Save，实现反射结果缓存以减少高频反射开销。
+        /// </summary>
+        /// <param name="id">分组标识</param>
+        /// <param name="basePath">可选基路径</param>
+        /// <param name="ct">取消令牌</param>
+        /// <returns>任务</returns>
+        public async Task SaveAsync(string id, string? basePath = null, CancellationToken ct = default)
+        {
+            if (string.IsNullOrEmpty(id)) throw new ArgumentException("id 不能为空", nameof(id));
+
+            if (!_storage.TryGetValue(id, out var bucket)) return; // 无数据，无操作
+
             var elementType = bucket.ElementType;
-            var sqliteGeneric = typeof(SqliteUnified<>).MakeGenericType(elementType);
+            // 获取或创建反射缓存条目
+            var cacheEntry = _reflectionCache.GetOrAdd(elementType, t => BuildReflectionCacheEntry(t));
 
             // 文件名使用 id.db
             var dbFileName = id.EndsWith(".db") ? id : id + ".db";
@@ -99,31 +173,45 @@ namespace Drx.Sdk.Network.V2.Web
             object? sqliteInstance = null;
             try
             {
-                sqliteInstance = Activator.CreateInstance(sqliteGeneric, dbFileName, basePath);
+                if (cacheEntry.Constructor != null)
+                {
+                    var ctorParams = cacheEntry.Constructor.GetParameters();
+                    if (ctorParams.Length == 2)
+                    {
+                        sqliteInstance = cacheEntry.Constructor.Invoke(new object?[] { dbFileName, basePath });
+                    }
+                    else if (ctorParams.Length == 1)
+                    {
+                        sqliteInstance = cacheEntry.Constructor.Invoke(new object?[] { dbFileName });
+                    }
+                    else
+                    {
+                        sqliteInstance = cacheEntry.Constructor.Invoke(null);
+                    }
+                }
+                else
+                {
+                    // 回退到 Activator.CreateInstance
+                    sqliteInstance = Activator.CreateInstance(cacheEntry.SqliteGenericType, dbFileName, basePath);
+                }
             }
             catch (Exception ex)
             {
                 throw new InvalidOperationException($"创建 SqliteUnified<{elementType.Name}> 实例失败: {ex.Message}", ex);
             }
 
-            // 尝试先调用 ClearAsync(CancellationToken)
+            // 调用 ClearAsync
             try
             {
-                var clearMethod = sqliteGeneric.GetMethod("ClearAsync", new Type[] { typeof(CancellationToken) });
-                if (clearMethod != null)
+                if (cacheEntry.ClearAsyncWithCt != null)
                 {
-                    var task = (System.Threading.Tasks.Task)clearMethod.Invoke(sqliteInstance, new object[] { CancellationToken.None })!;
-                    task.GetAwaiter().GetResult();
+                    var task = (Task)cacheEntry.ClearAsyncWithCt.Invoke(sqliteInstance, new object[] { ct })!;
+                    await task.ConfigureAwait(false);
                 }
-                else
+                else if (cacheEntry.ClearAsyncNoArgs != null)
                 {
-                    // 没有带参数的 ClearAsync？尝试无参 ClearAsync
-                    clearMethod = sqliteGeneric.GetMethod("ClearAsync", Type.EmptyTypes);
-                    if (clearMethod != null)
-                    {
-                        var task = (System.Threading.Tasks.Task)clearMethod.Invoke(sqliteInstance, null)!;
-                        task.GetAwaiter().GetResult();
-                    }
+                    var task = (Task)cacheEntry.ClearAsyncNoArgs.Invoke(sqliteInstance, null)!;
+                    await task.ConfigureAwait(false);
                 }
             }
             catch (TargetInvocationException tie)
@@ -131,27 +219,60 @@ namespace Drx.Sdk.Network.V2.Web
                 throw new InvalidOperationException($"在调用 ClearAsync 时发生错误: {tie.InnerException?.Message ?? tie.Message}", tie.InnerException ?? tie);
             }
 
-            // 逐条 Push
-            var pushMethod = sqliteGeneric.GetMethod("Push", new Type[] { elementType });
-            if (pushMethod == null)
+            if (cacheEntry.PushMethod == null)
             {
                 throw new InvalidOperationException($"未在 SqliteUnified<{elementType.Name}> 中找到 Push 方法");
             }
 
+            // 复制集合以缩短锁时间
+            var items = new List<object?>();
             lock (bucket.LockObj)
             {
-                foreach (var item in bucket.List)
+                foreach (var it in bucket.List)
                 {
-                    try
-                    {
-                        pushMethod.Invoke(sqliteInstance, new object[] { item });
-                    }
-                    catch (TargetInvocationException tie)
-                    {
-                        throw new InvalidOperationException($"调用 Push 时发生错误: {tie.InnerException?.Message ?? tie.Message}", tie.InnerException ?? tie);
-                    }
+                    items.Add(it);
                 }
             }
+
+            foreach (var item in items)
+            {
+                try
+                {
+                    var result = cacheEntry.PushMethod.Invoke(sqliteInstance, new object?[] { item });
+                    if (result is Task t)
+                    {
+                        await t.ConfigureAwait(false);
+                    }
+                }
+                catch (TargetInvocationException tie)
+                {
+                    throw new InvalidOperationException($"调用 Push 时发生错误: {tie.InnerException?.Message ?? tie.Message}", tie.InnerException ?? tie);
+                }
+            }
+        }
+
+        // 构建并返回用于特定元素类型的反射缓存条目
+        private ReflectionCacheEntry BuildReflectionCacheEntry(Type elementType)
+        {
+            var sqliteGeneric = typeof(SqliteUnified<>).MakeGenericType(elementType);
+            var entry = new ReflectionCacheEntry { SqliteGenericType = sqliteGeneric };
+
+            // 尝试查找合适的构造函数（优先 string, string）
+            var ctors = sqliteGeneric.GetConstructors(BindingFlags.Public | BindingFlags.Instance);
+            entry.Constructor = ctors.OrderByDescending(c => c.GetParameters().Length)
+                                     .FirstOrDefault(c => c.GetParameters().Length >= 1 && c.GetParameters()[0].ParameterType == typeof(string));
+
+            // ClearAsync
+            entry.ClearAsyncWithCt = sqliteGeneric.GetMethod("ClearAsync", new Type[] { typeof(CancellationToken) });
+            if (entry.ClearAsyncWithCt == null)
+            {
+                entry.ClearAsyncNoArgs = sqliteGeneric.GetMethod("ClearAsync", Type.EmptyTypes);
+            }
+
+            // Push 方法
+            entry.PushMethod = sqliteGeneric.GetMethod("Push", new Type[] { elementType });
+
+            return entry;
         }
     }
 }

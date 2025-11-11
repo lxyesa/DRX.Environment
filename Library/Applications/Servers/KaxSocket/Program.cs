@@ -1,5 +1,6 @@
 ﻿using Drx.Sdk.Network.V2.Socket;
 using Drx.Sdk.Network.V2.Web;
+using Drx.Sdk.Network.V2.Web.Models;
 using Drx.Sdk.Shared;
 using Drx.Sdk.Shared.Serialization;
 using Drx.Sdk.Shared.Utility;
@@ -58,6 +59,7 @@ public class Program
             server.AddRoute(HttpMethod.Get, "/register", req => new HtmlResultFromFile($"{AppDomain.CurrentDomain.BaseDirectory}Views/register.html"));
             server.RegisterHandlersFromAssembly(typeof(DLTBModPackerHttp));
             server.RegisterHandlersFromAssembly(typeof(KaxHttp));
+
             await server.StartAsync();
         }
         catch (Exception ex)
