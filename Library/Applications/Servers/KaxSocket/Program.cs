@@ -60,6 +60,9 @@ public class Program
             server.RegisterHandlersFromAssembly(typeof(DLTBModPackerHttp));
             server.RegisterHandlersFromAssembly(typeof(KaxHttp));
 
+            
+
+            Logger.Info("HttpServer 正在启动，监听地址: " + string.Join(", ", prefixes));
             await server.StartAsync();
         }
         catch (Exception ex)

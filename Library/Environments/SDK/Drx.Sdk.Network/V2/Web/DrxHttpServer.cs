@@ -1722,6 +1722,47 @@ namespace Drx.Sdk.Network.V2.Web
         private void _file_routes_add(string urlPrefix, string rootDirectory) => _fileRoutes.Add((urlPrefix, rootDirectory));
 
         /// <summary>
+        /// 检查指定 id 的持久化分组是否存在对应的数据库文件。
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="id"></param>
+        /// <param name="basePath"></param>
+        /// <returns></returns>
+        public bool ExistsDataPersistent<T>(string id, string? basePath = null) where T : Models.DataModelBase, new()
+        {
+            try
+            {
+                var path = string.IsNullOrEmpty(FileRootPath) ? basePath : FileRootPath;
+                return _dataPersistentManager.Exists<T>(id, path);
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"ExistsDataPersistent 失败: {ex.Message}");
+                throw;
+            }
+        }
+
+        /// <summary>
+        /// 从指定 id 的持久化分组加载实体到内存。
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="id"></param>
+        /// <param name="basePath"></param>
+        public void LoadDataPersistent<T>(string id, string? basePath = null) where T : Models.DataModelBase, new()
+        {
+            try
+            {
+                var path = string.IsNullOrEmpty(FileRootPath) ? basePath : FileRootPath;
+                _dataPersistentManager.Load<T>(id, path);
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"LoadDataPersistent 失败: {ex.Message}");
+                throw;
+            }
+        }
+
+        /// <summary>
         /// 向服务器添加一个持久化分组中的实体。
         /// 示例： server.AddDataPersistent(new UserData { ... }, "users");
         /// 同一 id 下的实体必须为相同的具体类型。
@@ -2274,6 +2315,57 @@ namespace Drx.Sdk.Network.V2.Web
                         if (string.IsNullOrEmpty(response.ContentType))
                             response.ContentType = "application/json";
                     }
+                    else
+                    {
+                        // 序列化失败：返回错误响应
+                        Logger.Warn($"无法序列化对象（类型: {httpResponse.BodyObject.GetType().FullName}），使用错误响应");
+                        var errorJson = System.Text.Json.JsonSerializer.Serialize(new
+                        {
+                            error = "服务器内部错误：无法序列化响应对象",
+                            type = httpResponse.BodyObject.GetType().FullName
+                        });
+                        responseBytes = Encoding.UTF8.GetBytes(errorJson);
+                        response.StatusCode = 500;
+                        if (string.IsNullOrEmpty(response.ContentType))
+                            response.ContentType = "application/json";
+                    }
+                }
+                else if (!string.IsNullOrEmpty(httpResponse.Body))
+                {
+                    responseBytes = Encoding.UTF8.GetBytes(httpResponse.Body);
+                }
+
+                if (responseBytes != null)
+                {
+                    try
+                    {
+                        response.ContentLength64 = responseBytes.Length;
+                    }
+                    catch (InvalidOperationException ioe)
+                    {
+                        // 如果响应头已发送，无法设置 ContentLength64，记录警告并继续写入（可能使用分块传输）
+                        Logger.Warn($"无法设置 ContentLength64（响应头可能已发送）: {ioe.Message}");
+                    }
+                    try
+                    {
+                        response.OutputStream.Write(responseBytes, 0, responseBytes.Length);
+                    }
+                    catch (Exception)
+                    {
+                    }
+                }
+                else
+                {
+                    response.ContentLength64 = 0;
+                }
+
+                try
+                {
+                    response.OutputStream.Close();
+                }
+                catch (Exception ex)
+                {
+                    Logger.Warn($"关闭响应流时发生错误: {ex}");
                 }
             }
             catch (Exception ex)

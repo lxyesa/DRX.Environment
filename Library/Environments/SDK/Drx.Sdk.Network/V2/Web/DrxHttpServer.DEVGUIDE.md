@@ -28,6 +28,8 @@ DrxHttpServer 是 DRX.Environment 框架中的高性能 HTTP 服务器，基于 
 | AddStreamUploadRoute | void AddStreamUploadRoute(string, Func<HttpRequest, Task<HttpResponse>>) | 注册流式上传路由 | void | - |
 | AddFileRoute | void AddFileRoute(string, string) | 注册文件路由 | void | - |
 | AddDataPersistent | void AddDataPersistent<T>(T entity, string id) where T : Models.DataModelBase | 向服务器内存分组添加实体（按 id 分组），随后可调用持久化接口保存为 {id}.db | void | ArgumentException, InvalidOperationException |
+| ExistsDataPersistent | bool ExistsDataPersistent<T>(string id, string? basePath = null) where T : Models.DataModelBase, new() | 检查指定 id 的持久化分组数据文件是否存在（优先使用 server.FileRootPath） | bool | - |
+| LoadDataPersistent | void LoadDataPersistent<T>(string id, string? basePath = null) where T : Models.DataModelBase, new() | 从持久化存储加载指定 id 的分组数据到服务器内存（浅拷贝或替换内存中当前分组，行为见实现） | void | IOException, InvalidOperationException |
 | GetDataPersistent | List<T> GetDataPersistent<T>(string id) where T : Models.DataModelBase | 获取指定 id 的分组数据（浅拷贝），若不存在返回空列表 | List<T> | ArgumentException, InvalidOperationException |
 | UpdateOrCreateDataPersistent | void UpdateOrCreateDataPersistent<T>(string id, string? basePath = null) | 将指定 id 的分组持久化为 {id}.db（同步阻塞），优先使用 server.FileRootPath 或传入的 basePath | void | IOException, InvalidOperationException |
 | SetPerMessageProcessingDelay | void SetPerMessageProcessingDelay(int ms) | 设置每消息最小处理延迟 | void | - |
@@ -36,7 +38,7 @@ DrxHttpServer 是 DRX.Environment 框架中的高性能 HTTP 服务器，基于 
 | GetRateLimit | (int maxRequests, TimeSpan window) GetRateLimit() | 获取当前速率限制设置 | (int, TimeSpan) | - |
 | OnGlobalRateLimitExceeded | Func<int, HttpRequest, Task>? OnGlobalRateLimitExceeded { get; set; } | 全局速率限制触发时的异步回调（参数：触发次数, HttpRequest） | settable async callback | - |
 | OnRouteRateLimitExceeded | Func<int, HttpRequest, string, Task>? OnRouteRateLimitExceeded { get; set; } | 路由级速率限制触发时的异步回调（参数：触发次数, HttpRequest, routeKey） | settable async callback | - |
-| RegisterHandlersFromAssembly | void RegisterHandlersFromAssembly(Typeof) | 动态注册带特性的方法 | void | Exception |
+| RegisterHandlersFromAssembly | void RegisterHandlersFromAssembly(Type markerType, bool emitLinkerDescriptor = false, string? descriptorPath = null, bool emitPreserveSource = false, string? preserveSourcePath = null) | 动态注册带特性的方法（按类型标记扫描并注册该类型的处理方法与中间件，并可选择生成 linker 描述或 Preserve 源以支持裁剪） | void | Exception |
 | Response | void Response(HttpListenerContext, HttpResponse) | 由处理器直接同步发送响应的便利方法 | void | - |
 | ResponseAsync | Task ResponseAsync(HttpListenerContext, IActionResult) | 由处理器异步发送 IActionResult 的便利方法 | Task | - |
 | SaveUploadFile | static HttpResponse SaveUploadFile(HttpRequest, string, string) | 保存上传流为文件 | HttpResponse | Exception |
@@ -307,13 +309,21 @@ var (max, window) = server.GetRateLimit();
 
 当路由级限流启用时，服务器会先检查路由级限流；若该路由没有启用路由级限流，则会检查全局限流设置。超限时返回 HTTP 429。此行为保证了对关键或易被滥用的路由可以有更严格或更宽松的策略。
 
-### RegisterHandlersFromAssembly(Assembly, DrxHttpServer)
-- **Parameters**: 程序集、服务器实例。
+### RegisterHandlersFromAssembly(Type markerType, bool emitLinkerDescriptor = false, string? descriptorPath = null, bool emitPreserveSource = false, string? preserveSourcePath = null)
+- **Parameters**: 
+  - `markerType`：用于标识目标类型（只扫描并注册该类型自身的方法与中间件），此方式便于在裁剪场景下通过裁剪注解保留必要元数据。
+  - `emitLinkerDescriptor`：可选，是否为该类型生成 linker 描述文件（linker.xml），以便在发布/裁剪时保留反射访问目标。
+  - `descriptorPath`：可选，linker 描述文件的输出路径。
+  - `emitPreserveSource`：可选，是否生成带 DynamicDependency 注解的 Preserve 源文件以辅助裁剪保留。
+  - `preserveSourcePath`：可选，Preserve 源文件的输出路径。
 - **Returns**: void
-- **Behavior**: 动态注册带 HttpHandle 特性的方法。
+- **Behavior**: 仅扫描并注册传入类型（markerType）自身声明的带 `HttpHandleAttribute` / `HttpMiddlewareAttribute` 的方法。注册过程中会根据方法签名自动选择包装器（支持 HttpRequest/HttpListenerContext、同步/异步、IActionResult 等签名），并可选择生成 linker 描述或 Preserve 源以支持 ILLink 裁剪场景。
 - **Example**:
 ```csharp
-DrxHttpServer.RegisterHandlersFromAssembly(typeof(MyApi).Assembly, server);
+// 推荐的用法：传入类型标记（仅扫描该类型），而不是传入整个 Assembly
+server.RegisterHandlersFromAssembly(typeof(MyApi));
+// 若需要同时生成 linker 描述文件：
+server.RegisterHandlersFromAssembly(typeof(MyApi), emitLinkerDescriptor: true, descriptorPath: "linker.MyApi.xml");
 ```
 
 路由级速率限制（通过属性）
@@ -800,6 +810,8 @@ public static async Task<IActionResult> HelloAsync(HttpRequest req, DrxHttpServe
 公开 API（DrxHttpServer 对外暴露的简易包装）：
 
 - `void AddDataPersistent<T>(T entity, string id) where T : Models.DataModelBase` — 将实体加入指定分组；若分组不存在则创建。要求同一分组内元素类型一致，否则抛出 `InvalidOperationException`。
+- `bool ExistsDataPersistent<T>(string id, string? basePath = null) where T : Models.DataModelBase, new()` — 检查指定 id 的持久化数据文件是否存在（优先检查 `DrxHttpServer.FileRootPath`，否则使用 `basePath`）；返回 true 表示存在。
+- `void LoadDataPersistent<T>(string id, string? basePath = null) where T : Models.DataModelBase, new()` — 从持久化存储加载指定 id 的分组数据到服务器内存（会替换或初始化内存中的该分组），若文件不存在或读取失败会抛出异常。
 - `List<T> GetDataPersistent<T>(string id) where T : Models.DataModelBase` — 返回指定分组的浅拷贝列表（若分组不存在返回空列表）。
 - `void UpdateOrCreateDataPersistent(string id, string? basePath = null)` — 将分组持久化为 `{id}.db`，同步阻塞。存储路径优先使用 `DrxHttpServer.FileRootPath`（若已设置），否则使用 `basePath`（若传入），最后由 `SqliteUnified` 决定默认位置。
 
@@ -824,6 +836,20 @@ var users = server.GetDataPersistent<UserData>("users");
 
 // 持久化到 C:/wwwroot/users.db（如果 server.FileRootPath 已设置）
 server.UpdateOrCreateDataPersistent<T>("users");
+```
+
+示例：检查并加载已有持久化数据，然后读取
+
+```csharp
+// 检查是否存在已持久化的 users.db
+if (server.ExistsDataPersistent<UserData>("users"))
+{
+  // 从磁盘加载到内存（若发生 IO 错误会抛出异常）
+  server.LoadDataPersistent<UserData>("users");
+
+  // 现在可从内存读取
+  var users = server.GetDataPersistent<UserData>("users");
+}
 ```
 
 改进建议：
@@ -889,7 +915,7 @@ server.AddFileRoute("/download/", "C:/files");
 
 ### 动态注册 API
 ```csharp
-server.RegisterHandlersFromAssembly(typeof(MyApi).Assembly);
+server.RegisterHandlersFromAssembly(typeof(MyApi));
 ```
 
 ### 设置速率限制

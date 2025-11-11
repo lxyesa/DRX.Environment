@@ -259,6 +259,14 @@
                     });
                     clearTimeout(timeoutId);
 
+                    // 非 2xx 的响应立即清理本地 token 并恢复按钮可用状态
+                    try {
+                        if (!(resp.status >= 200 && resp.status < 300)) {
+                            try { localStorage.removeItem('kax_login_token'); } catch (_) { }
+                            try { setBtnDisabled(btn, false); } catch (_) { }
+                        }
+                    } catch (_) { }
+
                     if (resp.status === 200) {
                         // token 有效 -> 根据需求将按钮置为灰色、不可点击，并修改文本
                         try {
@@ -271,7 +279,7 @@
                         // token 过期或无效，清理本地存储，保留按钮可用以便用户登录
                         try { localStorage.removeItem('kax_login_token'); } catch (_) { }
                     } else {
-                        // 其它非 200 响应不强制清理 token，保持原有行为（用户点击时会再次校验）
+                        // 其它非 200 响应不强制清理 token（此处已做统一清理），保持原有行为（用户点击时会再次校验）
                         console.warn('token 验证返回状态：', resp.status);
                     }
                 } catch (err) {
@@ -325,6 +333,14 @@
                         signal: controller.signal
                     });
                     clearTimeout(timeoutId);
+
+                    // 非 2xx 的响应立即清理本地 token 并恢复按钮可用状态
+                    try {
+                        if (!(resp.status >= 200 && resp.status < 300)) {
+                            try { localStorage.removeItem('kax_login_token'); } catch (_) { }
+                            try { setBtnDisabled(btn, false); } catch (_) { }
+                        }
+                    } catch (_) { }
 
                     if (resp.status === 200) {
                         // token 有效：将按钮置为已参加并滚动到功能区

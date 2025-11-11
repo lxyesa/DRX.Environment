@@ -159,6 +159,8 @@ public class KaxHttp
             };
         }
 
+        Logger.Info("处理用户注册请求...");
+
         try
         {
             var bodyJson = JsonNode.Parse(request.Body);
@@ -336,6 +338,15 @@ public class KaxHttp
         }
 
         var userName = principal.Identity?.Name;
+
+        if (KaxGlobal.UserDatabase.QueryFirstAsync(u => u.UserName == userName).Result == null)
+        {
+            return new JsonResult(new
+            {
+                message = "令牌对应的用户不存在。",
+            }, 404);
+        }
+
         if (IsUserBanned(userName!))
         {
             return new JsonResult(new

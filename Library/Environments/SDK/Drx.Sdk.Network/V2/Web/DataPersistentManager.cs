@@ -7,6 +7,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Drx.Sdk.Network.DataBase.Sqlite;
 using System.Reflection;
+using System.IO;
 
 namespace Drx.Sdk.Network.V2.Web
 {
@@ -110,6 +111,132 @@ namespace Drx.Sdk.Network.V2.Web
         public void Save<T>(string id, string? basePath = null) where T : Models.DataModelBase, new()
         {
             SaveAsync<T>(id, basePath, CancellationToken.None).GetAwaiter().GetResult();
+        }
+
+        /// <summary>
+        /// 从磁盘加载指定 id 的分组数据到内存（同步阻塞）。
+        /// 若分组不存在则会创建分组并填充数据；若分组已存在则会替换内存中的内容。
+        /// </summary>
+        /// <typeparam name="T">实体类型，需继承 Models.DataModelBase 且有无参构造</typeparam>
+        /// <param name="id">分组标识</param>
+        /// <param name="basePath">可选基路径</param>
+        public void Load<T>(string id, string? basePath = null) where T : Models.DataModelBase, new()
+        {
+            LoadAsync<T>(id, basePath, CancellationToken.None).GetAwaiter().GetResult();
+        }
+
+        /// <summary>
+        /// 判断指定 id 的分组在持久化存储中是否存在任意记录（同步）。
+        /// </summary>
+        public bool Exists<T>(string id, string? basePath = null) where T : Models.DataModelBase, new()
+        {
+            return ExistsAsync<T>(id, basePath, CancellationToken.None).GetAwaiter().GetResult();
+        }
+
+        /// <summary>
+        /// 判断指定 id 的分组在持久化存储中是否存在任意记录（异步）。
+        /// 实现：通过 SqliteUnified<T>.GetAllAsync 读取并检查是否有元素。
+        /// </summary>
+        public async Task<bool> ExistsAsync<T>(string id, string? basePath = null, CancellationToken ct = default) where T : Models.DataModelBase, new()
+        {
+            if (string.IsNullOrEmpty(id)) throw new ArgumentException("id 不能为空", nameof(id));
+            if (!_storage.TryGetValue(id, out var bucket))
+            {
+                // 分组内存不存在，先检查磁盘上是否存在 db 文件，避免构造 SqliteUnified 导致创建空文件
+                var dbFileName = id.EndsWith(".db") ? id : id + ".db";
+                var baseDir = string.IsNullOrEmpty(basePath) ? AppDomain.CurrentDomain.BaseDirectory : basePath!;
+                var fullPath = Path.Combine(baseDir, dbFileName);
+                if (!File.Exists(fullPath))
+                {
+                    return false;
+                }
+
+                try
+                {
+                    var sqlite = new Drx.Sdk.Network.DataBase.Sqlite.SqliteUnified<T>(dbFileName, basePath);
+                    var all = await sqlite.GetAllAsync(ct).ConfigureAwait(false);
+                    return all != null && all.Count > 0;
+                }
+                catch
+                {
+                    return false;
+                }
+            }
+
+            // 如果内存中已有分组，直接判断内存集合是否有元素
+            if (bucket.ElementType != typeof(T))
+                throw new InvalidOperationException($"分组 '{id}' 的元素类型冲突：期望 {bucket.ElementType.FullName}，但请求 {typeof(T).FullName}");
+
+            lock (bucket.LockObj)
+            {
+                return bucket.List.Count > 0;
+            }
+        }
+
+        /// <summary>
+        /// 异步从磁盘加载指定 id 的分组数据到内存。
+        /// 实现：使用 SqliteUnified<T>.GetAllAsync 读取所有实体，然后用锁替换内存桶中的集合内容。
+        /// </summary>
+        /// <typeparam name="T">实体类型，需继承 Models.DataModelBase 且有无参构造</typeparam>
+        /// <param name="id">分组标识</param>
+        /// <param name="basePath">可选基路径</param>
+        /// <param name="ct">取消令牌</param>
+        public async Task LoadAsync<T>(string id, string? basePath = null, CancellationToken ct = default) where T : Models.DataModelBase, new()
+        {
+            if (string.IsNullOrEmpty(id)) throw new ArgumentException("id 不能为空", nameof(id));
+
+            // 文件名使用 id.db
+            var dbFileName = id.EndsWith(".db") ? id : id + ".db";
+
+            // 若磁盘上不存在该 db 文件，则不创建新文件，直接确保内存桶存在并返回（避免生成空的 .db）
+            var baseDir = string.IsNullOrEmpty(basePath) ? AppDomain.CurrentDomain.BaseDirectory : basePath!;
+            var fullPath = Path.Combine(baseDir, dbFileName);
+            if (!File.Exists(fullPath))
+            {
+                // 确保创建空的内存桶但不触发 SqliteUnified 的构造
+                _storage.GetOrAdd(id, _ => new DataBucket(typeof(T)));
+                return;
+            }
+
+            // 构造 SqliteUnified<T> 并读取所有数据
+            var sqlite = new Drx.Sdk.Network.DataBase.Sqlite.SqliteUnified<T>(dbFileName, basePath);
+
+            List<T> items;
+            try
+            {
+                items = await sqlite.GetAllAsync(ct).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException($"从数据库加载 SqliteUnified<{typeof(T).Name}> 数据失败: {ex.Message}", ex);
+            }
+
+            // 获取或创建桶
+            var bucket = _storage.GetOrAdd(id, _ => new DataBucket(typeof(T)));
+
+            if (bucket.ElementType != typeof(T))
+                throw new InvalidOperationException($"分组 '{id}' 的元素类型冲突：期望 {bucket.ElementType.FullName}，但尝试加载 {typeof(T).FullName}");
+
+            // 用锁替换内部集合内容（先清空再追加），保持外部引用不变
+            lock (bucket.LockObj)
+            {
+                // IList 支持 Clear()
+                try
+                {
+                    bucket.List.Clear();
+                }
+                catch
+                {
+                    // 若 Clear 不可用，创建新的 List 并替换（尽量不发生）
+                    var newList = (IList)Activator.CreateInstance(typeof(List<>).MakeGenericType(typeof(T)))!;
+                    _storage[id] = new DataBucket(typeof(T));
+                }
+
+                foreach (var it in items)
+                {
+                    bucket.List.Add(it);
+                }
+            }
         }
 
         /// <summary>

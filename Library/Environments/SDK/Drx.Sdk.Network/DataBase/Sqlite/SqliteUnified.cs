@@ -180,6 +180,278 @@ namespace Drx.Sdk.Network.DataBase.Sqlite
         }
 
         /// <summary>
+        /// 流式异步枚举所有实体，逐条读取并异步加载子表，适用于大数据集以降低瞬时内存占用。
+        /// </summary>
+        public async IAsyncEnumerable<T> GetAllStreamAsync([System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            using var connection = new SqliteConnection(_connectionString);
+            await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+            var sql = $"SELECT * FROM [{_tableName}]";
+            using var cmd = new SqliteCommand(sql, connection);
+            using var reader = await cmd.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+            while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var entity = CreateEntityFromReader(reader);
+                // 异步加载子表数据（如果存在）
+                await LoadChildEntitiesAsync(connection, entity, cancellationToken).ConfigureAwait(false);
+                yield return entity;
+            }
+        }
+
+        /// <summary>
+        /// 批量异步写入（按 batch 分段，内部顺序调用 PushAsync），用于将大量数据直接写入磁盘，避免在内存中保留全部集合。
+        /// 简单实现：按 batch 将元素分组并逐条调用 PushAsync。若需更高写入性能，可在未来将 batch 内的多条写入合并到单个事务中。
+        /// </summary>
+        public async Task PushBatchAsync(IEnumerable<T> items, int batchSize = 1000, CancellationToken cancellationToken = default)
+        {
+            if (items == null) throw new ArgumentNullException(nameof(items));
+            if (batchSize <= 0) batchSize = 1000;
+
+            var buffer = new List<T>(batchSize);
+            foreach (var item in items)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                buffer.Add(item);
+                if (buffer.Count >= batchSize)
+                {
+                    // 在单个连接/事务中写入整个 batch，降低连接/事务开销
+                    using var connection = new SqliteConnection(_connectionString);
+                    await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+                    var tranObj = await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+                    var transaction = tranObj as SqliteTransaction ?? throw new InvalidOperationException("SqliteTransaction 获取失败");
+                    try
+                    {
+                        foreach (var e in buffer)
+                        {
+                            cancellationToken.ThrowIfCancellationRequested();
+                            // 插入主表与子表（在同一事务内）
+                            await InsertEntityInTransactionAsync(connection, transaction, e, cancellationToken).ConfigureAwait(false);
+                        }
+                        transaction.Commit();
+                    }
+                    catch
+                    {
+                        transaction.Rollback();
+                        throw;
+                    }
+                    finally
+                    {
+                        // 事务对象会随 connection.Dispose 一起清理
+                    }
+                    buffer.Clear();
+                }
+            }
+
+            if (buffer.Count > 0)
+            {
+                using var connection = new SqliteConnection(_connectionString);
+                await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+                var tranObj = await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+                var transaction = tranObj as SqliteTransaction ?? throw new InvalidOperationException("SqliteTransaction 获取失败");
+                try
+                {
+                    foreach (var e in buffer)
+                    {
+                        cancellationToken.ThrowIfCancellationRequested();
+                        await InsertEntityInTransactionAsync(connection, transaction, e, cancellationToken).ConfigureAwait(false);
+                    }
+                    transaction.Commit();
+                }
+                catch
+                {
+                    transaction.Rollback();
+                    throw;
+                }
+            }
+        }
+
+        // 在指定 connection/transaction 中插入实体及其子表，内部复用已实现的插入方法
+        private Task InsertEntityInTransactionAsync(SqliteConnection connection, SqliteTransaction transaction, T entity, CancellationToken cancellationToken)
+        {
+            if (entity == null) throw new ArgumentNullException(nameof(entity));
+
+            // 确保 Id
+            if (entity.Id == 0)
+            {
+                entity.Id = (int)(DateTime.UtcNow.Ticks % int.MaxValue);
+            }
+
+            // 插入主实体
+            InsertMainEntity(connection, transaction, entity);
+
+            // 同步一对一子表
+            foreach (var dataTableProp in _dataTableProperties)
+            {
+                var childEntity = dataTableProp.Value.GetValue(entity) as IDataTable;
+                if (childEntity != null)
+                {
+                    childEntity.ParentId = entity.Id;
+                    InsertChildEntity(connection, transaction, childEntity, $"{_tableName}_{dataTableProp.Key}");
+                }
+            }
+
+            // 同步一对多子表
+            foreach (var dataTableListProp in _dataTableListProperties)
+            {
+                var childList = dataTableListProp.Value.GetValue(entity) as IEnumerable;
+                if (childList != null)
+                {
+                    var tableName = $"{_tableName}_{dataTableListProp.Key}";
+                    // 先删除旧的（保持与 Push 语义一致）
+                    var deleteSql = $"DELETE FROM [{tableName}] WHERE [ParentId] = @parentId";
+                    using (var deleteCommand = new SqliteCommand(deleteSql, connection, transaction))
+                    {
+                        deleteCommand.Parameters.AddWithValue("@parentId", entity.Id);
+                        deleteCommand.ExecuteNonQuery();
+                    }
+
+                    foreach (IDataTable childEntity in childList)
+                    {
+                        if (childEntity != null)
+                        {
+                            childEntity.ParentId = entity.Id;
+                            InsertChildEntity(connection, transaction, childEntity, tableName);
+                        }
+                    }
+                }
+            }
+
+            // 处理数组属性
+            foreach (var arrayProp in _arrayProperties)
+            {
+                var arr = arrayProp.Value.GetValue(entity) as Array;
+                if (arr != null)
+                {
+                    var tableName = $"{_tableName}_{arrayProp.Key}";
+                    var deleteSql = $"DELETE FROM [{tableName}] WHERE [ParentId] = @parentId";
+                    using (var deleteCommand = new SqliteCommand(deleteSql, connection, transaction))
+                    {
+                        deleteCommand.Parameters.AddWithValue("@parentId", entity.Id);
+                        deleteCommand.ExecuteNonQuery();
+                    }
+
+                    foreach (var elem in arr)
+                    {
+                        if (elem != null)
+                        {
+                            if (IsComplexType(elem.GetType()))
+                            {
+                                var pi = elem.GetType().GetProperty("ParentId");
+                                if (pi != null) pi.SetValue(elem, entity.Id);
+                            }
+                            if (elem is IDataTable dtElem)
+                            {
+                                InsertChildEntity(connection, transaction, dtElem, tableName);
+                            }
+                            else
+                            {
+                                var surrogate = new DictionaryEntrySurrogate
+                                {
+                                    ParentId = entity.Id,
+                                    DictKey = "",
+                                    DictValue = elem?.ToString() ?? ""
+                                };
+                                InsertChildEntity(connection, transaction, surrogate, tableName);
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 处理链表属性
+            foreach (var linkedProp in _linkedListProperties)
+            {
+                var linked = linkedProp.Value.GetValue(entity) as System.Collections.IEnumerable;
+                if (linked != null)
+                {
+                    var tableName = $"{_tableName}_{linkedProp.Key}";
+                    var elemType = linkedProp.Value.PropertyType.GetGenericArguments()[0];
+
+                    var deleteSql = $"DELETE FROM [{tableName}] WHERE [ParentId] = @parentId";
+                    using (var deleteCommand = new SqliteCommand(deleteSql, connection, transaction))
+                    {
+                        deleteCommand.Parameters.AddWithValue("@parentId", entity.Id);
+                        deleteCommand.ExecuteNonQuery();
+                    }
+
+                    foreach (var elem in linked)
+                    {
+                        if (elem != null)
+                        {
+                            if (IsSimpleType(elemType))
+                            {
+                                InsertSimpleTypeCollectionElement(connection, transaction, tableName, entity.Id, elem);
+                            }
+                            else if (elem is IDataTable dtElem)
+                            {
+                                dtElem.ParentId = entity.Id;
+                                InsertChildEntity(connection, transaction, dtElem, tableName);
+                            }
+                            else if (IsComplexType(elem.GetType()))
+                            {
+                                var pi = elem.GetType().GetProperty("ParentId");
+                                if (pi != null) pi.SetValue(elem, entity.Id);
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 处理字典属性
+            foreach (var dictProp in _dictionaryProperties)
+            {
+                var dict = dictProp.Value.GetValue(entity);
+                if (dict is System.Collections.IDictionary idict)
+                {
+                    var tableName = $"{_tableName}_{dictProp.Key}";
+                    var deleteSql = $"DELETE FROM [{tableName}] WHERE [ParentId] = @parentId";
+                    using (var deleteCommand = new SqliteCommand(deleteSql, connection, transaction))
+                    {
+                        deleteCommand.Parameters.AddWithValue("@parentId", entity.Id);
+                        deleteCommand.ExecuteNonQuery();
+                    }
+
+                    foreach (System.Collections.DictionaryEntry entry in idict)
+                    {
+                        var surrogate = new DictionaryEntrySurrogate
+                        {
+                            ParentId = entity.Id,
+                            DictKey = entry.Key?.ToString() ?? "",
+                            DictValue = entry.Value?.ToString() ?? ""
+                        };
+                        InsertChildEntity(connection, transaction, surrogate, tableName);
+
+                        if (entry.Value != null && IsComplexType(entry.Value.GetType()))
+                        {
+                            var valueTableName = $"{tableName}_Value";
+                            if (entry.Value.GetType().GetProperty("ParentId") != null)
+                            {
+                                entry.Value.GetType().GetProperty("ParentId")?.SetValue(entry.Value, entity.Id);
+                            }
+                            if (entry.Value is IDataTable dtVal)
+                            {
+                                InsertChildEntity(connection, transaction, dtVal, valueTableName);
+                            }
+                            else
+                            {
+                                var surrogateVal = new DictionaryEntrySurrogate
+                                {
+                                    ParentId = entity.Id,
+                                    DictKey = entry.Key?.ToString() ?? "",
+                                    DictValue = entry.Value?.ToString() ?? ""
+                                };
+                                InsertChildEntity(connection, transaction, surrogateVal, valueTableName);
+                            }
+                        }
+                    }
+                }
+            }
+
+            return Task.CompletedTask;
+        }
+
+        /// <summary>
         /// 修复指定表结构
         /// </summary>
         private void RepairTableForType(SqliteConnection connection, Type type, string tableName)
