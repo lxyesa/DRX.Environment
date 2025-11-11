@@ -51,11 +51,13 @@ public class Program
                 ConfigUtility.Push($"{AppDomain.CurrentDomain.BaseDirectory}configs.ini", "version", version, "general");
             }
 
+            server.FileRootPath = $"{AppDomain.CurrentDomain.BaseDirectory}Views";
+
             server.AddRoute(HttpMethod.Get, "/", req => new HtmlResultFromFile($"{AppDomain.CurrentDomain.BaseDirectory}Views/index.html"));
             server.AddRoute(HttpMethod.Get, "/login", req => new HtmlResultFromFile($"{AppDomain.CurrentDomain.BaseDirectory}Views/login.html"));
             server.AddRoute(HttpMethod.Get, "/register", req => new HtmlResultFromFile($"{AppDomain.CurrentDomain.BaseDirectory}Views/register.html"));
+            server.RegisterHandlersFromAssembly(typeof(DLTBModPackerHttp));
             server.RegisterHandlersFromAssembly(typeof(KaxHttp));
-
             await server.StartAsync();
         }
         catch (Exception ex)

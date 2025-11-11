@@ -138,7 +138,6 @@ public class KaxHttp
 
     #region HTTP Handlers
 
-
     [HttpMiddleware]
     public static HttpResponse Echo(HttpRequest request, Func<HttpRequest, HttpResponse> next)
     {
@@ -242,7 +241,7 @@ public class KaxHttp
     }
 
     [HttpHandle("/api/user/login", "POST", RateLimitMaxRequests = 5, RateLimitWindowSeconds = 60)]
-    public static async Task<HttpResponse> PostLogin(HttpRequest request)
+    public static async Task<HttpResponse> PostLogin(HttpRequest request, DrxHttpServer server)
     {
         if (request.Body == null)
         {
@@ -285,6 +284,22 @@ public class KaxHttp
             userExists.LastLoginAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
             await KaxGlobal.UserDatabase.EditWhereAsync(u => u.Id == userExists.Id, userExists);
 
+            // 使用会话机制：获取或创建会话并在会话中保存用户信息
+            try
+            {
+                var session = server?.SessionManager.GetOrCreateSession(request.Session?.Id);
+                if (session != null)
+                {
+                    session.Data["userId"] = userExists.Id;
+                    session.Data["userName"] = userExists.UserName;
+                    session.UpdateAccess();
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Warn($"尝试写入会话时发生错误: {ex.Message}");
+            }
+
             return new HttpResponse()
             {
                 StatusCode = 200,
@@ -292,6 +307,7 @@ public class KaxHttp
                 {
                     ["message"] = "登录成功。",
                     ["login_token"] = token,
+                    ["session_id"] = request.Session?.Id ?? server?.SessionManager.GetOrCreateSession(null)?.Id
                 }.ToJsonString(),
             };
         }
@@ -406,6 +422,43 @@ public class KaxHttp
                 StatusCode = 500,
                 Body = "服务器错误，无法处理请求。",
             };
+        }
+    }
+    
+    [HttpHandle("/api/session/test", "GET")]
+    public static IActionResult Get_SessionTest(HttpRequest request)
+    {
+        try
+        {
+            var session = request.Session;
+            if (session == null)
+            {
+                return new JsonResult(new
+                {
+                    message = "未检测到会话，请确保已在服务器端启用会话中间件并在登录时获得会话。"
+                }, 401);
+            }
+
+            // 将会话内的简单键值复制到可序列化对象
+            var dict = new System.Collections.Generic.Dictionary<string, object?>();
+            foreach (var kv in session.Data)
+            {
+                dict[kv.Key] = kv.Value;
+            }
+
+            return new JsonResult(new
+            {
+                message = "会话有效",
+                session_id = session.Id,
+                created = session.Created,
+                last_access = session.LastAccess,
+                data = dict
+            });
+        }
+        catch (Exception ex)
+        {
+            Logger.Error($"读取会话时发生错误: {ex.Message}");
+            return new JsonResult(new { message = "服务器错误，无法读取会话" }, 500);
         }
     }
 

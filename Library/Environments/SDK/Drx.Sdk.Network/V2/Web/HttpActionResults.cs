@@ -302,11 +302,231 @@ namespace Drx.Sdk.Network.V2.Web
         }
     }
 
+    /// <summary>
+    /// 200 OK 结果
+    /// </summary>
     public class OkResult : IActionResult
     {
         public Task<HttpResponse> ExecuteAsync(HttpRequest request, DrxHttpServer server)
         {
             var resp = new HttpResponse(200);
+            return Task.FromResult(resp);
+        }
+    }
+
+    /// <summary>
+    /// 404 Not Found 结果
+    /// </summary>
+    public class NotFoundResult : IActionResult
+    {
+        public string Message { get; }
+        public NotFoundResult(string message = "Not Found") => Message = message;
+
+        /// <summary>
+        /// 将 NotFoundResult 转换为 HttpResponse
+        /// </summary>
+        /// <returns>状态码 404 的 HttpResponse</returns>
+        public Task<HttpResponse> ExecuteAsync(HttpRequest request, DrxHttpServer server)
+        {
+            var resp = new HttpResponse(404, Message);
+            return Task.FromResult(resp);
+        }
+    }
+
+    /// <summary>
+    /// 400 Bad Request 结果
+    /// </summary>
+    public class BadRequestResult : IActionResult
+    {
+        public string Message { get; }
+        public BadRequestResult(string message = "Bad Request") => Message = message;
+
+        /// <summary>
+        /// 将 BadRequestResult 转换为 HttpResponse
+        /// </summary>
+        public Task<HttpResponse> ExecuteAsync(HttpRequest request, DrxHttpServer server)
+        {
+            var resp = new HttpResponse(400, Message);
+            return Task.FromResult(resp);
+        }
+    }
+
+    /// <summary>
+    /// 401 Unauthorized 结果
+    /// </summary>
+    public class UnauthorizedResult : IActionResult
+    {
+        public string? Scheme { get; }
+        public string? Parameter { get; }
+
+        public UnauthorizedResult(string? scheme = null, string? parameter = null)
+        {
+            Scheme = scheme; Parameter = parameter;
+        }
+
+        /// <summary>
+        /// 返回 401 并可附带 WWW-Authenticate 头
+        /// </summary>
+        public Task<HttpResponse> ExecuteAsync(HttpRequest request, DrxHttpServer server)
+        {
+            var resp = new HttpResponse(401, "Unauthorized");
+            try
+            {
+                if (!string.IsNullOrEmpty(Scheme)) resp.Headers.Add("WWW-Authenticate", Scheme + (string.IsNullOrEmpty(Parameter) ? string.Empty : " " + Parameter));
+            }
+            catch { }
+            return Task.FromResult(resp);
+        }
+    }
+
+    /// <summary>
+    /// 403 Forbid 结果（拒绝访问）
+    /// </summary>
+    public class ForbidResult : IActionResult
+    {
+        public string Message { get; }
+        public ForbidResult(string message = "Forbidden") => Message = message;
+
+        public Task<HttpResponse> ExecuteAsync(HttpRequest request, DrxHttpServer server)
+        {
+            var resp = new HttpResponse(403, Message);
+            return Task.FromResult(resp);
+        }
+    }
+
+    /// <summary>
+    /// 201 Created 结果，带 Location 头和可选内容
+    /// </summary>
+    public class CreatedResult : IActionResult
+    {
+        public string Location { get; }
+        public object? Content { get; }
+
+        public CreatedResult(string location, object? content = null)
+        {
+            Location = location;
+            Content = content;
+        }
+
+        /// <summary>
+        /// 返回 201，并设置 Location 头；若提供内容则以 application/json 返回
+        /// </summary>
+        public Task<HttpResponse> ExecuteAsync(HttpRequest request, DrxHttpServer server)
+        {
+            try
+            {
+                var resp = new HttpResponse(201, string.Empty);
+                try { resp.Headers.Add("Location", Location); } catch { }
+
+                if (Content != null)
+                {
+                    var json = JsonSerializer.Serialize(Content, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
+                    resp = new HttpResponse(201, json);
+                    try { resp.Headers.Add("Content-Type", "application/json; charset=utf-8"); } catch { }
+                    try { resp.Headers.Add("Location", Location); } catch { }
+                }
+
+                return Task.FromResult(resp);
+            }
+            catch (Exception ex)
+            {
+                return Task.FromResult(new HttpResponse(500, $"Internal Server Error: {ex.Message}"));
+            }
+        }
+    }
+
+    /// <summary>
+    /// 202 Accepted 结果，可选包含描述或数据
+    /// </summary>
+    public class AcceptedResult : IActionResult
+    {
+        public object? Value { get; }
+        public AcceptedResult(object? value = null) => Value = value;
+
+        public Task<HttpResponse> ExecuteAsync(HttpRequest request, DrxHttpServer server)
+        {
+            if (Value == null) return Task.FromResult(new HttpResponse(202, string.Empty));
+            try
+            {
+                var json = JsonSerializer.Serialize(Value, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
+                var resp = new HttpResponse(202, json);
+                try { resp.Headers.Add("Content-Type", "application/json; charset=utf-8"); } catch { }
+                return Task.FromResult(resp);
+            }
+            catch (Exception ex)
+            {
+                return Task.FromResult(new HttpResponse(500, $"Internal Server Error: {ex.Message}"));
+            }
+        }
+    }
+
+    /// <summary>
+    /// 204 No Content 结果
+    /// </summary>
+    public class NoContentResult : IActionResult
+    {
+        public Task<HttpResponse> ExecuteAsync(HttpRequest request, DrxHttpServer server)
+        {
+            return Task.FromResult(new HttpResponse(204, string.Empty));
+        }
+    }
+
+    /// <summary>
+    /// Problem Details (RFC 7807) 结果，返回 application/problem+json
+    /// </summary>
+    public class ProblemDetailsResult : IActionResult
+    {
+        public string? Type { get; }
+        public string? Title { get; }
+        public int? Status { get; }
+        public string? Detail { get; }
+        public string? Instance { get; }
+        public System.Collections.Generic.Dictionary<string, object?>? Extensions { get; }
+
+        public ProblemDetailsResult(string? title = null, string? detail = null, int? status = null, string? type = null, string? instance = null, System.Collections.Generic.Dictionary<string, object?>? extensions = null)
+        {
+            Title = title; Detail = detail; Status = status; Type = type; Instance = instance; Extensions = extensions;
+        }
+
+        public Task<HttpResponse> ExecuteAsync(HttpRequest request, DrxHttpServer server)
+        {
+            try
+            {
+                var obj = new System.Collections.Generic.Dictionary<string, object?>();
+                if (Type != null) obj["type"] = Type;
+                if (Title != null) obj["title"] = Title;
+                if (Status != null) obj["status"] = Status;
+                if (Detail != null) obj["detail"] = Detail;
+                if (Instance != null) obj["instance"] = Instance;
+                if (Extensions != null)
+                {
+                    foreach (var kv in Extensions) obj[kv.Key] = kv.Value;
+                }
+
+                var json = JsonSerializer.Serialize(obj, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
+                var resp = new HttpResponse(Status ?? 500, json);
+                try { resp.Headers.Add("Content-Type", "application/problem+json; charset=utf-8"); } catch { }
+                return Task.FromResult(resp);
+            }
+            catch (Exception ex)
+            {
+                return Task.FromResult(new HttpResponse(500, $"Internal Server Error: {ex.Message}"));
+            }
+        }
+    }
+
+    /// <summary>
+    /// 301 Permanent Redirect 结果
+    /// </summary>
+    public class PermanentRedirectResult : IActionResult
+    {
+        public string Location { get; }
+        public PermanentRedirectResult(string location) => Location = location;
+
+        public Task<HttpResponse> ExecuteAsync(HttpRequest request, DrxHttpServer server)
+        {
+            var resp = new HttpResponse(301, string.Empty);
+            try { resp.Headers.Add("Location", Location); } catch { }
             return Task.FromResult(resp);
         }
     }

@@ -163,6 +163,59 @@ session.Data["userId"] = 123;
 
 实现注意事项：SessionManager 会自动清理过期会话（基于构造时传入的超时时间），并提供线程安全的并发字典用于会话数据存储。
 
+### AuthorizationManager
+
+- **Purpose**: 管理短生命周期的授权码/授权记录，适用于实现 OAuth 风格的授权码流程或临时授权确认页面。
+- **Location**: 服务器通过 `DrxHttpServer.AuthorizationManager` 暴露该功能，内部使用线程安全的 `ConcurrentDictionary` 存储记录并通过定时器清理过期项。
+
+公开方法（可通过 `DrxHttpServer.AuthorizationManager` 访问）:
+
+- `string GenerateAuthorizationCode(string userName, string applicationName, string applicationDescription = "", string scopes = "")`
+  - 生成新的唯一授权码并在内存中保存一条授权记录。
+  - 返回值为授权码字符串（例如用于构造授权页面 URL）。
+
+- `AuthorizationRecord? GetAuthorizationRecord(string code)`
+  - 根据授权码获取对应记录，若记录不存在或已过期则返回 null。
+
+- `bool CompleteAuthorization(string code)`
+  - 将授权记录标记为已完成（`IsAuthorized=true`）并记录完成时间；返回是否成功完成。
+
+数据结构与生命周期:
+
+- `AuthorizationRecord` 包含授权码 (`Code`)、申请用户名 (`UserName`)、应用名/描述、创建时间 (`CreatedAt`)、有效期（分钟）与权限范围 (`Scopes`) 等字段；提供 `IsExpired` 快速判断是否过期。
+- 默认授权码有效期为 5 分钟（可在 `AuthorizationManager` 构造时调整）。
+- `AuthorizationManager` 启动后台定时器（每分钟）清理过期记录，避免内存长期累积。
+
+示例流程（高层）:
+
+1. 客户端在服务端请求生成授权码：
+   - 服务端调用 `server.AuthorizationManager.GenerateAuthorizationCode(userName, appName, desc, scopes)` 并返回一个 URL（比如 `https://example.com/authorize?code={code}`）给客户端。
+2. 用户在浏览器打开该 URL，服务器端根据 `code` 获取记录并展示授权确认页面（页面可从 localStorage/sessionStorage 读取登录 token 并提交）。
+3. 页面提交 `code` 与用户的登录 token 至后端确认接口；后端使用 `GetAuthorizationRecord(code)` 验证并调用 `CompleteAuthorization(code)` 完成授权流程。
+
+安全与推荐实践：
+
+- 授权码应为不可预测的高熵字符串（如 GUID 或更强随机值），并仅在短期内有效。
+- 授权确认时务必验证提交的登录 token 与授权记录中的 `UserName` 匹配，防止横向授权劫持。
+- 在生产环境强烈建议通过 HTTPS 传输授权 URL 与令牌。页面端不应把登录 token 暴露给第三方脚本。
+- 若需要跨实例持久化授权状态或更长生命周期，请把 `AuthorizationRecord` 持久化到数据库并在 `AuthorizationManager` 中改为从数据库查询。
+
+示例（伪代码）：
+
+```csharp
+// 生成授权码并返回给客户端
+var code = server.AuthorizationManager.GenerateAuthorizationCode(userName, "MyApp", "描述", "read_profile,write_data");
+var url = $"https://yourhost/authorize?code={code}";
+
+// 在授权页面处理确认时（后端）
+var record = server.AuthorizationManager.GetAuthorizationRecord(code);
+if (record != null && JwtHelper.ValidateToken(token)?.Identity?.Name == record.UserName) {
+    server.AuthorizationManager.CompleteAuthorization(code);
+}
+```
+
+注意：`AuthorizationManager` 只提供内存级别的短期授权管理；若需做跨进程或持久化支持，请扩展为数据库后端或分布式缓存。
+
 ### SetPerMessageProcessingDelay(int ms)
 - **Parameters**: 延迟毫秒数。
 - **Returns**: void

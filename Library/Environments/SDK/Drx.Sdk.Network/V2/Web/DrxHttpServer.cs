@@ -17,6 +17,7 @@ using System.Text.RegularExpressions;
 using System.Diagnostics;
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.Net.Http.Headers;
+using Drx.Sdk.Network.Email;
 
 namespace Drx.Sdk.Network.V2.Web
 {
@@ -85,6 +86,41 @@ namespace Drx.Sdk.Network.V2.Web
         public string? FileRootPath { get; set; }
 
         /// <summary>
+        /// 配置全局 JSON 序列化策略
+        /// 默认为链式回退模式（先反射，后安全模式）
+        /// </summary>
+        /// <param name="serializer">自定义序列化器，或 null 则恢复默认配置</param>
+        public static void ConfigureJsonSerializer(IDrxJsonSerializer? serializer)
+        {
+            if (serializer == null)
+            {
+                DrxJsonSerializerManager.ConfigureChainedMode();
+            }
+            else
+            {
+                DrxJsonSerializerManager.ConfigureCustom(serializer);
+            }
+        }
+
+        /// <summary>
+        /// 配置 JSON 序列化为反射模式
+        /// 适合开发环境和非裁剪部署（但启用 PublishTrimmed 时需要为相关类型添加 DynamicDependency）
+        /// </summary>
+        public static void ConfigureJsonSerializerReflectionMode()
+        {
+            DrxJsonSerializerManager.ConfigureReflectionMode();
+        }
+
+        /// <summary>
+        /// 配置 JSON 序列化为安全模式
+        /// 适合启用代码裁剪（PublishTrimmed/NativeAOT）的环境，包含自动回退机制
+        /// </summary>
+        public static void ConfigureJsonSerializerSafeMode()
+        {
+            DrxJsonSerializerManager.ConfigureSafeMode();
+        }
+
+        /// <summary>
         /// 将用户传入的文件指示符解析为磁盘上的绝对路径：
         /// - 如果传入的是以 '/' 或 '\\' 开头的相对路径且 FileRootPath 已设置，则把它解释为相对于 FileRootPath 的路径；
         /// - 否则如果是相对路径（不以盘符开头），也尝试相对于 FileRootPath 解析；
@@ -137,6 +173,8 @@ namespace Drx.Sdk.Network.V2.Web
         private readonly List<MiddlewareEntry> _middlewares = new();
         private int _middlewareCounter = 0;
         private readonly SessionManager _sessionManager;
+        private readonly AuthorizationManager _authorizationManager;
+    private readonly DataPersistentManager _dataPersistentManager;
         private readonly System.Threading.AsyncLocal<Session?> _currentSession = new();
 
         private CancellationTokenSource _cts;
@@ -213,6 +251,15 @@ namespace Drx.Sdk.Network.V2.Web
             _messageQueue = new MessageQueue<HttpListenerContext>(1000);
             _threadPool = new ThreadPoolManager(Environment.ProcessorCount);
             _sessionManager = new SessionManager(sessionTimeoutMinutes);
+            _authorizationManager = new AuthorizationManager(5);
+
+            // 初始化数据持久化管理器（内存缓存 + 持久化到 sqlite）
+            _dataPersistentManager = new DataPersistentManager();
+
+            // 初始化 JSON 序列化器为链式回退模式
+            // 优先使用反射序列化（支持任意 .NET 类型），失败时回退到安全模式
+            // 这样可以在正常环境和代码裁剪环境中都能正确工作
+            DrxJsonSerializerManager.ConfigureChainedMode();
         }
 
         /// <summary>
@@ -678,379 +725,185 @@ namespace Drx.Sdk.Network.V2.Web
         /// <param name="descriptorPath">可选的输出路径；若为空则写到应用目录下的 linker.{assemblyName}.xml</param>
         public void RegisterHandlersFromAssembly([DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicMethods | DynamicallyAccessedMemberTypes.PublicConstructors | DynamicallyAccessedMemberTypes.PublicNestedTypes)] Type markerType, bool emitLinkerDescriptor = false, string? descriptorPath = null, bool emitPreserveSource = false, string? preserveSourcePath = null)
         {
+            // 新实现：只扫描并注册传入类型（markerType）自身的方法与中间件，而不扫描整个程序集
+            if (markerType == null) throw new ArgumentNullException(nameof(markerType));
+
             try
             {
-                var assembly = markerType.Assembly;
+                var targetType = markerType;
 
-                var methods = assembly.GetTypes()
-                    .SelectMany(t => t.GetMethods(BindingFlags.Public | BindingFlags.Static))
-                    .Where(m => m.GetCustomAttributes(typeof(HttpHandleAttribute), false).Length > 0)
-                    .ToList();
+                var methods = targetType.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Instance).ToList();
+
+                int registeredHandlers = 0;
+                int registeredMiddlewares = 0;
 
                 foreach (var method in methods)
                 {
-                    var attributes = method.GetCustomAttributes<HttpHandleAttribute>();
-                    foreach (var attr in attributes)
-                    {
-                        // 如果标注为 Raw / Stream 下载, 注册为原始处理器（接收 HttpListenerContext）
-                        // 注意：StreamUpload 将使用专门的装饰器，允许处理方法签名为 (HttpRequest) -> HttpResponse 或 Task<HttpResponse>
-                        if (attr.Raw || attr.StreamDownload)
-                        {
-                            // 方法签名需接受 HttpListenerContext
-                            var parameters = method.GetParameters();
-                            if (parameters.Length == 1 && parameters[0].ParameterType == typeof(HttpListenerContext))
-                            {
-                                var returnType = method.ReturnType;
-                                if (returnType == typeof(void))
-                                {
-                                    Func<HttpListenerContext, Task> handler = ctx => { method.Invoke(null, new object[] { ctx }); return Task.CompletedTask; };
-                                    this.AddRawRoute(attr.Path, handler, attr.RateLimitMaxRequests, attr.RateLimitWindowSeconds);
-                                }
-                                else if (returnType == typeof(Task))
-                                {
-                                    Func<HttpListenerContext, Task> handler = ctx => (Task)method.Invoke(null, new object[] { ctx });
-                                    this.AddRawRoute(attr.Path, handler, attr.RateLimitMaxRequests, attr.RateLimitWindowSeconds);
-                                }
-                                else if (returnType == typeof(HttpResponse))
-                                {
-                                    Func<HttpListenerContext, Task> handler = async ctx =>
-                                    {
-                                        try
-                                        {
-                                            var resp = (HttpResponse)method.Invoke(null, new object[] { ctx })!;
-                                            this.SendResponse(ctx.Response, resp ?? new HttpResponse(500, "Internal Server Error"));
-                                        }
-                                        catch (TargetInvocationException tie)
-                                        {
-                                            Logger.Error($"执行原始路由方法 {method.Name} 时发生错误: {tie.InnerException?.Message ?? tie.Message}\n{tie.InnerException?.StackTrace ?? tie.StackTrace}");
-                                            try { ctx.Response.StatusCode = 500; using var sw = new StreamWriter(ctx.Response.OutputStream, Encoding.UTF8, leaveOpen: false); sw.Write($"Internal Server Error: {tie.InnerException?.Message ?? tie.Message}"); } catch { }
-                                        }
-                                        catch (Exception ex)
-                                        {
-                                            Logger.Error($"执行原始路由方法 {method.Name} 时发生错误: {ex}");
-                                            try { ctx.Response.StatusCode = 500; using var sw = new StreamWriter(ctx.Response.OutputStream, Encoding.UTF8, leaveOpen: false); sw.Write("Internal Server Error"); } catch { }
-                                        }
-                                        await Task.CompletedTask;
-                                    };
-                                    this.AddRawRoute(attr.Path, handler);
-                                }
-                                else if (returnType == typeof(Task<HttpResponse>))
-                                {
-                                    Func<HttpListenerContext, Task> handler = async ctx =>
-                                    {
-                                        try
-                                        {
-                                            var task = (Task<HttpResponse>)method.Invoke(null, new object[] { ctx })!;
-                                            var resp = await task.ConfigureAwait(false) ?? new HttpResponse(500, "Internal Server Error");
-                                            this.SendResponse(ctx.Response, resp);
-                                        }
-                                        catch (TargetInvocationException tie)
-                                        {
-                                            Logger.Error($"执行原始路由方法 {method.Name} 时发生错误: {tie.InnerException?.Message ?? tie.Message}\n{tie.InnerException?.StackTrace ?? tie.StackTrace}");
-                                            try { ctx.Response.StatusCode = 500; using var sw = new StreamWriter(ctx.Response.OutputStream, Encoding.UTF8, leaveOpen: false); sw.Write($"Internal Server Error: {tie.InnerException?.Message ?? tie.Message}"); } catch { }
-                                        }
-                                        catch (Exception ex)
-                                        {
-                                            Logger.Error($"执行原始路由方法 {method.Name} 时发生错误: {ex}");
-                                            try { ctx.Response.StatusCode = 500; using var sw = new StreamWriter(ctx.Response.OutputStream, Encoding.UTF8, leaveOpen: false); sw.Write("Internal Server Error"); } catch { }
-                                        }
-                                    };
-                                    this.AddRawRoute(attr.Path, handler);
-                                }
-                                else
-                                {
-                                    Logger.Warn($"不能注册原始路由: 方法 {method.Name} 返回类型不受支持: {returnType}");
-                                }
-                            }
-                            else
-                            {
-                                Logger.Warn($"标注为 Raw/Stream 的方法 {method.Name} 必须接受一个 HttpListenerContext 参数");
-                            }
-                        }
-                        else if (attr.StreamUpload)
-                        {
-                            // StreamUpload 路由会自动将 HttpListenerContext 的请求流传递给处理方法，签名可为 (HttpRequest) -> HttpResponse/Task<HttpResponse>
-                            var handler = CreateHandlerDelegate(method);
-                            if (handler != null)
-                            {
-                                // 使用专用注册器将 handler 包装为 raw handler，传入 HttpRequest.Stream 和 ListenerContext
-                                this.AddStreamUploadRoute(attr.Path, handler, attr.RateLimitMaxRequests, attr.RateLimitWindowSeconds);
-                            }
-                            else
-                            {
-                                Logger.Warn($"不能注册 StreamUpload 路由: 方法 {method.Name} 的签名或返回类型不受支持");
-                            }
-                        }
-                        else
-                        {
-                            var httpMethod = ParseHttpMethod(attr.Method);
-                            if (httpMethod != null)
-                            {
-                                // 如果方法声明需要 HttpListenerContext 或 返回 void/Task，则将其作为 raw 路由注册，
-                                // 以便方法可以直接通过 server.Response(...) 写入响应并控制流式场景。
-                                var parameters = method.GetParameters();
-                                var returnType = method.ReturnType;
-                                var shouldRegisterAsRaw = parameters.Any(p => p.ParameterType == typeof(HttpListenerContext))
-                                                       || returnType == typeof(void)
-                                                       || returnType == typeof(Task);
-
-                                if (shouldRegisterAsRaw)
-                                {
-                                    Func<HttpListenerContext, Task> rawHandler = async ctx =>
-                                    {
-                                        try
-                                        {
-                                            // 构建参数列表：支持 HttpRequest、DrxHttpServer、HttpListenerContext
-                                            var req = await this.ParseRequestAsync(ctx.Request).ConfigureAwait(false);
-                                            var args = new List<object?>();
-                                            foreach (var p in parameters)
-                                            {
-                                                if (p.ParameterType == typeof(HttpRequest)) args.Add(req);
-                                                else if (p.ParameterType == typeof(DrxHttpServer)) args.Add(this);
-                                                else if (p.ParameterType == typeof(HttpListenerContext)) args.Add(ctx);
-                                                else args.Add(null);
-                                            }
-
-                                            var result = method.Invoke(null, args.ToArray());
-                                            if (result is Task t)
-                                            {
-                                                await t.ConfigureAwait(false);
-                                            }
-                                            // 方法被视为自行处理响应（通过 server.Response 等）
-                                        }
-                                        catch (TargetInvocationException tie)
-                                        {
-                                            Logger.Error($"注册的原始方法 {method.Name} 调用失败: {tie.InnerException?.Message ?? tie.Message}\n{tie.InnerException?.StackTrace ?? tie.StackTrace}");
-                                            try { ctx.Response.StatusCode = 500; using var sw = new StreamWriter(ctx.Response.OutputStream, Encoding.UTF8, leaveOpen: false); sw.Write("Internal Server Error"); } catch { }
-                                        }
-                                        catch (Exception ex)
-                                        {
-                                            Logger.Error($"注册的原始方法 {method.Name} 执行时发生错误: {ex}");
-                                            try { ctx.Response.StatusCode = 500; using var sw = new StreamWriter(ctx.Response.OutputStream, Encoding.UTF8, leaveOpen: false); sw.Write("Internal Server Error"); } catch { }
-                                        }
-                                    };
-
-                                    this.AddRawRoute(attr.Path, rawHandler, attr.RateLimitMaxRequests, attr.RateLimitWindowSeconds);
-                                }
-                                else
-                                {
-                                    var handler = CreateHandlerDelegate(method);
-                                    if (handler != null)
-                                    {
-                                        // 绑定路由级速率限制回调（如果属性中指定了）
-                                        var rateLimitCallback = BindRateLimitCallback(method.DeclaringType!, attr);
-                                        this.AddRoute(httpMethod, attr.Path, handler, attr.RateLimitMaxRequests, attr.RateLimitWindowSeconds, rateLimitCallback);
-                                    }
-                                }
-                            }
-                            else
-                            {
-                                Logger.Warn($"无效的 HTTP 方法: {attr.Method}");
-                            }
-                        }
-                    }
-                }
-
-                // 注册中间件
-                var middlewareMethods = assembly.GetTypes()
-                    .SelectMany(t => t.GetMethods(BindingFlags.Public | BindingFlags.Static))
-                    .Where(m => m.GetCustomAttributes(typeof(HttpMiddlewareAttribute), false).Length > 0)
-                    .ToList();
-
-                foreach (var method in middlewareMethods)
-                {
-                    var attributes = method.GetCustomAttributes<HttpMiddlewareAttribute>();
-                    foreach (var attr in attributes)
+                    // 先处理中间件特性
+                    var middlewareAttrs = method.GetCustomAttributes(typeof(HttpMiddlewareAttribute), false).Cast<HttpMiddlewareAttribute>();
+                    foreach (var ma in middlewareAttrs)
                     {
                         var parameters = method.GetParameters();
-                        // 支持两种中间件签名：老的 (HttpListenerContext) 或新的 (HttpRequest, Func<HttpRequest, HttpResponse>) / (HttpRequest, Func<HttpRequest, Task<HttpResponse>>)
+
+                        // 支持老式 (HttpListenerContext) 中间件
                         if (parameters.Length == 1 && parameters[0].ParameterType == typeof(HttpListenerContext))
                         {
-                            var returnType = method.ReturnType;
-                            Func<HttpListenerContext, Task> middlewareHandler;
-                            if (returnType == typeof(void))
+                            Func<HttpListenerContext, Task> mw;
+                            if (typeof(Task).IsAssignableFrom(method.ReturnType))
                             {
-                                middlewareHandler = ctx => { method.Invoke(null, new object[] { ctx }); return Task.CompletedTask; };
+                                if (method.IsStatic)
+                                {
+                                    mw = ctx => (Task)method.Invoke(null, new object[] { ctx })!;
+                                }
+                                else
+                                {
+                                    mw = ctx => (Task)method.Invoke(Activator.CreateInstance(targetType), new object[] { ctx })!;
+                                }
                             }
-                            else if (returnType == typeof(Task))
+                            else if (method.ReturnType == typeof(void))
                             {
-                                middlewareHandler = ctx => (Task)method.Invoke(null, new object[] { ctx });
+                                if (method.IsStatic)
+                                {
+                                    mw = ctx => { method.Invoke(null, new object[] { ctx }); return Task.CompletedTask; };
+                                }
+                                else
+                                {
+                                    mw = ctx => { method.Invoke(Activator.CreateInstance(targetType), new object[] { ctx }); return Task.CompletedTask; };
+                                }
                             }
                             else
                             {
-                                Logger.Warn($"不能注册中间件: 方法 {method.Name} 返回类型不受支持: {returnType}");
+                                Logger.Warn($"不能注册中间件: 方法 {method.Name} 返回类型不受支持: {method.ReturnType}");
                                 continue;
                             }
 
-                            this.AddMiddleware(middlewareHandler, attr.Path, attr.Priority, attr.OverrideGlobal);
+                            AddMiddleware(mw, ma.Path, ma.Priority, ma.OverrideGlobal);
+                            registeredMiddlewares++;
+                            continue;
                         }
-                        else if (parameters.Length == 2 && parameters[0].ParameterType == typeof(HttpRequest))
+
+                        // 支持新的 (HttpRequest, next) 风格中间件
+                        // 常见签名示例：
+                        // Task<HttpResponse?> M(HttpRequest req, Func<HttpRequest, Task<HttpResponse?>> next)
+                        // HttpResponse M(HttpRequest req, Func<HttpRequest, HttpResponse> next)
+                        if (parameters.Length == 2 && parameters[0].ParameterType == typeof(HttpRequest))
                         {
-                            // 支持第二个参数为同步或异步的 next 委托
-                            var secondParam = parameters[1].ParameterType;
-                            var returnType = method.ReturnType;
-
-                            // 创建一个通用的 RequestMiddleware 包装器
-                            Func<HttpRequest, Func<HttpRequest, Task<HttpResponse?>>, Task<HttpResponse?>> requestMiddleware = null;
-
-                            if (secondParam == typeof(Func<HttpRequest, HttpResponse>))
+                            // 构造一个将 MethodInfo 调用适配为 RequestMiddleware 的包装
+                            Func<HttpRequest, Func<HttpRequest, Task<HttpResponse?>>, Task<HttpResponse?>> requestMw = async (req, next) =>
                             {
-                                if (returnType == typeof(HttpResponse))
+                                try
                                 {
-                                    requestMiddleware = async (req, next) =>
+                                    object? instance = null;
+                                    if (!method.IsStatic)
                                     {
-                                        try
-                                        {
-                                            // 将异步 next 包装为同步调用（阻塞），以适配方法期望的签名
-                                            Func<HttpRequest, HttpResponse> nextSync = r => next(r).GetAwaiter().GetResult();
-                                            var resp = (HttpResponse)method.Invoke(null, new object[] { req, nextSync })!;
-                                            return resp ?? new HttpResponse(500, "Internal Server Error");
-                                        }
-                                        catch (TargetInvocationException tie)
-                                        {
-                                            Logger.Error($"执行中间件方法 {method.Name} 时发生错误: {tie.InnerException?.Message ?? tie.Message}");
-                                            return new HttpResponse(500, $"Internal Server Error: {tie.InnerException?.Message ?? tie.Message}");
-                                        }
-                                        catch (Exception ex)
-                                        {
-                                            Logger.Error($"执行中间件方法 {method.Name} 时发生错误: {ex}");
-                                            return new HttpResponse(500, $"Internal Server Error: {ex.Message}");
-                                        }
-                                    };
-                                }
-                                else if (returnType == typeof(Task<HttpResponse>))
-                                {
-                                    requestMiddleware = async (req, next) =>
-                                    {
-                                        try
-                                        {
-                                            Func<HttpRequest, HttpResponse> nextSync = r => next(r).GetAwaiter().GetResult();
-                                            var task = (Task<HttpResponse>)method.Invoke(null, new object[] { req, nextSync })!;
-                                            var resp = await task.ConfigureAwait(false);
-                                            return resp ?? new HttpResponse(500, "Internal Server Error");
-                                        }
-                                        catch (TargetInvocationException tie)
-                                        {
-                                            Logger.Error($"执行中间件方法 {method.Name} 时发生错误: {tie.InnerException?.Message ?? tie.Message}");
-                                            return new HttpResponse(500, $"Internal Server Error: {tie.InnerException?.Message ?? tie.Message}");
-                                        }
-                                        catch (Exception ex)
-                                        {
-                                            Logger.Error($"执行中间件方法 {method.Name} 时发生错误: {ex}");
-                                            return new HttpResponse(500, $"Internal Server Error: {ex.Message}");
-                                        }
-                                    };
-                                }
-                                else
-                                {
-                                    Logger.Warn($"不能注册中间件: 方法 {method.Name} 返回类型不受支持: {returnType}");
-                                    continue;
-                                }
-                            }
-                            else if (secondParam == typeof(Func<HttpRequest, Task<HttpResponse>>))
-                            {
-                                if (returnType == typeof(HttpResponse))
-                                {
-                                    requestMiddleware = async (req, next) =>
-                                    {
-                                        try
-                                        {
-                                            Func<HttpRequest, Task<HttpResponse?>> nextAsync = r => next(r);
-                                            var resp = (HttpResponse)method.Invoke(null, new object[] { req, nextAsync })!;
-                                            return resp ?? new HttpResponse(500, "Internal Server Error");
-                                        }
-                                        catch (TargetInvocationException tie)
-                                        {
-                                            Logger.Error($"执行中间件方法 {method.Name} 时发生错误: {tie.InnerException?.Message ?? tie.Message}");
-                                            return new HttpResponse(500, $"Internal Server Error: {tie.InnerException?.Message ?? tie.Message}");
-                                        }
-                                        catch (Exception ex)
-                                        {
-                                            Logger.Error($"执行中间件方法 {method.Name} 时发生错误: {ex}");
-                                            return new HttpResponse(500, $"Internal Server Error: {ex.Message}");
-                                        }
-                                    };
-                                }
-                                else if (returnType == typeof(Task<HttpResponse>))
-                                {
-                                    requestMiddleware = async (req, next) =>
-                                    {
-                                        try
-                                        {
-                                            Func<HttpRequest, Task<HttpResponse?>> nextAsync = r => next(r);
-                                            var task = (Task<HttpResponse>)method.Invoke(null, new object[] { req, nextAsync })!;
-                                            var resp = await task.ConfigureAwait(false);
-                                            return resp ?? new HttpResponse(500, "Internal Server Error");
-                                        }
-                                        catch (TargetInvocationException tie)
-                                        {
-                                            Logger.Error($"执行中间件方法 {method.Name} 时发生错误: {tie.InnerException?.Message ?? tie.Message}");
-                                            return new HttpResponse(500, $"Internal Server Error: {tie.InnerException?.Message ?? tie.Message}");
-                                        }
-                                        catch (Exception ex)
-                                        {
-                                            Logger.Error($"执行中间件方法 {method.Name} 时发生错误: {ex}");
-                                            return new HttpResponse(500, $"Internal Server Error: {ex.Message}");
-                                        }
-                                    };
-                                }
-                                else
-                                {
-                                    Logger.Warn($"不能注册中间件: 方法 {method.Name} 返回类型不受支持: {returnType}");
-                                    continue;
-                                }
-                            }
-                            else
-                            {
-                                Logger.Warn($"标注为中间件的方法 {method.Name} 的第二个参数类型不支持: {secondParam}");
-                                continue;
-                            }
+                                        instance = Activator.CreateInstance(targetType);
+                                    }
 
-                            var priority = attr.Priority;
-                            if (priority == -1)
-                            {
-                                priority = (attr.Path == null) ? 0 : 100;
-                            }
-                            if (attr.OverrideGlobal)
-                            {
-                                priority = -1;
-                            }
+                                    var nextParamType = parameters[1].ParameterType;
+                                    object? secondArg = null;
 
-                            var entry = new MiddlewareEntry
-                            {
-                                Path = attr.Path,
-                                Priority = priority,
-                                OverrideGlobal = attr.OverrideGlobal,
-                                AddOrder = this._middlewareCounter++,
-                                Handler = ctx => Task.CompletedTask,
-                                RequestMiddleware = requestMiddleware
+                                    if (nextParamType == typeof(Func<HttpRequest, Task<HttpResponse?>>) || nextParamType == typeof(Func<HttpRequest, Task<HttpResponse>>))
+                                    {
+                                        // 直接传入异步 next
+                                        secondArg = next;
+                                    }
+                                    else if (nextParamType == typeof(Func<HttpRequest, HttpResponse?>) || nextParamType == typeof(Func<HttpRequest, HttpResponse>))
+                                    {
+                                        // 将异步 next 包装为同步委托（阻塞等待），以兼容同步签名
+                                        Func<HttpRequest, HttpResponse?> syncNext = (r) =>
+                                        {
+                                            var t = next(r);
+                                            t.Wait();
+                                            return t.Result;
+                                        };
+                                        secondArg = syncNext;
+                                    }
+                                    else if (nextParamType.IsGenericType && nextParamType.GetGenericTypeDefinition() == typeof(Func<,>))
+                                    {
+                                        // 宽松兼容，尝试传入 next（若类型可转换，在运行时可能成功）
+                                        secondArg = next;
+                                    }
+                                    else
+                                    {
+                                        // 不支持的 next 参数类型，跳过
+                                        return null;
+                                    }
+
+                                    var args = new object?[] { req, secondArg };
+                                    var result = method.Invoke(instance, args);
+
+                                    if (result is Task task)
+                                    {
+                                        await task.ConfigureAwait(false);
+                                        var prop = task.GetType().GetProperty("Result");
+                                        if (prop != null)
+                                        {
+                                            return prop.GetValue(task) as HttpResponse;
+                                        }
+                                        return null;
+                                    }
+
+                                    return result as HttpResponse;
+                                }
+                                catch (TargetInvocationException tie)
+                                {
+                                    throw tie.InnerException ?? tie;
+                                }
                             };
 
-                            // 使用内部添加以保持排序逻辑
-                            this._middlewares.Add(entry);
-                            // 保持与 AddMiddleware 相同的日志输出，确保反射注册的中间件在日志中可见且格式一致
-                            Logger.Info($"添加中间件: {attr.Path ?? "全局"} (优先级: {priority})");
+                            // 直接把包装好的 RequestMiddleware 注册为中间件条目
+                            var entry = new MiddlewareEntry
+                            {
+                                RequestMiddleware = requestMw,
+                                Path = ma.Path,
+                                Priority = ma.Priority,
+                                OverrideGlobal = ma.OverrideGlobal,
+                                AddOrder = _middlewareCounter++
+                            };
+
+                            _middlewares.Add(entry);
+                            registeredMiddlewares++;
+                            continue;
                         }
-                        else
+
+                        // 其它签名：尝试使用现有的 AddMiddleware 路径（若外部有对 MethodInfo 的自动适配，则可工作）
+                        // 否则跳过
+                    }
+
+                    // 再处理路由处理特性
+                    var handleAttrs = method.GetCustomAttributes(typeof(HttpHandleAttribute), false).Cast<HttpHandleAttribute>();
+                    foreach (var ha in handleAttrs)
+                    {
+                        var handlerDelegate = CreateHandlerDelegate(method);
+                        if (handlerDelegate == null)
                         {
-                            Logger.Warn($"标注为中间件的方法 {method.Name} 必须接受 HttpListenerContext 或 (HttpRequest, next) 签名");
+                            Logger.Warn($"无法为方法 {method.Name} 创建处理委托，跳过注册");
+                            continue;
                         }
+
+                        var httpMethod = ParseHttpMethod(ha.Method) ?? new HttpMethod("GET");
+
+                        var rateLimitCallback = BindRateLimitCallback(method.DeclaringType ?? targetType, ha);
+
+                        // 使用框架已有的 AddRoute 重载注册路由（包含速率限制参数与可选回调）
+                        AddRoute(httpMethod, ha.Path, handlerDelegate, ha.RateLimitMaxRequests, ha.RateLimitWindowSeconds, rateLimitCallback);
+                        registeredHandlers++;
                     }
                 }
 
-                Logger.Info($"从程序集 {assembly.FullName} 注册了 {methods.Count} 个 HTTP处理方法和 {middlewareMethods.Count} 个中间件");
+                Logger.Info($"从类型 {targetType.FullName} 注册了 {registeredHandlers} 个 HTTP 处理方法和 {registeredMiddlewares} 个中间件 (仅该类型)");
 
-                // 可选：生成 linker 描述文件，供 ILLink/Trim 使用以保留反射访问的类型和成员
+                // 可选：仅为该类型生成 linker 描述或 preserve 源，便于裁剪时保留该类型的元数据
                 if (emitLinkerDescriptor)
                 {
                     try
                     {
-                        GenerateLinkerDescriptorForAssembly(assembly, descriptorPath);
-                        Logger.Info($"已生成 linker 描述文件，用于保留 {assembly.GetName().Name} 中的反射目标");
+                        GenerateLinkerDescriptorForType(targetType, descriptorPath);
+                        Logger.Info($"已为类型 {targetType.FullName} 生成 linker 描述文件");
                     }
                     catch (Exception ex)
                     {
-                        Logger.Warn($"生成 linker 描述文件失败: {ex.Message}");
+                        Logger.Warn($"为类型生成 linker 描述文件失败: {ex.Message}");
                     }
                 }
 
@@ -1058,19 +911,74 @@ namespace Drx.Sdk.Network.V2.Web
                 {
                     try
                     {
-                        GeneratePreserveSourceForAssembly(assembly, preserveSourcePath);
-                        Logger.Info($"已生成 Preserve 源文件，用于在编译时通过 DynamicDependency 保留 {assembly.GetName().Name} 的处理器类型");
+                        GeneratePreserveSourceForType(targetType, preserveSourcePath);
+                        Logger.Info($"已为类型 {targetType.FullName} 生成 Preserve 源文件");
                     }
                     catch (Exception ex)
                     {
-                        Logger.Warn($"生成 Preserve 源文件失败: {ex.Message}");
+                        Logger.Warn($"为类型生成 Preserve 源文件失败: {ex.Message}");
                     }
                 }
             }
             catch (Exception ex)
             {
-                Logger.Error($"注册 HTTP处理方法时发生错误: {ex}");
+                Logger.Error($"注册 HTTP 处理方法时发生错误: {ex}");
             }
+        }
+
+        // 为单个类型生成 linker 描述，仅包含该类型以便更精确地控制裁剪保留
+        private static void GenerateLinkerDescriptorForType(Type type, string? descriptorPath)
+        {
+            if (type == null) throw new ArgumentNullException(nameof(type));
+
+            var assemblyName = type.Assembly.GetName().Name ?? "UnknownAssembly";
+            var root = new XElement("linker");
+            var asmElem = new XElement("assembly", new XAttribute("fullname", assemblyName));
+            asmElem.Add(new XElement("type", new XAttribute("fullname", type.FullName ?? type.Name), new XAttribute("preserve", "all")));
+            root.Add(asmElem);
+            var doc = new XDocument(new XComment(" Auto-generated by DrxHttpServer.RegisterHandlersFromAssembly - preserve single type "), root);
+
+            string outPath;
+            if (!string.IsNullOrEmpty(descriptorPath)) outPath = descriptorPath!;
+            else outPath = Path.Combine(AppContext.BaseDirectory ?? Directory.GetCurrentDirectory(), $"linker.{assemblyName}.{type.Name}.xml");
+
+            var dir = Path.GetDirectoryName(outPath);
+            if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
+
+            using var fs = new FileStream(outPath, FileMode.Create, FileAccess.Write, FileShare.None);
+            var settings = new System.Xml.XmlWriterSettings { Indent = true, Encoding = Encoding.UTF8 };
+            using var xw = System.Xml.XmlWriter.Create(fs, settings);
+            doc.WriteTo(xw);
+        }
+
+        // 为单个类型生成 Preserve 源文件（包含 DynamicDependency 注解），以便在启用裁剪时保留该类型
+        private static void GeneratePreserveSourceForType(Type type, string? outputPath)
+        {
+            if (type == null) throw new ArgumentNullException(nameof(type));
+
+            var assemblyName = type.Assembly.GetName().Name ?? "UnknownAssembly";
+            var sb = new StringBuilder();
+            sb.AppendLine("// Auto-generated by DrxHttpServer.GeneratePreserveSourceForType");
+            sb.AppendLine("using System.Diagnostics.CodeAnalysis;");
+            sb.AppendLine();
+            var safeNamespace = assemblyName.Replace('-', '_').Replace('.', '_');
+            sb.AppendLine($"namespace {safeNamespace}");
+            sb.AppendLine("{");
+            sb.AppendLine($"    internal static class Preserve_{type.Name}_Generated");
+            sb.AppendLine("    {");
+            sb.AppendLine($"        [DynamicDependency(DynamicallyAccessedMemberTypes.All, \"{type.FullName}\", \"{assemblyName}\")] ");
+            sb.AppendLine("        private static void Preserve() { }");
+            sb.AppendLine("    }");
+            sb.AppendLine("}");
+
+            string outPath;
+            if (!string.IsNullOrEmpty(outputPath)) outPath = outputPath!;
+            else outPath = Path.Combine(AppContext.BaseDirectory ?? Directory.GetCurrentDirectory(), $"PreserveHandlers.{assemblyName}.{type.Name}.Generated.cs");
+
+            var dir = Path.GetDirectoryName(outPath);
+            if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
+
+            File.WriteAllText(outPath, sb.ToString(), Encoding.UTF8);
         }
 
         /// <summary>
@@ -1657,8 +1565,68 @@ namespace Drx.Sdk.Network.V2.Web
                         }
                     }
 
-                    // 如果没有匹配的路由，尝试静态文件
-                    if (_staticFileRoot != null && TryServeStaticFile(req.Path, out var fileResponse))
+                    // 如果没有匹配的路由，优先尝试从 FileRootPath 提供静态文件（当用户通过 FileRootPath 设置了根目录时）
+                    // 这允许像 /xxx.html 这样未经注册的路径仍然能被访问到（受限于目录穿越防护）。
+                    if (!string.IsNullOrEmpty(FileRootPath))
+                    {
+                        try
+                        {
+                            var relPath = req.Path ?? "/";
+                            if (relPath.StartsWith("/")) relPath = relPath.Substring(1);
+
+                            // 仅当请求带有文件名（包含扩展名）时才尝试直接从 FileRootPath 提供
+                            if (!string.IsNullOrEmpty(relPath) && relPath.Contains('.'))
+                            {
+                                // 防止路径穿越
+                                var safeRel = relPath.Replace('/', Path.DirectorySeparatorChar);
+                                if (safeRel.Contains(".."))
+                                {
+                                    return new HttpResponse(403, "Forbidden");
+                                }
+
+                                var filePath = Path.Combine(FileRootPath, safeRel);
+                                if (File.Exists(filePath))
+                                {
+                                    var clientIp = req.ClientAddress.Ip ?? context.Request.RemoteEndPoint?.Address.ToString();
+                                    Logger.Info($"通过 FileRootPath 提供静态文件: {relPath} (客户端: {clientIp})");
+
+                                    var ext = Path.GetExtension(filePath).ToLowerInvariant();
+                                    var mime = GetMimeType(ext);
+
+                                    // 对于文本类小文件直接读取返回以获得更好的兼容性（例如 html/css/js）
+                                    if (ext == ".html" || ext == ".htm" || ext == ".css" || ext == ".js" || ext == ".json" || ext == ".txt")
+                                    {
+                                        try
+                                        {
+                                            var content = File.ReadAllText(filePath);
+                                            var resp = new HttpResponse(200, content);
+                                            try { resp.Headers.Add("Content-Type", mime); } catch { }
+                                            return resp;
+                                        }
+                                        catch (Exception ex)
+                                        {
+                                            Logger.Error($"从 FileRootPath 读取文件时出错: {ex}");
+                                            return new HttpResponse(500, "Internal Server Error");
+                                        }
+                                    }
+
+                                    // 对于其他二进制类文件，使用流式响应以支持大文件
+                                    var streamResp = CreateFileResponse(filePath, null, mime);
+                                    // 对于通过浏览器内联显示的资源，不强制 attachment：移除 Content-Disposition
+                                    try { streamResp.Headers.Remove("Content-Disposition"); } catch { }
+                                    return streamResp;
+                                }
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            Logger.Error($"尝试从 FileRootPath 提供静态文件时发生错误: {ex}");
+                            return new HttpResponse(500, "Internal Server Error");
+                        }
+                    }
+
+                    // 如果没有匹配的路由，尝试静态文件（仅针对 _staticFileRoot 前缀）
+                    if (_staticFileRoot != null && TryServeStaticFile(req.Path ?? "/", out var fileResponse))
                     {
                         return fileResponse ?? new HttpResponse(500, "Internal Server Error");
                     }
@@ -1701,6 +1669,58 @@ namespace Drx.Sdk.Network.V2.Web
         }
 
         private void _file_routes_add(string urlPrefix, string rootDirectory) => _fileRoutes.Add((urlPrefix, rootDirectory));
+
+        /// <summary>
+        /// 向服务器添加一个持久化分组中的实体。
+        /// 示例： server.AddDataPersistent(new UserData { ... }, "users");
+        /// 同一 id 下的实体必须为相同的具体类型。
+        /// </summary>
+        public void AddDataPersistent<T>(T entity, string id) where T : Models.DataModelBase
+        {
+            try
+            {
+                _dataPersistentManager.Add(entity, id);
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"AddDataPersistent 失败: {ex.Message}");
+                throw;
+            }
+        }
+
+        /// <summary>
+        /// 获取指定 id 的持久化分组（浅拷贝）。若不存在返回空列表。
+        /// </summary>
+        public List<T> GetDataPersistent<T>(string id) where T : Models.DataModelBase
+        {
+            try
+            {
+                return _dataPersistentManager.Get<T>(id);
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"GetDataPersistent 失败: {ex.Message}");
+                throw;
+            }
+        }
+
+        /// <summary>
+        /// 将指定 id 的分组持久化为 {id}.db（同步阻塞）。
+        /// 存储路径优先使用服务器的 FileRootPath（若不为空），否则传入的 basePath，最后 SqliteUnified 的默认行为。
+        /// </summary>
+        public void UpdateOrCreateDataPersistent(string id, string? basePath = null)
+        {
+            try
+            {
+                var path = string.IsNullOrEmpty(FileRootPath) ? basePath : FileRootPath;
+                _dataPersistentManager.Save(id, path);
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"UpdateOrCreateDataPersistent 失败: {ex.Message}");
+                throw;
+            }
+        }
 
         /// <summary>
         /// 尝试以流方式服务文件（支持 Range），如果处理则直接写入 context.Response 并返回 true。
@@ -2193,12 +2213,30 @@ namespace Drx.Sdk.Network.V2.Web
                 }
                 else if (httpResponse.BodyObject != null)
                 {
-                    // 假设 BodyObject 是可序列化的对象，序列化为 JSON
-                    var json = System.Text.Json.JsonSerializer.Serialize(httpResponse.BodyObject);
-                    responseBytes = Encoding.UTF8.GetBytes(json);
-                    // 设置 Content-Type，仅当未由调用方指定时设置
-                    if (string.IsNullOrEmpty(response.ContentType))
-                        response.ContentType = "application/json";
+                    // 使用全局 JSON 序列化管理器处理对象序列化
+                    // 这支持多种序列化策略：反射、源生成、自定义回退等
+                    // 支持在启用代码裁剪（PublishTrimmed/NativeAOT）时安全工作
+                    if (DrxJsonSerializerManager.TrySerialize(httpResponse.BodyObject, out var json) && !string.IsNullOrEmpty(json))
+                    {
+                        responseBytes = Encoding.UTF8.GetBytes(json);
+                        // 设置 Content-Type，仅当未由调用方指定时设置
+                        if (string.IsNullOrEmpty(response.ContentType))
+                            response.ContentType = "application/json";
+                    }
+                    else
+                    {
+                        // 序列化失败：返回错误响应
+                        Logger.Warn($"无法序列化对象（类型: {httpResponse.BodyObject.GetType().FullName}），使用错误响应");
+                        var errorJson = System.Text.Json.JsonSerializer.Serialize(new
+                        {
+                            error = "服务器内部错误：无法序列化响应对象",
+                            type = httpResponse.BodyObject.GetType().FullName
+                        });
+                        responseBytes = Encoding.UTF8.GetBytes(errorJson);
+                        response.StatusCode = 500;
+                        if (string.IsNullOrEmpty(response.ContentType))
+                            response.ContentType = "application/json";
+                    }
                 }
                 else if (!string.IsNullOrEmpty(httpResponse.Body))
                 {
@@ -2803,10 +2841,74 @@ namespace Drx.Sdk.Network.V2.Web
         /// </summary>
         public SessionManager SessionManager => _sessionManager;
 
+        /// <summary>
+        /// 获取授权管理器
+        /// </summary>
+        public AuthorizationManager AuthorizationManager => _authorizationManager;
+
+        /// <summary>
+        /// 使用默认 QQ SMTP（或通过发件人和授权码）发送简单文本邮件。
+        /// 返回 true 表示发送成功，false 表示发生异常（异常已被内部捕获并记录）。
+        /// </summary>
+        /// <param name="to">收件人地址</param>
+        /// <param name="body">邮件正文（text/plain）</param>
+        /// <param name="senderAddress">发件人地址（例如 xxx@qq.com）</param>
+        /// <param name="authCode">发件人授权码（QQ 邮箱的授权码），若为 null 将使用 DRXEmail 的默认值</param>
+        /// <param name="subject">邮件主题</param>
+        public bool SendEmail(string to, string body, string senderAddress = "xxx@qq.com", string? authCode = null, string subject = "DRX Notification")
+        {
+            if (string.IsNullOrWhiteSpace(to)) throw new ArgumentNullException(nameof(to));
+            if (string.IsNullOrWhiteSpace(senderAddress)) throw new ArgumentNullException(nameof(senderAddress));
+
+            DRXEmail email = authCode == null ? new DRXEmail(senderAddress) : new DRXEmail(senderAddress, authCode);
+            try
+            {
+                email.SendEmail(subject, body, to);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                try { Logger.Error($"SendEmail error: {ex}"); } catch { }
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// 使用完整的 EmailConfig 配置发送邮件（支持自定义 SMTP、HTML 内容等）。
+        /// 返回 true 表示发送成功，false 表示发送失败（异常已记录）。
+        /// </summary>
+        /// <param name="cfg">邮件配置对象</param>
+        public bool SendEmail(EmailConfig cfg)
+        {
+            if (cfg == null) throw new ArgumentNullException(nameof(cfg));
+            if (string.IsNullOrWhiteSpace(cfg.SenderAddress)) throw new ArgumentException("SenderAddress must be provided in EmailConfig", nameof(cfg));
+            if (string.IsNullOrWhiteSpace(cfg.To)) throw new ArgumentException("To (recipient) must be provided in EmailConfig", nameof(cfg));
+
+            var drx = new DRXEmail(cfg.SenderAddress, cfg.SmtpHost, cfg.Password, cfg.SmtpPort, cfg.EnableSsl, cfg.DisplayName);
+            try
+            {
+                if (!string.IsNullOrEmpty(cfg.Body) && (cfg.Body.IndexOf("<html", StringComparison.OrdinalIgnoreCase) >= 0 || cfg.Body.IndexOf("<body", StringComparison.OrdinalIgnoreCase) >= 0))
+                {
+                    drx.SendHtmlEmail(cfg.Subject ?? string.Empty, cfg.Body, cfg.To);
+                }
+                else
+                {
+                    drx.SendEmail(cfg.Subject ?? string.Empty, cfg.Body ?? string.Empty, cfg.To);
+                }
+                return true;
+            }
+            catch (Exception ex)
+            {
+                try { Logger.Error($"SendEmail(config) error: {ex}"); } catch { }
+                return false;
+            }
+        }
+
         public ValueTask DisposeAsync()
         {
             Stop();
             _sessionManager?.Dispose();
+            _authorizationManager?.Dispose();
             return ValueTask.CompletedTask;
         }
     }
@@ -3078,6 +3180,170 @@ namespace Drx.Sdk.Network.V2.Web
         private string GenerateSessionId()
         {
             return Guid.NewGuid().ToString("N") + DateTime.UtcNow.Ticks.ToString();
+        }
+
+        /// <summary>
+        /// 释放资源
+        /// </summary>
+        public void Dispose()
+        {
+            _cleanupTimer?.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// 授权记录数据类
+    /// </summary>
+    public class AuthorizationRecord
+    {
+        /// <summary>
+        /// 授权码，唯一标识
+        /// </summary>
+        public string Code { get; set; }
+
+        /// <summary>
+        /// 授权用户名
+        /// </summary>
+        public string UserName { get; set; }
+
+        /// <summary>
+        /// 应用名称（用于展示）
+        /// </summary>
+        public string ApplicationName { get; set; }
+
+        /// <summary>
+        /// 应用描述
+        /// </summary>
+        public string ApplicationDescription { get; set; }
+
+        /// <summary>
+        /// 授权请求时间
+        /// </summary>
+        public DateTime CreatedAt { get; set; }
+
+        /// <summary>
+        /// 授权超时时间（分钟）
+        /// </summary>
+        public int ExpirationMinutes { get; set; }
+
+        /// <summary>
+        /// 是否已授权完成
+        /// </summary>
+        public bool IsAuthorized { get; set; }
+
+        /// <summary>
+        /// 授权完成时间
+        /// </summary>
+        public DateTime? AuthorizedAt { get; set; }
+
+        /// <summary>
+        /// 授权范围/权限列表（逗号分隔）
+        /// </summary>
+        public string Scopes { get; set; }
+
+        public AuthorizationRecord(string code, string userName, string applicationName, string applicationDescription = "", int expirationMinutes = 5, string scopes = "")
+        {
+            Code = code;
+            UserName = userName;
+            ApplicationName = applicationName;
+            ApplicationDescription = applicationDescription;
+            CreatedAt = DateTime.UtcNow;
+            ExpirationMinutes = expirationMinutes;
+            IsAuthorized = false;
+            AuthorizedAt = null;
+            Scopes = scopes;
+        }
+
+        /// <summary>
+        /// 检查授权码是否已过期
+        /// </summary>
+        public bool IsExpired => (DateTime.UtcNow - CreatedAt).TotalMinutes > ExpirationMinutes;
+    }
+
+    /// <summary>
+    /// 授权管理器
+    /// </summary>
+    public class AuthorizationManager
+    {
+        private readonly System.Collections.Concurrent.ConcurrentDictionary<string, AuthorizationRecord> _authorizations = new();
+        private readonly Timer _cleanupTimer;
+        private readonly int _defaultExpirationMinutes;
+
+        public AuthorizationManager(int defaultExpirationMinutes = 5)
+        {
+            _defaultExpirationMinutes = defaultExpirationMinutes;
+            // 每分钟清理一次过期授权码
+            _cleanupTimer = new Timer(CleanupExpiredAuthorizations, null, TimeSpan.FromMinutes(1), TimeSpan.FromMinutes(1));
+        }
+
+        /// <summary>
+        /// 生成新的授权码
+        /// </summary>
+        public string GenerateAuthorizationCode(string userName, string applicationName, string applicationDescription = "", string scopes = "")
+        {
+            var code = Guid.NewGuid().ToString("N");
+            var record = new AuthorizationRecord(code, userName, applicationName, applicationDescription, _defaultExpirationMinutes, scopes);
+            _authorizations[code] = record;
+            Logger.Info($"生成授权码: {code} for user {userName} on app {applicationName}");
+            return code;
+        }
+
+        /// <summary>
+        /// 获取授权记录
+        /// </summary>
+        public AuthorizationRecord? GetAuthorizationRecord(string code)
+        {
+            if (_authorizations.TryGetValue(code, out var record))
+            {
+                if (!record.IsExpired)
+                {
+                    return record;
+                }
+                else
+                {
+                    _authorizations.TryRemove(code, out _);
+                    Logger.Info($"授权码已过期: {code}");
+                }
+            }
+            return null;
+        }
+
+        /// <summary>
+        /// 完成授权
+        /// </summary>
+        public bool CompleteAuthorization(string code)
+        {
+            if (_authorizations.TryGetValue(code, out var record))
+            {
+                if (!record.IsExpired && !record.IsAuthorized)
+                {
+                    record.IsAuthorized = true;
+                    record.AuthorizedAt = DateTime.UtcNow;
+                    Logger.Info($"授权完成: {code} for user {record.UserName}");
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// 清理过期授权码
+        /// </summary>
+        private void CleanupExpiredAuthorizations(object? state)
+        {
+            var expiredKeys = _authorizations.Where(kvp => kvp.Value.IsExpired)
+                                            .Select(kvp => kvp.Key)
+                                            .ToList();
+
+            foreach (var key in expiredKeys)
+            {
+                _authorizations.TryRemove(key, out _);
+            }
+
+            if (expiredKeys.Count > 0)
+            {
+                Logger.Info($"清理了 {expiredKeys.Count} 个过期授权码");
+            }
         }
 
         /// <summary>

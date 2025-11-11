@@ -18,7 +18,7 @@
             /* 主题蓝 */
             --white: #ffffff;
             --card-border: rgba(255, 255, 255, 0.05);
-            --glass: rgba(255, 255, 255, 0.02);
+            --glass: rgba(255, 255, 255, 0);
         }
 
         * {
@@ -168,23 +168,51 @@
             border: none;
             cursor: pointer;
             font-size: 1rem;
-            transition: transform .12s ease, box-shadow .12s;
+            /* 与 ghost 保持一致的平滑过渡：背景/文字/位移/阴影 */
+            transition: background .12s ease, color .12s ease, transform .12s ease, box-shadow .12s ease;
         }
 
-        .btn:active {
-            transform: translateY(1px)
-        }
-
+        /* hover 时轻微上浮并带阴影，和 ghost 保持一致 */
         .btn:hover {
-            box-shadow: 0 8px 26px rgba(59, 130, 246, 0.06)
+            transform: translateY(-2px);
+            box-shadow: 0 8px 26px rgba(59, 130, 246, 0.06);
         }
 
+        /* active 时回位，表现按下效果（不向下过分移动，避免突兀） */
+        .btn:active {
+            transform: translateY(0);
+        }
+
+        .btn:focus {
+            outline: none;
+            box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.06);
+        }
+
+        /* 简洁风格的 ghost 按钮：透明底 + 细边框，hover 时有轻微背景与上浮效果 */
         .btn.ghost {
             background: transparent;
+            color: var(--muted-strong);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            padding: 10px 12px;
+            border-radius: 8px;
+            transition: background .12s ease, color .12s ease, transform .08s ease, box-shadow .12s ease;
+            margin-top: 10px;
+        }
+
+        .btn.ghost:hover {
+            background: rgba(255, 255, 255, 0.03);
             color: var(--white);
-            border: none;
-            opacity: 0.9;
-            margin-top: 10px
+            transform: translateY(-2px);
+            box-shadow: 0 8px 26px rgba(59, 130, 246, 0.04);
+        }
+
+        .btn.ghost:active {
+            transform: translateY(0);
+        }
+
+        .btn.ghost:focus {
+            outline: none;
+            box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.06);
         }
 
         /* loading spinner */
@@ -204,6 +232,33 @@
             to {
                 transform: rotate(360deg)
             }
+        }
+
+        /* 覆盖浏览器自动填充样式，使用主题变量避免白底（Chromium / Firefox） */
+        input:-webkit-autofill,
+        textarea:-webkit-autofill,
+        select:-webkit-autofill,
+        input:-webkit-autofill:hover,
+        textarea:-webkit-autofill:hover,
+        select:-webkit-autofill:hover,
+        input:-webkit-autofill:focus,
+        textarea:-webkit-autofill:focus,
+        select:-webkit-autofill:focus {
+            /* 用巨大 inset box-shadow 覆盖浏览器的填充背景，保证和页面玻璃效果一致 */
+            -webkit-box-shadow: 0 0 0 1000px var(--glass) inset !important;
+            box-shadow: 0 0 0 1000px var(--glass) inset !important;
+            /* 覆盖文字颜色 */
+            -webkit-text-fill-color: var(--white) !important;
+            /* 防止浏览器的背景色动画闪烁 */
+            transition: background-color 5000s ease-in-out 0s !important;
+        }
+
+        /* Firefox autofill */
+        input:-moz-autofill,
+        textarea:-moz-autofill,
+        select:-moz-autofill {
+            box-shadow: 0 0 0 1000px var(--glass) inset !important;
+            -moz-text-fill-color: var(--white) !important;
         }
 
         @media (max-width:520px) {
@@ -259,6 +314,38 @@
     <script>
         // 简单客户端验证与交互（界面演示）
         (function () {
+            // 页面加载时：若本地存在 token 且能通过验证，则视为已登录并重定向到首页
+            (async function checkTokenRedirect() {
+                try {
+                    var token = localStorage.getItem('kax_login_token');
+                    if (!token) return; // 无 token，继续显示登录页
+
+                    var controller = new AbortController();
+                    var timeoutId = setTimeout(function () { controller.abort(); }, 6000);
+
+                    var resp = await fetch('/api/token/test', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+                        signal: controller.signal
+                    });
+                    clearTimeout(timeoutId);
+
+                    if (resp.status === 200) {
+                        // token 有效：跳转到首页
+                        window.location.href = '/';
+                        return;
+                    }
+
+                    if (resp.status === 401) {
+                        // token 无效或过期，清理并留在当前页
+                        try { localStorage.removeItem('kax_login_token'); } catch (_) { }
+                    }
+                    // 其他情况不做处理，保持在登录页以便用户登录
+                } catch (err) {
+                    if (err && err.name === 'AbortError') console.warn('token 验证超时，未自动跳转');
+                    else console.error('检查 token 时出错：', err);
+                }
+            })();
             var form = document.getElementById('loginForm');
             var submitBtn = document.getElementById('submitBtn');
             var backBtn = document.getElementById('backBtn');
