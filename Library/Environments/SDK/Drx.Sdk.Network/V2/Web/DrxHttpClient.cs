@@ -1095,6 +1095,13 @@ namespace Drx.Sdk.Network.V2.Web
             {
                 using var request = new HttpRequestMessage(System.Net.Http.HttpMethod.Get, url);
                 var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
+
+#if DEBUG
+                Logger.Debug($"响应头: {response.Headers}");
+                Logger.Debug($"内容头: {response.Content.Headers}");
+                Logger.Debug($"状态码: {response.StatusCode}");
+#endif
+
                 response.EnsureSuccessStatusCode();
 
                 var total = response.Content.Headers.ContentLength ?? -1L;
@@ -1342,33 +1349,33 @@ namespace Drx.Sdk.Network.V2.Web
             if (fileStream == null) throw new ArgumentNullException(nameof(fileStream));
             if (string.IsNullOrEmpty(fileName)) fileName = "file";
 
-            string body = null;
+            string mDataJson = null;
             if (metadata != null)
             {
                 try
                 {
                     if (metadata is JToken jToken)
                     {
-                        body = jToken.ToString();
+                        mDataJson = jToken.ToString();
                     }
                     else
                     {
-                        body = JsonSerializer.Serialize(metadata);
+                        mDataJson = JsonSerializer.Serialize(metadata);
                     }
                 }
                 catch (Exception ex)
                 {
                     Logger.Warn($"序列化 metadata 时发生错误: {ex.Message}");
-                    body = metadata.ToString();
+                    mDataJson = metadata.ToString();
                 }
             }
 
+            Logger.Debug($"Uploading file with metadata to {url}, filename: {fileName}, metadata: {mDataJson}");
 
             var req = new HttpRequest
             {
                 Url = url,
                 Method = "POST",
-                Body = body,
                 Headers = headers ?? new NameValueCollection(),
                 UploadFile = new HttpRequest.UploadFileDescriptor
                 {
@@ -1379,6 +1386,8 @@ namespace Drx.Sdk.Network.V2.Web
                     CancellationToken = cancellationToken
                 }
             };
+
+            req.AddMetaData(mDataJson ?? @"{""metadata"":{}}");
 
             try
             {

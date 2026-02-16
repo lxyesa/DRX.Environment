@@ -280,6 +280,7 @@ public class KaxHttp
         }
 
         var userExists = KaxGlobal.UserDatabase.QueryFirstAsync(u => u.UserName == userName && u.PasswordHash == CommonUtility.ComputeSHA256Hash(password)).Result;
+        string? createdSessionId = null;
         if (userExists != null)
         {
             var token = GenerateLoginToken(userExists);
@@ -289,12 +290,13 @@ public class KaxHttp
             // 使用会话机制：获取或创建会话并在会话中保存用户信息
             try
             {
-                var session = server?.SessionManager.GetOrCreateSession(request.Session?.Id);
+                var session = server?.SessionManager.GetOrCreateSession(request.SessionId);
                 if (session != null)
                 {
                     session.Data["userId"] = userExists.Id;
                     session.Data["userName"] = userExists.UserName;
                     session.UpdateAccess();
+                    createdSessionId = session.Id;
                 }
             }
             catch (Exception ex)
@@ -309,7 +311,7 @@ public class KaxHttp
                 {
                     ["message"] = "登录成功。",
                     ["login_token"] = token,
-                    ["session_id"] = request.Session?.Id ?? server?.SessionManager.GetOrCreateSession(null)?.Id
+                    ["session_id"] = createdSessionId ?? request.SessionId ?? server?.SessionManager.GetOrCreateSession(null)?.Id
                 }.ToJsonString(),
             };
         }
@@ -403,6 +405,43 @@ public class KaxHttp
         }
     }
 
+    [HttpHandle("/api/user/test/sayhello", "GET", RateLimitMaxRequests = 5, RateLimitWindowSeconds = 60, RateLimitCallbackMethodName = nameof(RateLimitCallback))]
+    public static IActionResult Get_UserTestSayHello(HttpRequest request, DrxHttpServer server)
+    {
+        try
+        {
+            // 使用服务器会话验证：要求请求携带已存在的 session id，并且会话中包含 userName
+            var session = request.ResolveSession(server);
+            if (session == null)
+            {
+                return new JsonResult(new { message = "未检测到会话或未登录，请先登录。" }, 401);
+            }
+
+            if (!session.Data.TryGetValue("userName", out var userNameObj) || userNameObj == null)
+            {
+                return new JsonResult(new { message = "会话中未包含用户信息或已过期，请重新登录。" }, 401);
+            }
+
+            var userName = userNameObj.ToString();
+            if (string.IsNullOrEmpty(userName))
+            {
+                return new JsonResult(new { message = "会话内用户信息不完整，请重新登录。" }, 401);
+            }
+
+            if (IsUserBanned(userName))
+            {
+                return new JsonResult(new { message = "您的账号已被封禁，无法访问此资源。" }, 403);
+            }
+
+            return new JsonResult(new { message = $"Hello, {userName}! (登录用户专用)" }, 200);
+        }
+        catch (Exception ex)
+        {
+            Logger.Error("处理 /api/user/test/sayhello 时发生异常: " + ex.Message);
+            return new JsonResult(new { message = "服务器错误，无法处理请求。" }, 500);
+        }
+    }
+
     [HttpHandle("/api/user/unban?{userName}?{dev_code}", "POST")]
     public static HttpResponse Post_UnBanUser(HttpRequest request)
     {
@@ -437,11 +476,11 @@ public class KaxHttp
     }
     
     [HttpHandle("/api/session/test", "GET")]
-    public static IActionResult Get_SessionTest(HttpRequest request)
+    public static IActionResult Get_SessionTest(HttpRequest request, DrxHttpServer server)
     {
         try
         {
-            var session = request.Session;
+            var session = request.ResolveSession(server);
             if (session == null)
             {
                 return new JsonResult(new

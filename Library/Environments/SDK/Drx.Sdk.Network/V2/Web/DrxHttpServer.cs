@@ -2132,7 +2132,7 @@ namespace Drx.Sdk.Network.V2.Web
                         throw;
                     }
 
-                    httpRequest.Session = _currentSession.Value;
+                    httpRequest.SessionId = _currentSession.Value?.Id;
                     return httpRequest;
                 }
 
@@ -2148,7 +2148,7 @@ namespace Drx.Sdk.Network.V2.Web
                 httpRequest.BodyBytes = bodyBytes;
                 httpRequest.Content = new System.Dynamic.ExpandoObject();
                 try { ((System.Collections.Generic.IDictionary<string, object>)httpRequest.Content)["Text"] = body; } catch { }
-                httpRequest.Session = _currentSession.Value;
+                httpRequest.SessionId = _currentSession.Value?.Id;
                 return httpRequest;
             }
             catch (Exception ex)
@@ -2556,7 +2556,7 @@ namespace Drx.Sdk.Network.V2.Web
         /// <param name="savePath">目标保存目录</param>
         /// <param name="fileName">保存的文件名。默认值 "upload_" 会追加时间戳以避免冲突</param>
         /// <returns>处理结果 HttpResponse</returns>
-        public static HttpResponse SaveUploadFile(HttpRequest request, string savePath, string fileName = "upload_")
+        public HttpResponse SaveUploadFile(HttpRequest request, string savePath, string fileName = "upload_")
         {
             if (request?.UploadFile == null || request.UploadFile.Stream == null)
             {
@@ -2932,6 +2932,18 @@ namespace Drx.Sdk.Network.V2.Web
         /// 获取会话管理器
         /// </summary>
         public SessionManager SessionManager => _sessionManager;
+        
+        /// <summary>
+        /// 根据会话 id 获取会话对象，若不存在返回 null。该方法只是对内部 SessionManager.GetSession 的封装，
+        /// 便于外部调用者使用会话 id 解析会话对象。
+        /// </summary>
+        /// <param name="sessionId">会话 id</param>
+        /// <returns>Session 对象或 null</returns>
+        public Session? GetSessionById(string? sessionId)
+        {
+            if (string.IsNullOrEmpty(sessionId)) return null;
+            return _sessionManager.GetSession(sessionId);
+        }
 
         /// <summary>
         /// 获取授权管理器

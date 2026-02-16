@@ -859,23 +859,29 @@ if (server.ExistsDataPersistent<UserData>("users"))
 - 为每个分组支持按需合并而非先 Clear 的策略（例如基于 Id 更新/插入），以保留数据库中已存在但当前未加载到内存的条目。
 
 
-3) 在路由中返回文件下载（推荐使用 `IActionResult` 的 `FileResult`，保持与旧 API 兼容）
+
+### 文件下载（FileResult / CreateFileResponse）
+
+在业务路由中推荐使用 `IActionResult` 的 `FileResult` 来返回文件下载（框架会处理 Range、ETag、Content-Disposition 等细节）。若需要兼容旧接口，也可以直接返回 `HttpResponse`（例如通过 `CreateFileResponse`）。示例：
 
 ```csharp
-// 使用 IActionResult/ FileResult 返回文件下载（推荐）
-server.AddRoute(HttpMethod.Get, "/download/{name}", req =>
-{
-    var filePath = Path.Combine("C:/files", req.PathParameters["name"]);
-    var downloadName = Path.GetFileName(filePath);
-    // FileResult 是 IActionResult 的实现，框架会在执行时把文件流和头正确写出并支持 Range
-    return new FileResult(filePath, downloadName, "application/octet-stream", bandwidthLimitKbps: 0);
+// 使用 IActionResult / FileResult 返回文件下载（推荐）
+server.AddRoute(HttpMethod.Get, "/download/{name}", req => {
+  var filePath = Path.Combine("C:/files", req.PathParameters["name"]);
+  var downloadName = Path.GetFileName(filePath);
+  // FileResult 是 IActionResult 的实现，框架会在执行时把文件流和头正确写出并支持 Range
+  return new FileResult(filePath, downloadName, "application/octet-stream", bandwidthLimitKbps: 0);
 });
 
-// 兼容旧版：仍可直接返回 HttpResponse（CreateFileResponse），框架会继续支持此写法
+// 兼容旧版（仍然可用）
 // return DrxHttpServer.CreateFileResponse(filePath, downloadName, "application/octet-stream", 0);
 ```
 
-4) 原始/低级处理器示例（直接操作 `HttpListenerContext`，并使用 `ResponseAsync` 便捷地发送 `IActionResult`）
+说明：当需要更细粒度控制（例如自定义带宽控制、特殊缓存策略或在响应中注入额外头）时，可直接调用 `CreateFileResponse` 或在原始路由中手动写流。
+
+### 原始/低级处理器示例（Raw）
+
+当需要直接操作底层 `HttpListenerContext`（如 WebSocket 握手、长连接或自定义协议）时，可注册 Raw 路由并直接操作 ctx。示例：
 
 ```csharp
 [HttpHandle("/raw-echo", "POST", Raw = true)]
@@ -891,16 +897,16 @@ public static async Task RawEcho(HttpListenerContext ctx, DrxHttpServer server)
 }
 ```
 
-5) 通过属性批量注册：把带 `HttpHandle` 的类所在程序集注册到服务器
+### 批量注册（RegisterHandlersFromAssembly）
+
+可在启动时批量扫描并注册带 `HttpHandle` / `HttpMiddleware` 特性的方法：
 
 ```csharp
-// 在启动处把 API 类所在程序集注册到 server
+// 在启动处把 API 类所在类型所在的程序集注册到 server（传入类型作为标记）
 server.RegisterHandlersFromAssembly(typeof(MyApi));
 ```
 
-说明：
-- 推荐在大多数业务路由中使用 `IActionResult`（或 `HttpResponse`）签名，便于框架统一处理 Content-Type、Status、流响应与异步行为。 
-- 仅在需要直接控制底层流、实现自定义协议或 WebSocket 握手时使用 Raw (`HttpListenerContext`) 签名。
+推荐：大多数业务路由使用 `IActionResult`（或 `HttpResponse`）签名，Raw 签名仅在必须直接控制底层流时使用。
 
 
 ### 流式上传

@@ -155,9 +155,30 @@ namespace Drx.Sdk.Network.V2.Web
         public Dictionary<string, string> PathParameters { get; set; } = new Dictionary<string, string>();
 
         /// <summary>
-        /// 会话对象（如果启用了会话中间件）
+        /// 会话 Id（如果启用了会话中间件）
+        /// 
+        /// 说明：重构后请求仅携带会话 id，若需获取会话对象可通过 DrxHttpServer.SessionManager 或调用
+        /// request.ResolveSession(server) 来获取对应的 Session 实例。
         /// </summary>
-        public Session? Session { get; set; }
+        public string? SessionId { get; set; }
+
+        /// <summary>
+        /// 通过服务器实例解析会话 id 为会话对象（若找不到返回 null）。
+        /// 这是一个便捷方法，避免调用方直接依赖 SessionManager 内部实现。
+        /// </summary>
+        public Session? ResolveSession(DrxHttpServer server)
+        {
+            if (server == null) return null;
+            if (string.IsNullOrEmpty(SessionId)) return null;
+            try
+            {
+                return server.SessionManager.GetSession(SessionId);
+            }
+            catch
+            {
+                return null;
+            }
+        }
 
         /// <summary>
         /// 表单字段集合，multipart/form-data 或 application/x-www-form-urlencoded 场景使用
@@ -401,6 +422,63 @@ namespace Drx.Sdk.Network.V2.Web
                 return vals ?? Array.Empty<string>();
             }
             catch { return Array.Empty<string>(); }
+        }
+
+        /// <summary>
+        /// 添加元数据到请求头中
+        /// </summary>
+        /// <param name="metaData">必须是一个有效的 JSON 字符串</param>
+        public void AddMetaData(string metaData)
+        {
+            this.Headers.Add("X-MetaData", metaData);
+        }
+
+        /// <summary>
+        /// 获取元数据
+        /// </summary>
+        /// <returns></returns>
+        public string? GetMetaData()
+        {
+            // 首先尝试从 Headers 中获取
+            var metaData = this.Headers["X-MetaData"];
+
+            // 若 header 中不存在，尝试从 multipart/form-data 的表单字段或 urlencoded body 中获取名为 metadata 的值
+            if (string.IsNullOrEmpty(metaData))
+            {
+                try { metaData = this.Form?["metadata"]; } catch { metaData = null; }
+            }
+
+            if (string.IsNullOrEmpty(metaData)) return null;
+
+            metaData = metaData.Trim();
+
+            // 优先处理 URL 百分号编码（percent-encoding），例如 %7B %22 %0D%0A 等
+            try
+            {
+                if (metaData.IndexOf('%') >= 0)
+                {
+                    // 使用 WebUtility.UrlDecode 还原
+                    try
+                    {
+                        var urlDecoded = System.Net.WebUtility.UrlDecode(metaData);
+                        if (!string.IsNullOrEmpty(urlDecoded)) return urlDecoded;
+                    }
+                    catch { /* 容错，继续回退 */ }
+                }
+            }
+            catch { }
+
+            // 如果不是 percent-encoding，尝试 Base64 解码（兼容旧逻辑）
+            try
+            {
+                var base64Bytes = Convert.FromBase64String(metaData);
+                return Encoding.UTF8.GetString(base64Bytes);
+            }
+            catch
+            {
+                // 既不是 URL 编码也不是 Base64，则返回原始字符串
+                return metaData;
+            }
         }
     }
 }

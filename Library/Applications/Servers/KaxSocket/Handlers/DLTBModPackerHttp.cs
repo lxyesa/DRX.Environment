@@ -100,7 +100,7 @@ namespace KaxSocket
                     Body = "无效用户，请重新登录"
                 };
             }
-            
+
             // 获取所有Mod信息，然后组装为json数组
             var modInfoDb = DLTBModPackerGlobal.Instance.GetModInfoDataBase();
             if (modInfoDb != null)
@@ -125,11 +125,19 @@ namespace KaxSocket
                 };
             }
         }
+        
+        [HttpHandle("/api/dltbmodpacker/mod/download/online", "GET", RateLimitMaxRequests = 10, RateLimitWindowSeconds = 60)]
+        public static async Task<IActionResult> Get_DownloadOnlineWithCRC(HttpRequest request, DrxHttpServer server)
+        {
+            var filePath = Path.Combine(AppContext.BaseDirectory, "mods", "online_mods.zip");
+            var fileName = "online_mods.zip";
+            return new FileResult(filePath, fileName, bandwidthLimitKb: 5120);
+        }
 
         [HttpHandle("/api/dltbmodpacker/mod/upload", "POST", RateLimitMaxRequests = 5, RateLimitWindowSeconds = 60)]
-        public static HttpResponse PostUploadMod(HttpRequest request)
+        public static HttpResponse PostUploadMod(HttpRequest request, DrxHttpServer server)
         {
-            var reqBody = request.Body;
+            var metaData = request.GetMetaData();
             if (JwtHelper.ValidateTokenFromRequest(request) == null)
             {
                 return new HttpResponse
@@ -139,7 +147,7 @@ namespace KaxSocket
                 };
             }
 
-            if (string.IsNullOrEmpty(reqBody) && (request.UploadFile == null || request.UploadFile.Stream == null))
+            if (string.IsNullOrEmpty(metaData) && (request.UploadFile == null || request.UploadFile.Stream == null))
             {
                 return new HttpResponse
                 {
@@ -148,7 +156,7 @@ namespace KaxSocket
                 };
             }
 
-            if (string.IsNullOrEmpty(reqBody))
+            if (string.IsNullOrEmpty(metaData))
             {
                 // 没有 metadata，但可能有上传文件；返回错误以要求 metadata
                 return new HttpResponse
@@ -161,7 +169,7 @@ namespace KaxSocket
             JObject jsonObj;
             try
             {
-                jsonObj = JObject.Parse(reqBody);
+                jsonObj = JObject.Parse(metaData);
             }
             catch (Exception ex)
             {
@@ -207,7 +215,7 @@ namespace KaxSocket
 
                 try
                 {
-                    var result = DrxHttpServer.SaveUploadFile(request, "mods", $"{modId}.dltbmodpak");
+                    var result = server.SaveUploadFile(request, "mods", $"{modId}.dltbmodpak");
 
                     // 检测数据库内是否已存在该Mod信息，若不存在则保存，而是更新
                     var existingMod = DLTBModPackerGlobal.Instance.GetModInfoDataBase().Query("ModId", modId);
@@ -263,7 +271,7 @@ namespace KaxSocket
                     return new HttpResponse
                     {
                         StatusCode = 404,
-                        Body = "Not Found"
+                        Body = "错误：Mod 文件不存在"
                     };
                 }
 

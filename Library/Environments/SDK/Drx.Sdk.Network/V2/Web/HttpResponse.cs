@@ -32,6 +32,11 @@ namespace Drx.Sdk.Network.V2.Web
         public NameValueCollection Headers { get; set; } = new NameValueCollection();
 
         /// <summary>
+        /// 可选：与响应关联的会话 Id（当服务器需要在响应中携带会话 id 时使用）
+        /// </summary>
+        public string? SessionId { get; set; }
+
+        /// <summary>
         /// 响应体 (字符串形式)
         /// </summary>
         public string Body { get; set; }

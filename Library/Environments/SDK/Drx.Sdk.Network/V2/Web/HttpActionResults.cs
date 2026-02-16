@@ -3,6 +3,7 @@ using System.IO;
 using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
+using Drx.Sdk.Shared;
 
 namespace Drx.Sdk.Network.V2.Web
 {
@@ -219,7 +220,8 @@ namespace Drx.Sdk.Network.V2.Web
                 var resolved = server?.ResolveFilePath(FilePathIndicator) ?? FilePathIndicator;
                 if (string.IsNullOrEmpty(resolved) || !File.Exists(resolved))
                 {
-                    return Task.FromResult(new HttpResponse(404, "Not Found"));
+                    Logger.Warn($"文件不存在于路径：{resolved}");
+                    return Task.FromResult(new HttpResponse(404, "File Not Found"));
                 }
 
                 var resp = DrxHttpServer.CreateFileResponse(resolved, FileName, ContentType, BandwidthLimitKb);
