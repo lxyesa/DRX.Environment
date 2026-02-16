@@ -1,8 +1,14 @@
 using System;
 using System.Diagnostics.CodeAnalysis;
+using System.IO;
+using System.Linq;
 using System.Security.Claims;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json.Nodes;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
+
 using Drx.Sdk.Network.V2.Web;
 using Drx.Sdk.Shared;
 using Drx.Sdk.Shared.Utility;
@@ -16,10 +22,6 @@ public class KaxHttp
     {
     }
 
-
-
-    #region 辅助方法
-
     static KaxHttp()
     {
         // 配置 JWT
@@ -32,82 +34,6 @@ public class KaxHttp
         });
     }
 
-    private static string GenerateLoginToken(UserData user)
-    {
-        return JwtHelper.GenerateToken(user.Id.ToString(), user.UserName, user.Email);
-    }
-
-    private static ClaimsPrincipal ValidateToken(string token)
-    {
-        return JwtHelper.ValidateToken(token);
-    }
-
-
-    private static bool IsUserBanned(string userName)
-    {
-        var user = KaxGlobal.UserDatabase.QueryFirstAsync(u => u.UserName == userName).Result;
-        if (user != null)
-        {
-            Logger.Info($"检查用户 {userName} 的封禁状态: IsBanned={user.Status.IsBanned}");
-            Logger.Info($"封禁过期时间: {user.Status.BanExpiresAt}, 当前时间: {DateTimeOffset.UtcNow.ToUnixTimeSeconds()}");
-            Logger.Info($"封禁原因: {user.Status.BanReason}");
-
-            if (user.Status.IsBanned)
-            {
-                // 检查封禁是否已过期
-                var currentTime = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-                Logger.Info($"当前时间戳: {currentTime}, 用户封禁到期时间戳: {user.Status.BanExpiresAt}");
-                if (user.Status.BanExpiresAt > 0 && currentTime >= user.Status.BanExpiresAt)
-                {
-                    UnBanUser(userName).Wait();
-                    Logger.Info($"用户 {user.UserName} 的封禁已过期，已自动解除封禁。");
-                    return false;
-                }
-                return true;
-            }
-        }
-        else
-        {
-            Logger.Warn($"检查封禁状态时未找到用户：{userName}");
-        }
-        return false;
-    }
-
-    private static async Task BanUser(string userName, string reason, long durationSeconds)
-    {
-        var user = KaxGlobal.UserDatabase.QueryFirstAsync(u => u.UserName == userName).Result;
-        if (user != null && !user.Status.IsBanned)
-        {
-            user.Status.IsBanned = true;
-            user.Status.BannedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-            user.Status.BanExpiresAt = user.Status.BannedAt + durationSeconds;
-            user.Status.BanReason = reason;
-            _ = await KaxGlobal.UserDatabase.EditWhereAsync(u => u.Id == user.Id, user);
-            Logger.Info($"已封禁用户 {user.UserName}，原因：{reason}，持续时间：{durationSeconds} 秒。");
-        }
-    }
-
-    private static async Task UnBanUser(string userName)
-    {
-        var user = await KaxGlobal.UserDatabase.QueryFirstAsync(u => u.UserName == userName);
-        if (user != null && user.Status.IsBanned)
-        {
-            user.Status.IsBanned = false;
-            user.Status.BanExpiresAt = 0;
-            user.Status.BanReason = string.Empty;
-            _ = KaxGlobal.UserDatabase.EditWhereAsync(u => u.Id == user.Id, user);
-            Logger.Info($"已解除用户 {user.UserName} 的封禁状态。");
-        }
-    }
-
-    #endregion
-
-
-
-
-
-
-
     #region Rate Limit Callback
 
 
@@ -117,7 +43,7 @@ public class KaxHttp
         {
             var userToken = request.Headers[HttpHeaders.Authorization]?.Replace("Bearer ", "");
             var userName = JwtHelper.ValidateToken(userToken!)?.Identity?.Name ?? "未知用户";
-            _ = BanUser(userName, "短时间内请求过于频繁，自动封禁。", 60); // 封禁 1 分钟
+            _ = KaxGlobal.BanUser(userName, "短时间内请求过于频繁，自动封禁。", 60); // 封禁 1 分钟
             return new HttpResponse(429, "请求过于频繁，您的账号暂时被封禁。");
         }
         else
@@ -138,6 +64,16 @@ public class KaxHttp
 
     #region HTTP Handlers
 
+    // 检查当前用户是否属于允许使用 CDK 管理 API 的权限组（Console/Root/Admin）
+    private static async Task<bool> IsCdkAdminUser(string? userName)
+    {
+        if (string.IsNullOrWhiteSpace(userName)) return false;
+        var user = (await KaxGlobal.UserDatabase.SelectWhereAsync("UserName", userName)).FirstOrDefault();
+        if (user == null) return false;
+        var g = user.PermissionGroup;
+        return g == UserPermissionGroup.Console || g == UserPermissionGroup.Root || g == UserPermissionGroup.Admin;
+    }
+
     [HttpMiddleware]
     public static HttpResponse Echo(HttpRequest request, Func<HttpRequest, HttpResponse> next)
     {
@@ -147,7 +83,7 @@ public class KaxHttp
     }
 
     [HttpHandle("/api/user/register", "POST", RateLimitMaxRequests = 3, RateLimitWindowSeconds = 60)]
-    public static HttpResponse PostRegister(HttpRequest request)
+    public static async Task<HttpResponse> PostRegister(HttpRequest request)
     {
         if (request.Body == null)
         {
@@ -207,7 +143,9 @@ public class KaxHttp
 
             // 处理注册逻辑
             // 检查用户名或邮箱是否已被注册
-            var userExists = KaxGlobal.UserDatabase.QueryFirstAsync(u => u.UserName == userName || u.Email == email).Result;
+            var byName = (await KaxGlobal.UserDatabase.SelectWhereAsync("UserName", userName)).FirstOrDefault();
+            var byEmail = (await KaxGlobal.UserDatabase.SelectWhereAsync("Email", email)).FirstOrDefault();
+            var userExists = byName ?? byEmail;
             if (userExists != null)
             {
                 return new HttpResponse()
@@ -218,7 +156,7 @@ public class KaxHttp
             }
 
             // 保存用户数据到数据库
-            _ = KaxGlobal.UserDatabase.PushAsync(new UserData()
+            KaxGlobal.UserDatabase.Insert(new UserData()
             {
                 UserName = userName,
                 PasswordHash = CommonUtility.ComputeSHA256Hash(password),
@@ -278,42 +216,24 @@ public class KaxHttp
                 Body = "用户名和密码不能为空。",
             };
         }
-
-        var userExists = KaxGlobal.UserDatabase.QueryFirstAsync(u => u.UserName == userName && u.PasswordHash == CommonUtility.ComputeSHA256Hash(password)).Result;
-        string? createdSessionId = null;
-        if (userExists != null)
+        var userExists = (await KaxGlobal.UserDatabase.SelectWhereAsync("UserName", userName)).FirstOrDefault();
+        if (userExists != null && userExists.PasswordHash == CommonUtility.ComputeSHA256Hash(password))
         {
-            var token = GenerateLoginToken(userExists);
+            var token = KaxGlobal.GenerateLoginToken(userExists);
             userExists.LastLoginAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-            await KaxGlobal.UserDatabase.EditWhereAsync(u => u.Id == userExists.Id, userExists);
+            await KaxGlobal.UserDatabase.UpdateAsync(userExists);
 
-            // 使用会话机制：获取或创建会话并在会话中保存用户信息
-            try
-            {
-                var session = server?.SessionManager.GetOrCreateSession(request.SessionId);
-                if (session != null)
-                {
-                    session.Data["userId"] = userExists.Id;
-                    session.Data["userName"] = userExists.UserName;
-                    session.UpdateAccess();
-                    createdSessionId = session.Id;
-                }
-            }
-            catch (Exception ex)
-            {
-                Logger.Warn($"尝试写入会话时发生错误: {ex.Message}");
-            }
-
-            return new HttpResponse()
+            var resp = new HttpResponse()
             {
                 StatusCode = 200,
                 Body = new JsonObject
                 {
                     ["message"] = "登录成功。",
-                    ["login_token"] = token,
-                    ["session_id"] = createdSessionId ?? request.SessionId ?? server?.SessionManager.GetOrCreateSession(null)?.Id
+                    ["login_token"] = token
                 }.ToJsonString(),
             };
+
+            return resp;
         }
         else
         {
@@ -326,11 +246,11 @@ public class KaxHttp
         }
     }
 
-    [HttpHandle("/api/token/test", "POST", RateLimitMaxRequests = 5, RateLimitWindowSeconds = 60, RateLimitCallbackMethodName = nameof(RateLimitCallback))]
-    public static IActionResult Post_TestToken(HttpRequest request)
+    [HttpHandle("/api/user/verify/account", "POST", RateLimitMaxRequests = 60, RateLimitWindowSeconds = 60, RateLimitCallbackMethodName = nameof(RateLimitCallback))]
+    public static async Task<IActionResult> Post_Verify(HttpRequest request)
     {
         var token = request.Headers[HttpHeaders.Authorization]?.Replace("Bearer ", "");
-        var principal = ValidateToken(token!);
+        var principal = KaxGlobal.ValidateToken(token!);
         if (principal == null)
         {
             return new JsonResult(new
@@ -341,7 +261,8 @@ public class KaxHttp
 
         var userName = principal.Identity?.Name;
 
-        if (KaxGlobal.UserDatabase.QueryFirstAsync(u => u.UserName == userName).Result == null)
+        var userModel = (await KaxGlobal.UserDatabase.SelectWhereAsync("UserName", userName)).FirstOrDefault();
+        if (userModel == null)
         {
             return new JsonResult(new
             {
@@ -349,7 +270,7 @@ public class KaxHttp
             }, 404);
         }
 
-        if (IsUserBanned(userName!))
+        if (await KaxGlobal.IsUserBanned(userName!))
         {
             return new JsonResult(new
             {
@@ -357,89 +278,17 @@ public class KaxHttp
             }, 403);
         }
 
+        // 返回额外的权限信息，前端可据此决定是否显示管理员入口
+        var permissionGroup = userModel.PermissionGroup;
+        var isAdmin = permissionGroup == UserPermissionGroup.Console || permissionGroup == UserPermissionGroup.Root || permissionGroup == UserPermissionGroup.Admin;
+
         return new JsonResult(new
         {
             message = "令牌有效，欢迎您！",
             user = userName,
+            permissionGroup = (int)permissionGroup,
+            isAdmin = isAdmin
         });
-    }
-
-    /*
-    * 测试用的受保护路由，需提供有效的登录令牌才能访问
-    * 用于测试登录令牌的有效性
-    */
-    [HttpHandle("/api/hello", "GET", RateLimitMaxRequests = 1, RateLimitWindowSeconds = 60, RateLimitCallbackMethodName = nameof(RateLimitCallback))]
-    public static IActionResult Get_SayHello(HttpRequest request)
-    {
-        try
-        {
-            var principal = JwtHelper.ValidateTokenFromRequest(request);
-            if (principal == null)
-            {
-                return new JsonResult(new
-                {
-                    message = "无效的登录令牌。",
-                }, 401);
-            }
-
-            var userName = principal.Identity?.Name;
-            if (IsUserBanned(userName!))
-            {
-                return new JsonResult(new
-                {
-                    message = "您的账号已被封禁，无法访问此资源。",
-                }, 403);
-            }
-            return new JsonResult(new
-            {
-                message = $"Hello, {userName}! Your token is valid.",
-            }, 200);
-        }
-        catch (Exception ex)
-        {
-            Logger.Error("验证令牌时发生异常: " + ex.Message);
-            return new JsonResult(new
-            {
-                message = "服务器错误，无法处理请求。",
-            }, 500);
-        }
-    }
-
-    [HttpHandle("/api/user/test/sayhello", "GET", RateLimitMaxRequests = 5, RateLimitWindowSeconds = 60, RateLimitCallbackMethodName = nameof(RateLimitCallback))]
-    public static IActionResult Get_UserTestSayHello(HttpRequest request, DrxHttpServer server)
-    {
-        try
-        {
-            // 使用服务器会话验证：要求请求携带已存在的 session id，并且会话中包含 userName
-            var session = request.ResolveSession(server);
-            if (session == null)
-            {
-                return new JsonResult(new { message = "未检测到会话或未登录，请先登录。" }, 401);
-            }
-
-            if (!session.Data.TryGetValue("userName", out var userNameObj) || userNameObj == null)
-            {
-                return new JsonResult(new { message = "会话中未包含用户信息或已过期，请重新登录。" }, 401);
-            }
-
-            var userName = userNameObj.ToString();
-            if (string.IsNullOrEmpty(userName))
-            {
-                return new JsonResult(new { message = "会话内用户信息不完整，请重新登录。" }, 401);
-            }
-
-            if (IsUserBanned(userName))
-            {
-                return new JsonResult(new { message = "您的账号已被封禁，无法访问此资源。" }, 403);
-            }
-
-            return new JsonResult(new { message = $"Hello, {userName}! (登录用户专用)" }, 200);
-        }
-        catch (Exception ex)
-        {
-            Logger.Error("处理 /api/user/test/sayhello 时发生异常: " + ex.Message);
-            return new JsonResult(new { message = "服务器错误，无法处理请求。" }, 500);
-        }
     }
 
     [HttpHandle("/api/user/unban?{userName}?{dev_code}", "POST")]
@@ -457,7 +306,7 @@ public class KaxHttp
                     Body = "无效的开发者代码，无法解除封禁。",
                 };
             }
-            _ = UnBanUser(userName);
+            _ = KaxGlobal.UnBanUser(userName);
             return new HttpResponse()
             {
                 StatusCode = 200,
@@ -474,41 +323,637 @@ public class KaxHttp
             };
         }
     }
+
     
-    [HttpHandle("/api/session/test", "GET")]
-    public static IActionResult Get_SessionTest(HttpRequest request, DrxHttpServer server)
+    [HttpHandle("/api/user/verify/asset/{assetId}", "GET", RateLimitMaxRequests = 60, RateLimitWindowSeconds = 60, RateLimitCallbackMethodName = nameof(RateLimitCallback))]
+    public static async Task<IActionResult> Get_VerifyAsset(HttpRequest request)
     {
+        var token = request.Headers[HttpHeaders.Authorization]?.Replace("Bearer ", "");
+        var principal = KaxGlobal.ValidateToken(token!);
+        var userName = principal?.Identity?.Name;
+        if (string.IsNullOrWhiteSpace(userName))
+        {
+            return new JsonResult(new { message = "未授权" }, 401);
+        }
+
+        if (await KaxGlobal.IsUserBanned(userName))
+        {
+            return new JsonResult(new { message = "账号被封禁" }, 403);
+        }
+
+        if (!request.PathParameters.TryGetValue("assetId", out var assetIdString) ||
+            !int.TryParse(assetIdString, out var assetId) || assetId <= 0)
+        {
+            return new JsonResult(new { message = "assetId 参数必须是大于 0 的整数" }, 400);
+        }
+
+        var hasAsset = await KaxGlobal.VerifyUserHasActiveAsset(userName, assetId);
+
+        // 返回统一结构：HTTP 200 + 内部业务码（0 = 拥有，2004 = 未拥有）
+        if (hasAsset)
+        {
+            return new JsonResult(new { assetId = assetId, has = true, code = 0 });
+        }
+        else
+        {
+            return new JsonResult(new { assetId = assetId, has = false, code = 2004 });
+        }
+    }
+
+    // --------------------------------------------------
+    // CDK：生成 / 保存 / 列表
+    // - POST /api/cdk/generate  -> 返回 codes
+    // - POST /api/cdk/save      -> 保存到服务器（接受 codes[] 或生成参数）
+    // - GET  /api/cdk/list      -> 返回最近的 CDK 列表（最多 200 条）
+    // --------------------------------------------------
+
+    private static string RandomString(int length, string? charset = null)
+    {
+        if (string.IsNullOrEmpty(charset)) charset = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+        var chars = charset.ToCharArray();
+        var sb = new StringBuilder(length);
+        using var rng = RandomNumberGenerator.Create();
+        var buf = new byte[4];
+        for (int i = 0; i < length; i++)
+        {
+            rng.GetBytes(buf);
+            uint v = BitConverter.ToUInt32(buf, 0);
+            sb.Append(chars[(int)(v % (uint)chars.Length)]);
+        }
+        return sb.ToString();
+    }
+
+    [HttpHandle("/api/cdk/admin/inspect", "POST", RateLimitMaxRequests = 60, RateLimitWindowSeconds = 60, RateLimitCallbackMethodName = nameof(RateLimitCallback))]
+    public static async Task<IActionResult> Post_InspectCdk(HttpRequest request)
+    {
+        var token = request.Headers[HttpHeaders.Authorization]?.Replace("Bearer ", "");
+        var principal = KaxGlobal.ValidateToken(token!);
+        if (principal == null) return new JsonResult(new { message = "未授权" }, 401);
+        var userName = principal.Identity?.Name;
+        if (await KaxGlobal.IsUserBanned(userName!)) return new JsonResult(new { message = "账号被封禁" }, 403);
+        if (!await IsCdkAdminUser(userName)) return new JsonResult(new { message = "权限不足" }, 403);
+
+        if (string.IsNullOrEmpty(request.Body)) return new JsonResult(new { message = "请求体不能为空" }, 400);
+        var body = JsonNode.Parse(request.Body);
+        if (body == null) return new JsonResult(new { message = "无效的 JSON" }, 400);
+
+        var code = body["code"]?.ToString()?.Trim();
+        if (string.IsNullOrEmpty(code)) return new JsonResult(new { message = "缺少 code 字段" }, 400);
+
         try
         {
-            var session = request.ResolveSession(server);
-            if (session == null)
-            {
-                return new JsonResult(new
-                {
-                    message = "未检测到会话，请确保已在服务器端启用会话中间件并在登录时获得会话。"
-                }, 401);
-            }
-
-            // 将会话内的简单键值复制到可序列化对象
-            var dict = new System.Collections.Generic.Dictionary<string, object?>();
-            foreach (var kv in session.Data)
-            {
-                dict[kv.Key] = kv.Value;
-            }
+            // 以 case-insensitive 在数据库中查找 CDK（兼容历史数据）
+            var all = await KaxGlobal.CdkDatabase.SelectAllAsync();
+            var model = all.FirstOrDefault(c => string.Equals(c.Code, code, StringComparison.OrdinalIgnoreCase));
+            if (model == null) return new JsonResult(new { contains = false });
 
             return new JsonResult(new
             {
-                message = "会话有效",
-                session_id = session.Id,
-                created = session.Created,
-                last_access = session.LastAccess,
-                data = dict
+                contains = true,
+                mapped = new
+                {
+                    assetId = model.AssetId,
+                    description = model.Description,
+                    iat = model.CreatedAt,
+                    isUsed = model.IsUsed,
+                    usedBy = model.UsedBy
+                },
+                claims = new { }
             });
         }
         catch (Exception ex)
         {
-            Logger.Error($"读取会话时发生错误: {ex.Message}");
-            return new JsonResult(new { message = "服务器错误，无法读取会话" }, 500);
+            Logger.Error("Inspect CDK 错误: " + ex.Message);
+            return new JsonResult(new { message = "查询失败" }, 500);
+        }
+    }
+
+    [HttpHandle("/api/cdk/admin/generate", "POST", RateLimitMaxRequests = 10, RateLimitWindowSeconds = 60, RateLimitCallbackMethodName = nameof(RateLimitCallback))]
+    public static async Task<IActionResult> Post_GenerateCdk(HttpRequest request)
+    {
+        var token = request.Headers[HttpHeaders.Authorization]?.Replace("Bearer ", "");
+        var principal = KaxGlobal.ValidateToken(token!);
+        if (principal == null) return new JsonResult(new { message = "未授权" }, 401);
+        var userName = principal.Identity?.Name;
+        if (await KaxGlobal.IsUserBanned(userName!)) return new JsonResult(new { message = "账号被封禁" }, 403);
+        if (!await IsCdkAdminUser(userName)) return new JsonResult(new { message = "权限不足" }, 403);
+
+        if (string.IsNullOrEmpty(request.Body)) return new JsonResult(new { message = "请求体不能为空" }, 400);
+        var body = JsonNode.Parse(request.Body);
+        if (body == null) return new JsonResult(new { message = "无效的 JSON" }, 400);
+
+        var prefix = body["prefix"]?.ToString() ?? string.Empty;
+        int count = 1; int.TryParse(body["count"]?.ToString() ?? "1", out count);
+        int length = 8; int.TryParse(body["length"]?.ToString() ?? "8", out length);
+        count = Math.Clamp(count, 1, 1000);
+        length = Math.Clamp(length, 4, 256);
+
+
+
+        var codes = new List<string>(count);
+        for (int i = 0; i < count; i++)
+        {
+            var codePart = ((prefix ?? string.Empty) + RandomString(length)).ToUpperInvariant();
+            codes.Add(codePart);
+        }
+
+        return new JsonResult(new { codes = codes });
+    }
+
+    [HttpHandle("/api/cdk/admin/save", "POST", RateLimitMaxRequests = 5, RateLimitWindowSeconds = 60, RateLimitCallbackMethodName = nameof(RateLimitCallback))]
+    public static async Task<IActionResult> Post_SaveCdk(HttpRequest request)
+    {
+        var token = request.Headers[HttpHeaders.Authorization]?.Replace("Bearer ", "");
+        var principal = KaxGlobal.ValidateToken(token!);
+        if (principal == null) return new JsonResult(new { message = "未授权" }, 401);
+        var userName = principal.Identity?.Name ?? "anonymous";
+        if (await KaxGlobal.IsUserBanned(userName!)) return new JsonResult(new { message = "账号被封禁" }, 403);
+        if (!await IsCdkAdminUser(userName)) return new JsonResult(new { message = "权限不足" }, 403);
+
+        if (string.IsNullOrEmpty(request.Body)) return new JsonResult(new { message = "请求体不能为空" }, 400);
+        var body = JsonNode.Parse(request.Body);
+        if (body == null) return new JsonResult(new { message = "无效的 JSON" }, 400);
+
+        var codes = new List<string>();
+        var codesNode = body["codes"] as JsonArray;
+        if (codesNode != null)
+        {
+            foreach (var it in codesNode) if (it != null) codes.Add(it.ToString());
+        }
+        else
+        {
+            var prefix = body["prefix"]?.ToString() ?? string.Empty;
+            int count = 1; int.TryParse(body["count"]?.ToString() ?? "1", out count);
+            int length = 8; int.TryParse(body["length"]?.ToString() ?? "8", out length);
+            count = Math.Clamp(count, 1, 1000);
+            length = Math.Clamp(length, 4, 256);
+
+            // 支持通过保存接口直接以参数生成（payload 功能已移除）
+            for (int i = 0; i < count; i++)
+            {
+                var baseCode = ((prefix ?? string.Empty) + RandomString(length)).ToUpperInvariant();
+                codes.Add(baseCode);
+            }
+        }
+
+        if (codes.Count == 0) return new JsonResult(new { message = "没有要保存的 CDK" }, 400);
+
+        // 解析 assetId 与 description（assetId 建议为大于 0 的整数）
+        int assetId = 0;
+        if (body["assetId"] != null) int.TryParse(body["assetId"]?.ToString() ?? "0", out assetId);
+        var description = body["description"]?.ToString() ?? string.Empty;
+
+        // 强制校验 assetId（客户端已验证，但后端再校验以确保数据完整）
+        if (assetId <= 0) return new JsonResult(new { message = "assetId 必须是大于 0 的整数" }, 400);
+
+        try
+        {
+            var saved = 0;
+
+            // 使用直接表操作（避免将整表加载到内存）
+            foreach (var raw in codes)
+            {
+                var normalized = (raw ?? string.Empty).Trim();
+                if (string.IsNullOrEmpty(normalized)) continue;
+
+                // 以规范化（大写）形式判断是否已存在——这是最常见的存储格式，能用索引快速判断
+                var normalizedUpper = normalized.ToUpperInvariant();
+                var exists = (await KaxGlobal.CdkDatabase.SelectWhereAsync("Code", normalizedUpper)).Any();
+                if (exists)
+                    continue;
+
+                // 回退检查：兼容历史可能存在的非规范大小写记录（仅在上面快速检查未命中时才做）
+                var ciExisting = (await KaxGlobal.CdkDatabase.SelectAllAsync()).FirstOrDefault(c => string.Equals(c.Code, normalized, StringComparison.OrdinalIgnoreCase));
+                if (ciExisting != null)
+                    continue;
+
+                var model = new Model.CdkModel
+                {
+                    Code = normalizedUpper,
+                    Description = description ?? string.Empty,
+                    IsUsed = false,
+                    CreatedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
+                    UsedAt = 0,
+                    UsedBy = string.Empty,
+                    AssetId = assetId
+                };
+
+                KaxGlobal.CdkDatabase.Insert(model);
+                saved++;
+            }
+
+            return new JsonResult(new { message = "已保存到数据库", count = saved }, saved > 0 ? 201 : 200);
+        }
+        catch (Exception ex)
+        {
+            Logger.Error("保存 CDK 时出错: " + ex.Message);
+            return new JsonResult(new { message = "保存失败" }, 500);
+        }
+    }
+
+    [HttpHandle("/api/cdk/admin/delete", "POST", RateLimitMaxRequests = 180, RateLimitWindowSeconds = 60, RateLimitCallbackMethodName = nameof(RateLimitCallback))]
+    public static async Task<IActionResult> Post_DeleteCdk(HttpRequest request)
+    {
+        var token = request.Headers[HttpHeaders.Authorization]?.Replace("Bearer ", "");
+        var principal = KaxGlobal.ValidateToken(token!);
+        if (principal == null) return new JsonResult(new { message = "未授权" }, 401);
+        var userName = principal.Identity?.Name;
+        if (await KaxGlobal.IsUserBanned(userName!)) return new JsonResult(new { message = "账号被封禁" }, 403);
+        if (!await IsCdkAdminUser(userName)) return new JsonResult(new { message = "权限不足" }, 403);
+
+        if (string.IsNullOrEmpty(request.Body)) return new JsonResult(new { message = "请求体不能为空" }, 400);
+        var body = JsonNode.Parse(request.Body);
+        if (body == null) return new JsonResult(new { message = "无效的 JSON" }, 400);
+
+        var code = body["code"]?.ToString()?.Trim();
+        if (string.IsNullOrEmpty(code)) return new JsonResult(new { message = "缺少 code 字段" }, 400);
+
+        try
+        {
+            // 在数据库中以大小写不敏感方式查找并删除匹配项
+            var all = await KaxGlobal.CdkDatabase.SelectAllAsync();
+            var matches = all.Where(c => string.Equals(c.Code, code, StringComparison.OrdinalIgnoreCase)).ToList();
+            if (matches.Count == 0) return new JsonResult(new { message = "未找到指定 CDK" }, 404);
+
+            var removed = 0;
+            foreach (var m in matches)
+            {
+                KaxGlobal.CdkDatabase.DeleteById(m.Id);
+                removed++;
+            }
+
+            return new JsonResult(new { message = "删除成功", removed = removed });
+        }
+        catch (Exception ex)
+        {
+            Logger.Error("删除 CDK 时出错: " + ex.Message);
+            return new JsonResult(new { message = "删除失败" }, 500);
+        }
+    }
+
+    [HttpHandle("/api/cdk/admin/list", "GET", RateLimitMaxRequests = 60, RateLimitWindowSeconds = 60, RateLimitCallbackMethodName = nameof(RateLimitCallback))]
+    public static async Task<IActionResult> Get_CdkList(HttpRequest request)
+    {
+        var token = request.Headers[HttpHeaders.Authorization]?.Replace("Bearer ", "");
+        var principal = KaxGlobal.ValidateToken(token!);
+        if (principal == null) return new JsonResult(new { message = "未授权" }, 401);
+        var userName = principal.Identity?.Name;
+        if (!await IsCdkAdminUser(userName)) return new JsonResult(new { message = "权限不足" }, 403);
+
+        try
+        {
+            var all = await KaxGlobal.CdkDatabase.SelectAllAsync();
+            var items = all.OrderByDescending(c => c.CreatedAt).Take(200)
+                .Select(c => new { code = c.Code, isUsed = c.IsUsed, createdAt = c.CreatedAt, assetId = c.AssetId, description = c.Description })
+                .ToList<object>();
+            return new JsonResult(items);
+        }
+        catch (Exception ex)
+        {
+            Logger.Error("读取 CDK 列表时出错: " + ex.Message);
+            return new JsonResult(new { message = "无法读取 CDK 列表" }, 500);
+        }
+    }
+
+    // --------------------------------------------------
+    // Asset：创建 / 修改 / 查询 / 删除 / 列表
+    // - POST /api/asset/admin/create   -> 创建资源
+    // - POST /api/asset/admin/update   -> 修改资源
+    // - POST /api/asset/admin/inspect  -> 查询单个资源
+    // - POST /api/asset/admin/delete   -> 删除资源
+    // - GET  /api/asset/admin/list     -> 返回资源列表
+    // --------------------------------------------------
+
+    /// <summary>
+    /// 检查当前用户是否属于允许使用 Asset 管理 API 的权限组（Console/Root/Admin）
+    /// </summary>
+    private static async Task<bool> IsAssetAdminUser(string? userName)
+    {
+        if (string.IsNullOrWhiteSpace(userName)) return false;
+        var user = (await KaxGlobal.UserDatabase.SelectWhereAsync("UserName", userName)).FirstOrDefault();
+        if (user == null) return false;
+        var g = user.PermissionGroup;
+        return g == UserPermissionGroup.Console || g == UserPermissionGroup.Root || g == UserPermissionGroup.Admin;
+    }
+
+    [HttpHandle("/api/asset/admin/create", "POST", RateLimitMaxRequests = 10, RateLimitWindowSeconds = 60, RateLimitCallbackMethodName = nameof(RateLimitCallback))]
+    public static async Task<IActionResult> Post_CreateAsset(HttpRequest request)
+    {
+        var token = request.Headers[HttpHeaders.Authorization]?.Replace("Bearer ", "");
+        var principal = KaxGlobal.ValidateToken(token!);
+        if (principal == null) return new JsonResult(new { message = "无效的登录令牌" }, 401);
+
+        var userName = principal.Identity?.Name;
+        if (await KaxGlobal.IsUserBanned(userName!))
+            return new JsonResult(new { message = "您的账号已被封禁" }, 403);
+        if (!await IsAssetAdminUser(userName))
+            return new JsonResult(new { message = "权限不足" }, 403);
+
+        if (string.IsNullOrEmpty(request.Body))
+            return new JsonResult(new { message = "请求体不能为空" }, 400);
+
+        try
+        {
+            var body = JsonNode.Parse(request.Body);
+            if (body == null) return new JsonResult(new { message = "无法解析请求体" }, 400);
+
+            var name = body["name"]?.ToString();
+            var version = body["version"]?.ToString();
+            var author = body["author"]?.ToString();
+            var description = body["description"]?.ToString() ?? "";
+
+            if (string.IsNullOrEmpty(name) || name.Length > 100)
+                return new JsonResult(new { message = "资源名称无效（1-100字符）" }, 400);
+            if (string.IsNullOrEmpty(version) || version.Length > 50)
+                return new JsonResult(new { message = "版本字段无效（1-50字符）" }, 400);
+            if (string.IsNullOrEmpty(author) || author.Length > 100)
+                return new JsonResult(new { message = "作者字段无效（1-100字符）" }, 400);
+            if (description.Length > 500)
+                return new JsonResult(new { message = "描述过长（最多500字符）" }, 400);
+
+            var asset = new Model.AssetModel
+            {
+                Name = name,
+                Version = version,
+                Author = author,
+                Description = description,
+                LastUpdatedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds()
+            };
+
+            KaxGlobal.AssetDataBase.Insert(asset);
+
+            Logger.Info($"用户 {userName} 创建了资源: {name} (v{version})");
+            return new JsonResult(new { message = "资源创建成功", id = asset.Id });
+        }
+        catch (Exception ex)
+        {
+            Logger.Error($"创建资源失败: {ex.Message}");
+            return new JsonResult(new { message = "服务器错误" }, 500);
+        }
+    }
+
+    [HttpHandle("/api/asset/admin/update", "POST", RateLimitMaxRequests = 10, RateLimitWindowSeconds = 60, RateLimitCallbackMethodName = nameof(RateLimitCallback))]
+    public static async Task<IActionResult> Post_UpdateAsset(HttpRequest request)
+    {
+        var token = request.Headers[HttpHeaders.Authorization]?.Replace("Bearer ", "");
+        var principal = KaxGlobal.ValidateToken(token!);
+        if (principal == null) return new JsonResult(new { message = "无效的登录令牌" }, 401);
+
+        var userName = principal.Identity?.Name;
+        if (await KaxGlobal.IsUserBanned(userName!))
+            return new JsonResult(new { message = "您的账号已被封禁" }, 403);
+        if (!await IsAssetAdminUser(userName))
+            return new JsonResult(new { message = "权限不足" }, 403);
+
+        if (string.IsNullOrEmpty(request.Body))
+            return new JsonResult(new { message = "请求体不能为空" }, 400);
+
+        try
+        {
+            var body = JsonNode.Parse(request.Body);
+            if (body == null) return new JsonResult(new { message = "无法解析请求体" }, 400);
+
+            if (!int.TryParse(body["id"]?.ToString(), out var id) || id <= 0)
+                return new JsonResult(new { message = "资源ID无效" }, 400);
+
+            var asset = await KaxGlobal.AssetDataBase.SelectByIdAsync(id);
+            if (asset == null)
+                return new JsonResult(new { message = "资源不存在" }, 404);
+
+            var version = body["version"]?.ToString();
+            var author = body["author"]?.ToString();
+            var description = body["description"]?.ToString() ?? "";
+
+            if (!string.IsNullOrEmpty(version) && version.Length > 50)
+                return new JsonResult(new { message = "版本字段无效（最多50字符）" }, 400);
+            if (!string.IsNullOrEmpty(author) && author.Length > 100)
+                return new JsonResult(new { message = "作者字段无效（最多100字符）" }, 400);
+            if (description.Length > 500)
+                return new JsonResult(new { message = "描述过长（最多500字符）" }, 400);
+
+            if (!string.IsNullOrEmpty(version)) asset.Version = version;
+            if (!string.IsNullOrEmpty(author)) asset.Author = author;
+            asset.Description = description;
+            asset.LastUpdatedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+
+            await KaxGlobal.AssetDataBase.UpdateAsync(asset);
+
+            Logger.Info($"用户 {userName} 修改了资源: {asset.Name} (id={id})");
+            return new JsonResult(new { message = "资源已更新" });
+        }
+        catch (Exception ex)
+        {
+            Logger.Error($"更新资源失败: {ex.Message}");
+            return new JsonResult(new { message = "服务器错误" }, 500);
+        }
+    }
+
+    [HttpHandle("/api/asset/admin/inspect", "POST", RateLimitMaxRequests = 60, RateLimitWindowSeconds = 60, RateLimitCallbackMethodName = nameof(RateLimitCallback))]
+    public static async Task<IActionResult> Post_InspectAsset(HttpRequest request)
+    {
+        var token = request.Headers[HttpHeaders.Authorization]?.Replace("Bearer ", "");
+        var principal = KaxGlobal.ValidateToken(token!);
+        if (principal == null) return new JsonResult(new { message = "无效的登录令牌" }, 401);
+
+        var userName = principal.Identity?.Name;
+        if (await KaxGlobal.IsUserBanned(userName!))
+            return new JsonResult(new { message = "您的账号已被封禁" }, 403);
+        if (!await IsAssetAdminUser(userName))
+            return new JsonResult(new { message = "权限不足" }, 403);
+
+        if (string.IsNullOrEmpty(request.Body))
+            return new JsonResult(new { message = "请求体不能为空" }, 400);
+
+        try
+        {
+            var body = JsonNode.Parse(request.Body);
+            if (body == null) return new JsonResult(new { message = "无法解析请求体" }, 400);
+
+            if (!int.TryParse(body["id"]?.ToString(), out var id) || id <= 0)
+                return new JsonResult(new { message = "资源ID无效" }, 400);
+
+            var asset = await KaxGlobal.AssetDataBase.SelectByIdAsync(id);
+            if (asset == null)
+                return new JsonResult(new { message = "资源不存在" }, 404);
+
+            return new JsonResult(new
+            {
+                data = new
+                {
+                    id = asset.Id,
+                    name = asset.Name,
+                    version = asset.Version,
+                    author = asset.Author,
+                    description = asset.Description,
+                    lastUpdatedAt = asset.LastUpdatedAt,
+                    isDeleted = asset.IsDeleted,
+                    deletedAt = asset.DeletedAt
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            Logger.Error($"查询资源失败: {ex.Message}");
+            return new JsonResult(new { message = "服务器错误" }, 500);
+        }
+    }
+
+    [HttpHandle("/api/asset/admin/delete", "POST", RateLimitMaxRequests = 10, RateLimitWindowSeconds = 60, RateLimitCallbackMethodName = nameof(RateLimitCallback))]
+    public static async Task<IActionResult> Post_DeleteAsset(HttpRequest request)
+    {
+        var token = request.Headers[HttpHeaders.Authorization]?.Replace("Bearer ", "");
+        var principal = KaxGlobal.ValidateToken(token!);
+        if (principal == null) return new JsonResult(new { message = "无效的登录令牌" }, 401);
+
+        var userName = principal.Identity?.Name;
+        if (await KaxGlobal.IsUserBanned(userName!))
+            return new JsonResult(new { message = "您的账号已被封禁" }, 403);
+        if (!await IsAssetAdminUser(userName))
+            return new JsonResult(new { message = "权限不足" }, 403);
+
+        if (string.IsNullOrEmpty(request.Body))
+            return new JsonResult(new { message = "请求体不能为空" }, 400);
+
+        try
+        {
+            var body = JsonNode.Parse(request.Body);
+            if (body == null) return new JsonResult(new { message = "无法解析请求体" }, 400);
+
+            if (!int.TryParse(body["id"]?.ToString(), out var id) || id <= 0)
+                return new JsonResult(new { message = "资源ID无效" }, 400);
+
+            var asset = await KaxGlobal.AssetDataBase.SelectByIdAsync(id);
+            if (asset == null)
+                return new JsonResult(new { message = "资源不存在" }, 404);
+
+            // 软删除：标记为已删除并记录时间
+            asset.IsDeleted = true;
+            asset.DeletedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+            asset.LastUpdatedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+            await KaxGlobal.AssetDataBase.UpdateAsync(asset);
+
+            Logger.Info($"用户 {userName} 软删除了资源: {asset.Name} (id={id})");
+            return new JsonResult(new { message = "资源已标记为已删除" });
+        }
+        catch (Exception ex)
+        {
+            Logger.Error($"删除资源失败: {ex.Message}");
+            return new JsonResult(new { message = "服务器错误" }, 500);
+        }
+    }
+
+    [HttpHandle("/api/asset/admin/restore", "POST", RateLimitMaxRequests = 10, RateLimitWindowSeconds = 60, RateLimitCallbackMethodName = nameof(RateLimitCallback))]
+    public static async Task<IActionResult> Post_RestoreAsset(HttpRequest request)
+    {
+        var token = request.Headers[HttpHeaders.Authorization]?.Replace("Bearer ", "");
+        var principal = KaxGlobal.ValidateToken(token!);
+        if (principal == null) return new JsonResult(new { message = "无效的登录令牌" }, 401);
+
+        var userName = principal.Identity?.Name;
+        if (await KaxGlobal.IsUserBanned(userName!))
+            return new JsonResult(new { message = "您的账号已被封禁" }, 403);
+        if (!await IsAssetAdminUser(userName))
+            return new JsonResult(new { message = "权限不足" }, 403);
+
+        if (string.IsNullOrEmpty(request.Body))
+            return new JsonResult(new { message = "请求体不能为空" }, 400);
+
+        try
+        {
+            var body = JsonNode.Parse(request.Body);
+            if (body == null) return new JsonResult(new { message = "无法解析请求体" }, 400);
+
+            if (!int.TryParse(body["id"]?.ToString(), out var id) || id <= 0)
+                return new JsonResult(new { message = "资源ID无效" }, 400);
+
+            var asset = await KaxGlobal.AssetDataBase.SelectByIdAsync(id);
+            if (asset == null)
+                return new JsonResult(new { message = "资源不存在" }, 404);
+
+            asset.IsDeleted = false;
+            asset.DeletedAt = 0;
+            asset.LastUpdatedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+            await KaxGlobal.AssetDataBase.UpdateAsync(asset);
+
+            Logger.Info($"用户 {userName} 恢复了资源: {asset.Name} (id={id})");
+            return new JsonResult(new { message = "资源已恢复" });
+        }
+        catch (Exception ex)
+        {
+            Logger.Error($"恢复资源失败: {ex.Message}");
+            return new JsonResult(new { message = "服务器错误" }, 500);
+        }
+    }
+
+    [HttpHandle("/api/asset/admin/list", "GET", RateLimitMaxRequests = 0, RateLimitWindowSeconds = 0, RateLimitCallbackMethodName = nameof(RateLimitCallback))]
+    public static async Task<IActionResult> Get_AssetList(HttpRequest request)
+    {
+        var token = request.Headers[HttpHeaders.Authorization]?.Replace("Bearer ", "");
+        var principal = KaxGlobal.ValidateToken(token!);
+        if (principal == null) return new JsonResult(new { message = "无效的登录令牌" }, 401);
+
+        var userName = principal.Identity?.Name;
+        if (!await IsAssetAdminUser(userName))
+            return new JsonResult(new { message = "权限不足" }, 403);
+
+        try
+        {
+            // 支持查询参数：q (搜索), author, version, page, pageSize, includeDeleted
+            var q = request.Query[("q")] ?? string.Empty;
+            var authorFilter = request.Query[("author")] ?? string.Empty;
+            var versionFilter = request.Query[("version")] ?? string.Empty;
+            var includeDeleted = (request.Query[("includeDeleted")] ?? "false").ToLower() == "true";
+            int page = 1;
+            int pageSize = 20;
+            if (!int.TryParse(request.Query[("page")], out page) || page <= 0) page = 1;
+            if (!int.TryParse(request.Query[("pageSize")], out pageSize) || pageSize <= 0) pageSize = 20;
+
+            var all = await KaxGlobal.AssetDataBase.SelectAllAsync();
+
+            var filtered = all.AsQueryable();
+            if (!includeDeleted)
+            {
+                filtered = filtered.Where(a => !a.IsDeleted).AsQueryable();
+            }
+            if (!string.IsNullOrEmpty(q))
+            {
+                var qlow = q.ToLowerInvariant();
+                filtered = filtered.Where(a => (a.Name ?? string.Empty).ToLowerInvariant().Contains(qlow)
+                    || (a.Author ?? string.Empty).ToLowerInvariant().Contains(qlow)
+                    || (a.Version ?? string.Empty).ToLowerInvariant().Contains(qlow)).AsQueryable();
+            }
+            if (!string.IsNullOrEmpty(authorFilter))
+            {
+                var alow = authorFilter.ToLowerInvariant();
+                filtered = filtered.Where(a => (a.Author ?? string.Empty).ToLowerInvariant().Contains(alow)).AsQueryable();
+            }
+            if (!string.IsNullOrEmpty(versionFilter))
+            {
+                var vlow = versionFilter.ToLowerInvariant();
+                filtered = filtered.Where(a => (a.Version ?? string.Empty).ToLowerInvariant().Contains(vlow)).AsQueryable();
+            }
+
+            var total = filtered.Count();
+            var items = filtered.OrderByDescending(a => a.LastUpdatedAt)
+                .Skip((page - 1) * pageSize).Take(pageSize)
+                .Select(a => new
+                {
+                    id = a.Id,
+                    name = a.Name,
+                    version = a.Version,
+                    author = a.Author,
+                    description = a.Description,
+                    lastUpdatedAt = a.LastUpdatedAt,
+                    isDeleted = a.IsDeleted
+                })
+                .ToList<object>();
+
+            return new JsonResult(new { data = items, page, pageSize, total });
+        }
+        catch (Exception ex)
+        {
+            Logger.Error($"读取资源列表失败: {ex.Message}");
+            return new JsonResult(new { message = "无法读取资源列表" }, 500);
         }
     }
 

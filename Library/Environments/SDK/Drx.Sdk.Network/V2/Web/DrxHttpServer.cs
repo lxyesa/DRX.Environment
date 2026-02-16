@@ -182,15 +182,25 @@ namespace Drx.Sdk.Network.V2.Web
         private HttpListener _listener;
         private readonly List<(string Prefix, string RootDir)> _fileRoutes = new();
         private readonly List<RouteEntry> _routes = new();
+        private readonly System.Collections.Generic.Dictionary<HttpMethod, List<RouteEntry>> _routesByMethod = new();
+        private readonly object _routesLock = new();
+        private readonly System.Collections.Generic.Dictionary<string, string> _rateLimitKeyCache = new();
+        private readonly object _rateLimitKeyCacheLock = new();
         // raw route entries 包含可选的速率限制字段
         // 最后一项为可选的路由级速率触发回调（见 RouteEntry.RateLimitCallback 签名）
         private readonly System.Collections.Generic.List<(string Template, Func<HttpListenerContext, Task> Handler, int RateLimitMaxRequests, int RateLimitWindowSeconds, Func<int, HttpRequest, OverrideContext, Task<HttpResponse?>>? RateLimitCallback)> _rawRoutes = new();
         private readonly string? _staticFileRoot;
         private readonly List<MiddlewareEntry> _middlewares = new();
         private int _middlewareCounter = 0;
+        private List<MiddlewareEntry>? _cachedSortedMiddlewares = null;
+        private readonly object _middlewareCacheLock = new();
         private readonly SessionManager _sessionManager;
         private readonly AuthorizationManager _authorizationManager;
         private readonly DataPersistentManager _dataPersistentManager;
+        private readonly CommandManager _commandManager;
+        // 交互式控制台实例（在 StartAsync 时启动）
+        private InteractiveCommandConsole? _interactiveConsole;
+        private Task? _interactiveConsoleTask;
         private readonly System.Threading.AsyncLocal<Session?> _currentSession = new();
 
         private CancellationTokenSource _cts;
@@ -201,6 +211,38 @@ namespace Drx.Sdk.Network.V2.Web
         private readonly ThreadPoolManager _threadPool;
         // 每条消息至少处理耗时（毫秒）。若为 0 则不强制延迟。
         private volatile int _perMessageProcessingDelayMs = 0;
+
+        // 高性能 ticker 支持（专用调度线程 + 并发分发）
+        private readonly System.Collections.Concurrent.ConcurrentDictionary<int, TickerEntry> _tickers;
+        private int _tickerIdCounter = 0;
+        private Thread? _tickerThread;
+        private AutoResetEvent? _tickerWake;
+        private readonly object _tickerLock = new();
+
+        // 命令输入处理线程相关
+        /// <summary>
+        /// 内部命令队列条目结构，包含命令输入和执行完成的回调
+        /// </summary>
+        private class CommandQueueEntry
+        {
+            public string CommandInput { get; set; }
+            public Func<string, Task>? OnCompleted { get; set; }
+        }
+
+        // ticker 内部条目
+        private class TickerEntry
+        {
+            public int Id;
+            public int IntervalMs;
+            public long NextDueMs;
+            public Action<DrxHttpServer>? SyncCallback;
+            public Func<DrxHttpServer, Task>? AsyncCallback;
+            public volatile bool Cancelled;
+        }
+
+        private readonly Channel<CommandQueueEntry> _commandInputChannel = Channel.CreateUnbounded<CommandQueueEntry>();
+        // 命令执行完成时的全局回调（可为 null）
+        public Func<string, string, Task>? OnCommandCompleted { get; set; }
 
         // 请求拦截机制：基于IP的速率限制（全局）
         private readonly System.Collections.Concurrent.ConcurrentDictionary<string, System.Collections.Generic.Queue<DateTime>> _ipRequestHistory = new();
@@ -217,6 +259,14 @@ namespace Drx.Sdk.Network.V2.Web
 
         // 路由级速率限制：按 (ip + routeKey) 跟踪请求时间戳
         private readonly System.Collections.Concurrent.ConcurrentDictionary<string, System.Collections.Generic.Queue<DateTime>> _ipRouteRequestHistory = new();
+
+        // 优化 1：使用令牌桶算法替代 Queue<DateTime> 滑动窗口（全局和路由级）
+        // 优势：O(1) 时间复杂度，固定内存占用，天然支持突发流量
+        private TokenBucketManager? _tokenBucketManager;
+
+        // 优化 3：路由匹配结果缓存（缓存热点路由匹配结果和参数提取）
+        // 对 Regex.Match 昂贵操作的缓存，避免每次请求都执行正则匹配和参数遍历
+        private RouteMatchCache? _routeMatchCache;
 
         private class RouteEntry
         {
@@ -268,14 +318,25 @@ namespace Drx.Sdk.Network.V2.Web
             _threadPool = new ThreadPoolManager(Environment.ProcessorCount);
             _sessionManager = new SessionManager(sessionTimeoutMinutes);
             _authorizationManager = new AuthorizationManager(5);
+            _commandManager = new CommandManager();
 
             // 初始化数据持久化管理器（内存缓存 + 持久化到 sqlite）
             _dataPersistentManager = new DataPersistentManager();
+
+            // 初始化令牌桶管理器（用于替代 Queue<DateTime> 的速率限制）
+            _tokenBucketManager = new TokenBucketManager();
+
+            // 初始化路由匹配缓存（缓存热点路由的匹配结果和参数）
+            _routeMatchCache = new RouteMatchCache(2048);
 
             // 初始化 JSON 序列化器为链式回退模式
             // 优先使用反射序列化（支持任意 .NET 类型），失败时回退到安全模式
             // 这样可以在正常环境和代码裁剪环境中都能正确工作
             DrxJsonSerializerManager.ConfigureChainedMode();
+
+            // 初始化 ticker 容器与唤醒句柄（调度线程采用懒启动）
+            _tickers = new System.Collections.Concurrent.ConcurrentDictionary<int, TickerEntry>();
+            _tickerWake = new AutoResetEvent(false);
         }
 
         /// <summary>
@@ -323,6 +384,10 @@ namespace Drx.Sdk.Network.V2.Web
             };
 
             _middlewares.Add(entry);
+            lock (_middlewareCacheLock)
+            {
+                _cachedSortedMiddlewares = null;
+            }
             Logger.Info($"添加中间件: {path ?? "全局"} (优先级: {priority})");
         }
 
@@ -416,9 +481,24 @@ namespace Drx.Sdk.Network.V2.Web
                     processingTasks[i] = Task.Run(() => ProcessRequestsAsync(_cts.Token), _cts.Token);
                 }
 
+                // 启动命令处理线程（独立于 HTTP 请求处理）
+                var commandProcessingTask = Task.Run(() => ProcessCommandsAsync(_cts.Token), _cts.Token);
+
+                // 启动交互式控制台（在单独线程中，不阻塞 StartAsync 的等待）
+                try
+                {
+                    _interactiveConsole = new InteractiveCommandConsole(this);
+                    _interactiveConsoleTask = Task.Run(() => _interactiveConsole.StartAsync(), _cts.Token);
+                }
+                catch (Exception ex)
+                {
+                    Logger.Warn($"启动交互式控制台失败: {ex.Message}");
+                }
+
                 await Task.WhenAll(
                     ListenAsync(_cts.Token),
-                    Task.WhenAll(processingTasks)
+                    Task.WhenAll(processingTasks),
+                    commandProcessingTask
                 );
             }
             catch (Exception ex)
@@ -435,12 +515,33 @@ namespace Drx.Sdk.Network.V2.Web
         {
             try
             {
+                // 优雅关闭命令输入通道，允许已提交的命令完成处理
+                try
+                {
+                    _commandInputChannel?.Writer.TryComplete();
+                }
+                catch { }
+
+                // 停止交互式控制台（如果已启动）
+                try
+                {
+                    _interactiveConsole?.Stop();
+                    if (_interactiveConsoleTask != null)
+                    {
+                        try { _interactiveConsoleTask.Wait(500); } catch { }
+                    }
+                }
+                catch { }
+
                 _cts?.Cancel();
+                _tickerWake?.Set();
                 _listener.Stop();
                 _semaphore.Dispose();
-                // 停止并释放新增的队列与线程池
+                // 停止并释放新增的队列、线程池、令牌桶管理器
                 try { _messageQueue?.Complete(); } catch { }
                 try { _threadPool?.Dispose(); } catch { }
+                try { _tokenBucketManager?.Dispose(); } catch { }
+                try { _routeMatchCache?.Clear(); } catch { }
                 Logger.Info("HttpServer 已停止");
             }
             catch (Exception ex)
@@ -466,7 +567,14 @@ namespace Drx.Sdk.Network.V2.Web
                     Handler = async (request) => await Task.FromResult(handler(request)),
                     ExtractParameters = CreateParameterExtractor(path)
                 };
-                _routes.Add(route);
+                lock (_routesLock)
+                {
+                    _routes.Add(route);
+                    if (!_routesByMethod.ContainsKey(method))
+                        _routesByMethod[method] = new();
+                    _routesByMethod[method].Add(route);
+                    _routeMatchCache?.Invalidate();
+                }
                 Logger.Info($"添加同步路由: {method} {path}");
             }
             catch (Exception ex)
@@ -489,7 +597,14 @@ namespace Drx.Sdk.Network.V2.Web
                     RateLimitMaxRequests = rateLimitMaxRequests,
                     RateLimitWindowSeconds = rateLimitWindowSeconds
                 };
-                _routes.Add(route);
+                lock (_routesLock)
+                {
+                    _routes.Add(route);
+                    if (!_routesByMethod.ContainsKey(method))
+                        _routesByMethod[method] = new();
+                    _routesByMethod[method].Add(route);
+                    _routeMatchCache?.Invalidate();
+                }
                 Logger.Info($"添加同步路由: {method} {path} (rate={rateLimitMaxRequests}/{rateLimitWindowSeconds}s)");
             }
             catch (Exception ex)
@@ -517,7 +632,13 @@ namespace Drx.Sdk.Network.V2.Web
                     RateLimitMaxRequests = 0,
                     RateLimitWindowSeconds = 0
                 };
-                _routes.Add(route);
+                lock (_routesLock)
+                {
+                    _routes.Add(route);
+                    if (!_routesByMethod.ContainsKey(method))
+                        _routesByMethod[method] = new();
+                    _routesByMethod[method].Add(route);
+                }
                 Logger.Info($"添加异步路由: {method} {path}");
             }
             catch (Exception ex)
@@ -541,7 +662,13 @@ namespace Drx.Sdk.Network.V2.Web
                     RateLimitWindowSeconds = rateLimitWindowSeconds,
                     RateLimitCallback = rateLimitCallback
                 };
-                _routes.Add(route);
+                lock (_routesLock)
+                {
+                    _routes.Add(route);
+                    if (!_routesByMethod.ContainsKey(method))
+                        _routesByMethod[method] = new();
+                    _routesByMethod[method].Add(route);
+                }
                 Logger.Info($"添加异步路由: {method} {path} (rate={rateLimitMaxRequests}/{rateLimitWindowSeconds}s)");
             }
             catch (Exception ex)
@@ -574,7 +701,14 @@ namespace Drx.Sdk.Network.V2.Web
                     },
                     ExtractParameters = CreateParameterExtractor(path)
                 };
-                _routes.Add(route);
+                lock (_routesLock)
+                {
+                    _routes.Add(route);
+                    if (!_routesByMethod.ContainsKey(method))
+                        _routesByMethod[method] = new();
+                    _routesByMethod[method].Add(route);
+                    _routeMatchCache?.Invalidate();
+                }
                 Logger.Info($"添加同步路由: {method} {path}");
             }
             catch (Exception ex)
@@ -609,7 +743,13 @@ namespace Drx.Sdk.Network.V2.Web
                     RateLimitMaxRequests = 0,
                     RateLimitWindowSeconds = 0
                 };
-                _routes.Add(route);
+                lock (_routesLock)
+                {
+                    _routes.Add(route);
+                    if (!_routesByMethod.ContainsKey(method))
+                        _routesByMethod[method] = new();
+                    _routesByMethod[method].Add(route);
+                }
                 Logger.Info($"添加异步路由: {method} {path}");
             }
             catch (Exception ex)
@@ -642,7 +782,13 @@ namespace Drx.Sdk.Network.V2.Web
                     RateLimitWindowSeconds = rateLimitWindowSeconds,
                     RateLimitCallback = rateLimitCallback
                 };
-                _routes.Add(route);
+                lock (_routesLock)
+                {
+                    _routes.Add(route);
+                    if (!_routesByMethod.ContainsKey(method))
+                        _routesByMethod[method] = new();
+                    _routesByMethod[method].Add(route);
+                }
                 Logger.Info($"添加异步路由: {method} {path} (rate={rateLimitMaxRequests}/{rateLimitWindowSeconds}s)");
             }
             catch (Exception ex)
@@ -1417,35 +1563,104 @@ namespace Drx.Sdk.Network.V2.Web
             }
         }
 
+        /// <summary>
+        /// 命令处理线程入口，独立于 HTTP 请求处理线程。
+        /// 该方法从命令输入通道中读取命令，执行它们，并通过回调委托返回结果。
+        /// 不会因为命令执行而阻塞服务器的主 HTTP 请求处理。
+        /// </summary>
+        private async Task ProcessCommandsAsync(CancellationToken token)
+        {
+            try
+            {
+                await foreach (var entry in _commandInputChannel.Reader.ReadAllAsync(token))
+                {
+                    try
+                    {
+                        // 执行命令
+                        var result = ExecuteCommand(entry.CommandInput);
+
+                        // 调用单个命令的完成回调（如果设置）
+                        if (entry.OnCompleted != null)
+                        {
+                            try
+                            {
+                                await entry.OnCompleted(result).ConfigureAwait(false);
+                            }
+                            catch (Exception ex)
+                            {
+                                Logger.Error($"执行命令完成回调时发生错误: {ex.Message}");
+                            }
+                        }
+
+                        // 调用全局命令完成回调（如果设置）
+                        if (OnCommandCompleted != null)
+                        {
+                            try
+                            {
+                                await OnCommandCompleted(entry.CommandInput, result).ConfigureAwait(false);
+                            }
+                            catch (Exception ex)
+                            {
+                                Logger.Error($"执行全局命令完成回调时发生错误: {ex.Message}");
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Error($"处理命令输入时发生异常: {entry.CommandInput}, 错误: {ex.Message}");
+                    }
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                // 服务器停止时，通道会被关闭，这是预期行为
+                Logger.Info("命令处理线程已关闭");
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"命令处理线程发生异常: {ex.Message}");
+            }
+        }
+
         private async Task<HttpResponse?> ExecuteMiddlewarePipelineAsync(HttpListenerContext context, HttpRequest request, Func<HttpRequest, Task<HttpResponse?>> finalHandler)
         {
             var rawPath = context.Request.Url?.AbsolutePath ?? "/";
 
-            // 收集适用的中间件
-            var applicableMiddlewares = new List<MiddlewareEntry>();
-
-            // 添加全局中间件
-            applicableMiddlewares.AddRange(_middlewares.Where(m => m.Path == null));
-
-            // 添加路由特定中间件
-            var routeMiddlewares = _middlewares.Where(m => m.Path != null && rawPath.StartsWith(m.Path, StringComparison.OrdinalIgnoreCase));
-            applicableMiddlewares.AddRange(routeMiddlewares);
-
-            // 排序：优先级升序（低优先级先执行），然后按添加顺序
-            applicableMiddlewares.Sort((a, b) =>
+            List<MiddlewareEntry> sortedMiddlewares;
+            lock (_middlewareCacheLock)
             {
-                int aPriority = a.OverrideGlobal ? -1 : a.Priority;
-                int bPriority = b.OverrideGlobal ? -1 : b.Priority;
-                int priorityCompare = aPriority.CompareTo(bPriority);
-                if (priorityCompare != 0) return priorityCompare;
-                return a.AddOrder.CompareTo(b.AddOrder);
-            });
+                if (_cachedSortedMiddlewares == null)
+                {
+                    var applicableMiddlewares = new List<MiddlewareEntry>();
+                    applicableMiddlewares.AddRange(_middlewares.Where(m => m.Path == null));
+                    applicableMiddlewares.AddRange(_middlewares.Where(m => m.Path != null));
 
-            // 从最后一个中间件向前组合管道
+                    applicableMiddlewares.Sort((a, b) =>
+                    {
+                        int aPriority = a.OverrideGlobal ? -1 : a.Priority;
+                        int bPriority = b.OverrideGlobal ? -1 : b.Priority;
+                        int priorityCompare = aPriority.CompareTo(bPriority);
+                        if (priorityCompare != 0) return priorityCompare;
+                        return a.AddOrder.CompareTo(b.AddOrder);
+                    });
+                    _cachedSortedMiddlewares = applicableMiddlewares;
+                }
+                sortedMiddlewares = _cachedSortedMiddlewares;
+            }
+
+            var applicableForPath = new List<MiddlewareEntry>(sortedMiddlewares.Count);
+            foreach (var m in sortedMiddlewares)
+            {
+                if (m.Path == null || rawPath.StartsWith(m.Path, StringComparison.OrdinalIgnoreCase))
+                {
+                    applicableForPath.Add(m);
+                }
+            }
+
             Func<HttpRequest, Task<HttpResponse?>> pipeline = finalHandler;
-            for (int i = applicableMiddlewares.Count - 1; i >= 0; i--)
+            for (int i = applicableForPath.Count - 1; i >= 0; i--)
             {
-                var mw = applicableMiddlewares[i];
+                var mw = applicableForPath[i];
                 var next = pipeline;
                 pipeline = async (req) =>
                 {
@@ -1509,12 +1724,14 @@ namespace Drx.Sdk.Network.V2.Web
                                 // 路由级速率限制优先（支持自定义回调）
                                 if (!string.IsNullOrEmpty(clientIP) && RateLimitMaxRequests > 0 && RateLimitWindowSeconds > 0)
                                 {
-                                    var routeKey = $"RAW:{Template}";
-                                    var (isExceeded, customResponse) = await CheckRateLimitForRouteAsync(clientIP, routeKey, RateLimitMaxRequests, RateLimitWindowSeconds, req, RateLimitCallback).ConfigureAwait(false);
+                                    var baseKey = $"RAW:{Template}";
+                                    var routeKey = GetOrCacheRateLimitKey(baseKey);
+                                    var result = await CheckRateLimitForRouteAsync(clientIP, routeKey, RateLimitMaxRequests, RateLimitWindowSeconds, req, RateLimitCallback).ConfigureAwait(false);
+                                    var isExceeded = result.Item1;
+                                    var customResponse = result.Item2;
 
                                     if (isExceeded)
                                     {
-                                        // 如果有自定义响应，使用它；否则返回默认 429
                                         return customResponse ?? new HttpResponse(429, "Too Many Requests");
                                     }
                                 }
@@ -1534,49 +1751,101 @@ namespace Drx.Sdk.Network.V2.Web
                                 return new HttpResponse(500, "Internal Server Error");
                             }
                         }
-                    }                    // 常规模式路由匹配
+                    }                    // 常规模式路由匹配（优化 3：使用缓存加速热点路由）
                     var method = ParseHttpMethod(req.Method);
                     if (method != null)
                     {
-                        foreach (var route in _routes)
+                        RouteEntry matchedRoute = null;
+                        Dictionary<string, string> pathParameters = null;
+
+                        // 尝试从缓存中获取路由匹配结果
+                        if (_routeMatchCache!.TryGet(method.ToString(), req.Path, out var cacheResult) && cacheResult != null)
                         {
-                            if (route.Method == method)
+                            // 缓存命中：直接使用缓存的路由索引和参数
+                            if (!cacheResult.IsNotFound)
                             {
-                                var parameters = route.ExtractParameters(req.Path);
-                                if (parameters != null)
+                                // 根据缓存的索引重新获取路由对象
+                                lock (_routesLock)
                                 {
-                                    req.PathParameters = parameters;
-
-                                    // 路由级速率限制优先（支持自定义回调）
-                                    if (!string.IsNullOrEmpty(clientIP) && route.RateLimitMaxRequests > 0 && route.RateLimitWindowSeconds > 0)
+                                    if (_routesByMethod.TryGetValue(method, out var routesForMethod) && cacheResult.RouteIndex >= 0 && cacheResult.RouteIndex < routesForMethod.Count)
                                     {
-                                        var routeKey = $"ROUTE:{route.Method}:{route.Template}";
-                                        var (isExceeded, customResponse) = await CheckRateLimitForRouteAsync(clientIP, routeKey, route.RateLimitMaxRequests, route.RateLimitWindowSeconds, req, route.RateLimitCallback).ConfigureAwait(false);
-
-                                        if (isExceeded)
-                                        {
-                                            // 如果有自定义响应，使用它；否则返回默认 429
-                                            return customResponse ?? new HttpResponse(429, "Too Many Requests");
-                                        }
-                                    }
-
-                                    // 若未命中路由级限制，则检查全局限流
-                                    if (!string.IsNullOrEmpty(clientIP) && (route.RateLimitMaxRequests == 0) && IsRateLimitExceeded(clientIP, req))
-                                    {
-                                        return new HttpResponse(429, "Too Many Requests");
-                                    }
-
-                                    try
-                                    {
-                                        var resp = await route.Handler(req).ConfigureAwait(false);
-                                        return resp;
-                                    }
-                                    catch (Exception ex)
-                                    {
-                                        Logger.Error($"执行路由处理器时发生错误: {ex}");
-                                        return new HttpResponse(500, $"Internal Server Error: {ex.Message}");
+                                        matchedRoute = routesForMethod[cacheResult.RouteIndex];
+                                        pathParameters = cacheResult.Parameters;
                                     }
                                 }
+                            }
+                        }
+                        else
+                        {
+                            // 缓存未命中：执行完整的路由匹配
+                            List<RouteEntry> routesForMethod = null;
+                            lock (_routesLock)
+                            {
+                                if (_routesByMethod.TryGetValue(method, out var routes))
+                                {
+                                    routesForMethod = routes;
+                                }
+                            }
+
+                            if (routesForMethod != null)
+                            {
+                                for (int i = 0; i < routesForMethod.Count; i++)
+                                {
+                                    var route = routesForMethod[i];
+                                    var parameters = route.ExtractParameters(req.Path);
+                                    if (parameters != null)
+                                    {
+                                        matchedRoute = route;
+                                        pathParameters = parameters;
+                                        // 缓存此匹配结果
+                                        _routeMatchCache!.Set(method.ToString(), req.Path, i, parameters);
+                                        break;
+                                    }
+                                }
+
+                                // 如果未找到匹配的路由，也缓存"未找到"结果以加速后续相同路径的查询
+                                if (matchedRoute == null)
+                                {
+                                    _routeMatchCache!.Set(method.ToString(), req.Path, -1, null);
+                                }
+                            }
+                        }
+
+                        // 使用匹配的路由处理请求
+                        if (matchedRoute != null)
+                        {
+                            req.PathParameters = pathParameters ?? new Dictionary<string, string>();
+
+                            // 路由级速率限制优先（支持自定义回调）
+                            if (!string.IsNullOrEmpty(clientIP) && matchedRoute.RateLimitMaxRequests > 0 && matchedRoute.RateLimitWindowSeconds > 0)
+                            {
+                                var baseKey = $"ROUTE:{matchedRoute.Method}:{matchedRoute.Template}";
+                                var routeKey = GetOrCacheRateLimitKey(baseKey);
+                                var result = await CheckRateLimitForRouteAsync(clientIP, routeKey, matchedRoute.RateLimitMaxRequests, matchedRoute.RateLimitWindowSeconds, req, matchedRoute.RateLimitCallback).ConfigureAwait(false);
+                                var isExceeded = result.Item1;
+                                var customResponse = result.Item2;
+
+                                if (isExceeded)
+                                {
+                                    return customResponse ?? new HttpResponse(429, "Too Many Requests");
+                                }
+                            }
+
+                            // 若未命中路由级限制，则检查全局限流
+                            if (!string.IsNullOrEmpty(clientIP) && (matchedRoute.RateLimitMaxRequests == 0) && IsRateLimitExceeded(clientIP, req))
+                            {
+                                return new HttpResponse(429, "Too Many Requests");
+                            }
+
+                            try
+                            {
+                                var resp = await matchedRoute.Handler(req).ConfigureAwait(false);
+                                return resp;
+                            }
+                            catch (Exception ex)
+                            {
+                                Logger.Error($"执行路由处理器时发生错误: {ex}");
+                                return new HttpResponse(500, $"Internal Server Error: {ex.Message}");
                             }
                         }
                     }
@@ -2138,10 +2407,24 @@ namespace Drx.Sdk.Network.V2.Web
 
                 if (request.HasEntityBody)
                 {
-                    using var memoryStream = new MemoryStream();
-                    request.InputStream.CopyTo(memoryStream);
-                    bodyBytes = memoryStream.ToArray();
-                    body = Encoding.UTF8.GetString(bodyBytes);
+                    // 优化 2：使用 PooledMemoryStream 替代 MemoryStream，避免分配大对象堆内存
+                    using var memoryStream = HttpObjectPool.CreatePooledMemoryStream();
+                    // 优化 2：使用 ArrayPool 缓冲区而非直接分配（减少 GC 压力）
+                    var buffer = HttpObjectPool.BytePool.Rent(HttpObjectPool.DefaultBufferSize);
+                    try
+                    {
+                        int bytesRead;
+                        while ((bytesRead = request.InputStream.Read(buffer, 0, buffer.Length)) > 0)
+                        {
+                            memoryStream.Write(buffer, 0, bytesRead);
+                        }
+                        bodyBytes = memoryStream.ToArray();
+                        body = Encoding.UTF8.GetString(bodyBytes);
+                    }
+                    finally
+                    {
+                        HttpObjectPool.BytePool.Return(buffer);
+                    }
                 }
 
                 httpRequest.Body = body;
@@ -2700,8 +2983,25 @@ namespace Drx.Sdk.Network.V2.Web
         }
 
         /// <summary>
-        /// 检查指定IP是否超出速率限制。
-        /// 如果未设置限制或未超出，返回false；否则返回true并记录请求。
+        /// 获取或缓存速率限制键以避免频繁的字符串拼接
+        /// </summary>
+        private string GetOrCacheRateLimitKey(string baseKey)
+        {
+            lock (_rateLimitKeyCacheLock)
+            {
+                if (_rateLimitKeyCache.TryGetValue(baseKey, out var cached))
+                {
+                    return cached;
+                }
+                _rateLimitKeyCache[baseKey] = baseKey;
+                return baseKey;
+            }
+        }
+
+        /// <summary>
+        /// 检查指定IP是否超出全局速率限制（使用令牌桶算法）。
+        /// 如果未设置限制或令牌可用则返回 false；否则返回 true 并触发回调。
+        /// 相比基于 Queue<DateTime> 的滑动窗口，令牌桶提供 O(1) 复杂度和固定内存占用。
         /// </summary>
         private bool IsRateLimitExceeded(string ip, HttpRequest? request = null)
         {
@@ -2714,24 +3014,16 @@ namespace Drx.Sdk.Network.V2.Web
             }
             if (maxRequests <= 0 || window == TimeSpan.Zero) return false;
 
-            var now = DateTime.UtcNow;
-            var cutoff = now - window;
+            // 使用令牌桶管理器（时间窗口转换为毫秒）
+            var windowMs = window.TotalMilliseconds;
+            var hasToken = _tokenBucketManager!.TryConsume(ip, maxRequests, windowMs);
 
-            var queue = _ipRequestHistory.GetOrAdd(ip, _ => new System.Collections.Generic.Queue<DateTime>());
-
-            // 清理过期请求
-            while (queue.Count > 0 && queue.Peek() < cutoff)
+            if (!hasToken)
             {
-                queue.Dequeue();
-            }
-
-            // 检查是否超出
-            if (queue.Count >= maxRequests)
-            {
-                // 触发次数 = 当前队列中的请求数 + 本次尝试
-                int triggeredCount = queue.Count + 1;
                 if (request != null && OnGlobalRateLimitExceeded != null)
                 {
+                    var availableTokens = _tokenBucketManager!.GetAvailableTokens(ip);
+                    var triggeredCount = Math.Max(1, Math.Abs(availableTokens));
                     var cb = OnGlobalRateLimitExceeded;
                     _ = Task.Run(async () =>
                     {
@@ -2745,69 +3037,15 @@ namespace Drx.Sdk.Network.V2.Web
                         }
                     });
                 }
-
                 return true;
             }
 
-            // 记录当前请求
-            queue.Enqueue(now);
-            return false;
-        }
-
-        /// <summary>
-        /// 检查指定IP在指定路由（routeKey）上是否超出速率限制。
-        /// routeKey 是唯一标识某路由的字符串（例如: "ROUTE:GET:/api/foo" 或 "RAW:/upload"）。
-        /// 如果未设置限制返回 false；否则在检查并记录请求后返回是否超出。
-        /// </summary>
-        private bool IsRateLimitExceededForRoute(string ip, string routeKey, int maxRequests, int windowSeconds, HttpRequest? request = null)
-        {
-            if (maxRequests <= 0 || windowSeconds <= 0) return false;
-
-            var now = DateTime.UtcNow;
-            var window = TimeSpan.FromSeconds(windowSeconds);
-            var cutoff = now - window;
-
-            var dictKey = ip + "#" + routeKey;
-            var queue = _ipRouteRequestHistory.GetOrAdd(dictKey, _ => new System.Collections.Generic.Queue<DateTime>());
-
-            // 清理过期请求
-            while (queue.Count > 0 && queue.Peek() < cutoff)
-            {
-                queue.Dequeue();
-            }
-
-            if (queue.Count >= maxRequests)
-            {
-                int triggeredCount = queue.Count + 1;
-                // 记录此次超限请求，使得 count 能够继续增长
-                queue.Enqueue(now);
-
-                if (request != null && OnRouteRateLimitExceeded != null)
-                {
-                    var cb = OnRouteRateLimitExceeded;
-                    _ = Task.Run(async () =>
-                    {
-                        try
-                        {
-                            await cb(triggeredCount, request, routeKey).ConfigureAwait(false);
-                        }
-                        catch (Exception ex)
-                        {
-                            Logger.Warn($"执行路由速率限制回调时发生错误: {ex.Message}");
-                        }
-                    });
-                }
-
-                return true;
-            }
-
-            queue.Enqueue(now);
             return false;
         }
 
         /// <summary>
         /// 检查路由级速率限制，如果超限则优先调用路由级回调并返回其响应（若有）；否则返回特定响应表示处理结果。
-        /// 带回调的版本：支持路由自定义超限响应。
+        /// 使用令牌桶算法（O(1) 复杂度，固定内存）替代基于 Queue<DateTime> 的滑动窗口。
         /// </summary>
         /// <param name="ip">客户端 IP</param>
         /// <param name="routeKey">路由标识符</param>
@@ -2820,24 +3058,14 @@ namespace Drx.Sdk.Network.V2.Web
         {
             if (maxRequests <= 0 || windowSeconds <= 0) return (false, null);
 
-            var now = DateTime.UtcNow;
-            var window = TimeSpan.FromSeconds(windowSeconds);
-            var cutoff = now - window;
-
             var dictKey = ip + "#" + routeKey;
-            var queue = _ipRouteRequestHistory.GetOrAdd(dictKey, _ => new System.Collections.Generic.Queue<DateTime>());
+            var windowMs = windowSeconds * 1000.0;
+            var hasToken = _tokenBucketManager!.TryConsume(dictKey, maxRequests, windowMs);
 
-            // 清理过期请求
-            while (queue.Count > 0 && queue.Peek() < cutoff)
+            if (!hasToken)
             {
-                queue.Dequeue();
-            }
-
-            if (queue.Count >= maxRequests)
-            {
-                int triggeredCount = queue.Count + 1;
-                // 记录此次超限请求，使得 count 能够继续增长
-                queue.Enqueue(now);
+                var availableTokens = _tokenBucketManager!.GetAvailableTokens(dictKey);
+                var triggeredCount = Math.Max(1, Math.Abs(availableTokens));
 
                 // 优先调用路由级回调（如果设置）
                 if (rateLimitCallback != null)
@@ -2858,8 +3086,7 @@ namespace Drx.Sdk.Network.V2.Web
                             });
                         }
 
-                        // 如果回调返回 null（或调用了 context.Default()），表示使用默认行为
-                        return (true, customResponse); // 返回超限 + 自定义响应（可能为 null）
+                        return (true, customResponse);
                     }
                     catch (Exception ex)
                     {
@@ -2867,7 +3094,7 @@ namespace Drx.Sdk.Network.V2.Web
                     }
                 }
 
-                // 如果没有回调或回调抛异常，触发全局通知
+                // 触发全局通知
                 if (OnRouteRateLimitExceeded != null)
                 {
                     var cb = OnRouteRateLimitExceeded;
@@ -2878,11 +3105,51 @@ namespace Drx.Sdk.Network.V2.Web
                     });
                 }
 
-                return (true, null); // 超限且无自定义响应，使用默认 429
+                return (true, null);
             }
 
-            queue.Enqueue(now);
-            return (false, null); // 未超限
+            return (false, null);
+        }
+
+        // ==================== 性能监控和缓存统计 ====================
+
+        /// <summary>
+        /// 获取路由匹配缓存的性能统计信息
+        /// </summary>
+        /// <returns>包含缓存命中率和当前条目数的统计信息</returns>
+        public (long hits, long misses, int currentCacheSize, double hitRate) GetRouteMatchCacheStats()
+        {
+            if (_routeMatchCache == null)
+                return (0, 0, 0, 0.0);
+
+            var hits = _routeMatchCache.Hits;
+            var misses = _routeMatchCache.Misses;
+            var total = hits + misses;
+            var hitRate = total > 0 ? (double)hits / total : 0.0;
+            return (hits, misses, _routeMatchCache.Count, hitRate);
+        }
+
+        /// <summary>
+        /// 清空路由匹配缓存（仅在调试或手动维护时使用）
+        /// </summary>
+        public void ClearRouteMatchCache()
+        {
+            _routeMatchCache?.Clear();
+            Logger.Info("路由匹配缓存已清空");
+        }
+
+        /// <summary>
+        /// 获取令牌桶管理器中指定客户端/路由的可用令牌数（用于监控限流状态）
+        /// </summary>
+        /// <param name="ip">客户端 IP 地址</param>
+        /// <param name="routeKey">路由标识符（可选），为空时查询全局限流令牌数</param>
+        /// <returns>可用令牌数，-1 表示该键不存在或未启用限流</returns>
+        public int GetAvailableTokens(string ip, string? routeKey = null)
+        {
+            if (_tokenBucketManager == null) return -1;
+
+            var key = string.IsNullOrEmpty(routeKey) ? ip : ip + "#" + routeKey;
+            return _tokenBucketManager.GetAvailableTokens(key);
         }
 
         /// <summary>
@@ -2949,6 +3216,281 @@ namespace Drx.Sdk.Network.V2.Web
         /// 获取授权管理器
         /// </summary>
         public AuthorizationManager AuthorizationManager => _authorizationManager;
+
+        /// <summary>
+        /// 从指定类型注册命令（该类型中所有带 CommandAttribute 的方法都会被自动注册）。
+        /// 命令管理器是黑箱，仅允许通过此方法注册命令，不允许外界直接修改其内部配置。
+        /// </summary>
+        /// <param name="handlerType">包含命令处理方法的类型</param>
+        public void RegisterCommandsFromType(Type handlerType)
+        {
+            if (handlerType == null) throw new ArgumentNullException(nameof(handlerType));
+            _commandManager.RegisterCommandsFromType(handlerType);
+        }
+
+        /// <summary>
+        /// 执行命令输入字符串，返回执行结果。
+        /// 命令管理器仅允许通过此方法执行命令，禁止直接访问或修改其内部状态。
+        /// </summary>
+        /// <param name="input">命令输入字符串，例如 "ban user123 spam 300"</param>
+        /// <returns>命令执行结果字符串</returns>
+        public string ExecuteCommand(string input)
+        {
+            return _commandManager.ExecuteCommand(input);
+        }
+
+        /// <summary>
+        /// 获取所有已注册命令的帮助信息，按分类分组显示。
+        /// </summary>
+        /// <returns>格式化的帮助文本</returns>
+        public string GetCommandsHelp()
+        {
+            return _commandManager.GetHelpText();
+        }
+
+        /// <summary>
+        /// 异步提交命令到独立的命令处理线程。该方法不会阻塞调用者，命令将在后台线程中执行，
+        /// 不会影响服务器的 HTTP 请求处理性能。
+        /// </summary>
+        /// <param name="input">命令输入字符串，例如 "ban user123 spam 300"</param>
+        /// <param name="onCompleted">可选的完成回调委托，当命令执行完毕时被调用（在命令处理线程中执行）</param>
+        /// <returns>提交是否成功（返回 false 表示命令队列已关闭或提交失败）</returns>
+        public async Task<bool> SubmitCommandAsync(string input, Func<string, Task>? onCompleted = null)
+        {
+            if (string.IsNullOrWhiteSpace(input))
+                return false;
+
+            try
+            {
+                var entry = new CommandQueueEntry
+                {
+                    CommandInput = input,
+                    OnCompleted = onCompleted
+                };
+
+                await _commandInputChannel.Writer.WriteAsync(entry).ConfigureAwait(false);
+                return true;
+            }
+            catch (ChannelClosedException)
+            {
+                Logger.Warn("命令处理队列已关闭，无法提交命令");
+                return false;
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"提交命令到处理队列失败: {ex.Message}");
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// 异步提交命令，并等待其执行完成（带超时）。
+        /// 注意：该方法会阻塞调用者直到命令执行完毕或超时，不建议在 HTTP 处理中使用。
+        /// 建议使用 SubmitCommandAsync 来避免阻塞。
+        /// </summary>
+        /// <param name="input">命令输入字符串</param>
+        /// <param name="timeoutMs">等待超时（毫秒），0 表示无限等待</param>
+        /// <returns>命令执行结果</returns>
+        public async Task<string> SubmitCommandAndWaitAsync(string input, int timeoutMs = 0)
+        {
+            if (string.IsNullOrWhiteSpace(input))
+                return "错误：命令不能为空";
+
+            var taskCompletionSource = new TaskCompletionSource<string>();
+
+            Func<string, Task> onCompleted = async (result) =>
+            {
+                taskCompletionSource.SetResult(result);
+                await Task.CompletedTask.ConfigureAwait(false);
+            };
+
+            var submitted = await SubmitCommandAsync(input, onCompleted).ConfigureAwait(false);
+            if (!submitted)
+                return "错误：无法提交命令到处理队列";
+
+            try
+            {
+                if (timeoutMs > 0)
+                {
+                    using var cts = new CancellationTokenSource(timeoutMs);
+                    return await taskCompletionSource.Task.ConfigureAwait(false);
+                }
+                else
+                {
+                    return await taskCompletionSource.Task.ConfigureAwait(false);
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                return "错误：命令执行超时";
+            }
+            catch (Exception ex)
+            {
+                return $"错误：等待命令执行时发生异常: {ex.Message}";
+            }
+        }
+
+        // ---------------------- 高性能 Ticker API ----------------------
+        /// <summary>
+        /// 每隔指定毫秒执行一次回调（返回 IDisposable 用于取消）。
+        /// 调度由专用的高优先级线程负责调度并将回调分发到线程池执行，以保证高并发场景下的稳定性。
+        /// </summary>
+        public IDisposable DoTicker(int intervalMs, Action<DrxHttpServer> callback)
+        {
+            if (intervalMs <= 0) throw new ArgumentException("intervalMs must be > 0", nameof(intervalMs));
+            if (callback == null) throw new ArgumentNullException(nameof(callback));
+
+            var id = Interlocked.Increment(ref _tickerIdCounter);
+            var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+            var entry = new TickerEntry
+            {
+                Id = id,
+                IntervalMs = intervalMs,
+                NextDueMs = now + intervalMs,
+                SyncCallback = callback,
+                Cancelled = false
+            };
+            _tickers[id] = entry;
+            EnsureTickerThreadRunning();
+            _tickerWake?.Set();
+            return new TickerRegistration(this, id);
+        }
+
+        /// <summary>
+        /// 异步回调版本
+        /// </summary>
+        public IDisposable DoTicker(int intervalMs, Func<DrxHttpServer, Task> asyncCallback)
+        {
+            if (intervalMs <= 0) throw new ArgumentException("intervalMs must be > 0", nameof(intervalMs));
+            if (asyncCallback == null) throw new ArgumentNullException(nameof(asyncCallback));
+
+            var id = Interlocked.Increment(ref _tickerIdCounter);
+            var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+            var entry = new TickerEntry
+            {
+                Id = id,
+                IntervalMs = intervalMs,
+                NextDueMs = now + intervalMs,
+                AsyncCallback = asyncCallback,
+                Cancelled = false
+            };
+            _tickers[id] = entry;
+            EnsureTickerThreadRunning();
+            _tickerWake?.Set();
+            return new TickerRegistration(this, id);
+        }
+
+        private void EnsureTickerThreadRunning()
+        {
+            lock (_tickerLock)
+            {
+                if (_tickerThread != null && _tickerThread.IsAlive) return;
+                _tickerThread = new Thread(() => TickerLoop())
+                {
+                    IsBackground = true,
+                    Name = "DrxHttpServer-Ticker",
+                    Priority = ThreadPriority.AboveNormal
+                };
+                _tickerThread.Start();
+            }
+        }
+
+        private void UnregisterTicker(int id)
+        {
+            if (_tickers.TryRemove(id, out _)) { _tickerWake?.Set(); }
+        }
+
+        private void TickerLoop()
+        {
+            try
+            {
+                while (!(_cts?.IsCancellationRequested ?? true))
+                {
+                    var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+                    long nextDueMs = long.MaxValue;
+                    var due = new System.Collections.Generic.List<TickerEntry>();
+
+                    foreach (var kv in _tickers)
+                    {
+                        var e = kv.Value;
+                        if (e.Cancelled) continue;
+                        if (now >= e.NextDueMs)
+                        {
+                            due.Add(e);
+                            // 计算下次到期时间（支持追赶丢失的周期）
+                            var missed = (int)Math.Max(0, (now - e.NextDueMs) / (long)e.IntervalMs);
+                            e.NextDueMs += (missed + 1) * (long)e.IntervalMs;
+                        }
+                        if (e.NextDueMs < nextDueMs) nextDueMs = e.NextDueMs;
+                    }
+
+                    if (due.Count > 0)
+                    {
+                        foreach (var e in due)
+                        {
+                            try
+                            {
+                                if (e.SyncCallback != null)
+                                {
+                                    Task.Run(() =>
+                                    {
+                                        try { e.SyncCallback(this); }
+                                        catch (Exception ex) { try { Logger.Error($"Ticker callback error (id={e.Id}): {ex}"); } catch { } }
+                                    });
+                                }
+                                else if (e.AsyncCallback != null)
+                                {
+                                    _ = e.AsyncCallback(this).ContinueWith(t =>
+                                    {
+                                        if (t.Exception != null)
+                                        {
+                                            try { Logger.Error($"Ticker async callback error (id={e.Id}): {t.Exception}"); } catch { }
+                                        }
+                                    }, TaskContinuationOptions.ExecuteSynchronously);
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                try { Logger.Error($"Dispatch ticker (id={e.Id}) failed: {ex}"); } catch { }
+                            }
+                        }
+                        // 立刻重新计算等待时间（因为刚刚可能产生新的 soon-due 项）
+                        continue;
+                    }
+
+                    if (nextDueMs == long.MaxValue)
+                    {
+                        // 没有活动 ticker，等待唤醒或停止
+                        _tickerWake?.WaitOne(Timeout.Infinite);
+                        continue;
+                    }
+
+                    var waitMs = (int)Math.Max(1, Math.Min( (int)(nextDueMs - now), 1000 ));
+                    _tickerWake?.WaitOne(waitMs);
+                }
+            }
+            catch (ThreadAbortException) { }
+            catch (Exception ex)
+            {
+                try { Logger.Error($"TickerLoop 异常: {ex}"); } catch { }
+            }
+        }
+
+        private class TickerRegistration : IDisposable
+        {
+            private readonly DrxHttpServer _server;
+            private readonly int _id;
+            private int _disposed;
+            public TickerRegistration(DrxHttpServer server, int id) { _server = server; _id = id; }
+            public void Dispose()
+            {
+                if (Interlocked.Exchange(ref _disposed, 1) == 0)
+                {
+                    _server.UnregisterTicker(_id);
+                }
+            }
+        }
+        // ----------------------------------------------------------------------
 
         /// <summary>
         /// 使用默认 QQ SMTP（或通过发件人和授权码）发送简单文本邮件。
@@ -3456,6 +3998,583 @@ namespace Drx.Sdk.Network.V2.Web
         public void Dispose()
         {
             _cleanupTimer?.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// 命令处理方法特性，用于标注命令处理方法。
+    /// 支持通过属性进行注册，命令格式规范：
+    /// - 使用 &lt;&gt; 表示必须参数，例如：&lt;username&gt;
+    /// - 使用 [] 表示可选参数，例如：[duration]
+    /// 示例：[Command("ban &lt;username&gt; &lt;reason&gt; [duration]", "user:封禁用户", "用于管理员操作")]
+    /// </summary>
+    [AttributeUsage(AttributeTargets.Method, AllowMultiple = true)]
+    public class CommandAttribute : Attribute
+    {
+        /// <summary>
+        /// 命令格式字符串，定义命令名称和参数。
+        /// 示例："unban &lt;username&gt;"、"ban &lt;username&gt; &lt;reason&gt; [duration]"
+        /// </summary>
+        public string Format { get; }
+
+        /// <summary>
+        /// 命令分类，用于分组和帮助文本。
+        /// 示例："user:管理用户"、"helper:系统帮助"
+        /// </summary>
+        public string Category { get; }
+
+        /// <summary>
+        /// 命令描述，简短说明该命令的作用。
+        /// 示例："仅限开发者使用"、"解除用户的封禁状态"
+        /// </summary>
+        public string Description { get; }
+
+        /// <summary>
+        /// 构造函数
+        /// </summary>
+        public CommandAttribute(string format, string category, string description)
+        {
+            Format = format ?? throw new ArgumentNullException(nameof(format));
+            Category = category ?? "";
+            Description = description ?? "";
+        }
+    }
+
+    /// <summary>
+    /// 命令管理器，负责注册、解析和执行命令。
+    /// 支持通过 CommandAttribute 特性注册命令或手动注册。
+    /// </summary>
+    public class CommandManager
+    {
+        /// <summary>
+        /// 内部命令条目结构
+        /// </summary>
+        private class CommandEntry
+        {
+            public string Name { get; set; }
+            public CommandAttribute Attribute { get; set; }
+            public CommandParser Parser { get; set; }
+            public MethodInfo Method { get; set; }
+            public Type DeclaringType { get; set; }
+        }
+
+        private readonly System.Collections.Generic.List<CommandEntry> _commands = new();
+        private readonly object _commandLock = new object();
+
+        /// <summary>
+        /// 从指定类型扫描所有带 CommandAttribute 的方法，自动注册命令。
+        /// </summary>
+        public void RegisterCommandsFromType(Type type)
+        {
+            if (type == null) throw new ArgumentNullException(nameof(type));
+
+            try
+            {
+                var methods = type.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Instance);
+
+                foreach (var method in methods)
+                {
+                    var commandAttrs = method.GetCustomAttributes(typeof(CommandAttribute), false).Cast<CommandAttribute>();
+                    foreach (var attr in commandAttrs)
+                    {
+                        try
+                        {
+                            var parser = new CommandParser(attr.Format);
+                            lock (_commandLock)
+                            {
+                                _commands.Add(new CommandEntry
+                                {
+                                    Name = parser.CommandName,
+                                    Attribute = attr,
+                                    Parser = parser,
+                                    Method = method,
+                                    DeclaringType = type
+                                });
+                            }
+                            Logger.Info($"已注册命令: {parser.CommandName} - {attr.Description}");
+                        }
+                        catch (Exception ex)
+                        {
+                            Logger.Error($"注册命令 {attr.Format} 失败: {ex.Message}");
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"从类型 {type.FullName} 扫描命令失败: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// 手动注册一个命令
+        /// </summary>
+        public void RegisterCommand(string format, string category, string description, Delegate handler)
+        {
+            if (string.IsNullOrEmpty(format)) throw new ArgumentNullException(nameof(format));
+            if (handler == null) throw new ArgumentNullException(nameof(handler));
+
+            try
+            {
+                var parser = new CommandParser(format);
+                var method = handler.Method;
+                var type = handler.Target?.GetType() ?? method.DeclaringType;
+
+                lock (_commandLock)
+                {
+                    _commands.Add(new CommandEntry
+                    {
+                        Name = parser.CommandName,
+                        Attribute = new CommandAttribute(format, category, description),
+                        Parser = parser,
+                        Method = method,
+                        DeclaringType = type!
+                    });
+                }
+                Logger.Info($"已注册命令: {parser.CommandName}");
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"手动注册命令 {format} 失败: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// 执行命令，返回执行结果（字符串形式）。
+        /// 若命令不存在或执行出错，返回错误消息。
+        /// </summary>
+        public string ExecuteCommand(string input)
+        {
+            if (string.IsNullOrWhiteSpace(input))
+                return "错误：命令不能为空";
+
+            try
+            {
+                // 分解输入为命令名和参数
+                var tokens = TokenizeInput(input);
+                if (tokens.Count == 0)
+                    return "错误：无效的命令格式";
+
+                var commandName = tokens[0].ToLower();
+                var args = tokens.Skip(1).ToList();
+
+                // 查找匹配的命令
+                CommandEntry entry;
+                lock (_commandLock)
+                {
+                    entry = _commands.FirstOrDefault(c => string.Equals(c.Name, commandName, StringComparison.OrdinalIgnoreCase));
+                }
+
+                if (entry == null)
+                    return $"错误：命令 '{commandName}' 不存在。输入 'help' 获取帮助。";
+
+                // 验证参数
+                var parseResult = entry.Parser.Parse(args);
+                if (!parseResult.IsValid)
+                    return $"错误: {parseResult.ErrorMessage}\n用法: {entry.Parser.GetUsage()}";
+
+                // 构建方法调用参数
+                var methodParams = entry.Method.GetParameters();
+                var invokeArgs = new object[methodParams.Length];
+
+                for (int i = 0; i < methodParams.Length; i++)
+                {
+                    var paramType = methodParams[i].ParameterType;
+                    var paramName = methodParams[i].Name ?? "";
+
+                    if (!parseResult.Parameters.TryGetValue(paramName, out var value))
+                    {
+                        // 尝试忽略大小写查找
+                        var key = parseResult.Parameters.Keys.FirstOrDefault(k => 
+                            string.Equals(k, paramName, StringComparison.OrdinalIgnoreCase));
+                        if (key != null)
+                            value = parseResult.Parameters[key];
+                        else
+                            value = null;
+                    }
+
+                    // 类型转换
+                    if (value != null)
+                    {
+                        invokeArgs[i] = Convert.ChangeType(value, paramType);
+                    }
+                    else if (paramType.IsValueType && Nullable.GetUnderlyingType(paramType) == null)
+                    {
+                        // 非可空值类型，使用默认值
+                        invokeArgs[i] = Activator.CreateInstance(paramType)!;
+                    }
+                    else
+                    {
+                        invokeArgs[i] = null!;
+                    }
+                }
+
+                // 执行方法
+                try
+                {
+                    object instance = null;
+                    if (!entry.Method.IsStatic && entry.DeclaringType != null)
+                    {
+                        instance = Activator.CreateInstance(entry.DeclaringType);
+                    }
+
+                    var result = entry.Method.Invoke(instance, invokeArgs);
+
+                    // 处理异步方法
+                    if (result is Task task)
+                    {
+                        task.Wait();
+                        var resultProp = task.GetType().GetProperty("Result");
+                        result = resultProp?.GetValue(task);
+                    }
+
+                    return result?.ToString() ?? $"命令 '{commandName}' 执行成功。";
+                }
+                catch (TargetInvocationException tie)
+                {
+                    Logger.Error($"执行命令 '{commandName}' 时发生异常: {tie.InnerException?.Message}");
+                    return $"错误：命令执行失败：{tie.InnerException?.Message}";
+                }
+                catch (Exception ex)
+                {
+                    Logger.Error($"执行命令 '{commandName}' 时发生异常: {ex.Message}");
+                    return $"错误：命令执行失败：{ex.Message}";
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"处理命令输入时发生异常: {ex.Message}");
+                return $"错误：处理命令失败：{ex.Message}";
+            }
+        }
+
+        /// <summary>
+        /// 获取所有已注册的命令列表（用于帮助显示）
+        /// </summary>
+        public List<(string CommandName, string Format, string Category, string Description)> GetAllCommands()
+        {
+            lock (_commandLock)
+            {
+                return _commands.Select(c => (c.Name, c.Attribute.Format, c.Attribute.Category, c.Attribute.Description)).ToList();
+            }
+        }
+
+        /// <summary>
+        /// 获取帮助文本
+        /// </summary>
+        public string GetHelpText()
+        {
+            var sb = new System.Text.StringBuilder();
+            sb.AppendLine("可用命令：");
+            sb.AppendLine();
+
+            lock (_commandLock)
+            {
+                var groupedByCategory = _commands.GroupBy(c => c.Attribute.Category);
+                foreach (var group in groupedByCategory)
+                {
+                    sb.AppendLine($"【{group.Key}】");
+                    foreach (var cmd in group)
+                    {
+                        sb.AppendLine($"  {cmd.Attribute.Format,-40} {cmd.Attribute.Description}");
+                    }
+                    sb.AppendLine();
+                }
+            }
+
+            return sb.ToString();
+        }
+
+        /// <summary>
+        /// 将输入字符串分解为令牌，支持带引号的参数
+        /// </summary>
+        private List<string> TokenizeInput(string input)
+        {
+            var tokens = new List<string>();
+            var current = new System.Text.StringBuilder();
+            bool inQuotes = false;
+
+            foreach (var ch in input)
+            {
+                if (ch == '"' && (current.Length == 0 || current[current.Length - 1] != '\\'))
+                {
+                    inQuotes = !inQuotes;
+                }
+                else if (char.IsWhiteSpace(ch) && !inQuotes)
+                {
+                    if (current.Length > 0)
+                    {
+                        tokens.Add(current.ToString());
+                        current.Clear();
+                    }
+                }
+                else
+                {
+                    current.Append(ch);
+                }
+            }
+
+            if (current.Length > 0)
+                tokens.Add(current.ToString());
+
+            return tokens;
+        }
+    }
+
+    /// <summary>
+    /// 命令格式解析器，将命令格式字符串解析为可验证和处理的结构。
+    /// 支持必须参数（&lt;name&gt;）和可选参数（[name]）。
+    /// </summary>
+    public class CommandParser
+    {
+        /// <summary>
+        /// 参数信息
+        /// </summary>
+        private class ParameterInfo
+        {
+            public string Name { get; set; }
+            public bool IsRequired { get; set; }
+        }
+
+        /// <summary>
+        /// 解析结果
+        /// </summary>
+        public class ParseResult
+        {
+            /// <summary>
+            /// 解析是否成功
+            /// </summary>
+            public bool IsValid { get; set; }
+
+            /// <summary>
+            /// 提取的参数字典（参数名 -> 值）
+            /// </summary>
+            public Dictionary<string, string> Parameters { get; set; } = new();
+
+            /// <summary>
+            /// 错误消息
+            /// </summary>
+            public string ErrorMessage { get; set; }
+        }
+
+        public string CommandName { get; private set; }
+        private List<ParameterInfo> _parameters = new();
+        private string _originalFormat;
+
+        /// <summary>
+        /// 构造函数，解析命令格式
+        /// </summary>
+        public CommandParser(string format)
+        {
+            if (string.IsNullOrWhiteSpace(format))
+                throw new ArgumentNullException(nameof(format));
+
+            _originalFormat = format;
+            ParseFormat(format);
+        }
+
+        /// <summary>
+        /// 解析命令格式字符串
+        /// 示例："ban &lt;username&gt; &lt;reason&gt; [duration]"
+        /// </summary>
+        private void ParseFormat(string format)
+        {
+            var tokens = format.Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
+            if (tokens.Length == 0)
+                throw new ArgumentException("命令格式不能为空");
+
+            CommandName = tokens[0];
+
+            // 解析参数
+            for (int i = 1; i < tokens.Length; i++)
+            {
+                var token = tokens[i];
+
+                if (token.StartsWith("<") && token.EndsWith(">"))
+                {
+                    // 必须参数
+                    var paramName = token.Substring(1, token.Length - 2);
+                    _parameters.Add(new ParameterInfo { Name = paramName, IsRequired = true });
+                }
+                else if (token.StartsWith("[") && token.EndsWith("]"))
+                {
+                    // 可选参数
+                    var paramName = token.Substring(1, token.Length - 2);
+                    _parameters.Add(new ParameterInfo { Name = paramName, IsRequired = false });
+                }
+                else
+                {
+                    throw new ArgumentException($"无效的参数格式: {token}，应使用 &lt;name&gt; 或 [name]");
+                }
+            }
+        }
+
+        /// <summary>
+        /// 解析输入的参数列表
+        /// </summary>
+        public ParseResult Parse(List<string> args)
+        {
+            var result = new ParseResult { IsValid = true, Parameters = new Dictionary<string, string>() };
+
+            var requiredCount = _parameters.Count(p => p.IsRequired);
+            var providedCount = args.Count;
+
+            // 检查必须参数数量
+            if (providedCount < requiredCount)
+            {
+                result.IsValid = false;
+                result.ErrorMessage = $"参数不足，需要至少 {requiredCount} 个参数，但只提供了 {providedCount} 个。";
+                return result;
+            }
+
+            if (providedCount > _parameters.Count)
+            {
+                result.IsValid = false;
+                result.ErrorMessage = $"参数过多，最多需要 {_parameters.Count} 个参数，但提供了 {providedCount} 个。";
+                return result;
+            }
+
+            // 将参数值映射到参数名
+            for (int i = 0; i < args.Count; i++)
+            {
+                if (i < _parameters.Count)
+                {
+                    result.Parameters[_parameters[i].Name] = args[i];
+                }
+            }
+
+            return result;
+        }
+
+        /// <summary>
+        /// 获取用法帮助文本
+        /// </summary>
+        public string GetUsage()
+        {
+            return _originalFormat;
+        }
+    }
+
+    /// <summary>
+    /// 交互式命令控制台 - 简化版本，使用 Logger 输出，支持基本命令输入与历史。
+    /// </summary>
+    public class InteractiveCommandConsole
+    {
+        private readonly DrxHttpServer _server;
+        private string _currentInput = "";
+        private readonly List<string> _commandHistory = new();
+        private readonly Stack<string> _undoStack = new();
+        private bool _isRunning = false;
+        private CancellationTokenSource? _cts;
+        private TaskCompletionSource<bool>? _stoppedTcs;
+
+        public InteractiveCommandConsole(DrxHttpServer server)
+        {
+            _server = server ?? throw new ArgumentNullException(nameof(server));
+        }
+
+        public async Task StartAsync()
+        {
+            _isRunning = true;
+            _cts = new CancellationTokenSource();
+            _stoppedTcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            
+            Logger.Info("========== 命令控制台已启动 ==========");
+            Logger.Info("输入命令或 'help' 获取帮助, 'exit' 退出");
+            // 绿色提示符
+            Console.ForegroundColor = ConsoleColor.Green;
+            Console.Write("[USER_INPUT] > ");
+            Console.ResetColor();
+
+            try
+            {
+                while (_isRunning && !(_cts?.IsCancellationRequested ?? false))
+                {
+                    try
+                    {
+                        await HandleInputAsync();
+                    }
+                    catch (OperationCanceledException) { break; }
+                    catch (Exception ex) { Logger.Error($"控制台错误: {ex.Message}"); }
+                }
+            }
+            finally
+            {
+                _isRunning = false;
+                Logger.Info("========== 命令控制台已停止 ==========");
+                try { _stoppedTcs?.TrySetResult(true); } catch { }
+            }
+        }
+
+        private async Task HandleInputAsync()
+        {
+            // 使用系统默认的控制台输入，自动显示用户输入的文本
+            Task<string?> readLineTask = Task.Run(() => Console.ReadLine());
+            var token = _cts?.Token ?? CancellationToken.None;
+            var completed = await Task.WhenAny(readLineTask, Task.Delay(Timeout.Infinite, token));
+            
+            if (completed != readLineTask) return;
+            
+            _currentInput = readLineTask.Result ?? string.Empty;
+            
+            if (!string.IsNullOrEmpty(_currentInput))
+            {
+                await HandleEnter();
+            }
+        }
+
+        private async Task HandleEnter()
+        {
+            if (string.IsNullOrWhiteSpace(_currentInput)) return;
+
+            var command = _currentInput.Trim();
+            if (command.Equals("exit", StringComparison.OrdinalIgnoreCase))
+            {
+                _isRunning = false;
+                return;
+            }
+
+            if (!_commandHistory.Contains(command)) _commandHistory.Add(command);
+
+            try
+            {
+                Logger.Info($"[SUBMIT] {command}");
+                var result = await _server.SubmitCommandAndWaitAsync(command, 30000).ConfigureAwait(false);
+                Logger.Info($"[RESULT] {result}");
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"[ERROR] {ex.Message}");
+            }
+
+            _currentInput = "";
+            _undoStack.Clear();
+        }
+
+        public void Stop()
+        {
+            try
+            {
+                _isRunning = false;
+                _cts?.Cancel();
+            }
+            catch { }
+        }
+
+        public async Task StopAsync(int millisecondsTimeout = 5000)
+        {
+            try
+            {
+                _isRunning = false;
+                _cts?.Cancel();
+                if (_stoppedTcs != null)
+                {
+                    var t = _stoppedTcs.Task;
+                    if (await Task.WhenAny(t, Task.Delay(millisecondsTimeout)) == t)
+                        await t;
+                }
+            }
+            catch { }
         }
     }
 }

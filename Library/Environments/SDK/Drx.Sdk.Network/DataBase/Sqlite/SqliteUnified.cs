@@ -1778,6 +1778,94 @@ namespace Drx.Sdk.Network.DataBase.Sqlite
         }
 
         /// <summary>
+        /// 安全地删除子表中符合特定条件的记录（条件由内部构建，防止 SQL 注入）
+        /// 通过参数化查询和白名单字段来构建删除条件
+        /// </summary>
+        /// <param name="childTableName">子表名称（必须是已知的表名）</param>
+        /// <param name="fieldName">字段名（必须是已知的字段）</param>
+        /// <param name="operatorType">操作符：=, <>, <, >, <=, >=, IN</param>
+        /// <param name="values">条件值</param>
+        /// <param name="cancellationToken">取消令牌</param>
+        /// <returns>删除的记录数</returns>
+        private async Task<int> DeleteChildRecordsInternalAsync(string childTableName, string fieldName, 
+            string operatorType, object?[] values, CancellationToken cancellationToken = default)
+        {
+            if (string.IsNullOrWhiteSpace(childTableName))
+                throw new ArgumentNullException(nameof(childTableName));
+            if (string.IsNullOrWhiteSpace(fieldName))
+                throw new ArgumentNullException(nameof(fieldName));
+            if (values == null || values.Length == 0)
+                throw new ArgumentNullException(nameof(values));
+
+            // 验证标识符（防止注入）
+            static bool IsValidIdentifier(string s) => !string.IsNullOrEmpty(s) && System.Text.RegularExpressions.Regex.IsMatch(s, "^[A-Za-z_][A-Za-z0-9_]*$");
+            if (!IsValidIdentifier(childTableName) || !IsValidIdentifier(fieldName))
+                throw new ArgumentException("表名或字段名包含非法字符");
+
+            // 白名单验证：确保操作符合法（支持 NOT IN）
+            var validOperators = new[] { "=", "<>", "<", ">", "<=", ">=", "IN", "NOT IN" };
+            if (!validOperators.Contains(operatorType))
+                throw new ArgumentException($"操作符 '{operatorType}' 无效");
+
+            using var connection = new SqliteConnection(_connectionString);
+            await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+
+            string sql;
+            using var cmd = new SqliteCommand { Connection = connection };
+
+            // 处理 IN / NOT IN 的空数组边界情况
+            if ((operatorType == "IN" || operatorType == "NOT IN") && (values == null || values.Length == 0))
+            {
+                // IN () 应匹配无记录 -> 不删除任何记录
+                // NOT IN () 应匹配所有记录 -> 删除全部记录
+                if (operatorType == "IN")
+                {
+                    sql = $"DELETE FROM [{childTableName}] WHERE 1=0"; // 删除0条
+                }
+                else // NOT IN && values.Length == 0
+                {
+                    sql = $"DELETE FROM [{childTableName}] WHERE 1=1"; // 删除全部
+                }
+                cmd.CommandText = sql;
+                return await cmd.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+            }
+
+            if (operatorType == "IN" || operatorType == "NOT IN")
+            {
+                // IN/NOT IN 操作符需要逐个参数化
+                var placeholders = string.Join(",", Enumerable.Range(0, values.Length).Select(i => $"@p{i}"));
+                sql = $"DELETE FROM [{childTableName}] WHERE [{fieldName}] {operatorType} ({placeholders})";
+                for (int i = 0; i < values.Length; i++)
+                    cmd.Parameters.AddWithValue($"@p{i}", values[i] ?? DBNull.Value);
+            }
+            else
+            {
+                // 其他操作符只需单个值
+                sql = $"DELETE FROM [{childTableName}] WHERE [{fieldName}] {operatorType} @val";
+                cmd.Parameters.AddWithValue("@val", values[0] ?? DBNull.Value);
+            }
+
+            cmd.CommandText = sql;
+            return await cmd.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// 安全删除子表记录：通过字段匹配条件（参数化防注入）
+        /// 用于特定场景清理，如清除过期/无效/已删除的子表数据
+        /// </summary>
+        /// <param name="childTableName">子表名称</param>
+        /// <param name="fieldName">子表字段名</param>
+        /// <param name="operatorType">操作符（=, <>, <, >, <=, >=, IN）</param>
+        /// <param name="values">条件值数组</param>
+        /// <param name="cancellationToken">取消令牌</param>
+        /// <returns>删除的记录数</returns>
+        public async Task<int> DeleteChildRecordsAsync(string childTableName, string fieldName, 
+            string operatorType, object?[] values, CancellationToken cancellationToken = default)
+        {
+            return await DeleteChildRecordsInternalAsync(childTableName, fieldName, operatorType, values, cancellationToken).ConfigureAwait(false);
+        }
+
+        /// <summary>
         /// 根据属性名和值删除所有匹配的实体及其关联数据
         /// </summary>
         public int DeleteWhere(string propertyName, object propertyValue)
@@ -3017,6 +3105,1050 @@ namespace Drx.Sdk.Network.DataBase.Sqlite
             return false;
         }
 
+        #endregion
+
+        #region 直接字段操作方法（无需序列化对象）
+
+        /// <summary>
+        /// 同步从主表获取指定ID的单个字段值
+        /// </summary>
+        /// <typeparam name="TField">字段值的类型</typeparam>
+        /// <param name="id">实体ID</param>
+        /// <param name="fieldName">字段名</param>
+        /// <returns>字段值，如果不存在返回null</returns>
+        public TField? GetField<TField>(int id, string fieldName)
+        {
+            if (string.IsNullOrEmpty(fieldName))
+                throw new ArgumentNullException(nameof(fieldName));
+            if (!_properties.ContainsKey(fieldName))
+                throw new ArgumentException($"属性 {fieldName} 不存在于类型 {typeof(T).Name} 中");
+
+            using var connection = new SqliteConnection(_connectionString);
+            connection.Open();
+
+            var sql = $"SELECT [{fieldName}] FROM [{_tableName}] WHERE [Id] = @id LIMIT 1";
+            using var command = new SqliteCommand(sql, connection);
+            command.Parameters.AddWithValue("@id", id);
+
+            using var reader = command.ExecuteReader();
+            if (reader.Read())
+            {
+                var value = reader[0];
+                return value == DBNull.Value ? default : (TField?)ConvertValue(value, typeof(TField));
+            }
+
+            return default;
+        }
+
+        /// <summary>
+        /// 异步从主表获取指定ID的单个字段值
+        /// </summary>
+        /// <typeparam name="TField">字段值的类型</typeparam>
+        /// <param name="id">实体ID</param>
+        /// <param name="fieldName">字段名</param>
+        /// <param name="cancellationToken">取消令牌</param>
+        /// <returns>字段值，如果不存在返回null</returns>
+        public async Task<TField?> GetFieldAsync<TField>(int id, string fieldName, CancellationToken cancellationToken = default)
+        {
+            if (string.IsNullOrEmpty(fieldName))
+                throw new ArgumentNullException(nameof(fieldName));
+            if (!_properties.ContainsKey(fieldName))
+                throw new ArgumentException($"属性 {fieldName} 不存在于类型 {typeof(T).Name} 中");
+
+            using var connection = new SqliteConnection(_connectionString);
+            await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+
+            var sql = $"SELECT [{fieldName}] FROM [{_tableName}] WHERE [Id] = @id LIMIT 1";
+            using var command = new SqliteCommand(sql, connection);
+            command.Parameters.AddWithValue("@id", id);
+
+            using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+            if (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+            {
+                var value = reader[0];
+                return value == DBNull.Value ? default : (TField?)ConvertValue(value, typeof(TField));
+            }
+
+            return default;
+        }
+
+        /// <summary>
+        /// 同步按条件获取第一个匹配实体的字段值
+        /// </summary>
+        /// <typeparam name="TField">字段值的类型</typeparam>
+        /// <param name="propertyName">查询条件的属性名</param>
+        /// <param name="propertyValue">查询条件的属性值</param>
+        /// <param name="fieldName">要获取的字段名</param>
+        /// <returns>字段值，如果不存在返回null</returns>
+        public TField? GetFieldWhere<TField>(string propertyName, object propertyValue, string fieldName)
+        {
+            if (string.IsNullOrEmpty(propertyName))
+                throw new ArgumentNullException(nameof(propertyName));
+            if (string.IsNullOrEmpty(fieldName))
+                throw new ArgumentNullException(nameof(fieldName));
+            if (!_properties.ContainsKey(propertyName))
+                throw new ArgumentException($"属性 {propertyName} 不存在于类型 {typeof(T).Name} 中");
+            if (!_properties.ContainsKey(fieldName))
+                throw new ArgumentException($"属性 {fieldName} 不存在于类型 {typeof(T).Name} 中");
+
+            using var connection = new SqliteConnection(_connectionString);
+            connection.Open();
+
+            var sql = $"SELECT [{fieldName}] FROM [{_tableName}] WHERE [{propertyName}] = @value LIMIT 1";
+            using var command = new SqliteCommand(sql, connection);
+            command.Parameters.AddWithValue("@value", propertyValue ?? DBNull.Value);
+
+            using var reader = command.ExecuteReader();
+            if (reader.Read())
+            {
+                var value = reader[0];
+                return value == DBNull.Value ? default : (TField?)ConvertValue(value, typeof(TField));
+            }
+
+            return default;
+        }
+
+        /// <summary>
+        /// 异步按条件获取第一个匹配实体的字段值
+        /// </summary>
+        /// <typeparam name="TField">字段值的类型</typeparam>
+        /// <param name="propertyName">查询条件的属性名</param>
+        /// <param name="propertyValue">查询条件的属性值</param>
+        /// <param name="fieldName">要获取的字段名</param>
+        /// <param name="cancellationToken">取消令牌</param>
+        /// <returns>字段值，如果不存在返回null</returns>
+        public async Task<TField?> GetFieldWhereAsync<TField>(string propertyName, object propertyValue, string fieldName, CancellationToken cancellationToken = default)
+        {
+            if (string.IsNullOrEmpty(propertyName))
+                throw new ArgumentNullException(nameof(propertyName));
+            if (string.IsNullOrEmpty(fieldName))
+                throw new ArgumentNullException(nameof(fieldName));
+            if (!_properties.ContainsKey(propertyName))
+                throw new ArgumentException($"属性 {propertyName} 不存在于类型 {typeof(T).Name} 中");
+            if (!_properties.ContainsKey(fieldName))
+                throw new ArgumentException($"属性 {fieldName} 不存在于类型 {typeof(T).Name} 中");
+
+            using var connection = new SqliteConnection(_connectionString);
+            await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+
+            var sql = $"SELECT [{fieldName}] FROM [{_tableName}] WHERE [{propertyName}] = @value LIMIT 1";
+            using var command = new SqliteCommand(sql, connection);
+            command.Parameters.AddWithValue("@value", propertyValue ?? DBNull.Value);
+
+            using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+            if (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+            {
+                var value = reader[0];
+                return value == DBNull.Value ? default : (TField?)ConvertValue(value, typeof(TField));
+            }
+
+            return default;
+        }
+
+        /// <summary>
+        /// 同步更新指定ID的单个字段值
+        /// </summary>
+        /// <param name="id">实体ID</param>
+        /// <param name="fieldName">字段名</param>
+        /// <param name="value">要设置的值</param>
+        /// <returns>是否更新成功</returns>
+        public bool UpdateField(int id, string fieldName, object? value)
+        {
+            if (string.IsNullOrEmpty(fieldName))
+                throw new ArgumentNullException(nameof(fieldName));
+            if (!_properties.ContainsKey(fieldName))
+                throw new ArgumentException($"属性 {fieldName} 不存在于类型 {typeof(T).Name} 中");
+            if (fieldName == "Id")
+                throw new ArgumentException("不能修改 Id 字段");
+
+            using var connection = new SqliteConnection(_connectionString);
+            connection.Open();
+
+            var sql = $"UPDATE [{_tableName}] SET [{fieldName}] = @value WHERE [Id] = @id";
+            using var command = new SqliteCommand(sql, connection);
+            command.Parameters.AddWithValue("@value", value ?? DBNull.Value);
+            command.Parameters.AddWithValue("@id", id);
+
+            return command.ExecuteNonQuery() > 0;
+        }
+
+        /// <summary>
+        /// 异步更新指定ID的单个字段值
+        /// </summary>
+        /// <param name="id">实体ID</param>
+        /// <param name="fieldName">字段名</param>
+        /// <param name="value">要设置的值</param>
+        /// <param name="cancellationToken">取消令牌</param>
+        /// <returns>是否更新成功</returns>
+        public async Task<bool> UpdateFieldAsync(int id, string fieldName, object? value, CancellationToken cancellationToken = default)
+        {
+            if (string.IsNullOrEmpty(fieldName))
+                throw new ArgumentNullException(nameof(fieldName));
+            if (!_properties.ContainsKey(fieldName))
+                throw new ArgumentException($"属性 {fieldName} 不存在于类型 {typeof(T).Name} 中");
+            if (fieldName == "Id")
+                throw new ArgumentException("不能修改 Id 字段");
+
+            using var connection = new SqliteConnection(_connectionString);
+            await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+
+            var sql = $"UPDATE [{_tableName}] SET [{fieldName}] = @value WHERE [Id] = @id";
+            using var command = new SqliteCommand(sql, connection);
+            command.Parameters.AddWithValue("@value", value ?? DBNull.Value);
+            command.Parameters.AddWithValue("@id", id);
+
+            return await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false) > 0;
+        }
+
+        /// <summary>
+        /// 同步批量更新满足条件的实体的单个字段
+        /// </summary>
+        /// <param name="conditionProperty">条件属性名</param>
+        /// <param name="conditionValue">条件值</param>
+        /// <param name="fieldName">要更新的字段名</param>
+        /// <param name="value">新值</param>
+        /// <returns>受影响的实体数量</returns>
+        public int UpdateFieldWhere(string conditionProperty, object conditionValue, string fieldName, object? value)
+        {
+            if (string.IsNullOrEmpty(conditionProperty))
+                throw new ArgumentNullException(nameof(conditionProperty));
+            if (string.IsNullOrEmpty(fieldName))
+                throw new ArgumentNullException(nameof(fieldName));
+            if (!_properties.ContainsKey(conditionProperty))
+                throw new ArgumentException($"属性 {conditionProperty} 不存在于类型 {typeof(T).Name} 中");
+            if (!_properties.ContainsKey(fieldName))
+                throw new ArgumentException($"属性 {fieldName} 不存在于类型 {typeof(T).Name} 中");
+            if (fieldName == "Id")
+                throw new ArgumentException("不能修改 Id 字段");
+
+            using var connection = new SqliteConnection(_connectionString);
+            connection.Open();
+
+            var sql = $"UPDATE [{_tableName}] SET [{fieldName}] = @value WHERE [{conditionProperty}] = @condition";
+            using var command = new SqliteCommand(sql, connection);
+            command.Parameters.AddWithValue("@value", value ?? DBNull.Value);
+            command.Parameters.AddWithValue("@condition", conditionValue ?? DBNull.Value);
+
+            return command.ExecuteNonQuery();
+        }
+
+        /// <summary>
+        /// 异步批量更新满足条件的实体的单个字段
+        /// </summary>
+        /// <param name="conditionProperty">条件属性名</param>
+        /// <param name="conditionValue">条件值</param>
+        /// <param name="fieldName">要更新的字段名</param>
+        /// <param name="value">新值</param>
+        /// <param name="cancellationToken">取消令牌</param>
+        /// <returns>受影响的实体数量</returns>
+        public async Task<int> UpdateFieldWhereAsync(string conditionProperty, object conditionValue, string fieldName, object? value, CancellationToken cancellationToken = default)
+        {
+            if (string.IsNullOrEmpty(conditionProperty))
+                throw new ArgumentNullException(nameof(conditionProperty));
+            if (string.IsNullOrEmpty(fieldName))
+                throw new ArgumentNullException(nameof(fieldName));
+            if (!_properties.ContainsKey(conditionProperty))
+                throw new ArgumentException($"属性 {conditionProperty} 不存在于类型 {typeof(T).Name} 中");
+            if (!_properties.ContainsKey(fieldName))
+                throw new ArgumentException($"属性 {fieldName} 不存在于类型 {typeof(T).Name} 中");
+            if (fieldName == "Id")
+                throw new ArgumentException("不能修改 Id 字段");
+
+            using var connection = new SqliteConnection(_connectionString);
+            await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+
+            var sql = $"UPDATE [{_tableName}] SET [{fieldName}] = @value WHERE [{conditionProperty}] = @condition";
+            using var command = new SqliteCommand(sql, connection);
+            command.Parameters.AddWithValue("@value", value ?? DBNull.Value);
+            command.Parameters.AddWithValue("@condition", conditionValue ?? DBNull.Value);
+
+            return await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// 同步获取表中的记录数
+        /// </summary>
+        /// <returns>记录数</returns>
+        public int Count()
+        {
+            using var connection = new SqliteConnection(_connectionString);
+            connection.Open();
+
+            var sql = $"SELECT COUNT(*) FROM [{_tableName}]";
+            using var command = new SqliteCommand(sql, connection);
+
+            var result = command.ExecuteScalar();
+            return result != null && result != DBNull.Value ? Convert.ToInt32(result) : 0;
+        }
+
+        /// <summary>
+        /// 异步获取表中的记录数
+        /// </summary>
+        /// <param name="cancellationToken">取消令牌</param>
+        /// <returns>记录数</returns>
+        public async Task<int> CountAsync(CancellationToken cancellationToken = default)
+        {
+            using var connection = new SqliteConnection(_connectionString);
+            await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+
+            var sql = $"SELECT COUNT(*) FROM [{_tableName}]";
+            using var command = new SqliteCommand(sql, connection);
+
+            var result = await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
+            return result != null && result != DBNull.Value ? Convert.ToInt32(result) : 0;
+        }
+
+        /// <summary>
+        /// 同步按条件计数
+        /// </summary>
+        /// <param name="propertyName">条件属性名</param>
+        /// <param name="propertyValue">条件值</param>
+        /// <returns>匹配条件的记录数</returns>
+        public int CountWhere(string propertyName, object propertyValue)
+        {
+            if (string.IsNullOrEmpty(propertyName))
+                throw new ArgumentNullException(nameof(propertyName));
+            if (!_properties.ContainsKey(propertyName))
+                throw new ArgumentException($"属性 {propertyName} 不存在于类型 {typeof(T).Name} 中");
+
+            using var connection = new SqliteConnection(_connectionString);
+            connection.Open();
+
+            var sql = $"SELECT COUNT(*) FROM [{_tableName}] WHERE [{propertyName}] = @value";
+            using var command = new SqliteCommand(sql, connection);
+            command.Parameters.AddWithValue("@value", propertyValue ?? DBNull.Value);
+
+            var result = command.ExecuteScalar();
+            return result != null && result != DBNull.Value ? Convert.ToInt32(result) : 0;
+        }
+
+        /// <summary>
+        /// 异步按条件计数
+        /// </summary>
+        /// <param name="propertyName">条件属性名</param>
+        /// <param name="propertyValue">条件值</param>
+        /// <param name="cancellationToken">取消令牌</param>
+        /// <returns>匹配条件的记录数</returns>
+        public async Task<int> CountWhereAsync(string propertyName, object propertyValue, CancellationToken cancellationToken = default)
+        {
+            if (string.IsNullOrEmpty(propertyName))
+                throw new ArgumentNullException(nameof(propertyName));
+            if (!_properties.ContainsKey(propertyName))
+                throw new ArgumentException($"属性 {propertyName} 不存在于类型 {typeof(T).Name} 中");
+
+            using var connection = new SqliteConnection(_connectionString);
+            await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+
+            var sql = $"SELECT COUNT(*) FROM [{_tableName}] WHERE [{propertyName}] = @value";
+            using var command = new SqliteCommand(sql, connection);
+            command.Parameters.AddWithValue("@value", propertyValue ?? DBNull.Value);
+
+            var result = await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
+            return result != null && result != DBNull.Value ? Convert.ToInt32(result) : 0;
+        }
+
+        /// <summary>
+        /// 同步检查是否存在指定ID的实体
+        /// </summary>
+        /// <param name="id">实体ID</param>
+        /// <returns>是否存在</returns>
+        public bool Exists(int id)
+        {
+            using var connection = new SqliteConnection(_connectionString);
+            connection.Open();
+
+            var sql = $"SELECT 1 FROM [{_tableName}] WHERE [Id] = @id LIMIT 1";
+            using var command = new SqliteCommand(sql, connection);
+            command.Parameters.AddWithValue("@id", id);
+
+            using var reader = command.ExecuteReader();
+            return reader.Read();
+        }
+
+        /// <summary>
+        /// 异步检查是否存在指定ID的实体
+        /// </summary>
+        /// <param name="id">实体ID</param>
+        /// <param name="cancellationToken">取消令牌</param>
+        /// <returns>是否存在</returns>
+        public async Task<bool> ExistsAsync(int id, CancellationToken cancellationToken = default)
+        {
+            using var connection = new SqliteConnection(_connectionString);
+            await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+
+            var sql = $"SELECT 1 FROM [{_tableName}] WHERE [Id] = @id LIMIT 1";
+            using var command = new SqliteCommand(sql, connection);
+            command.Parameters.AddWithValue("@id", id);
+
+            using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+            return await reader.ReadAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// 同步按条件检查是否存在符合条件的实体
+        /// </summary>
+        /// <param name="propertyName">条件属性名</param>
+        /// <param name="propertyValue">条件值</param>
+        /// <returns>是否存在</returns>
+        public bool ExistsWhere(string propertyName, object propertyValue)
+        {
+            if (string.IsNullOrEmpty(propertyName))
+                throw new ArgumentNullException(nameof(propertyName));
+            if (!_properties.ContainsKey(propertyName))
+                throw new ArgumentException($"属性 {propertyName} 不存在于类型 {typeof(T).Name} 中");
+
+            using var connection = new SqliteConnection(_connectionString);
+            connection.Open();
+
+            var sql = $"SELECT 1 FROM [{_tableName}] WHERE [{propertyName}] = @value LIMIT 1";
+            using var command = new SqliteCommand(sql, connection);
+            command.Parameters.AddWithValue("@value", propertyValue ?? DBNull.Value);
+
+            using var reader = command.ExecuteReader();
+            return reader.Read();
+        }
+
+        /// <summary>
+        /// 异步按条件检查是否存在符合条件的实体
+        /// </summary>
+        /// <param name="propertyName">条件属性名</param>
+        /// <param name="propertyValue">条件值</param>
+        /// <param name="cancellationToken">取消令牌</param>
+        /// <returns>是否存在</returns>
+        public async Task<bool> ExistsWhereAsync(string propertyName, object propertyValue, CancellationToken cancellationToken = default)
+        {
+            if (string.IsNullOrEmpty(propertyName))
+                throw new ArgumentNullException(nameof(propertyName));
+            if (!_properties.ContainsKey(propertyName))
+                throw new ArgumentException($"属性 {propertyName} 不存在于类型 {typeof(T).Name} 中");
+
+            using var connection = new SqliteConnection(_connectionString);
+            await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+
+            var sql = $"SELECT 1 FROM [{_tableName}] WHERE [{propertyName}] = @value LIMIT 1";
+            using var command = new SqliteCommand(sql, connection);
+            command.Parameters.AddWithValue("@value", propertyValue ?? DBNull.Value);
+
+            using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+            return await reader.ReadAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// 同步获取多个字段的值（返回 Dictionary）
+        /// </summary>
+        /// <param name="id">实体ID</param>
+        /// <param name="fieldNames">字段名集合</param>
+        /// <returns>字段名到值的映射字典</returns>
+        public Dictionary<string, object?> GetFields(int id, params string[] fieldNames)
+        {
+            if (fieldNames == null || fieldNames.Length == 0)
+                throw new ArgumentNullException(nameof(fieldNames));
+
+            var result = new Dictionary<string, object?>();
+            foreach (var fieldName in fieldNames)
+            {
+                if (string.IsNullOrEmpty(fieldName))
+                    throw new ArgumentException("字段名不能为空");
+                if (!_properties.ContainsKey(fieldName))
+                    throw new ArgumentException($"属性 {fieldName} 不存在于类型 {typeof(T).Name} 中");
+            }
+
+            using var connection = new SqliteConnection(_connectionString);
+            connection.Open();
+
+            var fields = string.Join(", ", fieldNames.Select(f => $"[{f}]"));
+            var sql = $"SELECT {fields} FROM [{_tableName}] WHERE [Id] = @id LIMIT 1";
+            using var command = new SqliteCommand(sql, connection);
+            command.Parameters.AddWithValue("@id", id);
+
+            using var reader = command.ExecuteReader();
+            if (reader.Read())
+            {
+                for (int i = 0; i < fieldNames.Length; i++)
+                {
+                    var value = reader[i];
+                    result[fieldNames[i]] = value == DBNull.Value ? null : value;
+                }
+            }
+
+            return result;
+        }
+
+        /// <summary>
+        /// 异步获取多个字段的值（返回 Dictionary）
+        /// </summary>
+        /// <param name="id">实体ID</param>
+        /// <param name="cancellationToken">取消令牌</param>
+        /// <param name="fieldNames">字段名集合</param>
+        /// <returns>字段名到值的映射字典</returns>
+        public async Task<Dictionary<string, object?>> GetFieldsAsync(int id, CancellationToken cancellationToken = default, params string[] fieldNames)
+        {
+            if (fieldNames == null || fieldNames.Length == 0)
+                throw new ArgumentNullException(nameof(fieldNames));
+
+            var result = new Dictionary<string, object?>();
+            foreach (var fieldName in fieldNames)
+            {
+                if (string.IsNullOrEmpty(fieldName))
+                    throw new ArgumentException("字段名不能为空");
+                if (!_properties.ContainsKey(fieldName))
+                    throw new ArgumentException($"属性 {fieldName} 不存在于类型 {typeof(T).Name} 中");
+            }
+
+            using var connection = new SqliteConnection(_connectionString);
+            await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+
+            var fields = string.Join(", ", fieldNames.Select(f => $"[{f}]"));
+            var sql = $"SELECT {fields} FROM [{_tableName}] WHERE [Id] = @id LIMIT 1";
+            using var command = new SqliteCommand(sql, connection);
+            command.Parameters.AddWithValue("@id", id);
+
+            using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+            if (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+            {
+                for (int i = 0; i < fieldNames.Length; i++)
+                {
+                    var value = reader[i];
+                    result[fieldNames[i]] = value == DBNull.Value ? null : value;
+                }
+            }
+
+            return result;
+        }
+
+        /// <summary>
+        /// 同步查询子表（按 ParentId）——返回列名->值 的字典列表（表级操作，无需反序列化）
+        /// 子表命名约定：`{MainTableName}_{PropertyName}`，子表通常包含 `ParentId` 列。
+        /// </summary>
+        public List<Dictionary<string, object?>> QueryChildByParentId(string childTableName, int parentId)
+        {
+            if (string.IsNullOrWhiteSpace(childTableName)) throw new ArgumentNullException(nameof(childTableName));
+            // 验证表名（防注入）
+            if (!System.Text.RegularExpressions.Regex.IsMatch(childTableName, "^[A-Za-z_][A-Za-z0-9_]*$"))
+                throw new ArgumentException("childTableName 包含非法字符");
+
+            var results = new List<Dictionary<string, object?>>();
+            using var connection = new SqliteConnection(_connectionString);
+            connection.Open();
+
+            var sql = $"SELECT * FROM [{childTableName}] WHERE [ParentId] = @parentId";
+            using var cmd = new SqliteCommand(sql, connection);
+            cmd.Parameters.AddWithValue("@parentId", parentId);
+
+            using var reader = cmd.ExecuteReader();
+            var cols = new List<string>();
+            for (int i = 0; i < reader.FieldCount; i++) cols.Add(reader.GetName(i));
+
+            while (reader.Read())
+            {
+                var row = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
+                for (int i = 0; i < cols.Count; i++)
+                {
+                    var v = reader.GetValue(i);
+                    row[cols[i]] = v == DBNull.Value ? null : v;
+                }
+                results.Add(row);
+            }
+
+            return results;
+        }
+
+        /// <summary>
+        /// 异步查询子表（按 ParentId）
+        /// </summary>
+        public async Task<List<Dictionary<string, object?>>> QueryChildByParentIdAsync(string childTableName, int parentId, CancellationToken cancellationToken = default)
+        {
+            if (string.IsNullOrWhiteSpace(childTableName)) throw new ArgumentNullException(nameof(childTableName));
+            if (!System.Text.RegularExpressions.Regex.IsMatch(childTableName, "^[A-Za-z_][A-Za-z0-9_]*$"))
+                throw new ArgumentException("childTableName 包含非法字符");
+
+            var results = new List<Dictionary<string, object?>>();
+            await using var connection = new SqliteConnection(_connectionString);
+            await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+
+            var sql = $"SELECT * FROM [{childTableName}] WHERE [ParentId] = @parentId";
+            await using var cmd = new SqliteCommand(sql, connection);
+            cmd.Parameters.AddWithValue("@parentId", parentId);
+
+            await using var reader = await cmd.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+            var cols = new List<string>();
+            for (int i = 0; i < reader.FieldCount; i++) cols.Add(reader.GetName(i));
+
+            while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+            {
+                var row = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
+                for (int i = 0; i < cols.Count; i++)
+                {
+                    var v = reader.GetValue(i);
+                    row[cols[i]] = v == DBNull.Value ? null : v;
+                }
+                results.Add(row);
+            }
+
+            return results;
+        }
+
+        /// <summary>
+        /// 同步按子表字段查询（等值匹配），返回行字典列表（表级操作）
+        /// </summary>
+        public List<Dictionary<string, object?>> QueryChildWhere(string childTableName, string fieldName, object? value)
+        {
+            if (string.IsNullOrWhiteSpace(childTableName)) throw new ArgumentNullException(nameof(childTableName));
+            if (string.IsNullOrWhiteSpace(fieldName)) throw new ArgumentNullException(nameof(fieldName));
+            if (!System.Text.RegularExpressions.Regex.IsMatch(childTableName, "^[A-Za-z_][A-Za-z0-9_]*$"))
+                throw new ArgumentException("childTableName 包含非法字符");
+            if (!System.Text.RegularExpressions.Regex.IsMatch(fieldName, "^[A-Za-z_][A-Za-z0-9_]*$"))
+                throw new ArgumentException("fieldName 包含非法字符");
+
+            var results = new List<Dictionary<string, object?>>();
+            using var connection = new SqliteConnection(_connectionString);
+            connection.Open();
+
+            var sql = $"SELECT * FROM [{childTableName}] WHERE [{fieldName}] = @val";
+            using var cmd = new SqliteCommand(sql, connection);
+            cmd.Parameters.AddWithValue("@val", value ?? DBNull.Value);
+
+            using var reader = cmd.ExecuteReader();
+            var cols = new List<string>();
+            for (int i = 0; i < reader.FieldCount; i++) cols.Add(reader.GetName(i));
+
+            while (reader.Read())
+            {
+                var row = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
+                for (int i = 0; i < cols.Count; i++)
+                {
+                    var v = reader.GetValue(i);
+                    row[cols[i]] = v == DBNull.Value ? null : v;
+                }
+                results.Add(row);
+            }
+
+            return results;
+        }
+
+        /// <summary>
+        /// 异步按子表字段查询（等值匹配）
+        /// </summary>
+        public async Task<List<Dictionary<string, object?>>> QueryChildWhereAsync(string childTableName, string fieldName, object? value, CancellationToken cancellationToken = default)
+        {
+            if (string.IsNullOrWhiteSpace(childTableName)) throw new ArgumentNullException(nameof(childTableName));
+            if (string.IsNullOrWhiteSpace(fieldName)) throw new ArgumentNullException(nameof(fieldName));
+            if (!System.Text.RegularExpressions.Regex.IsMatch(childTableName, "^[A-Za-z_][A-Za-z0-9_]*$"))
+                throw new ArgumentException("childTableName 包含非法字符");
+            if (!System.Text.RegularExpressions.Regex.IsMatch(fieldName, "^[A-Za-z_][A-Za-z0-9_]*$"))
+                throw new ArgumentException("fieldName 包含非法字符");
+
+            var results = new List<Dictionary<string, object?>>();
+            await using var connection = new SqliteConnection(_connectionString);
+            await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+
+            var sql = $"SELECT * FROM [{childTableName}] WHERE [{fieldName}] = @val";
+            await using var cmd = new SqliteCommand(sql, connection);
+            cmd.Parameters.AddWithValue("@val", value ?? DBNull.Value);
+
+            await using var reader = await cmd.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+            var cols = new List<string>();
+            for (int i = 0; i < reader.FieldCount; i++) cols.Add(reader.GetName(i));
+
+            while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+            {
+                var row = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
+                for (int i = 0; i < cols.Count; i++)
+                {
+                    var v = reader.GetValue(i);
+                    row[cols[i]] = v == DBNull.Value ? null : v;
+                }
+                results.Add(row);
+            }
+
+            return results;
+        }
+
+        /// <summary>
+        /// 同步统计子表中某 ParentId 的记录数
+        /// </summary>
+        public int CountChildByParentId(string childTableName, int parentId)
+        {
+            if (string.IsNullOrWhiteSpace(childTableName)) throw new ArgumentNullException(nameof(childTableName));
+            if (!System.Text.RegularExpressions.Regex.IsMatch(childTableName, "^[A-Za-z_][A-Za-z0-9_]*$"))
+                throw new ArgumentException("childTableName 包含非法字符");
+
+            using var connection = new SqliteConnection(_connectionString);
+            connection.Open();
+            var sql = $"SELECT COUNT(*) FROM [{childTableName}] WHERE [ParentId] = @parentId";
+            using var cmd = new SqliteCommand(sql, connection);
+            cmd.Parameters.AddWithValue("@parentId", parentId);
+            var res = cmd.ExecuteScalar();
+            return res != null && res != DBNull.Value ? Convert.ToInt32(res) : 0;
+        }
+
+        /// <summary>
+        /// 异步统计子表中某 ParentId 的记录数
+        /// </summary>
+        public async Task<int> CountChildByParentIdAsync(string childTableName, int parentId, CancellationToken cancellationToken = default)
+        {
+            if (string.IsNullOrWhiteSpace(childTableName)) throw new ArgumentNullException(nameof(childTableName));
+            if (!System.Text.RegularExpressions.Regex.IsMatch(childTableName, "^[A-Za-z_][A-Za-z0-9_]*$"))
+                throw new ArgumentException("childTableName 包含非法字符");
+
+            await using var connection = new SqliteConnection(_connectionString);
+            await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+            var sql = $"SELECT COUNT(*) FROM [{childTableName}] WHERE [ParentId] = @parentId";
+            await using var cmd = new SqliteCommand(sql, connection);
+            cmd.Parameters.AddWithValue("@parentId", parentId);
+            var res = await cmd.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
+            return res != null && res != DBNull.Value ? Convert.ToInt32(res) : 0;
+        }
+
+        /// <summary>
+        /// 同步检查子表中是否存在匹配 ParentId 的记录
+        /// </summary>
+        public bool ExistsChildByParentId(string childTableName, int parentId)
+        {
+            if (string.IsNullOrWhiteSpace(childTableName)) throw new ArgumentNullException(nameof(childTableName));
+            if (!System.Text.RegularExpressions.Regex.IsMatch(childTableName, "^[A-Za-z_][A-Za-z0-9_]*$"))
+                throw new ArgumentException("childTableName 包含非法字符");
+
+            using var connection = new SqliteConnection(_connectionString);
+            connection.Open();
+            var sql = $"SELECT 1 FROM [{childTableName}] WHERE [ParentId] = @parentId LIMIT 1";
+            using var cmd = new SqliteCommand(sql, connection);
+            cmd.Parameters.AddWithValue("@parentId", parentId);
+            using var reader = cmd.ExecuteReader();
+            return reader.Read();
+        }
+
+        /// <summary>
+        /// 异步检查子表中是否存在匹配 ParentId 的记录
+        /// </summary>
+        public async Task<bool> ExistsChildByParentIdAsync(string childTableName, int parentId, CancellationToken cancellationToken = default)
+        {
+            if (string.IsNullOrWhiteSpace(childTableName)) throw new ArgumentNullException(nameof(childTableName));
+            if (!System.Text.RegularExpressions.Regex.IsMatch(childTableName, "^[A-Za-z_][A-Za-z0-9_]*$"))
+                throw new ArgumentException("childTableName 包含非法字符");
+
+            await using var connection = new SqliteConnection(_connectionString);
+            await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+            var sql = $"SELECT 1 FROM [{childTableName}] WHERE [ParentId] = @parentId LIMIT 1";
+            await using var cmd = new SqliteCommand(sql, connection);
+            cmd.Parameters.AddWithValue("@parentId", parentId);
+            await using var reader = await cmd.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+            return await reader.ReadAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        #region 子表字段读取与更新（表级操作，无需序列化）
+
+        // 辅助：检查表中是否存在某列（同步）
+        private bool DoesTableHaveColumn(string tableName, string columnName)
+        {
+            if (string.IsNullOrWhiteSpace(tableName)) throw new ArgumentNullException(nameof(tableName));
+            if (string.IsNullOrWhiteSpace(columnName)) throw new ArgumentNullException(nameof(columnName));
+            using var connection = new SqliteConnection(_connectionString);
+            connection.Open();
+            using var cmd = new SqliteCommand($"PRAGMA table_info([{tableName}])", connection);
+            using var reader = cmd.ExecuteReader();
+            while (reader.Read())
+            {
+                var nm = reader["name"] as string;
+                if (string.Equals(nm, columnName, StringComparison.OrdinalIgnoreCase)) return true;
+            }
+            return false;
+        }
+
+        // 辅助：检查表中是否存在某列（异步）
+        private async Task<bool> DoesTableHaveColumnAsync(string tableName, string columnName, CancellationToken cancellationToken = default)
+        {
+            if (string.IsNullOrWhiteSpace(tableName)) throw new ArgumentNullException(nameof(tableName));
+            if (string.IsNullOrWhiteSpace(columnName)) throw new ArgumentNullException(nameof(columnName));
+            await using var connection = new SqliteConnection(_connectionString);
+            await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+            await using var cmd = new SqliteCommand($"PRAGMA table_info([{tableName}])", connection);
+            await using var reader = await cmd.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+            while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+            {
+                var nm = reader["name"] as string;
+                if (string.Equals(nm, columnName, StringComparison.OrdinalIgnoreCase)) return true;
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// 同步读取子表中某条（或第一条）记录的单个字段值（按 ParentId 可选按 childId 过滤）
+        /// </summary>
+        public TField? GetChildFieldValue<TField>(string childTableName, int parentId, string fieldName, int? childId = null)
+        {
+            if (string.IsNullOrWhiteSpace(childTableName)) throw new ArgumentNullException(nameof(childTableName));
+            if (string.IsNullOrWhiteSpace(fieldName)) throw new ArgumentNullException(nameof(fieldName));
+            if (!System.Text.RegularExpressions.Regex.IsMatch(childTableName, "^[A-Za-z_][A-Za-z0-9_]*$")) throw new ArgumentException("childTableName 包含非法字符");
+            if (!System.Text.RegularExpressions.Regex.IsMatch(fieldName, "^[A-Za-z_][A-Za-z0-9_]*$")) throw new ArgumentException("fieldName 包含非法字符");
+
+            using var connection = new SqliteConnection(_connectionString);
+            connection.Open();
+
+            if (!DoesTableHaveColumn(childTableName, fieldName))
+                throw new ArgumentException($"字段 {fieldName} 不存在于子表 {childTableName} 中");
+
+            var sql = childId.HasValue
+                ? $"SELECT [{fieldName}] FROM [{childTableName}] WHERE [ParentId] = @parentId AND [Id] = @childId LIMIT 1"
+                : $"SELECT [{fieldName}] FROM [{childTableName}] WHERE [ParentId] = @parentId LIMIT 1";
+
+            using var cmd = new SqliteCommand(sql, connection);
+            cmd.Parameters.AddWithValue("@parentId", parentId);
+            if (childId.HasValue) cmd.Parameters.AddWithValue("@childId", childId.Value);
+
+            using var reader = cmd.ExecuteReader();
+            if (reader.Read())
+            {
+                var v = reader[0];
+                return v == DBNull.Value ? default : (TField?)ConvertValue(v, typeof(TField));
+            }
+
+            return default;
+        }
+
+        /// <summary>
+        /// 异步读取子表中某条（或第一条）记录的单个字段值（按 ParentId 可选按 childId 过滤）
+        /// </summary>
+        public async Task<TField?> GetChildFieldValueAsync<TField>(string childTableName, int parentId, string fieldName, int? childId = null, CancellationToken cancellationToken = default)
+        {
+            if (string.IsNullOrWhiteSpace(childTableName)) throw new ArgumentNullException(nameof(childTableName));
+            if (string.IsNullOrWhiteSpace(fieldName)) throw new ArgumentNullException(nameof(fieldName));
+            if (!System.Text.RegularExpressions.Regex.IsMatch(childTableName, "^[A-Za-z_][A-Za-z0-9_]*$")) throw new ArgumentException("childTableName 包含非法字符");
+            if (!System.Text.RegularExpressions.Regex.IsMatch(fieldName, "^[A-Za-z_][A-Za-z0-9_]*$")) throw new ArgumentException("fieldName 包含非法字符");
+
+            await using var connection = new SqliteConnection(_connectionString);
+            await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+
+            if (!await DoesTableHaveColumnAsync(childTableName, fieldName, cancellationToken).ConfigureAwait(false))
+                throw new ArgumentException($"字段 {fieldName} 不存在于子表 {childTableName} 中");
+
+            var sql = childId.HasValue
+                ? $"SELECT [{fieldName}] FROM [{childTableName}] WHERE [ParentId] = @parentId AND [Id] = @childId LIMIT 1"
+                : $"SELECT [{fieldName}] FROM [{childTableName}] WHERE [ParentId] = @parentId LIMIT 1";
+
+            await using var cmd = new SqliteCommand(sql, connection);
+            cmd.Parameters.AddWithValue("@parentId", parentId);
+            if (childId.HasValue) cmd.Parameters.AddWithValue("@childId", childId.Value);
+
+            await using var reader = await cmd.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+            if (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+            {
+                var v = reader[0];
+                return v == DBNull.Value ? default : (TField?)ConvertValue(v, typeof(TField));
+            }
+
+            return default;
+        }
+
+        /// <summary>
+        /// 同步读取子表中某父记录的指定字段的所有值（按 ParentId）
+        /// </summary>
+        public List<TField?> GetChildFieldValues<TField>(string childTableName, int parentId, string fieldName)
+        {
+            if (string.IsNullOrWhiteSpace(childTableName)) throw new ArgumentNullException(nameof(childTableName));
+            if (string.IsNullOrWhiteSpace(fieldName)) throw new ArgumentNullException(nameof(fieldName));
+            if (!System.Text.RegularExpressions.Regex.IsMatch(childTableName, "^[A-Za-z_][A-Za-z0-9_]*$")) throw new ArgumentException("childTableName 包含非法字符");
+            if (!System.Text.RegularExpressions.Regex.IsMatch(fieldName, "^[A-Za-z_][A-Za-z0-9_]*$")) throw new ArgumentException("fieldName 包含非法字符");
+
+            var results = new List<TField?>();
+            using var connection = new SqliteConnection(_connectionString);
+            connection.Open();
+
+            if (!DoesTableHaveColumn(childTableName, fieldName))
+                throw new ArgumentException($"字段 {fieldName} 不存在于子表 {childTableName} 中");
+
+            var sql = $"SELECT [{fieldName}] FROM [{childTableName}] WHERE [ParentId] = @parentId";
+            using var cmd = new SqliteCommand(sql, connection);
+            cmd.Parameters.AddWithValue("@parentId", parentId);
+
+            using var reader = cmd.ExecuteReader();
+            while (reader.Read())
+            {
+                var v = reader[0];
+                results.Add(v == DBNull.Value ? default : (TField?)ConvertValue(v, typeof(TField)));
+            }
+
+            return results;
+        }
+
+        /// <summary>
+        /// 异步读取子表中某父记录的指定字段的所有值（按 ParentId）
+        /// </summary>
+        public async Task<List<TField?>> GetChildFieldValuesAsync<TField>(string childTableName, int parentId, string fieldName, CancellationToken cancellationToken = default)
+        {
+            if (string.IsNullOrWhiteSpace(childTableName)) throw new ArgumentNullException(nameof(childTableName));
+            if (string.IsNullOrWhiteSpace(fieldName)) throw new ArgumentNullException(nameof(fieldName));
+            if (!System.Text.RegularExpressions.Regex.IsMatch(childTableName, "^[A-Za-z_][A-Za-z0-9_]*$")) throw new ArgumentException("childTableName 包含非法字符");
+            if (!System.Text.RegularExpressions.Regex.IsMatch(fieldName, "^[A-Za-z_][A-Za-z0-9_]*$")) throw new ArgumentException("fieldName 包含非法字符");
+
+            var results = new List<TField?>();
+            await using var connection = new SqliteConnection(_connectionString);
+            await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+
+            if (!await DoesTableHaveColumnAsync(childTableName, fieldName, cancellationToken).ConfigureAwait(false))
+                throw new ArgumentException($"字段 {fieldName} 不存在于子表 {childTableName} 中");
+
+            var sql = $"SELECT [{fieldName}] FROM [{childTableName}] WHERE [ParentId] = @parentId";
+            await using var cmd = new SqliteCommand(sql, connection);
+            cmd.Parameters.AddWithValue("@parentId", parentId);
+
+            await using var reader = await cmd.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+            while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+            {
+                var v = reader[0];
+                results.Add(v == DBNull.Value ? default : (TField?)ConvertValue(v, typeof(TField)));
+            }
+
+            return results;
+        }
+
+        /// <summary>
+        /// 同步按 ParentId 更新子表的单个字段（返回受影响行数）
+        /// </summary>
+        public int UpdateChildFieldByParentId(string childTableName, int parentId, string fieldName, object? value)
+        {
+            if (string.IsNullOrWhiteSpace(childTableName)) throw new ArgumentNullException(nameof(childTableName));
+            if (string.IsNullOrWhiteSpace(fieldName)) throw new ArgumentNullException(nameof(fieldName));
+            if (!System.Text.RegularExpressions.Regex.IsMatch(childTableName, "^[A-Za-z_][A-Za-z0-9_]*$")) throw new ArgumentException("childTableName 包含非法字符");
+            if (!System.Text.RegularExpressions.Regex.IsMatch(fieldName, "^[A-Za-z_][A-Za-z0-9_]*$")) throw new ArgumentException("fieldName 包含非法字符");
+
+            using var connection = new SqliteConnection(_connectionString);
+            connection.Open();
+
+            if (!DoesTableHaveColumn(childTableName, fieldName))
+                throw new ArgumentException($"字段 {fieldName} 不存在于子表 {childTableName} 中");
+
+            var sql = $"UPDATE [{childTableName}] SET [{fieldName}] = @val WHERE [ParentId] = @parentId";
+            using var cmd = new SqliteCommand(sql, connection);
+            cmd.Parameters.AddWithValue("@val", value ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@parentId", parentId);
+            return cmd.ExecuteNonQuery();
+        }
+
+        /// <summary>
+        /// 异步按 ParentId 更新子表的单个字段（返回受影响行数）
+        /// </summary>
+        public async Task<int> UpdateChildFieldByParentIdAsync(string childTableName, int parentId, string fieldName, object? value, CancellationToken cancellationToken = default)
+        {
+            if (string.IsNullOrWhiteSpace(childTableName)) throw new ArgumentNullException(nameof(childTableName));
+            if (string.IsNullOrWhiteSpace(fieldName)) throw new ArgumentNullException(nameof(fieldName));
+            if (!System.Text.RegularExpressions.Regex.IsMatch(childTableName, "^[A-Za-z_][A-Za-z0-9_]*$")) throw new ArgumentException("childTableName 包含非法字符");
+            if (!System.Text.RegularExpressions.Regex.IsMatch(fieldName, "^[A-Za-z_][A-Za-z0-9_]*$")) throw new ArgumentException("fieldName 包含非法字符");
+
+            await using var connection = new SqliteConnection(_connectionString);
+            await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+
+            if (!await DoesTableHaveColumnAsync(childTableName, fieldName, cancellationToken).ConfigureAwait(false))
+                throw new ArgumentException($"字段 {fieldName} 不存在于子表 {childTableName} 中");
+
+            var sql = $"UPDATE [{childTableName}] SET [{fieldName}] = @val WHERE [ParentId] = @parentId";
+            await using var cmd = new SqliteCommand(sql, connection);
+            cmd.Parameters.AddWithValue("@val", value ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@parentId", parentId);
+            return await cmd.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// 同步按 ChildId 更新子表的单个字段（返回是否更新成功）
+        /// </summary>
+        public bool UpdateChildFieldByChildId(string childTableName, int childId, string fieldName, object? value)
+        {
+            if (string.IsNullOrWhiteSpace(childTableName)) throw new ArgumentNullException(nameof(childTableName));
+            if (string.IsNullOrWhiteSpace(fieldName)) throw new ArgumentNullException(nameof(fieldName));
+            if (!System.Text.RegularExpressions.Regex.IsMatch(childTableName, "^[A-Za-z_][A-Za-z0-9_]*$")) throw new ArgumentException("childTableName 包含非法字符");
+            if (!System.Text.RegularExpressions.Regex.IsMatch(fieldName, "^[A-Za-z_][A-Za-z0-9_]*$")) throw new ArgumentException("fieldName 包含非法字符");
+
+            using var connection = new SqliteConnection(_connectionString);
+            connection.Open();
+
+            if (!DoesTableHaveColumn(childTableName, fieldName))
+                throw new ArgumentException($"字段 {fieldName} 不存在于子表 {childTableName} 中");
+
+            var sql = $"UPDATE [{childTableName}] SET [{fieldName}] = @val WHERE [Id] = @childId";
+            using var cmd = new SqliteCommand(sql, connection);
+            cmd.Parameters.AddWithValue("@val", value ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@childId", childId);
+            return cmd.ExecuteNonQuery() > 0;
+        }
+
+        /// <summary>
+        /// 异步按 ChildId 更新子表的单个字段（返回是否更新成功）
+        /// </summary>
+        public async Task<bool> UpdateChildFieldByChildIdAsync(string childTableName, int childId, string fieldName, object? value, CancellationToken cancellationToken = default)
+        {
+            if (string.IsNullOrWhiteSpace(childTableName)) throw new ArgumentNullException(nameof(childTableName));
+            if (string.IsNullOrWhiteSpace(fieldName)) throw new ArgumentNullException(nameof(fieldName));
+            if (!System.Text.RegularExpressions.Regex.IsMatch(childTableName, "^[A-Za-z_][A-Za-z0-9_]*$")) throw new ArgumentException("childTableName 包含非法字符");
+            if (!System.Text.RegularExpressions.Regex.IsMatch(fieldName, "^[A-Za-z_][A-Za-z0-9_]*$")) throw new ArgumentException("fieldName 包含非法字符");
+
+            await using var connection = new SqliteConnection(_connectionString);
+            await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+
+            if (!await DoesTableHaveColumnAsync(childTableName, fieldName, cancellationToken).ConfigureAwait(false))
+                throw new ArgumentException($"字段 {fieldName} 不存在于子表 {childTableName} 中");
+
+            var sql = $"UPDATE [{childTableName}] SET [{fieldName}] = @val WHERE [Id] = @childId";
+            await using var cmd = new SqliteCommand(sql, connection);
+            cmd.Parameters.AddWithValue("@val", value ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@childId", childId);
+            return await cmd.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false) > 0;
+        }
+
+        /// <summary>
+        /// 同步按任意子表字段条件更新子表的单个字段（返回受影响行数）
+        /// </summary>
+        public int UpdateChildFieldWhere(string childTableName, string conditionField, object? conditionValue, string fieldName, object? value)
+        {
+            if (string.IsNullOrWhiteSpace(childTableName)) throw new ArgumentNullException(nameof(childTableName));
+            if (string.IsNullOrWhiteSpace(conditionField)) throw new ArgumentNullException(nameof(conditionField));
+            if (string.IsNullOrWhiteSpace(fieldName)) throw new ArgumentNullException(nameof(fieldName));
+            if (!System.Text.RegularExpressions.Regex.IsMatch(childTableName, "^[A-Za-z_][A-Za-z0-9_]*$")) throw new ArgumentException("childTableName 包含非法字符");
+            if (!System.Text.RegularExpressions.Regex.IsMatch(conditionField, "^[A-Za-z_][A-Za-z0-9_]*$")) throw new ArgumentException("conditionField 包含非法字符");
+            if (!System.Text.RegularExpressions.Regex.IsMatch(fieldName, "^[A-Za-z_][A-Za-z0-9_]*$")) throw new ArgumentException("fieldName 包含非法字符");
+
+            using var connection = new SqliteConnection(_connectionString);
+            connection.Open();
+
+            if (!DoesTableHaveColumn(childTableName, fieldName))
+                throw new ArgumentException($"字段 {fieldName} 不存在于子表 {childTableName} 中");
+            if (!DoesTableHaveColumn(childTableName, conditionField))
+                throw new ArgumentException($"字段 {conditionField} 不存在于子表 {childTableName} 中");
+
+            var sql = $"UPDATE [{childTableName}] SET [{fieldName}] = @val WHERE [{conditionField}] = @cond";
+            using var cmd = new SqliteCommand(sql, connection);
+            cmd.Parameters.AddWithValue("@val", value ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@cond", conditionValue ?? DBNull.Value);
+            return cmd.ExecuteNonQuery();
+        }
+
+        /// <summary>
+        /// 异步按任意子表字段条件更新子表的单个字段（返回受影响行数）
+        /// </summary>
+        public async Task<int> UpdateChildFieldWhereAsync(string childTableName, string conditionField, object? conditionValue, string fieldName, object? value, CancellationToken cancellationToken = default)
+        {
+            if (string.IsNullOrWhiteSpace(childTableName)) throw new ArgumentNullException(nameof(childTableName));
+            if (string.IsNullOrWhiteSpace(conditionField)) throw new ArgumentNullException(nameof(conditionField));
+            if (string.IsNullOrWhiteSpace(fieldName)) throw new ArgumentNullException(nameof(fieldName));
+            if (!System.Text.RegularExpressions.Regex.IsMatch(childTableName, "^[A-Za-z_][A-Za-z0-9_]*$")) throw new ArgumentException("childTableName 包含非法字符");
+            if (!System.Text.RegularExpressions.Regex.IsMatch(conditionField, "^[A-Za-z_][A-Za-z0-9_]*$")) throw new ArgumentException("conditionField 包含非法字符");
+            if (!System.Text.RegularExpressions.Regex.IsMatch(fieldName, "^[A-Za-z_][A-Za-z0-9_]*$")) throw new ArgumentException("fieldName 包含非法字符");
+
+            await using var connection = new SqliteConnection(_connectionString);
+            await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+
+            if (!await DoesTableHaveColumnAsync(childTableName, fieldName, cancellationToken).ConfigureAwait(false))
+                throw new ArgumentException($"字段 {fieldName} 不存在于子表 {childTableName} 中");
+            if (!await DoesTableHaveColumnAsync(childTableName, conditionField, cancellationToken).ConfigureAwait(false))
+                throw new ArgumentException($"字段 {conditionField} 不存在于子表 {childTableName} 中");
+
+            var sql = $"UPDATE [{childTableName}] SET [{fieldName}] = @val WHERE [{conditionField}] = @cond";
+            await using var cmd = new SqliteCommand(sql, connection);
+            cmd.Parameters.AddWithValue("@val", value ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@cond", conditionValue ?? DBNull.Value);
+            return await cmd.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        #endregion
         #endregion
     }
 }

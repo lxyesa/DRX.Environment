@@ -1,4 +1,6 @@
-﻿using Drx.Sdk.Network.V2.Socket;
+﻿using Drx.Sdk.Network.DataBase.Sqlite;
+using Drx.Sdk.Network.DataBase.Sqlite.V2;
+using Drx.Sdk.Network.V2.Socket;
 using Drx.Sdk.Network.V2.Web;
 using Drx.Sdk.Network.V2.Web.Models;
 using Drx.Sdk.Shared;
@@ -6,6 +8,7 @@ using Drx.Sdk.Shared.Serialization;
 using Drx.Sdk.Shared.Utility;
 using KaxSocket;
 using KaxSocket.Handlers;
+using KaxSocket.Handlers.Command;
 using System;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
@@ -57,10 +60,19 @@ public class Program
             server.AddRoute(HttpMethod.Get, "/", req => new HtmlResultFromFile($"{AppDomain.CurrentDomain.BaseDirectory}Views/index.html"));
             server.AddRoute(HttpMethod.Get, "/login", req => new HtmlResultFromFile($"{AppDomain.CurrentDomain.BaseDirectory}Views/login.html"));
             server.AddRoute(HttpMethod.Get, "/register", req => new HtmlResultFromFile($"{AppDomain.CurrentDomain.BaseDirectory}Views/register.html"));
+            server.AddRoute(HttpMethod.Get, "/cdk/admin", req=> new HtmlResultFromFile($"{AppDomain.CurrentDomain.BaseDirectory}Views/cdkadmin.html"));
+            server.AddRoute(HttpMethod.Get, "/asset/admin", req => new HtmlResultFromFile($"{AppDomain.CurrentDomain.BaseDirectory}Views/assetadmin.html"));
             server.RegisterHandlersFromAssembly(typeof(DLTBModPackerHttp));
             server.RegisterHandlersFromAssembly(typeof(KaxHttp));
+            server.RegisterCommandsFromType(typeof(KaxCommandHandler));
 
-            
+            server.DoTicker(1000 * 60, async (s) =>
+            {
+                await KaxGlobal.CleanUpAssets();
+                Logger.Info("已执行定时清理过期资源任务");
+            });
+
+            await SqliteV2Test.RunAllTests();
 
             Logger.Info("HttpServer 正在启动，监听地址: " + string.Join(", ", prefixes));
             await server.StartAsync();
@@ -69,8 +81,6 @@ public class Program
         {
 
             Logger.Error($"启动 HttpServer 时发生错误: {ex.Message}");
-            Console.WriteLine("启动 HttpServer失败: " + ex.Message);
-            Console.WriteLine("提示: HttpListener 不支持 '0.0.0.0' 前缀。若需监听所有接口，请使用 'http://+:<port>/' 并为该 URL 注册 ACL（需要管理员权限）。");
             throw;
         }
     }

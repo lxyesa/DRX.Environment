@@ -4,6 +4,8 @@ using System.Security.Claims;
 using Microsoft.IdentityModel.Tokens;
 using System.Collections.Generic;
 using System.Collections.Specialized;
+using System.Collections.Concurrent;
+using System.Linq;
 
 namespace Drx.Sdk.Network.V2.Web
 {
@@ -24,6 +26,8 @@ namespace Drx.Sdk.Network.V2.Web
         }
 
         private static JwtConfig _config = new();
+        // 被撤销的 token 列表：键 = jti, 值 = 到期时间（Unix 秒）
+        private static readonly ConcurrentDictionary<string, long> _revokedTokens = new();
 
         /// <summary>
         /// 设置全局 JWT 配置
@@ -43,10 +47,21 @@ namespace Drx.Sdk.Network.V2.Web
             var securityKey = new SymmetricSecurityKey(System.Text.Encoding.UTF8.GetBytes(_config.SecretKey));
             var credentials = new SigningCredentials(securityKey, SecurityAlgorithms.HmacSha256);
 
+            // 确保包含 jti（用于可撤销）和 iat
+            var claimsList = (claims ?? Array.Empty<Claim>()).ToList();
+            if (!claimsList.Any(c => c.Type == JwtRegisteredClaimNames.Jti))
+            {
+                claimsList.Add(new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()));
+            }
+            if (!claimsList.Any(c => c.Type == JwtRegisteredClaimNames.Iat))
+            {
+                claimsList.Add(new Claim(JwtRegisteredClaimNames.Iat, DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString()));
+            }
+
             var token = new JwtSecurityToken(
                 issuer: _config.Issuer,
                 audience: _config.Audience,
-                claims: claims,
+                claims: claimsList,
                 expires: DateTime.UtcNow.Add(_config.Expiration),
                 signingCredentials: credentials
             );
@@ -117,12 +132,75 @@ namespace Drx.Sdk.Network.V2.Web
                 };
 
                 tokenHandler.ValidateToken(token, validationParameters, out var validatedToken);
-                return new ClaimsPrincipal(new ClaimsIdentity(((JwtSecurityToken)validatedToken).Claims));
+                // 验证后检查是否被撤销（通过 jti）
+                if (validatedToken is JwtSecurityToken jwt)
+                {
+                    var jti = jwt.Id ?? jwt.Claims.FirstOrDefault(c => c.Type == JwtRegisteredClaimNames.Jti)?.Value;
+                    if (!string.IsNullOrEmpty(jti) && IsTokenRevoked(jti))
+                    {
+                        return null;
+                    }
+                    return new ClaimsPrincipal(new ClaimsIdentity(jwt.Claims));
+                }
+                return null;
             }
             catch
             {
                 return null;
             }
+        }
+
+        /// <summary>
+        /// 将给定的 JWT 字符串标记为撤销（可在后续验证时拒绝该 token）。
+        /// 方法会尝试解析 token，读取 jti 与 exp，若解析失败则忽略。
+        /// </summary>
+        public static void RevokeToken(string token)
+        {
+            if (string.IsNullOrEmpty(token)) return;
+            try
+            {
+                var handler = new JwtSecurityTokenHandler();
+                var jwt = handler.ReadJwtToken(token);
+                var jti = jwt.Id ?? jwt.Claims.FirstOrDefault(c => c.Type == JwtRegisteredClaimNames.Jti)?.Value;
+                long expiresAt = 0;
+                if (jwt.Payload.Expiration.HasValue)
+                {
+                    expiresAt = jwt.Payload.Expiration.Value;
+                }
+                else
+                {
+                    expiresAt = DateTimeOffset.UtcNow.Add(_config.Expiration).ToUnixTimeSeconds();
+                }
+
+                if (!string.IsNullOrEmpty(jti))
+                {
+                    _revokedTokens[jti] = expiresAt;
+                }
+            }
+            catch
+            {
+                // 忽略解析错误
+            }
+        }
+
+        /// <summary>
+        /// 检查指定 jti 的 token 是否已被撤销。
+        /// 如果记录已过期会自动清理并返回 false。
+        /// </summary>
+        public static bool IsTokenRevoked(string jti)
+        {
+            if (string.IsNullOrEmpty(jti)) return false;
+            if (_revokedTokens.TryGetValue(jti, out var expiresAt))
+            {
+                var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+                if (now >= expiresAt)
+                {
+                    _revokedTokens.TryRemove(jti, out _);
+                    return false;
+                }
+                return true;
+            }
+            return false;
         }
 
         /// <summary>

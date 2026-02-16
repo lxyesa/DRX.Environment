@@ -18,7 +18,7 @@ namespace Drx.Sdk.Network.Email
         /// <param name="senderAddress">发件人地址（可选，默认 xxx@qq.com）</param>
         /// <param name="authCode">发件人授权码（可选，默认 DRXEmail 的内置值）</param>
         /// <param name="subject">邮件主题（可选）</param>
-        public static bool SendEmail(this NetworkServer server, string to, string body, string senderAddress = "xxx@qq.com", string authCode = null, string subject = "DRX Notification")
+        public static bool SendEmail(this NetworkServer server, string to, string body, string senderAddress = "xxx@qq.com", string? authCode = null, string subject = "DRX Notification")
         {
             // 保守的参数校验
             if (string.IsNullOrWhiteSpace(to)) throw new ArgumentNullException(nameof(to));

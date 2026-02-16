@@ -390,7 +390,7 @@
                         if (token) {
                             try { localStorage.setItem('kax_login_token', token); } catch { }
                         }
-                        alert('登录成功');
+
                         window.location.href = '/';
                         return;
                     }
@@ -415,6 +415,8 @@
             });
         })();
     </script>
+    <script src="/global.js"></script>
+    <script>window.initGlobalFooter && window.initGlobalFooter();</script>
 </body>
 
 </html>

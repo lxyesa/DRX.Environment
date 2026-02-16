@@ -114,7 +114,13 @@ namespace Web.KaxServer.Services
 
         public Cdk? GetCdkByCode(string code)
         {
-            return CdkRepository.GetCdk(code);
+            // 先尝试从持久层查找
+            var stored = CdkRepository.GetCdk(code);
+            if (stored != null) return stored;
+
+            // 仅从持久化层查找；对于带后缀（token）的 CDK，解析/映射已迁移到 KaxSocket 的 /api/cdk/inspect 实现。
+            // 保持此方法只返回持久化的 Cdk 对象。
+            return null;
         }
 
         public Cdk? VerifyCdk(string code)
@@ -130,11 +136,13 @@ namespace Web.KaxServer.Services
         public Cdk? ActivateCdk(string code, UserSession userSession)
         {
             var cdk = GetCdkByCode(code);
-            
             if (cdk == null || cdk.IsUsed)
             {
                 return null;
             }
+
+            // 判断是否为已持久化的 CDK（token 型 CDK 通常不会在仓库中存在）
+            var persisted = CdkRepository.GetCdk(code) != null;
 
             switch (cdk.Type)
             {
@@ -166,8 +174,17 @@ namespace Web.KaxServer.Services
             cdk.IsUsed = true;
             cdk.UsedByUsername = userSession.Username;
             cdk.UsedDate = DateTime.UtcNow;
-            
-            CdkRepository.SaveCdk(cdk);
+
+            // 仅当 CDK 在仓库中存在时才保存（避免把短期 JWT token 写入持久化存储）
+            if (persisted)
+            {
+                CdkRepository.SaveCdk(cdk);
+            }
+            else
+            {
+                // 非持久化 CDK：记录日志（可选），返回临时对象
+                // logger 可在未来扩展以跟踪 token 激活历史
+            }
 
             return cdk;
         }

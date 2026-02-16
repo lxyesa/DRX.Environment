@@ -1,0 +1,218 @@
+/* KaxHub — 全局按钮样式（从 index.html / cdk.html 提取）
+   目的：将各页面中的按钮/图标型控件样式集中维护，避免样式重复。
+   仅包含“按钮类控件”的共享样式：
+   - .cta-button 用于首页行为按钮
+   - .btn / .btn.* 用于页面中的主要/ghost/danger 按钮
+   - .btn.icon / #...btn.btn.icon 用于图标型按钮
+   - .copy-icon / .info-btn / .panel-close 为小型交互按钮
+*/
+
+/* CTA（首页）按钮 */
+.cta-button {
+    display: inline-block;
+    padding: 12px 32px;
+    background: #ffffff;
+    color: #0f0f0f;
+    text-decoration: none;
+    border-radius: 4px;
+    font-weight: 600;
+    font-size: 1rem;
+    transition: all 0.15s ease;
+    border: 1px solid #ffffff;
+}
+.cta-button:hover { background: transparent; color: #ffffff; }
+.cta-button.kax-disabled { pointer-events: none; opacity: 0.6; cursor: default; }
+
+/* 通用主按钮（用于多处页面） */
+.btn {
+    display: inline-block;
+    padding: 12px 14px;
+    border-radius: 8px;
+    background: var(--white, #ffffff);
+    color: var(--bg, #0f0f0f);
+    font-weight: 700;
+    border: none;
+    cursor: pointer;
+    font-size: 1rem;
+    transition: background .12s ease, color .12s ease, transform .12s ease, box-shadow .12s ease;
+}
+.btn:hover { transform: translateY(-2px); box-shadow: none; }
+.btn:active { transform: translateY(0); }
+.btn:focus { outline: 2px solid rgba(59,130,246,0.18); outline-offset: 2px; box-shadow: none; }
+
+/* ghost（次要）按钮 */
+.btn.ghost {
+    background: transparent;
+    color: var(--muted-strong, rgba(255,255,255,0.9));
+    border: 1px solid rgba(255,255,255,0.08);
+    padding: 12px 14px;
+    border-radius: 8px;
+    transition: background .12s ease, color .12s ease, transform .12s ease, box-shadow .12s ease;
+}
+.btn.ghost:hover { background: rgba(255,255,255,0.03); color: var(--white); transform: translateY(-2px); box-shadow: none; }
+.btn.ghost:active { transform: translateY(0); }
+.btn.ghost:focus { outline: 2px solid rgba(59,130,246,0.12); outline-offset: 2px; box-shadow: none; }
+
+.btn.small {
+    padding: 8px 10px;
+    height: 36px;
+    font-size: 0.9rem;
+    border-radius: 8px;
+}
+
+/* 下拉框（select）——主题化样式，适用于 .btn / .filters select */
+select,
+select.btn,
+select.btn.ghost,
+.filters select,
+.select-themed {
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+    background-color: rgba(255,255,255,0.01);
+    color: var(--white);
+    border: 1px solid rgba(255,255,255,0.06);
+    padding: 8px 36px 8px 10px; /* 预留箭头空间 */
+    border-radius: 8px;
+    font-family: 'Poppins', sans-serif;
+    font-size: 0.95rem;
+    line-height: 1.2;
+    cursor: pointer;
+    min-width: 120px;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='none' stroke='%23FFFFFF' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' d='M1 1l5 5 5-5'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+    background-size: 12px 8px;
+    transition: box-shadow .12s ease, border-color .12s ease, background-color .12s ease;
+}
+
+select:focus,
+select.btn:focus,
+.filters select:focus {
+    outline: none;
+    border-color: rgba(59,130,246,0.95);
+    box-shadow: 0 0 0 6px rgba(59,130,246,0.06);
+}
+
+select.small,
+select.btn.small {
+    height: 36px;
+    padding: 6px 34px 6px 8px;
+    font-size: 0.9rem;
+}
+
+select[disabled],
+.btn[disabled] {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+/* 移除某些引擎的原生箭头 */
+select::-ms-expand { display: none; }
+
+/* 下拉项（受限但支持颜色/背景） */
+option {
+    background: linear-gradient(180deg, rgba(20,20,20,1), rgba(12,12,12,1));
+    color: var(--white);
+    padding: 6px 8px;
+}
+
+/* 自定义下拉（完全可定制的替代 native select） */
+.custom-dropdown { position: relative; display: inline-block; min-width: 140px; }
+.custom-dropdown.disabled { opacity: 0.6; pointer-events: none; }
+.custom-dropdown__trigger {
+    display: flex; align-items: center; gap: 8px;
+    justify-content: space-between;
+    background: rgba(255,255,255,0.01);
+    border: 1px solid rgba(255,255,255,0.06);
+    color: var(--white);
+    padding: 8px 12px;
+    border-radius: 8px;
+    cursor: pointer;
+    min-height: 36px;
+    font-family: 'Poppins', sans-serif;
+    font-size: 0.95rem;
+}
+.custom-dropdown__trigger:focus { outline: none; box-shadow: 0 0 0 6px rgba(59,130,246,0.06); border-color: rgba(59,130,246,0.95); }
+.custom-dropdown__value { flex: 1; text-align: left; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--muted-strong); }
+.custom-dropdown__caret { color: rgba(255,255,255,0.78); font-size: 1.1rem; margin-left: 8px; }
+.custom-dropdown__list {
+    position: absolute; right: 0; top: calc(100% + 8px);
+    background: rgba(20,20,20,1);
+    border: 1px solid rgba(255,255,255,0.04);
+    border-radius: 8px;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.6);
+    padding: 6px;
+    min-width: 200px;
+    max-height: 240px;
+    overflow: auto;
+    z-index: 120;
+    display: none;
+}
+.custom-dropdown.open .custom-dropdown__list { display: block; }
+.custom-dropdown.open .custom-dropdown__trigger { box-shadow: 0 6px 20px rgba(59,130,246,0.06); }
+.custom-dropdown__item {
+    padding: 8px 10px;
+    color: var(--muted-strong);
+    cursor: pointer;
+    border-radius: 6px;
+    transition: background .12s ease, color .12s ease;
+}
+.custom-dropdown__item:hover { background: rgba(59,130,246,0.06); color: var(--white); }
+.custom-dropdown__item[aria-selected="true"] { background: rgba(59,130,246,0.08); color: var(--white); font-weight: 700; }
+.custom-dropdown__item.disabled { opacity: 0.6; cursor: not-allowed; }
+.custom-dropdown__item.focused { outline: 1px solid rgba(59,130,246,0.12); box-shadow: inset 0 0 0 1px rgba(59,130,246,0.04); }
+.custom-dropdown .sr-only-select { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; clip: rect(1px,1px,1px,1px); white-space: nowrap; border: 0; padding: 0; margin: 0; }
+@media (max-width: 520px) { .custom-dropdown__list { left: 0; right: auto; width: calc(100vw - 32px); min-width: unset; } }
+
+/* 危险型按钮（删除/不可逆操作） */
+.btn.danger {
+    background: #ef4444; /* red-500 */
+    color: #fff;
+    border: 1px solid rgba(0,0,0,0.12);
+    transition: background .14s ease, transform .12s ease, border-color .12s ease;
+}
+.btn.danger:hover { background: #e03131; transform: translateY(-1px) scale(1.01); box-shadow: none; }
+.btn.danger:focus { outline: 2px solid rgba(239,68,68,0.16); outline-offset: 2px; }
+.btn.danger:active { transform: scale(0.98); }
+#deleteCdkBtn[disabled] { opacity: 0.75; transform: none; pointer-events: none; }
+
+/* 图标型按钮（示例：删除、详情） */
+.btn.icon { padding: 0; width: 36px; height: 36px; min-width: 36px; display: inline-flex; align-items: center; justify-content: center; border-radius: 8px; }
+#deleteCdkBtn.btn.icon { padding: 0; width: 36px; height: 36px; min-width: 36px; display: inline-flex; align-items: center; justify-content: center; border-radius: 8px; }
+
+/* 复制按钮（独立交互目标，含成功态反馈） */
+.copy-icon {
+    width: 34px;
+    height: 34px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: rgba(255,255,255,0.6);
+    border-radius: 8px;
+    transition: color .18s cubic-bezier(.2,.9,.2,1), background .18s ease, transform .18s ease;
+    background: rgba(255,255,255,0.01);
+    border: 1px solid rgba(255,255,255,0.03);
+    cursor: pointer;
+    padding: 4px;
+}
+.copy-icon:focus { outline: 2px solid rgba(59,130,246,0.12); outline-offset: 2px; box-shadow: none; }
+.copy-icon:hover { color: var(--accent, #3b82f6); background: rgba(59,130,246,0.04); transform: translateY(-1px); }
+.copy-icon.copied { transform: scale(0.78); color: #16a34a; background: rgba(22,163,74,0.06); border-color: rgba(22,163,74,0.12); }
+.copy-icon svg { transition: transform .24s ease, opacity .2s ease; display: block; }
+.copy-icon.copied svg { transform: scale(0.85); opacity: 1; }
+.copy-icon:hover { color: var(--accent, #3b82f6); background: rgba(59,130,246,0.06); transform: translateY(-2px) scale(1.03); box-shadow: none; }
+.copy-icon:active { transform: scale(0.95); box-shadow: none; }
+
+/* 详情 / 信息 按钮 */
+.info-btn { width: 34px; height: 34px; display: inline-flex; align-items: center; justify-content: center; color: rgba(255,255,255,0.62); border-radius: 8px; background: rgba(255,255,255,0.01); border: 1px solid rgba(255,255,255,0.03); cursor: pointer; transition: color .14s ease, background .14s ease, transform .14s ease, box-shadow .12s ease; }
+.info-btn:hover { color: var(--muted-strong, rgba(255,255,255,0.9)); background: rgba(255,255,255,0.02); transform: translateY(-2px); box-shadow: none; }
+.info-btn:active { transform: scale(0.97); }
+
+/* 面板顶部小型关闭按钮（复用其他按钮视觉） */
+.panel-close { width: 36px; height: 36px; padding: 6px; border-radius: 8px; background: transparent; color: var(--muted-strong, rgba(255,255,255,0.8)); border: 1px solid rgba(255,255,255,0.03); display: inline-flex; align-items: center; justify-content: center; cursor: pointer; transition: background .12s ease, transform .18s cubic-bezier(.2,.9,.2,1), color .12s ease; }
+.panel-close:hover { background: rgba(255,255,255,0.03); color: var(--white); transform: translateY(-1px) scale(1.02); box-shadow: none; }
+.panel-close:focus { outline: 2px solid rgba(59,130,246,0.12); outline-offset: 2px; }
+.panel-close:active { transform: scale(0.98); }
+.panel-close svg { transition: transform .18s ease, opacity .12s ease; }
+.panel-close:hover svg { transform: rotate(-12deg) scale(1.02); }
