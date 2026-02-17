@@ -1,0 +1,99 @@
+<!-- 保持 partial 简洁：markup 与 `index.html` 使用的顶部结构一致，以便样式一致 -->
+<header class="topbar" role="banner" aria-hidden="false">
+    <div class="topbar-inner">
+        <a class="topbar-logo" href="/">KaxHub</a>
+
+        <div class="top-actions">
+            <div id="headerAuth" class="top-auth">
+                <a href="/register" class="cta-button small">注册</a>
+                <a href="/login" class="cta-button small">登录</a>
+            </div>
+        </div>
+
+        <!-- 用户菜单（默认隐藏） -->
+        <div id="userMenu" class="user-menu" role="menu" aria-hidden="true">
+            <div class="user-menu-card" role="presentation">
+                <div class="user-menu-header">
+                    <img id="userMenuAvatar" class="menu-avatar" src="https://i.pravatar.cc/40?u=anon" alt="avatar">
+                    <div class="user-menu-info">
+                        <div id="userMenuName" class="user-menu-name">未登录</div>
+                        <div id="userMenuBio" class="user-menu-bio">欢迎</div>
+                    </div>
+                    <!-- 已移除关闭按钮，菜单通过点击头像或点击外部关闭 -->
+                </div>
+
+                <div class="user-menu-section">
+                    <a role="menuitem" tabindex="0" class="user-menu-item" href="/index"><span class="material-icons"
+                            aria-hidden="true">favorite</span> 赞助商</a>
+                </div>
+
+                <div class="separator"></div>
+
+                <div class="user-menu-section">
+                    <a role="menuitem" tabindex="0" class="user-menu-item" href="/profile"><span class="material-icons"
+                            aria-hidden="true">person</span> 简介</a>
+                    <a role="menuitem" tabindex="0" id="signOutBtn" class="user-menu-item" href="#"><span
+                            class="material-icons" aria-hidden="true">logout</span> 注销</a>
+                </div>
+            </div>
+        </div>
+
+        <nav class="topnav" role="navigation" aria-label="主导航">
+            <a href="/explore" class="btn ghost icon" aria-label="浏览"><span class="material-icons" aria-hidden="true"
+                    style="font-size:18px;">explore</span></a>
+            <a href="/asset" class="btn ghost icon" aria-label="资源"><span class="material-icons" aria-hidden="true"
+                    style="font-size:18px;">folder</span></a>
+            <!-- 保留 href 以便可在新标签打开；JS 会阻止普通点击并展示下拉 -->
+            <a id="cdkBtn" href="/cdk" class="btn ghost icon" aria-label="CDK" aria-expanded="false" data-dropdown="cdkPanel"><span class="material-icons" aria-hidden="true"
+                    style="font-size:18px;">redeem</span></a>
+        </nav>
+
+        <!-- CDK 下拉面板（样式嵌入本文件，遵循指示） -->
+        <style>
+        /* 嵌入：只用于 topbar 的 CDK 面板 */
+        .cdk-panel {
+            position: fixed;
+            min-width: 260px;
+            width: 320px;
+            max-width: calc(100vw - 32px);
+            background: rgba(22,22,22,0.98);
+            border: 0.8px solid rgba(255,255,255,0.06);
+            border-radius: 10px;
+            box-shadow: 0 12px 40px rgba(0,0,0,0.45);
+            padding: 12px;
+            z-index: 1500;
+            transform-origin: top left;
+            transform: translateY(-6px) scale(0.99);
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity .18s ease, transform .18s cubic-bezier(.2,.9,.2,1);
+        }
+        .cdk-panel.open { transform: translateY(0) scale(1); opacity: 1; pointer-events: auto; }
+        .cdk-panel .card { background: transparent; border: none; padding: 0; }
+        .cdk-panel .card-body { padding: 6px 0; }
+        .cdk-panel .card-actions { padding-top: 8px; }
+        .cdk-panel .field { margin: 0; }
+        .cdk-panel .label { font-size:0.85rem; color:rgba(255,255,255,0.72); margin-bottom:4px; }
+        .cdk-panel .label-divider { height:1px; background:rgba(255,255,255,0.03); margin:6px 0 8px; border-radius:1px; }
+        .cdk-panel input { width:100%; box-sizing:border-box; border:none; background:transparent; color:var(--muted-strong, rgba(255,255,255,0.92)); font-size:0.95rem; padding:8px 0; outline:none; }
+        .cdk-panel .btn.block { display:block; width:100%; }
+        @media (max-width:520px) { .cdk-panel { width: calc(100vw - 24px); left: 12px !important; right:12px !important; } }
+        </style>
+
+        <div id="cdkPanel" class="cdk-panel" role="dialog" aria-hidden="true" aria-label="激活 CDK">
+            <div class="card">
+                <div class="card-body">
+                    <!-- 内嵌 inputbox.html（适配卡片宽度） -->
+                    <div class="field">
+                      <label class="label">CDK</label>
+                      <div class="label-divider" aria-hidden="true"></div>
+                      <input id="cdkInput" title="CDK" placeholder="请输入 CDK 码" />
+                    </div>
+                </div>
+                <div class="card-actions">
+                    <button id="activateCdkBtn" class="btn block">激活CDK</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</header>

@@ -6,6 +6,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>KaxHub - 注册</title>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <link href="/global.css" rel="stylesheet">
     <style>
         /* 与 login.html 保持一致的主题变量与样式 */
         :root {
@@ -36,6 +38,7 @@
             color: var(--white);
             -webkit-font-smoothing: antialiased;
             display: flex;
+            flex-direction: column;
             align-items: center;
             justify-content: center;
             padding: 32px;
@@ -267,7 +270,7 @@
     </style>
 </head>
 
-<body>
+<body class="has-global-topbar">
     <div class="card" role="main" aria-labelledby="registerTitle">
         <div class="brand">
             <div>
@@ -403,7 +406,7 @@
             backBtn.addEventListener('click', function () { window.location.href = 'login' });
         })();
     </script>
-    <script src="/global.js"></script>
+    <script src="/global.js" defer></script>
     <script>window.initGlobalFooter && window.initGlobalFooter();</script>
 </body>
 

@@ -117,7 +117,7 @@ public class SqliteV2Test
     public static void TestBatchInsertPerformance(int recordCount = 10000)
     {
         Console.WriteLine("\n=== 批量插入性能测试 ===");
-        var db = new Sqlite<TestUser>("./test_v2.db", "./test_db");
+        var db = new SqliteV2<TestUser>("./test_v2.db", "./test_db");
 
         var users = Enumerable.Range(1, recordCount)
             .Select(i => new TestUser
@@ -142,7 +142,7 @@ public class SqliteV2Test
     public static void TestSingleInsertPerformance(int recordCount = 1000)
     {
         Console.WriteLine("\n=== 单条插入性能测试 ===");
-        var db = new Sqlite<TestUser>("./test_v2_single.db", "./test_db");
+        var db = new SqliteV2<TestUser>("./test_v2_single.db", "./test_db");
 
         var sw = Stopwatch.StartNew();
         for (int i = 1; i <= recordCount; i++)
@@ -166,7 +166,7 @@ public class SqliteV2Test
     public static void TestSelectAllPerformance(int recordCount = 10000)
     {
         Console.WriteLine("\n=== 查询所有性能测试 ===");
-        var db = new Sqlite<TestUser>("./test_v2_select.db", "./test_db");
+        var db = new SqliteV2<TestUser>("./test_v2_select.db", "./test_db");
 
         // 预加载数据
         var users = Enumerable.Range(1, recordCount)
@@ -187,7 +187,7 @@ public class SqliteV2Test
     public static void TestSelectByIdPerformance(int recordCount = 1000, int queryCount = 1000)
     {
         Console.WriteLine("\n=== 按 ID 查询性能测试 ===");
-        var db = new Sqlite<TestUser>("./test_v2_byid.db", "./test_db");
+        var db = new SqliteV2<TestUser>("./test_v2_byid.db", "./test_db");
 
         // 预加载数据
         var users = Enumerable.Range(1, recordCount)
@@ -212,7 +212,7 @@ public class SqliteV2Test
     public static void TestSelectWherePerformance(int recordCount = 10000)
     {
         Console.WriteLine("\n=== 条件查询性能测试 ===");
-        var db = new Sqlite<TestUser>("./test_v2_where.db", "./test_db");
+        var db = new SqliteV2<TestUser>("./test_v2_where.db", "./test_db");
 
         // 预加载数据
         var users = Enumerable.Range(1, recordCount)
@@ -233,7 +233,7 @@ public class SqliteV2Test
     public static void TestUpdatePerformance(int recordCount = 1000)
     {
         Console.WriteLine("\n=== 更新性能测试 ===");
-        var db = new Sqlite<TestUser>("./test_v2_update.db", "./test_db");
+        var db = new SqliteV2<TestUser>("./test_v2_update.db", "./test_db");
 
         // 预加载数据
         var users = Enumerable.Range(1, recordCount)
@@ -261,7 +261,7 @@ public class SqliteV2Test
     public static void TestLambdaQueryPerformance(int recordCount = 5000)
     {
         Console.WriteLine("\n=== Lambda 查询性能测试 ===");
-        var db = new Sqlite<TestUser>("./test_v2_lambda.db", "./test_db");
+        var db = new SqliteV2<TestUser>("./test_v2_lambda.db", "./test_db");
 
         // 预加载数据
         var users = Enumerable.Range(1, recordCount)
@@ -286,7 +286,7 @@ public class SqliteV2Test
     public static async Task TestBatchInsertAsyncPerformance(int recordCount = 10000, int batchSize = 1000)
     {
         Console.WriteLine("\n=== 异步批量插入性能测试 ===");
-        var db = new Sqlite<TestUser>("./test_v2_async.db", "./test_db");
+        var db = new SqliteV2<TestUser>("./test_v2_async.db", "./test_db");
 
         var users = Enumerable.Range(1, recordCount)
             .Select(i => new TestUser
@@ -311,7 +311,7 @@ public class SqliteV2Test
     public static async Task TestSelectAllAsyncPerformance(int recordCount = 10000)
     {
         Console.WriteLine("\n=== 异步查询所有性能测试 ===");
-        var db = new Sqlite<TestUser>("./test_v2_selectasync.db", "./test_db");
+        var db = new SqliteV2<TestUser>("./test_v2_selectasync.db", "./test_db");
 
         // 预加载数据
         var users = Enumerable.Range(1, recordCount)
@@ -332,7 +332,7 @@ public class SqliteV2Test
     public static async Task TestSelectAllStreamAsyncPerformance(int recordCount = 50000)
     {
         Console.WriteLine("\n=== 异步流式查询性能测试（大数据集）===");
-        var db = new Sqlite<TestUser>("./test_v2_stream.db", "./test_db");
+        var db = new SqliteV2<TestUser>("./test_v2_stream.db", "./test_db");
 
         // 预加载数据
         var users = Enumerable.Range(1, recordCount)
@@ -361,7 +361,7 @@ public class SqliteV2Test
     public static void TestChildTableInsertPerformance(int userCount = 100, int ordersPerUser = 50)
     {
         Console.WriteLine("\n=== 子表插入性能测试 ===");
-        var db = new Sqlite<TestUserWithOrders>("./test_v2_child.db", "./test_db");
+        var db = new SqliteV2<TestUserWithOrders>("./test_v2_child.db", "./test_db");
 
         var users = Enumerable.Range(1, userCount)
             .Select(i => new TestUserWithOrders
@@ -396,7 +396,7 @@ public class SqliteV2Test
     public static void TestChildTableSelectPerformance(int userCount = 100)
     {
         Console.WriteLine("\n=== 子表查询性能测试 ===");
-        var db = new Sqlite<TestUserWithOrders>("./test_v2_child.db", "./test_db");
+        var db = new SqliteV2<TestUserWithOrders>("./test_v2_child.db", "./test_db");
 
         var sw = Stopwatch.StartNew();
         var allUsers = db.SelectAll();
@@ -416,7 +416,7 @@ public class SqliteV2Test
     public static void TestChildTableDataValidation()
     {
         Console.WriteLine("\n=== 子表数据验证 ===");
-        var db = new Sqlite<TestUserWithOrders>("./test_v2_child_validate.db", "./test_db");
+        var db = new SqliteV2<TestUserWithOrders>("./test_v2_child_validate.db", "./test_db");
 
         // 插入测试数据
         var testUser = new TestUserWithOrders
@@ -461,7 +461,7 @@ public class SqliteV2Test
     public static async Task TestSelectByIdAsyncPerformance(int recordCount = 1000, int queryCount = 1000)
     {
         Console.WriteLine("\n=== 异步按 ID 查询性能测试 ===");
-        var db = new Sqlite<TestUser>("./test_v2_byid_async.db", "./test_db");
+        var db = new SqliteV2<TestUser>("./test_v2_byid_async.db", "./test_db");
 
         // 预加载数据
         var users = Enumerable.Range(1, recordCount)
@@ -486,7 +486,7 @@ public class SqliteV2Test
     public static async Task TestUpdateAsyncPerformance(int recordCount = 1000)
     {
         Console.WriteLine("\n=== 异步单条更新性能测试 ===");
-        var db = new Sqlite<TestUser>("./test_v2_update_single_async.db", "./test_db");
+        var db = new SqliteV2<TestUser>("./test_v2_update_single_async.db", "./test_db");
 
         // 预加载数据
         var users = Enumerable.Range(1, recordCount)
@@ -514,7 +514,7 @@ public class SqliteV2Test
     public static async Task TestUpdateBatchAsyncPerformance(int recordCount = 1000)
     {
         Console.WriteLine("\n=== 异步批量更新性能测试 ===");
-        var db = new Sqlite<TestUser>("./test_v2_update_batch_async.db", "./test_db");
+        var db = new SqliteV2<TestUser>("./test_v2_update_batch_async.db", "./test_db");
 
         // 预加载数据
         var users = Enumerable.Range(1, recordCount)
@@ -544,7 +544,7 @@ public class SqliteV2Test
         Console.WriteLine("\n=== 性能对比：同步 vs 异步单查询 ===");
 
         // 同步查询
-        var dbSync = new Sqlite<TestUser>("./test_v2_select_sync.db", "./test_db");
+        var dbSync = new SqliteV2<TestUser>("./test_v2_select_sync.db", "./test_db");
         var usersSync = Enumerable.Range(1, recordCount)
             .Select(i => new TestUser { Name = $"User{i}", Email = $"user{i}@test.com", Age = 20 + (i % 50), IsActive = i % 2 == 0 })
             .ToList();
@@ -561,7 +561,7 @@ public class SqliteV2Test
         LogPerformance($"同步按 ID 查询 {queryCount} 次", syncTime, queryCount);
 
         // 异步查询
-        var dbAsync = new Sqlite<TestUser>("./test_v2_select_async.db", "./test_db");
+        var dbAsync = new SqliteV2<TestUser>("./test_v2_select_async.db", "./test_db");
         var usersAsync = Enumerable.Range(1, recordCount)
             .Select(i => new TestUser { Name = $"User{i}", Email = $"user{i}@test.com", Age = 20 + (i % 50), IsActive = i % 2 == 0 })
             .ToList();
@@ -590,7 +590,7 @@ public class SqliteV2Test
         Console.WriteLine("\n=== 性能对比：同步单更 vs 异步单更 vs 异步批更（高精度测量）===");
 
         // 方案 A：同步单条更新 - 5 次测试取平均值
-        var dbA = new Sqlite<TestUser>("./test_v2_update_sync_single.db", "./test_db");
+        var dbA = new SqliteV2<TestUser>("./test_v2_update_sync_single.db", "./test_db");
         var usersA = Enumerable.Range(1, recordCount)
             .Select(i => new TestUser { Name = $"UserA{i}", Email = $"userA{i}@test.com", Age = 25, IsActive = true })
             .ToList();
@@ -614,7 +614,7 @@ public class SqliteV2Test
         LogPerformance($"同步单条更新 {recordCount} 条记录（3次平均）", avgSyncTime, recordCount);
 
         // 方案 B：异步单条更新
-        var dbB = new Sqlite<TestUser>("./test_v2_update_async_single.db", "./test_db");
+        var dbB = new SqliteV2<TestUser>("./test_v2_update_async_single.db", "./test_db");
         var usersB = Enumerable.Range(1, recordCount)
             .Select(i => new TestUser { Name = $"UserB{i}", Email = $"userB{i}@test.com", Age = 25, IsActive = true })
             .ToList();
@@ -638,7 +638,7 @@ public class SqliteV2Test
         LogPerformance($"异步单条更新 {recordCount} 条记录（3次平均）", avgAsyncSingleTime, recordCount);
 
         // 方案 C：异步批量更新 - 使用高精度测量
-        var dbC = new Sqlite<TestUser>("./test_v2_update_async_batch.db", "./test_db");
+        var dbC = new SqliteV2<TestUser>("./test_v2_update_async_batch.db", "./test_db");
         var usersC = Enumerable.Range(1, recordCount)
             .Select(i => new TestUser { Name = $"UserC{i}", Email = $"userC{i}@test.com", Age = 25, IsActive = true })
             .ToList();
@@ -689,7 +689,7 @@ public class SqliteV2Test
     public static void TestUpdateBatchPerformance(int recordCount = 1000)
     {
         Console.WriteLine("\n=== 批量更新性能测试 ===");
-        var db = new Sqlite<TestUser>("./test_v2_update.db", "./test_db");
+        var db = new SqliteV2<TestUser>("./test_v2_update.db", "./test_db");
 
         // 预加载数据
         var users = Enumerable.Range(1, recordCount)
@@ -718,7 +718,7 @@ public class SqliteV2Test
     public static void TestDeleteBatchPerformance(int recordCount = 1000)
     {
         Console.WriteLine("\n=== 批量删除性能测试 ===");
-        var db = new Sqlite<TestUser>("./test_v2_delete.db", "./test_db");
+        var db = new SqliteV2<TestUser>("./test_v2_delete.db", "./test_db");
 
         // 预加载数据
         var users = Enumerable.Range(1, recordCount)
@@ -747,7 +747,7 @@ public class SqliteV2Test
         var recordPerDb = recordCount;
 
         // 方案 A：逐条更新
-        var dbA = new Sqlite<TestUser>("./test_v2_update_single_large.db", "./test_db");
+        var dbA = new SqliteV2<TestUser>("./test_v2_update_single_large.db", "./test_db");
         var usersA = Enumerable.Range(1, recordPerDb)
             .Select(i => new TestUser { Name = $"UserA{i}", Email = $"userA{i}@test.com", Age = 25, IsActive = true })
             .ToList();
@@ -769,7 +769,7 @@ public class SqliteV2Test
         Console.WriteLine($"  ✓ 逐条更新 {recordPerDb} 条: {singleTimeStr} | {singleThroughput:F0} ops/s");
 
         // 方案 B：批量更新
-        var dbB = new Sqlite<TestUser>("./test_v2_update_batch_large.db", "./test_db");
+        var dbB = new SqliteV2<TestUser>("./test_v2_update_batch_large.db", "./test_db");
         var usersB = Enumerable.Range(1, recordPerDb)
             .Select(i => new TestUser { Name = $"UserB{i}", Email = $"userB{i}@test.com", Age = 25, IsActive = true })
             .ToList();

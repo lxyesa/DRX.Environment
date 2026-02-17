@@ -11,6 +11,11 @@
     <link href="/global.css" rel="stylesheet">
     <script src="/global.js"></script>
     <style>
+        :root {
+            --topbar-height: 64px;
+            --topbar-border: rgba(255, 255, 255, 0.08);
+        }
+
         * {
             margin: 0;
             padding: 0;
@@ -26,7 +31,8 @@
         }
 
         .hero {
-            min-height: 100vh;
+            /* 把 hero 的高度减去头部高度，避免被 fixed header 覆盖 */
+            min-height: calc(100vh - var(--topbar-height));
             display: flex;
             align-items: center;
             justify-content: center;
@@ -110,7 +116,9 @@
             font-weight: 300;
         }
 
-        .hidden { display: none; }
+        .hidden {
+            display: none;
+        }
 
         @media (max-width: 768px) {
             .hero h1 {
@@ -124,11 +132,19 @@
             .features h2 {
                 font-size: 1.8rem;
             }
+
+            .topnav {
+                display: none;
+            }
+
+            :root {
+                --topbar-height: 56px;
+            }
         }
     </style>
 </head>
 
-<body>
+<body class="has-global-topbar">
     <section class="hero">
         <div class="hero-content">
             <h1>KaxHub <span style="font-size:0.6rem; opacity:0.7; margin-left:0px; font-weight:400;">开发中</span>
@@ -201,223 +217,6 @@
                 });
             });
         });
-    </script>
-    <script>
-        // 管理首页“加入测试/参与测试”按钮的行为：加载时验证 token，有效则显示“你已参加测试”并禁用按钮
-        (function () {
-            var btn = document.getElementById('joinBtn');
-            if (!btn) return;
-
-            /**
-             * 将禁用状态应用到 <a> 按钮（<a> 无 disabled 属性）
-             * @param {HTMLElement} el - 按钮元素
-             * @param {boolean} disabled - 是否禁用
-             */
-            function setBtnDisabled(el, disabled) {
-                if (disabled) {
-                    el.classList.add('kax-disabled');
-                    el.setAttribute('aria-disabled', 'true');
-                    el.setAttribute('tabindex', '-1');
-                } else {
-                    el.classList.remove('kax-disabled');
-                    el.setAttribute('aria-disabled', 'false');
-                    el.removeAttribute('tabindex');
-                }
-            }
-
-            /**
-             * 在页面加载时检查本地 token 是否存在且有效。
-             * 成功（HTTP 200）时将按钮置为：禁用 + 文本为“你已参加测试”。
-             * 仅在明确返回 200 时才视作有效，其它响应将保持按钮为可用状态或按现有逻辑处理。
-             */
-            async function checkTokenOnLoad() {
-                try {
-                    var token = localStorage.getItem('kax_login_token');
-                    if (!token) return; // 无 token，不做处理
-
-                    // 小心：在页面加载阶段尽量避免长时间阻塞，设置短超时
-                    var controller = new AbortController();
-                    var timeoutId = setTimeout(function () { controller.abort(); }, 6000);
-
-                    var resp = await fetch('/api/user/verify/account', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'Authorization': 'Bearer ' + token
-                        },
-                        signal: controller.signal
-                    });
-
-                    clearTimeout(timeoutId);
-
-                    // 非 2xx 的响应立即清理本地 token 并恢复按钮可用状态
-                    try {
-                        if (!(resp.status >= 200 && resp.status < 300)) {
-                            try { localStorage.removeItem('kax_login_token'); } catch (_) { }
-                            try { setBtnDisabled(btn, false); } catch (_) { }
-                        }
-                    } catch (_) { }
-
-                    if (resp.status === 200) {
-                        // token 有效 -> 根据需求将按钮置为灰色、不可点击，并修改文本
-                        try {
-                            setBtnDisabled(btn, true);
-                            btn.textContent = '你已参加测试';
-                            // 保证不再跳转到登录页
-                            btn.removeAttribute('href');
-
-                            // 解析返回的权限信息，若为管理员（Console/Root/Admin）则显示管理入口
-                            try {
-                                var j = await resp.json();
-                                if (j && j.isAdmin) {
-                                    var adminDiv = document.getElementById('adminLinks');
-                                    if (adminDiv) adminDiv.classList.remove('hidden');
-                                }
-                            } catch (_) { }
-                        } catch (_) { }
-                    } else if (resp.status === 401) {
-                        // token 过期或无效，清理本地存储，保留按钮可用以便用户登录
-                        try { localStorage.removeItem('kax_login_token'); } catch (_) { }
-                    } else {
-                        // 其它非 200 响应不强制清理 token（此处已做统一清理），保持原有行为（用户点击时会再次校验）
-                        console.warn('token 验证返回状态：', resp.status);
-                    }
-                } catch (err) {
-                    // 仅记录错误，不阻塞用户操作
-                    if (err.name === 'AbortError') {
-                        console.warn('token 验证超时，跳过自动禁用。');
-                    } else {
-                        console.error('加载时验证 token 发生错误：', err);
-                    }
-                }
-            }
-
-            // 在 DOM 完全可用后立即进行一次验证
-            if (document.readyState === 'complete' || document.readyState === 'interactive') {
-                checkTokenOnLoad();
-            } else {
-                document.addEventListener('DOMContentLoaded', checkTokenOnLoad);
-            }
-
-            // 保留原有点击处理逻辑（点击时会再次校验并根据返回处理），仅对已被前端标记为禁用的按钮做防护
-            btn.addEventListener('click', async function (e) {
-                var keepDisabled = false;
-                var originalText = btn.textContent;
-
-                try {
-                    if (btn.classList.contains('kax-disabled') || btn.getAttribute('aria-disabled') === 'true') {
-                        // 已被禁用：阻止一切行为
-                        e.preventDefault();
-                        return;
-                    }
-
-                    var token = localStorage.getItem('kax_login_token');
-                    if (!token) {
-                        // 无 token：保持默认跳转到登录页（a 标签的 href）
-                        return;
-                    }
-
-                    e.preventDefault();
-                    btn.textContent = '验证中...';
-                    setBtnDisabled(btn, true);
-
-                    var controller = new AbortController();
-                    var timeoutId = setTimeout(function () { controller.abort(); }, 8000);
-
-                    var resp = await fetch('/api/token/test', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'Authorization': 'Bearer ' + token
-                        },
-                        signal: controller.signal
-                    });
-                    clearTimeout(timeoutId);
-
-                    // 非 2xx 的响应立即清理本地 token 并恢复按钮可用状态
-                    try {
-                        if (!(resp.status >= 200 && resp.status < 300)) {
-                            try { localStorage.removeItem('kax_login_token'); } catch (_) { }
-                            try { setBtnDisabled(btn, false); } catch (_) { }
-                        }
-                    } catch (_) { }
-
-                    if (resp.status === 200) {
-                        // token 有效：将按钮置为已参加并滚动到功能区
-                        setBtnDisabled(btn, true);
-                        btn.textContent = '你已参加测试';
-                        btn.removeAttribute('href');
-                        var features = document.getElementById('features');
-                        if (features) features.scrollIntoView({ behavior: 'smooth' });
-                        return;
-                    }
-
-                    if (resp.status === 429) {
-                        // 速率限制：解析等待时间并短暂禁用按钮
-                        try {
-                            var retrySeconds = 60;
-                            var ra = resp.headers.get('Retry-After');
-                            if (ra) {
-                                var n = parseInt(ra, 10);
-                                if (!isNaN(n)) retrySeconds = n;
-                                else {
-                                    var t = Date.parse(ra);
-                                    if (!isNaN(t)) retrySeconds = Math.max(1, Math.ceil((t - Date.now()) / 1000));
-                                }
-                            }
-                            alert('操作过于频繁，请在 ' + retrySeconds + ' 秒后重试。');
-                            keepDisabled = true;
-                            setBtnDisabled(btn, true);
-                            var remaining = retrySeconds;
-                            btn.textContent = '请稍后重试 (' + remaining + 's)';
-                            var intervalId = setInterval(function () {
-                                remaining--;
-                                if (remaining <= 0) {
-                                    clearInterval(intervalId);
-                                    try { setBtnDisabled(btn, false); btn.textContent = originalText; } catch (_) { }
-                                    keepDisabled = false;
-                                } else {
-                                    try { btn.textContent = '请稍后重试 (' + remaining + 's)'; } catch (_) { }
-                                }
-                            }, 1000);
-                        } catch (err429) { console.error('处理 429 时出错：', err429); }
-                        return;
-                    }
-
-                    if (resp.status === 401) {
-                        localStorage.removeItem('kax_login_token');
-                        location.href = 'login';
-                        return;
-                    }
-
-                    if (resp.status === 403) {
-                        try { var j = await resp.json(); if (j && j.message) alert(j.message); }
-                        catch (_) { alert('您的账号无法访问此资源。'); }
-                        localStorage.removeItem('kax_login_token');
-                        location.href = 'login';
-                        return;
-                    }
-
-                    try { var txt = await resp.text(); if (txt) console.warn('token test 返回：', txt); }
-                    catch (_) { }
-                    localStorage.removeItem('kax_login_token');
-                    location.href = 'login';
-
-                } catch (err) {
-                    console.error('验证登录令牌时出错', err);
-                    try { localStorage.removeItem('kax_login_token'); } catch (_) { }
-                    alert('无法验证登录状态，请重新登录。');
-                    location.href = 'login';
-                } finally {
-                    try {
-                        if (!keepDisabled) {
-                            setBtnDisabled(btn, false);
-                            btn.textContent = originalText;
-                        }
-                    } catch (_) { }
-                }
-            });
-        })();
     </script>
 </body>
 

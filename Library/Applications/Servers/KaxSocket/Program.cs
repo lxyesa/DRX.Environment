@@ -1,5 +1,6 @@
 ﻿using Drx.Sdk.Network.DataBase.Sqlite;
 using Drx.Sdk.Network.DataBase.Sqlite.V2;
+using Drx.Sdk.Network.DataBase.Sqlite.V2.Tests;
 using Drx.Sdk.Network.V2.Socket;
 using Drx.Sdk.Network.V2.Web;
 using Drx.Sdk.Network.V2.Web.Models;
@@ -24,6 +25,7 @@ public class Program
     // 简单测试：启动 HttpServer 并注册处理方法
     public static async Task Main(string[] args)
     {
+        // await TableListPerformanceTest.RunAllTests();
         if (!GlobalUtility.IsAdministrator())
         {
             var err_NotAdmin = "权限不足，正在尝试以管理员权限重启...";
@@ -62,6 +64,7 @@ public class Program
             server.AddRoute(HttpMethod.Get, "/register", req => new HtmlResultFromFile($"{AppDomain.CurrentDomain.BaseDirectory}Views/register.html"));
             server.AddRoute(HttpMethod.Get, "/cdk/admin", req=> new HtmlResultFromFile($"{AppDomain.CurrentDomain.BaseDirectory}Views/cdkadmin.html"));
             server.AddRoute(HttpMethod.Get, "/asset/admin", req => new HtmlResultFromFile($"{AppDomain.CurrentDomain.BaseDirectory}Views/assetadmin.html"));
+            server.AddRoute(HttpMethod.Get, "/profile", req => new HtmlResultFromFile($"{AppDomain.CurrentDomain.BaseDirectory}Views/profile.html"));
             server.RegisterHandlersFromAssembly(typeof(DLTBModPackerHttp));
             server.RegisterHandlersFromAssembly(typeof(KaxHttp));
             server.RegisterCommandsFromType(typeof(KaxCommandHandler));
@@ -71,8 +74,6 @@ public class Program
                 await KaxGlobal.CleanUpAssets();
                 Logger.Info("已执行定时清理过期资源任务");
             });
-
-            await SqliteV2Test.RunAllTests();
 
             Logger.Info("HttpServer 正在启动，监听地址: " + string.Join(", ", prefixes));
             await server.StartAsync();

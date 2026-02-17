@@ -8,7 +8,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
     <link href="/global.css" rel="stylesheet">
-    <script src="/global.js"></script>
+    <script src="/global.js" defer></script>
     <style>
         /* 主题变量，与 cdk.html / index.html 保持一致 */
         :root {
@@ -484,16 +484,20 @@
             transition: transform .22s cubic-bezier(.2, .9, .2, 1), opacity .14s ease;
             box-shadow: none;
             color: #ffffff;
-            background: rgb(20 20 20);
+            background: rgba(255,255,255,0.02);
             border: 1px solid var(--card-border);
+            /* 不在打开状态时阻止指针事件，避免遮挡后方控件 */
+            pointer-events: none;
         }
 
         #assetDetailPanel.open {
             transform: translateX(0);
             opacity: 1;
+            /* 打开时允许交互 */
+            pointer-events: auto;
         }
 
-        @media (max-width: 900px) {
+        @media (max-width: 768px) {
             #assetDetailPanel {
                 right: 0;
                 left: 0;
@@ -619,7 +623,7 @@
     </style>
 </head>
 
-<body>
+<body class="has-global-topbar">
     <!-- 页面内容默认隐藏，直到完成登录验证 -->
     <div id="page" class="hidden">
         <div class="container">
@@ -632,7 +636,8 @@
                     </div>
                 </div>
                 <div class="controls">
-                    <button id="logoutBtn" class="btn ghost">登出</button>
+                    <button id="homeBtn" class="btn ghost">返回首页</button>
+                    <button id="logoutBtn" class="btn">登出</button>
                 </div>
             </header>
 
@@ -704,6 +709,58 @@
                         </form>
                     </div>
 
+                    <!-- 创建 CDK（快速） -->
+                    <div class="card">
+                        <div class="card-header">
+                            <h2 class="card-title">创建 CDK</h2>
+                        </div>
+                        <form id="createCdkForm">
+                            <label for="cdkAssetId">AssetId *</label>
+                            <input type="text" id="cdkAssetId" placeholder="使用右侧已选资源ID（或手动填写）" />
+
+                            <label for="cdkContributionValue" style="margin-top:12px;">贡献值（可选）</label>
+                            <input type="text" id="cdkContributionValue" placeholder="0" value="0" />
+
+                            <label for="cdkExpiresIn" style="margin-top:12px;">时效（可选，0表示永久）</label>
+                            <div style="display: flex; gap: 8px; align-items: center;">
+                                <input type="text" id="cdkExpiresInValue" placeholder="时间量" value="0" style="flex: 1;" />
+                                <select id="cdkExpiresInUnit" style="flex: 0 0 auto; width: 80px;">
+                                    <option value="0">永久</option>
+                                    <option value="3600">小时</option>
+                                    <option value="86400">天</option>
+                                    <option value="604800">周</option>
+                                    <option value="2592000">月</option>
+                                </select>
+                            </div>
+
+                            <label for="cdkPrefix" style="margin-top:12px;">前缀（可选）</label>
+                            <input type="text" id="cdkPrefix" placeholder="例如：CDK-" />
+
+                            <label for="cdkCount" style="margin-top:12px;">生成数量</label>
+                            <input type="text" id="cdkCount" placeholder="1 - 1000" value="10" />
+
+                            <label for="cdkLength" style="margin-top:12px;">代码长度</label>
+                            <input type="text" id="cdkLength" placeholder="4 - 256" value="8" />
+
+                            <label for="cdkDesc" style="margin-top:12px;">描述（可选）</label>
+                            <input type="text" id="cdkDesc" placeholder="为 CDK 添加描述" />
+
+                            <div style="display:flex;gap:8px;margin-top:12px;">
+                                <button type="submit" id="createCdkBtn" class="btn" style="flex:1;">生成并保存</button>
+                                <button type="button" id="createCdkPreviewBtn" class="btn ghost" style="flex:1;">生成预览</button>
+                            </div>
+
+                            <label style="margin-top:12px;">生成结果</label>
+                            <textarea id="createCdkResult" readonly style="min-height:80px;"></textarea>
+
+                            <div style="display:flex;gap:8px;margin-top:8px;">
+                                <button type="button" id="createCdkSaveBtn" class="btn" style="flex:1;">保存</button>
+                                <button type="button" id="createCdkDownloadBtn" class="btn ghost" style="flex:1;">下载</button>
+                            </div>
+                            <p class="hint" style="margin-top: 12px; margin-bottom: 0; text-align: center;">为选中资源快速创建 CDK</p>
+                        </form>
+                    </div>
+
                     <!-- 修改资源卡片 -->
                     <div class="card">
                         <div class="card-header">
@@ -760,6 +817,7 @@
             const page = document.getElementById('page');
             const loading = document.getElementById('loading');
             const logoutBtn = document.getElementById('logoutBtn');
+            const homeBtn = document.getElementById('homeBtn');
 
             const createAssetForm = document.getElementById('createAssetForm');
             const updateAssetForm = document.getElementById('updateAssetForm');
@@ -768,6 +826,15 @@
             const assetList = document.getElementById('assetList');
             const searchInput = document.getElementById('searchInput');
             const searchSpinner = document.getElementById('searchSpinner');
+
+            // 快速创建 CDK 元素
+            const createCdkForm = document.getElementById('createCdkForm');
+            const createCdkResult = document.getElementById('createCdkResult');
+            const createCdkBtn = document.getElementById('createCdkBtn');
+            const createCdkPreviewBtn = document.getElementById('createCdkPreviewBtn');
+            const createCdkSaveBtn = document.getElementById('createCdkSaveBtn');
+            const createCdkDownloadBtn = document.getElementById('createCdkDownloadBtn');
+            const cdkAssetIdInput = document.getElementById('cdkAssetId');
 
             let currentSearchController = null;
 
@@ -970,6 +1037,9 @@ const descriptionPreview = asset.description ? asset.description.substring(0, 10
                             });
                             item.classList.add('selected');
                             document.getElementById('updateAssetId').value = asset.id;
+                            // 同步到快速创建 CDK 表单（如果存在）
+                            var _cdkEl = document.getElementById('cdkAssetId');
+                            if (_cdkEl) _cdkEl.value = asset.id;
                         });
 
                         assetList.appendChild(item);
@@ -1182,6 +1252,140 @@ const descriptionPreview = asset.description ? asset.description.substring(0, 10
                 }
             });
 
+            // ========== 快速创建 CDK ==========
+            if (createCdkForm) {
+                createCdkForm.addEventListener('submit', async (e) => {
+                    e.preventDefault();
+                    var assetId = parseInt(document.getElementById('cdkAssetId').value, 10) || 0;
+                    var contributionValue = parseInt(document.getElementById('cdkContributionValue').value, 10) || 0;
+                    var expiresInValue = parseInt(document.getElementById('cdkExpiresInValue').value, 10) || 0;
+                    var expiresInUnit = parseInt(document.getElementById('cdkExpiresInUnit').value, 10) || 0;
+                    var expiresInSeconds = expiresInValue > 0 ? expiresInValue * expiresInUnit : 0;
+                    var prefix = document.getElementById('cdkPrefix').value.trim();
+                    var count = parseInt(document.getElementById('cdkCount').value, 10) || 1;
+                    var length = parseInt(document.getElementById('cdkLength').value, 10) || 8;
+                    var description = document.getElementById('cdkDesc').value.trim();
+
+                    if (assetId <= 0) { alert('请输入有效的 AssetId'); return; }
+                    count = Math.max(1, Math.min(1000, count));
+                    length = Math.max(4, Math.min(256, length));
+
+                    try {
+                        var btn = document.getElementById('createCdkBtn');
+                        var orig = btn.textContent;
+                        btn.disabled = true;
+                        btn.textContent = '生成并保存...';
+
+                        var token = localStorage.getItem('kax_login_token');
+                        var genResp = await fetch('/api/cdk/admin/generate', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+                            body: JSON.stringify({ prefix: prefix, count: count, length: length })
+                        });
+                        if (!genResp.ok) throw new Error('生成失败');
+                        var genData = await genResp.json();
+                        var codes = genData.codes || [];
+
+                        var saveResp = await fetch('/api/cdk/admin/save', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+                            body: JSON.stringify({ codes: codes, assetId: assetId, contributionValue: contributionValue, expiresInSeconds: expiresInSeconds, description: description })
+                        });
+
+                        if (saveResp.status === 200 || saveResp.status === 201) {
+                            alert('已生成并保存 ' + (codes.length) + ' 条 CDK');
+                            document.getElementById('createCdkResult').value = codes.join('\n');
+                            loadAssetList();
+                        } else {
+                            var err = await saveResp.json();
+                            throw new Error(err.message || '保存失败');
+                        }
+                    } catch (err) {
+                        alert('操作失败：' + (err.message || err));
+                    } finally {
+                        var btn = document.getElementById('createCdkBtn');
+                        if (btn) { btn.disabled = false; btn.textContent = '生成并保存'; }
+                    }
+                });
+
+                // 仅生成预览（不保存）
+                createCdkPreviewBtn && createCdkPreviewBtn.addEventListener('click', async function () {
+                    var prefix = document.getElementById('cdkPrefix').value.trim();
+                    var count = parseInt(document.getElementById('cdkCount').value, 10) || 1;
+                    var length = parseInt(document.getElementById('cdkLength').value, 10) || 8;
+                    count = Math.max(1, Math.min(1000, count));
+                    length = Math.max(4, Math.min(256, length));
+                    try {
+                        var token = localStorage.getItem('kax_login_token');
+                        var resp = await fetch('/api/cdk/admin/generate', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+                            body: JSON.stringify({ prefix: prefix, count: count, length: length })
+                        });
+                        if (!resp.ok) throw new Error('生成失败');
+                        var data = await resp.json();
+                        document.getElementById('createCdkResult').value = (data.codes || []).join('\n');
+                    } catch (err) {
+                        alert('生成失败：' + (err.message || err));
+                    }
+                });
+
+                // 单独保存（从结果区域）
+                createCdkSaveBtn && createCdkSaveBtn.addEventListener('click', async function () {
+                    var txt = document.getElementById('createCdkResult').value || '';
+                    if (!txt) { alert('无生成代码可保存'); return; }
+                    var codes = txt.split(/\r?\n/).filter(Boolean);
+                    var assetId = parseInt(document.getElementById('cdkAssetId').value, 10) || 0;
+                    var contributionValue = parseInt(document.getElementById('cdkContributionValue').value, 10) || 0;
+                    var expiresInValue = parseInt(document.getElementById('cdkExpiresInValue').value, 10) || 0;
+                    var expiresInUnit = parseInt(document.getElementById('cdkExpiresInUnit').value, 10) || 0;
+                    var expiresInSeconds = expiresInValue > 0 ? expiresInValue * expiresInUnit : 0;
+                    var description = document.getElementById('cdkDesc').value.trim();
+                    if (assetId <= 0) { alert('请填写有效的 AssetId'); return; }
+
+                    try {
+                        var btn = document.getElementById('createCdkSaveBtn');
+                        var orig = btn.textContent;
+                        btn.disabled = true;
+                        btn.textContent = '保存中...';
+
+                        var token = localStorage.getItem('kax_login_token');
+                        var resp = await fetch('/api/cdk/admin/save', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+                            body: JSON.stringify({ codes: codes, assetId: assetId, contributionValue: contributionValue, expiresInSeconds: expiresInSeconds, description: description })
+                        });
+                        var data = await resp.json();
+                        if (resp.status === 200 || resp.status === 201) {
+                            alert('已保存 ' + (data.count || codes.length) + ' 条 CDK');
+                            loadAssetList();
+                        } else {
+                            alert('保存失败: ' + (data.message || '未知错误'));
+                        }
+                    } catch (err) {
+                        alert('保存失败: ' + (err.message || err));
+                    } finally {
+                        var btn = document.getElementById('createCdkSaveBtn');
+                        if (btn) { btn.disabled = false; btn.textContent = '保存'; }
+                    }
+                });
+
+                // 下载结果
+                createCdkDownloadBtn && createCdkDownloadBtn.addEventListener('click', function () {
+                    var txt = document.getElementById('createCdkResult').value;
+                    if (!txt) { alert('无内容可下载'); return; }
+                    var blob = new Blob([txt], { type: 'text/plain' });
+                    var url = URL.createObjectURL(blob);
+                    var a = document.createElement('a');
+                    a.href = url;
+                    a.download = 'cdks_' + new Date().getTime() + '.txt';
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                });
+            }
+
             /**
              * 加载按钮
              */
@@ -1249,8 +1453,11 @@ const descriptionPreview = asset.description ? asset.description.substring(0, 10
             });
 
             /**
-             * 登出
+             * 导航 — 返回首页 / 登出
              */
+            if (homeBtn) {
+                homeBtn.addEventListener('click', () => { location.href = '/'; });
+            }
             logoutBtn.addEventListener('click', () => {
                 localStorage.removeItem('kax_login_token');
                 location.href = '/login';

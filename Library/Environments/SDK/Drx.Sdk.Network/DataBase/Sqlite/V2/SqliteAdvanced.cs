@@ -13,7 +13,7 @@ namespace Drx.Sdk.Network.DataBase.Sqlite.V2;
 /// </summary>
 public sealed class SqliteUnitOfWork<T> : IDisposable where T : class, IDataBase, new()
 {
-    private readonly Sqlite<T> _db;
+    private readonly SqliteV2<T> _db;
     private readonly SqliteConnection _connection;
     private SqliteTransaction? _transaction;
     private bool _disposed;
@@ -23,7 +23,7 @@ public sealed class SqliteUnitOfWork<T> : IDisposable where T : class, IDataBase
     private readonly List<T> _modifiedItems = new();
     private readonly List<T> _deletedItems = new();
 
-    public SqliteUnitOfWork(Sqlite<T> db)
+    public SqliteUnitOfWork(SqliteV2<T> db)
     {
         _db = db ?? throw new ArgumentNullException(nameof(db));
         _connection = new SqliteConnection(_db.ConnectionString);
@@ -156,12 +156,12 @@ public sealed class SqliteUnitOfWork<T> : IDisposable where T : class, IDataBase
 /// </summary>
 public sealed class SqliteRepository<T> where T : class, IDataBase, new()
 {
-    private readonly Sqlite<T> _db;
+    private readonly SqliteV2<T> _db;
     private readonly object _lockObj = new();
 
     public SqliteRepository(string databasePath, string? basePath = null)
     {
-        _db = new Sqlite<T>(databasePath, basePath);
+        _db = new SqliteV2<T>(databasePath, basePath);
     }
 
     #region 查询操作
@@ -271,12 +271,12 @@ public sealed class SqliteRepository<T> where T : class, IDataBase, new()
 /// </summary>
 public sealed class SqliteBatchProcessor<T> where T : class, IDataBase, new()
 {
-    private readonly Sqlite<T> _db;
+    private readonly SqliteV2<T> _db;
     private readonly int _batchSize;
     private readonly List<T> _buffer;
     private readonly object _lockObj = new();
 
-    public SqliteBatchProcessor(Sqlite<T> db, int batchSize = 1000)
+    public SqliteBatchProcessor(SqliteV2<T> db, int batchSize = 1000)
     {
         if (batchSize <= 0) throw new ArgumentException("批大小必须大于 0");
         _db = db ?? throw new ArgumentNullException(nameof(db));

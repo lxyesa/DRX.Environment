@@ -12,6 +12,8 @@ using System.Threading.Tasks;
 using Drx.Sdk.Network.V2.Web;
 using Drx.Sdk.Shared;
 using Drx.Sdk.Shared.Utility;
+using System.Drawing;
+using System.Drawing.Imaging;
 
 namespace KaxSocket.Handlers;
 
@@ -259,9 +261,9 @@ public class KaxHttp
             }, 401);
         }
 
-        var userName = principal.Identity?.Name;
+        var userName = principal.Identity?.Name ?? "unknown user";
 
-        var userModel = (await KaxGlobal.UserDatabase.SelectWhereAsync("UserName", userName)).FirstOrDefault();
+        var userModel = (await KaxGlobal.UserDatabase.SelectWhereAsync("UserName", userName ?? "null")).FirstOrDefault();
         if (userModel == null)
         {
             return new JsonResult(new
@@ -282,13 +284,362 @@ public class KaxHttp
         var permissionGroup = userModel.PermissionGroup;
         var isAdmin = permissionGroup == UserPermissionGroup.Console || permissionGroup == UserPermissionGroup.Root || permissionGroup == UserPermissionGroup.Admin;
 
+        // 如果服务器上存在已上传的头像文件，返回可访问的 avatarUrl（供前端直接使用）
+        string avatarUrl = string.Empty;
+        try
+        {
+            var avatarPath = KaxGlobal.GetUserAvatarPathById(userModel.Id);
+            if (!string.IsNullOrEmpty(avatarPath))
+            {
+                var stamp = userModel.LastLoginAt > 0 ? userModel.LastLoginAt : DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+                avatarUrl = $"/api/user/avatar/{userModel.Id}?v={stamp}";
+            }
+        }
+        catch { /* 忽略异常，保持兼容 */ }
+
+        var _uname = userName ?? string.Empty;
         return new JsonResult(new
         {
             message = "令牌有效，欢迎您！",
             user = userName,
             permissionGroup = (int)permissionGroup,
-            isAdmin = isAdmin
+            isAdmin = isAdmin,
+            avatarUrl = avatarUrl,
+            // 兼容：返回用户统计摘要，方便 topbar/前端统一使用
+            resourceCount = await KaxGlobal.GetUserResourceCountAsync(_uname),
+            contribution = await KaxGlobal.GetUserContributionAsync(_uname),
+            recentActivity = await KaxGlobal.GetUserRecentActivityAsync(_uname),
+            cdkCount = await KaxGlobal.GetUserCdkCountAsync(_uname)
         });
+    }
+
+    // -----------------------------
+    // 用户资料 API
+    // GET  /api/user/profile   -> 返回当前登录用户的资料
+    // POST /api/user/profile   -> 更新当前登录用户的资料（displayName, email, bio）
+    // -----------------------------
+    [HttpHandle("/api/user/profile", "GET", RateLimitMaxRequests = 60, RateLimitWindowSeconds = 60, RateLimitCallbackMethodName = nameof(RateLimitCallback))]
+    public static async Task<IActionResult> Get_UserProfile(HttpRequest request)
+    {
+        var token = request.Headers[HttpHeaders.Authorization]?.Replace("Bearer ", "");
+        var principal = KaxGlobal.ValidateToken(token!);
+        if (principal == null) return new JsonResult(new { message = "未授权" }, 401);
+
+        var userName = principal.Identity?.Name;
+        if (string.IsNullOrWhiteSpace(userName)) return new JsonResult(new { message = "未授权" }, 401);
+
+        if (await KaxGlobal.IsUserBanned(userName)) return new JsonResult(new { message = "账号被封禁" }, 403);
+
+        var user = (await KaxGlobal.UserDatabase.SelectWhereAsync("UserName", userName)).FirstOrDefault();
+        if (user == null) return new JsonResult(new { message = "用户不存在" }, 404);
+
+        var respDisplayName = string.IsNullOrEmpty(user.DisplayName) ? user.UserName : user.DisplayName;
+        var respEmail = user.Email ?? string.Empty;
+        var respBio = string.Empty;
+        var bioProp = user.GetType().GetProperty("Bio");
+        if (bioProp != null) respBio = (bioProp.GetValue(user) as string) ?? string.Empty;
+        var respRegisteredAt = user.RegisteredAt;
+        var respLastLoginAt = user.LastLoginAt;
+
+        // 若存在服务器头像文件，则提供可访问的头像 URL（前端将直接使用该 URL）
+        string avatarUrl = string.Empty;
+        try
+        {
+            var avatarPath = KaxGlobal.GetUserAvatarPathById(user.Id);
+            if (!string.IsNullOrEmpty(avatarPath))
+            {
+                var stamp = respLastLoginAt > 0 ? respLastLoginAt : DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+                avatarUrl = $"/api/user/avatar/{user.Id}?v={stamp}";
+            }
+        }
+        catch { }
+
+        // 额外动态字段：resourceCount / contribution / recentActivity / cdkCount
+        var resourceCount = 0; var contribution = 0; var recentActivity = 0; var cdkCount = 0;
+        try { resourceCount = user.ResourceCount; contribution = user.Contribution; recentActivity = user.RecentActivity; } catch { }
+        try { cdkCount = await KaxGlobal.GetUserCdkCountAsync(user.UserName); } catch { }
+
+        return new JsonResult(new
+        {
+            id = user.Id,
+            user = user.UserName,
+            displayName = respDisplayName,
+            email = respEmail,
+            bio = respBio,
+            registeredAt = respRegisteredAt,
+            lastLoginAt = respLastLoginAt,
+            permissionGroup = (int)user.PermissionGroup,
+            // 保留旧字段以兼容前端
+            isBanned = user.Status != null && user.Status.IsBanned,
+            bannedAt = user.Status != null ? user.Status.BannedAt : 0,
+            banExpiresAt = user.Status != null ? user.Status.BanExpiresAt : 0,
+            banReason = user.Status != null ? (user.Status.BanReason ?? string.Empty) : string.Empty,
+            avatarUrl = avatarUrl,
+            resourceCount = resourceCount,
+            contribution = contribution,
+            recentActivity = recentActivity,
+            cdkCount = cdkCount
+        });
+    }
+
+    [HttpHandle("/api/user/profile", "POST", RateLimitMaxRequests = 10, RateLimitWindowSeconds = 60, RateLimitCallbackMethodName = nameof(RateLimitCallback))]
+    public static async Task<IActionResult> Post_UpdateUserProfile(HttpRequest request)
+    {
+        var token = request.Headers[HttpHeaders.Authorization]?.Replace("Bearer ", "");
+        var principal = KaxGlobal.ValidateToken(token!);
+        if (principal == null) return new JsonResult(new { message = "未授权" }, 401);
+
+        var userName = principal.Identity?.Name;
+        if (string.IsNullOrWhiteSpace(userName)) return new JsonResult(new { message = "未授权" }, 401);
+
+        if (await KaxGlobal.IsUserBanned(userName)) return new JsonResult(new { message = "账号被封禁" }, 403);
+
+        if (string.IsNullOrEmpty(request.Body)) return new JsonResult(new { message = "请求体不能为空" }, 400);
+
+        var body = JsonNode.Parse(request.Body);
+        if (body == null) return new JsonResult(new { message = "无效的 JSON" }, 400);
+
+        var displayName = body["displayName"]?.ToString()?.Trim() ?? string.Empty;
+        var email = body["email"]?.ToString()?.Trim() ?? string.Empty;
+        var bio = body["bio"]?.ToString() ?? string.Empty;
+
+        // 基础校验
+        if (!string.IsNullOrEmpty(email) && !CommonUtility.IsValidEmail(email))
+            return new JsonResult(new { message = "无效的电子邮箱地址" }, 400);
+
+        try
+        {
+            var user = (await KaxGlobal.UserDatabase.SelectWhereAsync("UserName", userName)).FirstOrDefault();
+            if (user == null) return new JsonResult(new { message = "用户不存在" }, 404);
+
+            // 如果邮箱发生变化，检查唯一性
+            if (!string.IsNullOrEmpty(email) && !string.Equals(user.Email ?? string.Empty, email, StringComparison.OrdinalIgnoreCase))
+            {
+                var byEmail = (await KaxGlobal.UserDatabase.SelectWhereAsync("Email", email)).FirstOrDefault();
+                if (byEmail != null && !string.Equals(byEmail.UserName, user.UserName, StringComparison.OrdinalIgnoreCase))
+                {
+                    return new JsonResult(new { message = "该邮箱已被占用" }, 409);
+                }
+                user.Email = email;
+            }
+
+            if (!string.IsNullOrEmpty(displayName)) user.DisplayName = displayName;
+
+            // 如果模型支持 Bio 字段则保存（向后兼容）
+            var prop = user.GetType().GetProperty("Bio");
+            if (prop != null) prop.SetValue(user, bio ?? string.Empty);
+
+            await KaxGlobal.UserDatabase.UpdateAsync(user);
+
+            return new JsonResult(new { message = "资料已更新" });
+        }
+        catch (Exception ex)
+        {
+            Logger.Error("更新用户资料时出错: " + ex.Message);
+            return new JsonResult(new { message = "服务器错误" }, 500);
+        }
+    }
+
+    // POST /api/user/password -> 修改当前登录用户的密码（需提供旧密码、新密码、确认新密码）
+    [HttpHandle("/api/user/password", "POST", RateLimitMaxRequests = 6, RateLimitWindowSeconds = 60, RateLimitCallbackMethodName = nameof(RateLimitCallback))]
+    public static async Task<IActionResult> Post_ChangePassword(HttpRequest request)
+    {
+        var token = request.Headers[HttpHeaders.Authorization]?.Replace("Bearer ", "");
+        var principal = KaxGlobal.ValidateToken(token!);
+        if (principal == null) return new JsonResult(new { message = "未授权" }, 401);
+
+        var userName = principal.Identity?.Name;
+        if (string.IsNullOrWhiteSpace(userName)) return new JsonResult(new { message = "未授权" }, 401);
+
+        if (await KaxGlobal.IsUserBanned(userName)) return new JsonResult(new { message = "账号被封禁" }, 403);
+
+        if (string.IsNullOrEmpty(request.Body)) return new JsonResult(new { message = "请求体不能为空" }, 400);
+        var body = JsonNode.Parse(request.Body);
+        if (body == null) return new JsonResult(new { message = "无效的 JSON" }, 400);
+
+        var oldPassword = body["oldPassword"]?.ToString() ?? string.Empty;
+        var newPassword = body["newPassword"]?.ToString() ?? string.Empty;
+        var confirmPassword = body["confirmPassword"]?.ToString() ?? string.Empty;
+
+        if (string.IsNullOrEmpty(oldPassword) || string.IsNullOrEmpty(newPassword) || string.IsNullOrEmpty(confirmPassword))
+            return new JsonResult(new { message = "旧密码/新密码/确认密码均为必填" }, 400);
+
+        if (newPassword.Length < 8) return new JsonResult(new { message = "新密码长度至少 8 位" }, 400);
+        if (newPassword != confirmPassword) return new JsonResult(new { message = "两次新密码不匹配" }, 400);
+
+        try
+        {
+            var user = (await KaxGlobal.UserDatabase.SelectWhereAsync("UserName", userName)).FirstOrDefault();
+            if (user == null) return new JsonResult(new { message = "用户不存在" }, 404);
+
+            var oldHash = CommonUtility.ComputeSHA256Hash(oldPassword);
+            if (!string.Equals(user.PasswordHash ?? string.Empty, oldHash, StringComparison.Ordinal))
+            {
+                Logger.Warn($"用户 {userName} 修改密码失败：旧密码不正确。");
+                return new JsonResult(new { message = "旧密码不正确" }, 401);
+            }
+
+            user.PasswordHash = CommonUtility.ComputeSHA256Hash(newPassword);
+            await KaxGlobal.UserDatabase.UpdateAsync(user);
+
+            Logger.Info($"用户 {userName} 已更新密码。");
+            return new JsonResult(new { message = "密码已更新" });
+        }
+        catch (Exception ex)
+        {
+            Logger.Error("修改密码时出错: " + ex.Message);
+            return new JsonResult(new { message = "服务器错误" }, 500);
+        }
+    }
+
+    // GET /api/user/avatar/{userId} -> 返回指定用户的头像文件（若存在）
+    [HttpHandle("/api/user/avatar/{userId}", "GET", RateLimitMaxRequests = 120, RateLimitWindowSeconds = 60)]
+    public static async Task<IActionResult> Get_UserAvatar(HttpRequest request)
+    {
+        if (!request.PathParameters.TryGetValue("userId", out var idStr) || !int.TryParse(idStr, out var userId) || userId <= 0)
+            return new JsonResult(new { message = "userId 参数无效" }, 400);
+
+        var path = KaxGlobal.GetUserAvatarPathById(userId);
+        if (string.IsNullOrEmpty(path)) return new JsonResult(new { message = "未找到头像" }, 404);
+
+        var ext = Path.GetExtension(path).ToLowerInvariant();
+        var contentType = ext == ".png" ? "image/png" : "image/jpeg";
+        return new FileResult(path, null, contentType);
+    }
+
+    // GET /api/user/stats -> 返回当前登录用户的统计信息（resourceCount / cdkCount / recentActivity / contribution）
+    [HttpHandle("/api/user/stats", "GET", RateLimitMaxRequests = 60, RateLimitWindowSeconds = 60, RateLimitCallbackMethodName = nameof(RateLimitCallback))]
+    public static async Task<IActionResult> Get_UserStats(HttpRequest request)
+    {
+        var token = request.Headers[HttpHeaders.Authorization]?.Replace("Bearer ", "");
+        var principal = KaxGlobal.ValidateToken(token!);
+        if (principal == null) return new JsonResult(new { message = "未授权" }, 401);
+
+        var userName = principal.Identity?.Name;
+        if (string.IsNullOrWhiteSpace(userName)) return new JsonResult(new { message = "未授权" }, 401);
+        if (await KaxGlobal.IsUserBanned(userName)) return new JsonResult(new { message = "账号被封禁" }, 403);
+
+        var user = (await KaxGlobal.UserDatabase.SelectWhereAsync("UserName", userName)).FirstOrDefault();
+        if (user == null) return new JsonResult(new { message = "用户不存在" }, 404);
+
+        var resourceCount = user.ResourceCount;
+        var contribution = user.Contribution;
+        var recentActivity = user.RecentActivity;
+        var cdkCount = await KaxGlobal.GetUserCdkCountAsync(userName);
+
+        return new JsonResult(new
+        {
+            user = userName,
+            resourceCount = resourceCount,
+            cdkCount = cdkCount,
+            recentActivity = recentActivity,
+            contribution = contribution
+        });
+    }
+
+    // POST /api/user/avatar -> 上传当前登录用户的头像（multipart/form-data, field name 可任意，使用第一个文件）
+    [HttpHandle("/api/user/avatar", "POST", RateLimitMaxRequests = 10, RateLimitWindowSeconds = 60, RateLimitCallbackMethodName = nameof(RateLimitCallback))]
+    public static async Task<IActionResult> Post_UploadUserAvatar(HttpRequest request, DrxHttpServer server)
+    {
+        var token = request.Headers[HttpHeaders.Authorization]?.Replace("Bearer ", "");
+        var principal = KaxGlobal.ValidateToken(token!);
+        if (principal == null) return new JsonResult(new { message = "未授权" }, 401);
+
+        var userName = principal.Identity?.Name;
+        if (string.IsNullOrWhiteSpace(userName)) return new JsonResult(new { message = "未授权" }, 401);
+        if (await KaxGlobal.IsUserBanned(userName)) return new JsonResult(new { message = "账号被封禁" }, 403);
+
+        if (request.UploadFile == null || request.UploadFile.Stream == null)
+            return new JsonResult(new { message = "缺少上传的文件（multipart/form-data）" }, 400);
+
+        var upload = request.UploadFile;
+        var fileExt = Path.GetExtension(upload.FileName ?? string.Empty).ToLowerInvariant();
+        if (fileExt == ".jpeg") fileExt = ".jpg";
+        if (fileExt != ".png" && fileExt != ".jpg")
+        {
+            return new JsonResult(new { message = "仅支持 PNG / JPG 格式（文件扩展名应为 .png/.jpg）" }, 400);
+        }
+
+        if (upload.Stream.Length > 2 * 1024 * 1024) return new JsonResult(new { message = "文件过大，最大 2MB" }, 413);
+
+        var user = (await KaxGlobal.UserDatabase.SelectWhereAsync("UserName", userName)).FirstOrDefault();
+        if (user == null) return new JsonResult(new { message = "用户不存在" }, 404);
+
+        var ext = fileExt;
+
+        var iconsDir = Path.Combine(AppContext.BaseDirectory, "resources", "user", "icon");
+        Directory.CreateDirectory(iconsDir);
+        var finalPngPath = Path.Combine(iconsDir, $"{user.Id}.png");
+
+        // 统一将上传的图片转为 PNG 并保存为 {uid}.png；若存在旧的 jpg 文件则删除
+        upload.Stream.Position = 0;
+        try
+        {
+            using var img = Image.FromStream(upload.Stream, useEmbeddedColorManagement: true, validateImageData: true);
+            // 使用高质量重采样以保证输出稳定
+            using var bmp = new Bitmap(img.Width, img.Height);
+            using (var g = Graphics.FromImage(bmp))
+            {
+                g.CompositingMode = System.Drawing.Drawing2D.CompositingMode.SourceOver;
+                g.CompositingQuality = System.Drawing.Drawing2D.CompositingQuality.HighQuality;
+                g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
+                g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.HighQuality;
+                g.DrawImage(img, 0, 0, img.Width, img.Height);
+            }
+
+            // 覆盖保存为 PNG
+            bmp.Save(finalPngPath, ImageFormat.Png);
+
+            // 删除可能残留的 JPG（避免同一用户存在多种扩展名）
+            var legacyJpg = Path.Combine(iconsDir, $"{user.Id}.jpg");
+            if (File.Exists(legacyJpg))
+            {
+                try { File.Delete(legacyJpg); } catch { /* 忽略删除失败 */ }
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.Error($"保存用户头像并转换为 PNG 失败: {ex.Message}");
+            return new JsonResult(new { message = "保存头像失败（无效的图片或服务器错误）" }, 500);
+        }
+
+        var url = $"/api/user/avatar/{user.Id}?v={DateTimeOffset.UtcNow.ToUnixTimeSeconds()}";
+        return new JsonResult(new { message = "头像已上传", url = url });
+    }
+
+    /// <summary>
+    /// 获取用户的激活资源列表（当前有效的资源）
+    /// 响应包含资源ID、激活时间、过期时间及剩余秒数
+    /// </summary>
+    [HttpHandle("/api/user/assets/active", "GET", RateLimitMaxRequests = 60, RateLimitWindowSeconds = 60, RateLimitCallbackMethodName = nameof(RateLimitCallback))]
+    public static async Task<IActionResult> Get_UserActiveAssets(HttpRequest request)
+    {
+        var token = request.Headers[HttpHeaders.Authorization]?.Replace("Bearer ", "");
+        var principal = KaxGlobal.ValidateToken(token ?? string.Empty);
+        if (principal == null) return new JsonResult(new { code = 401, message = "未授权" }, 401);
+
+        var userName = principal.Identity?.Name;
+        if (string.IsNullOrWhiteSpace(userName)) return new JsonResult(new { code = 400, message = "用户名无效" }, 400);
+
+        if (await KaxGlobal.IsUserBanned(userName)) return new JsonResult(new { code = 403, message = "用户已被封禁" }, 403);
+
+        var user = (await KaxGlobal.UserDatabase.SelectWhereAsync("UserName", userName)).FirstOrDefault();
+        if (user == null) return new JsonResult(new { code = 404, message = "用户不存在" }, 404);
+
+        var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        var activeAssets = user.ActiveAssets
+            .Where(a => a.ExpiresAt == 0 || a.ExpiresAt > now)  // 过滤有效的资源
+            .Select(a => new
+            {
+                id = a.Id,
+                assetId = a.AssetId,
+                activatedAt = a.ActivatedAt,
+                expiresAt = a.ExpiresAt,
+                remainingSeconds = a.ExpiresAt == 0 ? -1L : (a.ExpiresAt - now) / 1000
+            })
+            .ToList();
+
+        return new JsonResult(new { code = 0, message = "成功", data = activeAssets }, 200);
     }
 
     [HttpHandle("/api/user/unban?{userName}?{dev_code}", "POST")]
@@ -358,6 +709,65 @@ public class KaxHttp
         {
             return new JsonResult(new { assetId = assetId, has = false, code = 2004 });
         }
+    }
+
+    // 新增：返回资产原始激活记录（activatedAt / expiresAt）——raw
+    [HttpHandle("/api/user/verify/asset/{assetId}/raw", "GET", RateLimitMaxRequests = 60, RateLimitWindowSeconds = 60, RateLimitCallbackMethodName = nameof(RateLimitCallback))]
+    public static async Task<IActionResult> Get_VerifyAssetRaw(HttpRequest request)
+    {
+        var token = request.Headers[HttpHeaders.Authorization]?.Replace("Bearer ", "");
+        var principal = KaxGlobal.ValidateToken(token!);
+        var userName = principal?.Identity?.Name;
+        if (string.IsNullOrWhiteSpace(userName))
+            return new JsonResult(new { message = "未授权" }, 401);
+
+        if (await KaxGlobal.IsUserBanned(userName))
+            return new JsonResult(new { message = "账号被封禁" }, 403);
+
+        if (!request.PathParameters.TryGetValue("assetId", out var assetIdString) ||
+            !int.TryParse(assetIdString, out var assetId) || assetId <= 0)
+        {
+            return new JsonResult(new { message = "assetId 参数必须是大于 0 的整数" }, 400);
+        }
+
+        var entry = await KaxGlobal.GetUserActiveAssetRawAsync(userName, assetId);
+        if (entry == null)
+        {
+            return new JsonResult(new { assetId = assetId, activatedAt = 0L, expiresAt = 0L, has = false, code = 2004 });
+        }
+
+        return new JsonResult(new { assetId = assetId, activatedAt = entry.ActivatedAt, expiresAt = entry.ExpiresAt, has = true, code = 0 });
+    }
+
+    // 新增：返回资产剩余时间（秒）——如果永久返回 -1
+    [HttpHandle("/api/user/verify/asset/{assetId}/remaining", "GET", RateLimitMaxRequests = 60, RateLimitWindowSeconds = 60, RateLimitCallbackMethodName = nameof(RateLimitCallback))]
+    public static async Task<IActionResult> Get_VerifyAssetRemaining(HttpRequest request)
+    {
+        var token = request.Headers[HttpHeaders.Authorization]?.Replace("Bearer ", "");
+        var principal = KaxGlobal.ValidateToken(token!);
+        var userName = principal?.Identity?.Name;
+        if (string.IsNullOrWhiteSpace(userName))
+            return new JsonResult(new { message = "未授权" }, 401);
+
+        if (await KaxGlobal.IsUserBanned(userName))
+            return new JsonResult(new { message = "账号被封禁" }, 403);
+
+        if (!request.PathParameters.TryGetValue("assetId", out var assetIdString) ||
+            !int.TryParse(assetIdString, out var assetId) || assetId <= 0)
+        {
+            return new JsonResult(new { message = "assetId 参数必须是大于 0 的整数" }, 400);
+        }
+
+        var remaining = await KaxGlobal.GetUserAssetRemainingSecondsAsync(userName, assetId);
+
+        // null 表示无记录 / 未拥有
+        if (remaining == null)
+        {
+            return new JsonResult(new { assetId = assetId, has = false, remainingSeconds = 0L, code = 2004 });
+        }
+
+        var isActive = (remaining == -1L) || (remaining > 0L);
+        return new JsonResult(new { assetId = assetId, has = isActive, remainingSeconds = remaining, code = isActive ? 0 : 2004 });
     }
 
     // --------------------------------------------------
@@ -498,9 +908,16 @@ public class KaxHttp
 
         if (codes.Count == 0) return new JsonResult(new { message = "没有要保存的 CDK" }, 400);
 
-        // 解析 assetId 与 description（assetId 建议为大于 0 的整数）
+        // 解析 assetId、contributionValue、expiresInSeconds 与 description
         int assetId = 0;
         if (body["assetId"] != null) int.TryParse(body["assetId"]?.ToString() ?? "0", out assetId);
+        
+        int contributionValue = 0;
+        if (body["contributionValue"] != null) int.TryParse(body["contributionValue"]?.ToString() ?? "0", out contributionValue);
+        
+        long expiresInSeconds = 0;
+        if (body["expiresInSeconds"] != null) long.TryParse(body["expiresInSeconds"]?.ToString() ?? "0", out expiresInSeconds);
+        
         var description = body["description"]?.ToString() ?? string.Empty;
 
         // 强制校验 assetId（客户端已验证，但后端再校验以确保数据完整）
@@ -535,7 +952,9 @@ public class KaxHttp
                     CreatedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
                     UsedAt = 0,
                     UsedBy = string.Empty,
-                    AssetId = assetId
+                    AssetId = assetId,
+                    ContributionValue = contributionValue,
+                    ExpiresInSeconds = expiresInSeconds
                 };
 
                 KaxGlobal.CdkDatabase.Insert(model);
@@ -955,6 +1374,94 @@ public class KaxHttp
             Logger.Error($"读取资源列表失败: {ex.Message}");
             return new JsonResult(new { message = "无法读取资源列表" }, 500);
         }
+    }
+
+    // --------------------------------------------------
+    // CDK 用户激活 API
+    // - POST /api/cdk/activate -> 用户激活 CDK（添加资源到资源库）
+    // --------------------------------------------------
+
+    /// <summary>
+    /// 用户激活 CDK API
+    /// 请求体格式: { "code": "CDK_CODE" }
+    /// 响应: { "code": <错误码>, "message": <消息>, "assetId": <资源ID（可选）>, "contributionValue": <贡献值（可选）> }
+    /// </summary>
+    [HttpHandle("/api/cdk/activate", "POST", RateLimitMaxRequests = 20, RateLimitWindowSeconds = 60, RateLimitCallbackMethodName = nameof(RateLimitCallback))]
+    public static async Task<IActionResult> Post_ActivateCdk(HttpRequest request)
+    {
+        var token = request.Headers[HttpHeaders.Authorization]?.Replace("Bearer ", "");
+        var principal = KaxGlobal.ValidateToken(token!);
+        if (principal == null)
+        {
+            return new JsonResult(new { code = 401, message = "未授权" }, 401);
+        }
+
+        var userName = principal.Identity?.Name;
+        if (string.IsNullOrWhiteSpace(userName))
+        {
+            return new JsonResult(new { code = 401, message = "未授权" }, 401);
+        }
+
+        if (await KaxGlobal.IsUserBanned(userName))
+        {
+            return new JsonResult(new { code = 403, message = "账号被封禁" }, 403);
+        }
+
+        if (string.IsNullOrEmpty(request.Body))
+        {
+            return new JsonResult(new { code = 400, message = "请求体不能为空" }, 400);
+        }
+
+        var body = JsonNode.Parse(request.Body);
+        if (body == null)
+        {
+            return new JsonResult(new { code = 400, message = "无效的 JSON" }, 400);
+        }
+
+        var cdkCode = body["code"]?.ToString()?.Trim();
+        if (string.IsNullOrEmpty(cdkCode))
+        {
+            return new JsonResult(new { code = 1, message = "CDK为空" }, 400);
+        }
+
+        // 调用激活方法
+        var (resultCode, resultMessage) = await KaxGlobal.ActivateCdkAsync(cdkCode, userName);
+
+        // 根据激活结果返回对应的 HTTP 状态码和响应
+        int httpStatus = resultCode switch
+        {
+            0 => 200,          // 成功
+            1 => 400,          // CDK为空
+            2 => 400,          // CDK错误
+            3 => 409,          // CDK已使用（冲突）
+            _ => 500           // 服务器错误
+        };
+
+        // 如果激活成功，同时返回 CDK 对应的资源信息
+        if (resultCode == 0)
+        {
+            try
+            {
+                var normalizedCode = cdkCode.Trim().ToUpperInvariant();
+                var all = await KaxGlobal.CdkDatabase.SelectAllAsync();
+                var cdk = all.FirstOrDefault(c => string.Equals(c.Code, normalizedCode, StringComparison.OrdinalIgnoreCase));
+
+                if (cdk != null)
+                {
+                    return new JsonResult(new
+                    {
+                        code = resultCode,
+                        message = resultMessage,
+                        assetId = cdk.AssetId,
+                        contributionValue = cdk.ContributionValue,
+                        description = cdk.Description
+                    }, httpStatus);
+                }
+            }
+            catch { /* 忽略异常，仅返回基本信息 */ }
+        }
+
+        return new JsonResult(new { code = resultCode, message = resultMessage }, httpStatus);
     }
 
     #endregion

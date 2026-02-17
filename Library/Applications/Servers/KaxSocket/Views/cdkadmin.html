@@ -8,7 +8,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
     <link href="/global.css" rel="stylesheet">
-    <script src="/global.js"></script>
+    <script src="/global.js" defer></script>
     <style>
         /* 主题变量，与 index.html / login.html 保持一致 */
         :root {
@@ -133,9 +133,13 @@
         }
 
         .search-section {
+            display: flex;
+            gap: 8px;
+            align-items: center;
             margin-top: 6px;
             margin-bottom: 12px;
         }
+        .search-section .search-bar { flex: 1; min-width: 0; }
 
         .search-bar {
             display: flex;
@@ -413,11 +417,15 @@
             color: #ffffff;
             background: rgba(255,255,255,0.02);
             border: 1px solid var(--card-border);
+            /* 不在打开状态时阻止指针事件，避免遮挡后方控件 */
+            pointer-events: none;
         }
 
         #cdkDetailPanel.open {
             transform: translateX(0);
             opacity: 1;
+            /* 打开时恢复指针事件 */
+            pointer-events: auto;
         }
 
         .panel-header {
@@ -514,7 +522,7 @@
     </style>
 </head>
 
-<body>
+<body class="has-global-topbar">
     <!-- 页面内容默认隐藏，直到完成登录验证 -->
     <div id="page" class="hidden">
         <div class="container">
@@ -546,6 +554,7 @@
                                 <input id="searchInput" class="search-input" type="text" placeholder="搜索 CDK 代码、AssetId..." />
                                 <span id="searchSpinner" class="search-spinner"></span>
                             </div>
+                            <button id="deleteAllBtn" class="btn danger small" title="删除当前筛选的所有 CDK">删除所有</button>
                         </div>
                         
                         <div id="cdkList" class="cdk-list-container">
@@ -579,6 +588,21 @@
 
                             <label for="assetId" style="margin-top: 12px;">AssetId *</label>
                             <input type="text" id="assetId" placeholder="必填" required />
+
+                            <label for="contributionValue" style="margin-top: 12px;">贡献值（可选）</label>
+                            <input type="text" id="contributionValue" placeholder="0" value="0" />
+
+                            <label for="expiresIn" style="margin-top: 12px;">时效（可选，0表示永久）</label>
+                            <div style="display: flex; gap: 8px; align-items: center;">
+                                <input type="text" id="expiresInValue" placeholder="时间量" value="0" style="flex: 1;" />
+                                <select id="expiresInUnit" style="flex: 0 0 auto; width: 80px;">
+                                    <option value="0">永久</option>
+                                    <option value="3600">小时</option>
+                                    <option value="86400">天</option>
+                                    <option value="604800">周</option>
+                                    <option value="2592000">月</option>
+                                </select>
+                            </div>
 
                             <label for="cdkDescription" style="margin-top: 12px;">描述（可选）</label>
                             <input type="text" id="cdkDescription" placeholder="为 CDK 添加描述" />
@@ -646,6 +670,7 @@
             var saveBtn = document.getElementById('saveBtn');
             var downloadBtn = document.getElementById('downloadBtn');
             var searchSpinner = document.getElementById('searchSpinner');
+            var deleteAllBtn = document.getElementById('deleteAllBtn');
 
             var currentPage = 1;
             var allCdks = [];
@@ -908,6 +933,52 @@
                 }
             }
 
+            // Silent delete（无提示），供批量删除使用
+            async function deleteCdkSilent(code) {
+                try {
+                    var token = localStorage.getItem('kax_login_token');
+                    var resp = await fetch('/api/cdk/admin/delete', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+                        body: JSON.stringify({ code: code })
+                    });
+                    return resp.status === 200;
+                } catch (err) {
+                    console.error('deleteCdkSilent error', err);
+                    return false;
+                }
+            }
+
+            // ========== 批量删除（删除当前筛选出的所有 CDK） ==========
+            if (deleteAllBtn) {
+                deleteAllBtn.addEventListener('click', async function () {
+                    var count = filteredCdks.length;
+                    if (count === 0) { alert('当前没有可删除的 CDK'); return; }
+                    if (!confirm('确定要删除当前筛选出的 ' + count + ' 条 CDK 吗？此操作不可恢复。')) return;
+
+                    try {
+                        deleteAllBtn.disabled = true;
+                        var orig = deleteAllBtn.textContent;
+                        deleteAllBtn.textContent = '删除中...';
+
+                        var deleted = 0;
+                        for (var i = 0; i < filteredCdks.length; i++) {
+                            var ok = await deleteCdkSilent(filteredCdks[i].code);
+                            if (ok) deleted++;
+                        }
+
+                        alert('操作完成：已删除 ' + deleted + ' / ' + count + ' 条 CDK');
+                        loadCdkList();
+                    } catch (err) {
+                        console.error('批量删除错误：', err);
+                        alert('删除过程中发生错误：' + (err.message || err));
+                    } finally {
+                        deleteAllBtn.disabled = false;
+                        deleteAllBtn.textContent = orig;
+                    }
+                });
+            }
+
             // ========== 生成 CDK ==========
             async function apiGenerate(payload) {
                 var token = localStorage.getItem('kax_login_token');
@@ -956,6 +1027,10 @@
                 var codes = txt.split(/\r?\n/).filter(Boolean);
 
                 var assetId = parseInt(document.getElementById('assetId').value, 10) || 0;
+                var contributionValue = parseInt(document.getElementById('contributionValue').value, 10) || 0;
+                var expiresInValue = parseInt(document.getElementById('expiresInValue').value, 10) || 0;
+                var expiresInUnit = parseInt(document.getElementById('expiresInUnit').value, 10) || 0;
+                var expiresInSeconds = expiresInValue > 0 ? expiresInValue * expiresInUnit : 0;
                 var description = document.getElementById('cdkDescription').value.trim();
 
                 if (assetId <= 0) { alert('请填写有效的 AssetId'); return; }
@@ -969,7 +1044,7 @@
                     var resp = await fetch('/api/cdk/admin/save', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
-                        body: JSON.stringify({ codes: codes, assetId: assetId, description: description })
+                        body: JSON.stringify({ codes: codes, assetId: assetId, contributionValue: contributionValue, expiresInSeconds: expiresInSeconds, description: description })
                     });
 
                     var data = await resp.json();

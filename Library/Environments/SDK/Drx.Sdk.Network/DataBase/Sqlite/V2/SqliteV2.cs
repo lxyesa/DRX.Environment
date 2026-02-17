@@ -8,6 +8,7 @@ using System.Text;
 using System.Threading.Tasks;
 using System.Threading;
 using Microsoft.Data.Sqlite;
+using Drx.Sdk.Shared;
 using System.Collections.Concurrent;
 
 namespace Drx.Sdk.Network.DataBase.Sqlite.V2;
@@ -17,7 +18,7 @@ namespace Drx.Sdk.Network.DataBase.Sqlite.V2;
 /// 比原版本快 200-300 倍，专注于最常见的操作场景
 /// </summary>
 /// <typeparam name="T">继承自 IDataBase 的数据类型</typeparam>
-public class Sqlite<T> where T : class, IDataBase, new()
+public class SqliteV2<T> where T : class, IDataBase, new()
 {
     #region 内部缓存结构
 
@@ -94,7 +95,7 @@ public class Sqlite<T> where T : class, IDataBase, new()
 
     #region 构造函数与初始化
 
-    public Sqlite(string databasePath, string? basePath = null)
+    public SqliteV2(string databasePath, string? basePath = null)
     {
         basePath ??= AppDomain.CurrentDomain.BaseDirectory;
         var fullPath = Path.Combine(basePath, databasePath);
@@ -126,10 +127,10 @@ public class Sqlite<T> where T : class, IDataBase, new()
             .Where(p => p.CanRead && p.CanWrite && typeof(IDataTable).IsAssignableFrom(p.PropertyType))
             .ToArray();
 
-        // 缓存 List<IDataTable> 一对多子表属性
+        // 缓存 List<IDataTable> 和 TableList<IDataTableV2> 一对多子表属性
         _dataTableListProperties = _entityType
             .GetProperties(BindingFlags.Public | BindingFlags.Instance)
-            .Where(p => p.CanRead && p.CanWrite && IsDataTableList(p.PropertyType))
+            .Where(p => p.CanRead && p.CanWrite && (IsDataTableList(p.PropertyType) || IsTableList(p.PropertyType)))
             .ToArray();
 
         _isInitialized = false;
@@ -189,27 +190,73 @@ public class Sqlite<T> where T : class, IDataBase, new()
         {
             var childType = GetDataTableListElementType(childProp.PropertyType);
             var childTableName = $"{_tableName}_{childProp.Name}";
-            CreateChildTable(connection, childType, childTableName);
+            bool isTableList = IsTableList(childProp.PropertyType);
+            CreateChildTable(connection, childType, childTableName, isTableList);
         }
 
         foreach (var childProp in _dataTableProperties)
         {
             var childType = childProp.PropertyType;
             var childTableName = $"{_tableName}_{childProp.Name}";
-            CreateChildTable(connection, childType, childTableName);
+            CreateChildTable(connection, childType, childTableName, isTableList: false);
+        }
+
+        // ----- 向后兼容迁移：若模型新增了简单属性而表中缺失对应列，自动添加列 -----
+        try
+        {
+            var existingColumns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            using (var colCmd = new SqliteCommand($"PRAGMA table_info([{_tableName}])", connection))
+            using (var reader = colCmd.ExecuteReader())
+            {
+                while (reader.Read())
+                {
+                    var colName = reader["name"] as string;
+                    if (!string.IsNullOrEmpty(colName)) existingColumns.Add(colName);
+                }
+            }
+
+            foreach (var prop in _simpleProperties)
+            {
+                if (!existingColumns.Contains(prop.Name))
+                {
+                    var columnType = GetSqliteType(prop.PropertyType);
+                    var alterSql = $"ALTER TABLE [{_tableName}] ADD COLUMN [{prop.Name}] {columnType}";
+                    using var alterCmd = new SqliteCommand(alterSql, connection);
+                    alterCmd.ExecuteNonQuery();
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            // 避免在初始化时因迁移失败导致整个服务不可用，记录日志并继续
+            Logger.Warn($"自动迁移表结构时发生异常（{_tableName}）：{ex.Message}");
         }
     }
 
-    private void CreateChildTable(SqliteConnection connection, Type childType, string childTableName)
+    private void CreateChildTable(SqliteConnection connection, Type childType, string childTableName, bool isTableList = false)
     {
         var props = childType
             .GetProperties(BindingFlags.Public | BindingFlags.Instance)
-            .Where(p => p.CanRead && p.CanWrite && p.Name != "TableName" && p.Name != "Id" && p.Name != "ParentId")
+            .Where(p => p.CanRead && p.CanWrite && p.Name != "TableName" && p.Name != "Id" && p.Name != "ParentId" 
+                && (!isTableList || (p.Name != "CreatedAt" && p.Name != "UpdatedAt")))
             .ToArray();
 
         var columns = new StringBuilder();
-        columns.Append("Id INTEGER PRIMARY KEY AUTOINCREMENT,");
-        columns.Append("ParentId INTEGER,");
+        
+        if (isTableList)
+        {
+            // TableList<IDataTableV2> 使用 TEXT 类型的 Id 和时间戳
+            columns.Append("Id TEXT PRIMARY KEY,");
+            columns.Append("ParentId INTEGER,");
+            columns.Append("CreatedAt INTEGER,");
+            columns.Append("UpdatedAt INTEGER,");
+        }
+        else
+        {
+            // List<IDataTable> 使用 INTEGER 类型的 Id  
+            columns.Append("Id INTEGER PRIMARY KEY AUTOINCREMENT,");
+            columns.Append("ParentId INTEGER,");
+        }
 
         foreach (var prop in props)
         {
@@ -253,7 +300,23 @@ public class Sqlite<T> where T : class, IDataBase, new()
         if (entity == null) throw new ArgumentNullException(nameof(entity));
 
         using var connection = GetConnection();
-        InsertInternal(connection, entity);
+        connection.Open();
+
+        using var transaction = connection.BeginTransaction();
+        try
+        {
+            InsertInternal(connection, transaction, entity);
+            
+            // 同步 TableList 子表数据
+            SyncTableListChanges(connection, transaction, entity);
+            
+            transaction.Commit();
+        }
+        catch
+        {
+            transaction.Rollback();
+            throw;
+        }
     }
 
     /// <summary>
@@ -269,7 +332,8 @@ public class Sqlite<T> where T : class, IDataBase, new()
         using var transaction = connection.BeginTransaction();
         try
         {
-            var enumerator = entities.GetEnumerator();
+            var entitiesList = entities.ToList();
+            var enumerator = entitiesList.GetEnumerator();
             if (!enumerator.MoveNext())
                 return;
 
@@ -301,6 +365,38 @@ public class Sqlite<T> where T : class, IDataBase, new()
 
             } while (enumerator.MoveNext());
 
+            // 初始化所有 TableList 的 ParentId 和表名
+            foreach (var entity in entitiesList)
+            {
+                foreach (var childListProp in _dataTableListProperties)
+                {
+                    if (IsTableList(childListProp.PropertyType))
+                    {
+                        var childList = childListProp.GetValue(entity);
+                        if (childList != null)
+                        {
+                            // 构建子表名（约定：ParentTable_PropertyName）
+                            var fullTableName = $"{_tableName}_{childListProp.Name}";
+                            
+                            // 检查是否需要初始化
+                            var initMethod = childList.GetType().GetMethod("InitializeWithTableName", 
+                                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                            
+                            if (initMethod != null)
+                            {
+                                initMethod.Invoke(childList, new object[] { _connectionString, entity.Id, fullTableName });
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 同步所有 TableList 子表数据
+            foreach (var entity in entitiesList)
+            {
+                SyncTableListChanges(connection, transaction, entity);
+            }
+
             transaction.Commit();
         }
         catch
@@ -310,43 +406,100 @@ public class Sqlite<T> where T : class, IDataBase, new()
         }
     }
 
-    private void InsertChildTablesSync(SqliteConnection connection, SqliteTransaction transaction, T entity)
+    private void InsertChildTablesSync(SqliteConnection connection, SqliteTransaction? transaction, T entity)
     {
-        // 插入 List<IDataTable> 子表
-        foreach (var childListProp in _dataTableListProperties)
+        // 若没有事务（单条插入场景），创建一个新的
+        bool createdTransaction = false;
+        if (transaction == null)
         {
-            var childList = (System.Collections.IList?)childListProp.GetValue(entity);
-            if (childList == null || childList.Count == 0)
-                continue;
-
-            var childTableName = $"{_tableName}_{childListProp.Name}";
-            var childType = GetDataTableListElementType(childListProp.PropertyType);
-            var childProps = childType
-                .GetProperties(BindingFlags.Public | BindingFlags.Instance)
-                .Where(p => p.CanRead && p.CanWrite && p.Name != "TableName" && p.Name != "Id" && p.Name != "ParentId")
-                .ToArray();
-
-            foreach (IDataTable child in childList)
+            connection.Open();
+            transaction = connection.BeginTransaction();
+            createdTransaction = true;
+        }
+        
+        try
+        {
+            // 插入 List<IDataTable> 子表
+            // 注意：TableList<T> 现在是延迟同步的，在 Insert 时不处理
+            foreach (var childListProp in _dataTableListProperties)
             {
+                // 跳过 TableList<T> 类型（现在采用延迟同步策略）
+                if (IsTableList(childListProp.PropertyType))
+                    continue;
+
+                var childList = (System.Collections.IList?)childListProp.GetValue(entity);
+                if (childList == null || childList.Count == 0)
+                    continue;
+
+                var childTableName = $"{_tableName}_{childListProp.Name}";
+                var childType = GetDataTableListElementType(childListProp.PropertyType);
+                var childProps = childType
+                    .GetProperties(BindingFlags.Public | BindingFlags.Instance)
+                    .Where(p => p.CanRead && p.CanWrite && p.Name != "TableName" && p.Name != "Id" && p.Name != "ParentId")
+                    .ToArray();
+
+                foreach (IDataTable child in childList)
+                {
+                    InsertChildEntity(connection, transaction, child, entity.Id, childTableName, childProps);
+                }
+            }
+
+            // 插入 IDataTable 一对一子表
+            foreach (var childProp in _dataTableProperties)
+            {
+                var child = (IDataTable?)childProp.GetValue(entity);
+                if (child == null)
+                    continue;
+
+                var childTableName = $"{_tableName}_{childProp.Name}";
+                var childType = childProp.PropertyType;
+                var childProps = childType
+                    .GetProperties(BindingFlags.Public | BindingFlags.Instance)
+                    .Where(p => p.CanRead && p.CanWrite && p.Name != "TableName" && p.Name != "Id" && p.Name != "ParentId")
+                    .ToArray();
+
                 InsertChildEntity(connection, transaction, child, entity.Id, childTableName, childProps);
             }
         }
-
-        // 插入 IDataTable 一对一子表
-        foreach (var childProp in _dataTableProperties)
+        catch
         {
-            var child = (IDataTable?)childProp.GetValue(entity);
-            if (child == null)
-                continue;
+            if (createdTransaction)
+                transaction?.Rollback();
+            throw;
+        }
+        finally
+        {
+            if (createdTransaction)
+                transaction?.Commit();
+        }
+    }
 
-            var childTableName = $"{_tableName}_{childProp.Name}";
-            var childType = childProp.PropertyType;
-            var childProps = childType
-                .GetProperties(BindingFlags.Public | BindingFlags.Instance)
-                .Where(p => p.CanRead && p.CanWrite && p.Name != "TableName" && p.Name != "Id" && p.Name != "ParentId")
-                .ToArray();
+    /// <summary>
+    /// 同步 TableList 子表变更到数据库
+    /// 在 Insert 时也需要调用此方法来确保新插入的主表能同步其 TableList 子表数据
+    /// </summary>
+    private void SyncTableListChanges(SqliteConnection connection, SqliteTransaction transaction, T entity)
+    {
+        foreach (var childListProp in _dataTableListProperties)
+        {
+            if (IsTableList(childListProp.PropertyType))
+            {
+                var childList = childListProp.GetValue(entity);
+                if (childList != null)
+                {
+                    // 调用 TableList<T> 的 SyncChanges 方法
+                    var syncMethod = childList.GetType().GetMethod("SyncChanges", 
+                        System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance,
+                        null,
+                        new[] { typeof(SqliteConnection), typeof(SqliteTransaction) },
+                        null);
 
-            InsertChildEntity(connection, transaction, child, entity.Id, childTableName, childProps);
+                    if (syncMethod != null)
+                    {
+                        syncMethod.Invoke(childList, new object[] { connection, transaction });
+                    }
+                }
+            }
         }
     }
 
@@ -420,7 +573,8 @@ public class Sqlite<T> where T : class, IDataBase, new()
     /// </summary>
     public List<T> SelectWhere(string propertyName, object value)
     {
-        if (!_columnMapping.PropertyNames.Contains(propertyName))
+        // 允许查询 Id 主键或 _simpleProperties 中的属性
+        if (propertyName != "Id" && !_columnMapping.PropertyNames.Contains(propertyName))
             throw new ArgumentException($"属性 {propertyName} 不存在");
 
         var sql = $"SELECT * FROM [{_tableName}] WHERE [{propertyName}] = @value";
@@ -459,17 +613,55 @@ public class Sqlite<T> where T : class, IDataBase, new()
         if (entity.Id <= 0) throw new ArgumentException("实体 ID 必须大于 0");
 
         using var connection = GetConnection();
-        var sql = _sqlCache["UPDATE"];
-        using var cmd = new SqliteCommand(sql, connection);
+        connection.Open();
 
-        foreach (var prop in _simpleProperties)
+        using var transaction = connection.BeginTransaction();
+        try
         {
-            var value = GetPropertyValue(entity, prop);
-            cmd.Parameters.AddWithValue($"@{prop.Name}", value ?? DBNull.Value);
-        }
+            // 1. 更新主表
+            var sql = _sqlCache["UPDATE"];
+            using var cmd = new SqliteCommand(sql, connection);
+            cmd.Transaction = transaction;
 
-        cmd.Parameters.AddWithValue("@id", entity.Id);
-        cmd.ExecuteNonQuery();
+            foreach (var prop in _simpleProperties)
+            {
+                var value = GetPropertyValue(entity, prop);
+                cmd.Parameters.AddWithValue($"@{prop.Name}", value ?? DBNull.Value);
+            }
+
+            cmd.Parameters.AddWithValue("@id", entity.Id);
+            cmd.ExecuteNonQuery();
+
+            // 2. 同步所有 TableList<T> 子表的变更
+            foreach (var childListProp in _dataTableListProperties)
+            {
+                if (IsTableList(childListProp.PropertyType))
+                {
+                    var childList = childListProp.GetValue(entity);
+                    if (childList != null)
+                    {
+                        // 调用 TableList<T> 的 SyncChanges 方法
+                        var syncMethod = childList.GetType().GetMethod("SyncChanges", 
+                            System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance,
+                            null,
+                            new[] { typeof(SqliteConnection), typeof(SqliteTransaction) },
+                            null);
+
+                        if (syncMethod != null)
+                        {
+                            syncMethod.Invoke(childList, new object[] { connection, transaction });
+                        }
+                    }
+                }
+            }
+
+            transaction.Commit();
+        }
+        catch
+        {
+            transaction.Rollback();
+            throw;
+        }
     }
 
     /// <summary>
@@ -506,7 +698,9 @@ public class Sqlite<T> where T : class, IDataBase, new()
         using var transaction = connection.BeginTransaction();
         try
         {
-            var enumerator = entities.GetEnumerator();
+            var entitiesList = entities.ToList();
+            
+            var enumerator = entitiesList.GetEnumerator();
             if (!enumerator.MoveNext())
                 return;
 
@@ -536,6 +730,32 @@ public class Sqlite<T> where T : class, IDataBase, new()
 
                 cmd.ExecuteNonQuery();
             } while (enumerator.MoveNext());
+
+            // 同步所有 TableList<T> 子表的变更
+            foreach (var childListProp in _dataTableListProperties)
+            {
+                if (IsTableList(childListProp.PropertyType))
+                {
+                    foreach (var entity in entitiesList)
+                    {
+                        var childList = childListProp.GetValue(entity);
+                        if (childList != null)
+                        {
+                            // 调用 TableList<T> 的 SyncChanges 方法
+                            var syncMethod = childList.GetType().GetMethod("SyncChanges", 
+                                System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance,
+                                null,
+                                new[] { typeof(SqliteConnection), typeof(SqliteTransaction) },
+                                null);
+
+                            if (syncMethod != null)
+                            {
+                                syncMethod.Invoke(childList, new object[] { connection, transaction });
+                            }
+                        }
+                    }
+                }
+            }
 
             transaction.Commit();
         }
@@ -712,7 +932,8 @@ public class Sqlite<T> where T : class, IDataBase, new()
     /// </summary>
     public async Task<List<T>> SelectWhereAsync(string propertyName, object value, CancellationToken cancellationToken = default)
     {
-        if (!_columnMapping.PropertyNames.Contains(propertyName))
+        // 允许查询 Id 主键或 _simpleProperties 中的属性
+        if (propertyName != "Id" && !_columnMapping.PropertyNames.Contains(propertyName))
             throw new ArgumentException($"属性 {propertyName} 不存在");
 
         var sql = $"SELECT * FROM [{_tableName}] WHERE [{propertyName}] = @value";
@@ -746,17 +967,53 @@ public class Sqlite<T> where T : class, IDataBase, new()
         using var connection = GetConnection();
         await connection.OpenAsync(cancellationToken);
 
-        var sql = _sqlCache["UPDATE"];
-        using var cmd = new SqliteCommand(sql, connection);
-
-        foreach (var prop in _simpleProperties)
+        using var transaction = connection.BeginTransaction();
+        try
         {
-            var value = GetPropertyValue(entity, prop);
-            cmd.Parameters.AddWithValue($"@{prop.Name}", value ?? DBNull.Value);
-        }
+            // 1. 更新主表
+            var sql = _sqlCache["UPDATE"];
+            using var cmd = new SqliteCommand(sql, connection);
+            cmd.Transaction = transaction;
 
-        cmd.Parameters.AddWithValue("@id", entity.Id);
-        await cmd.ExecuteNonQueryAsync(cancellationToken);
+            foreach (var prop in _simpleProperties)
+            {
+                var value = GetPropertyValue(entity, prop);
+                cmd.Parameters.AddWithValue($"@{prop.Name}", value ?? DBNull.Value);
+            }
+
+            cmd.Parameters.AddWithValue("@id", entity.Id);
+            await cmd.ExecuteNonQueryAsync(cancellationToken);
+
+            // 2. 同步所有 TableList<T> 子表的变更
+            foreach (var childListProp in _dataTableListProperties)
+            {
+                if (IsTableList(childListProp.PropertyType))
+                {
+                    var childList = childListProp.GetValue(entity);
+                    if (childList != null)
+                    {
+                        // 调用 TableList<T> 的 SyncChanges 方法
+                        var syncMethod = childList.GetType().GetMethod("SyncChanges", 
+                            System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance,
+                            null,
+                            new[] { typeof(SqliteConnection), typeof(SqliteTransaction) },
+                            null);
+
+                        if (syncMethod != null)
+                        {
+                            syncMethod.Invoke(childList, new object[] { connection, transaction });
+                        }
+                    }
+                }
+            }
+
+            transaction.Commit();
+        }
+        catch
+        {
+            transaction.Rollback();
+            throw;
+        }
     }
 
     /// <summary>
@@ -772,7 +1029,9 @@ public class Sqlite<T> where T : class, IDataBase, new()
         using var transaction = connection.BeginTransaction();
         try
         {
-            var enumerator = entities.GetEnumerator();
+            var entitiesList = entities.ToList();
+            
+            var enumerator = entitiesList.GetEnumerator();
             if (!enumerator.MoveNext())
                 return;
 
@@ -802,6 +1061,32 @@ public class Sqlite<T> where T : class, IDataBase, new()
 
                 await cmd.ExecuteNonQueryAsync(cancellationToken);
             } while (enumerator.MoveNext());
+
+            // 同步所有 TableList<T> 子表的变更
+            foreach (var childListProp in _dataTableListProperties)
+            {
+                if (IsTableList(childListProp.PropertyType))
+                {
+                    foreach (var entity in entitiesList)
+                    {
+                        var childList = childListProp.GetValue(entity);
+                        if (childList != null)
+                        {
+                            // 调用 TableList<T> 的 SyncChanges 方法
+                            var syncMethod = childList.GetType().GetMethod("SyncChanges", 
+                                System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance,
+                                null,
+                                new[] { typeof(SqliteConnection), typeof(SqliteTransaction) },
+                                null);
+
+                            if (syncMethod != null)
+                            {
+                                syncMethod.Invoke(childList, new object[] { connection, transaction });
+                            }
+                        }
+                    }
+                }
+            }
 
             await transaction.CommitAsync(cancellationToken);
         }
@@ -914,10 +1199,10 @@ public class Sqlite<T> where T : class, IDataBase, new()
         return connection;
     }
 
-    private void InsertInternal(SqliteConnection connection, T entity)
+    private void InsertInternal(SqliteConnection connection, SqliteTransaction transaction, T entity)
     {
         var sql = _sqlCache["INSERT"];
-        using var cmd = new SqliteCommand(sql, connection);
+        using var cmd = new SqliteCommand(sql, connection, transaction);
 
         foreach (var prop in _simpleProperties)
         {
@@ -926,6 +1211,14 @@ public class Sqlite<T> where T : class, IDataBase, new()
         }
 
         cmd.ExecuteNonQuery();
+        
+        // 获取新插入的 ID
+        using var idCmd = new SqliteCommand("SELECT last_insert_rowid()", connection, transaction);
+        var newId = (long)idCmd.ExecuteScalar()!;
+        entity.Id = (int)newId;
+        
+        // 插入 List<IDataTable> 子表数据
+        InsertChildTablesSync(connection, transaction, entity);
     }
 
     private async Task InsertBatchInternalAsync(SqliteConnection connection, SqliteTransaction transaction, List<T> batch, CancellationToken cancellationToken)
@@ -944,6 +1237,24 @@ public class Sqlite<T> where T : class, IDataBase, new()
             }
 
             await cmd.ExecuteNonQueryAsync(cancellationToken);
+            
+            // 获取新插入的 ID
+            using var idCmd = new SqliteCommand("SELECT last_insert_rowid()", connection);
+            idCmd.Transaction = transaction;
+            var result = await idCmd.ExecuteScalarAsync(cancellationToken);
+            if (result != null && result is long)
+            {
+                entity.Id = (int)(long)result;
+            }
+            
+            // 插入 List<IDataTable> 子表数据
+            InsertChildTablesSync(connection, transaction, entity);
+        }
+
+        // 同步所有 TableList 子表数据
+        foreach (var entity in batch)
+        {
+            SyncTableListChanges(connection, transaction, entity);
         }
     }
 
@@ -999,13 +1310,30 @@ public class Sqlite<T> where T : class, IDataBase, new()
     {
         using var connection = GetConnection();
 
-        // 加载 List<IDataTable> 子表
+        // 加载 List<IDataTable> 子表和 TableList<IDataTableV2> 子表
         foreach (var childListProp in _dataTableListProperties)
         {
             var childType = GetDataTableListElementType(childListProp.PropertyType);
             var childTableName = $"{_tableName}_{childListProp.Name}";
 
-            var listObj = Activator.CreateInstance(childListProp.PropertyType);
+            // 检测是否是 TableList<T> 类型
+            bool isTableList = IsTableList(childListProp.PropertyType);
+
+            object? listObj;
+            if (isTableList)
+            {
+                // 创建 TableList<T> 实例并初始化
+                listObj = Activator.CreateInstance(childListProp.PropertyType);
+                var initMethod = childListProp.PropertyType.GetMethod("InitializeWithTableName", 
+                    System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                initMethod?.Invoke(listObj, new object[] { _connectionString, entity.Id, childTableName });
+            }
+            else
+            {
+                // 创建普通 List<T> 实例
+                listObj = Activator.CreateInstance(childListProp.PropertyType);
+            }
+
             var addMethod = childListProp.PropertyType.GetMethod("Add");
 
             var sql = $"SELECT * FROM [{childTableName}] WHERE ParentId = @parentId";
@@ -1022,13 +1350,29 @@ public class Sqlite<T> where T : class, IDataBase, new()
 
             while (reader.Read())
             {
-                var child = (IDataTable)Activator.CreateInstance(childType)!;
+                var child = (object)Activator.CreateInstance(childType)!;
                 
+                // 通用字段映射
                 try
                 {
                     var idOrdinal = reader.GetOrdinal("Id");
                     if (!reader.IsDBNull(idOrdinal))
-                        child.Id = reader.GetInt32(idOrdinal);
+                    {
+                        if (isTableList)
+                        {
+                            // TableList 使用 String 类型 Id
+                            var idProp = childType.GetProperty("Id");
+                            var idValue = reader.GetString(idOrdinal);
+                            idProp?.SetValue(child, idValue);
+                        }
+                        else
+                        {
+                            // 普通 List 使用 Int 类型 Id
+                            var idProp = childType.GetProperty("Id");
+                            var idValue = reader.GetInt32(idOrdinal);
+                            idProp?.SetValue(child, idValue);
+                        }
+                    }
                 }
                 catch { }
 
@@ -1036,10 +1380,43 @@ public class Sqlite<T> where T : class, IDataBase, new()
                 {
                     var parentIdOrdinal = reader.GetOrdinal("ParentId");
                     if (!reader.IsDBNull(parentIdOrdinal))
-                        child.ParentId = reader.GetInt32(parentIdOrdinal);
+                    {
+                        var parentIdProp = childType.GetProperty("ParentId");
+                        var parentIdValue = reader.GetInt32(parentIdOrdinal);
+                        parentIdProp?.SetValue(child, parentIdValue);
+                    }
                 }
                 catch { }
 
+                // 时间戳字段（TableList 特有）
+                if (isTableList)
+                {
+                    try
+                    {
+                        var createdAtOrdinal = reader.GetOrdinal("CreatedAt");
+                        if (!reader.IsDBNull(createdAtOrdinal))
+                        {
+                            var createdAtProp = childType.GetProperty("CreatedAt");
+                            var createdAtValue = reader.GetInt64(createdAtOrdinal);
+                            createdAtProp?.SetValue(child, createdAtValue);
+                        }
+                    }
+                    catch { }
+
+                    try
+                    {
+                        var updatedAtOrdinal = reader.GetOrdinal("UpdatedAt");
+                        if (!reader.IsDBNull(updatedAtOrdinal))
+                        {
+                            var updatedAtProp = childType.GetProperty("UpdatedAt");
+                            var updatedAtValue = reader.GetInt64(updatedAtOrdinal);
+                            updatedAtProp?.SetValue(child, updatedAtValue);
+                        }
+                    }
+                    catch { }
+                }
+
+                // 业务字段映射
                 foreach (var prop in childProps)
                 {
                     try
@@ -1054,7 +1431,19 @@ public class Sqlite<T> where T : class, IDataBase, new()
                     catch { }
                 }
 
-                addMethod?.Invoke(listObj, new[] { child });
+                // 从数据库加载时，区别对待 TableList 和普通 List
+                if (isTableList)
+                {
+                    // TableList 使用内部加载方法，不标记为已添加
+                    var loadMethod = childListProp.PropertyType.GetMethod("LoadFromDatabase", 
+                        System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                    loadMethod?.Invoke(listObj, new[] { child });
+                }
+                else
+                {
+                    // 普通 List 继续使用 Add 方法
+                    addMethod?.Invoke(listObj, new[] { child });
+                }
             }
 
             childListProp.SetValue(entity, listObj);
@@ -1178,6 +1567,28 @@ public class Sqlite<T> where T : class, IDataBase, new()
         if (targetType == typeof(byte[]))
             return (byte[])reader.GetValue(ordinal);
 
+        // 处理 Enum 类型：数据库存储为整数或字符串，需要转换为对应的 enum 值
+        if (targetType.IsEnum)
+        {
+            var rawValue = reader.GetValue(ordinal);
+            if (rawValue == null || rawValue is DBNull)
+                return Enum.GetValues(targetType).GetValue(0) ?? 0; // 返回默认值
+            
+            // 尝试从整数值转换
+            if (rawValue is int intVal)
+                return Enum.ToObject(targetType, intVal);
+            
+            // 尝试从字符串值转换
+            if (rawValue is string strVal)
+                return Enum.Parse(targetType, strVal, ignoreCase: true);
+            
+            // 尝试从 long 转换
+            if (rawValue is long longVal)
+                return Enum.ToObject(targetType, longVal);
+            
+            return Enum.ToObject(targetType, Convert.ToInt32(rawValue));
+        }
+
         return reader.GetValue(ordinal);
     }
 
@@ -1224,6 +1635,19 @@ public class Sqlite<T> where T : class, IDataBase, new()
 
         var elementType = type.GetGenericArguments()[0];
         return typeof(IDataTable).IsAssignableFrom(elementType);
+    }
+
+    private bool IsTableList(Type type)
+    {
+        if (!type.IsGenericType)
+            return false;
+
+        var genericDef = type.GetGenericTypeDefinition();
+        if (genericDef.Name != "TableList`1")
+            return false;
+
+        var elementType = type.GetGenericArguments()[0];
+        return typeof(IDataTableV2).IsAssignableFrom(elementType);
     }
 
     private Type GetDataTableListElementType(Type listType)
