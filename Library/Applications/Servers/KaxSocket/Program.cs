@@ -65,6 +65,7 @@ public class Program
             server.AddRoute(HttpMethod.Get, "/cdk/admin", req=> new HtmlResultFromFile($"{AppDomain.CurrentDomain.BaseDirectory}Views/cdkadmin.html"));
             server.AddRoute(HttpMethod.Get, "/asset/admin", req => new HtmlResultFromFile($"{AppDomain.CurrentDomain.BaseDirectory}Views/assetadmin.html"));
             server.AddRoute(HttpMethod.Get, "/profile", req => new HtmlResultFromFile($"{AppDomain.CurrentDomain.BaseDirectory}Views/profile.html"));
+            server.AddRoute(HttpMethod.Get, "/profile/{uid}", req => new HtmlResultFromFile($"{AppDomain.CurrentDomain.BaseDirectory}Views/profile.html"));
             server.RegisterHandlersFromAssembly(typeof(DLTBModPackerHttp));
             server.RegisterHandlersFromAssembly(typeof(KaxHttp));
             server.RegisterCommandsFromType(typeof(KaxCommandHandler));

@@ -15,6 +15,10 @@
 | `/api/user/verify/asset/{assetId}` | GET | Bearer token | 60 / 60s | 校验用户是否拥有指定 asset |
 | `/api/cdk/admin/*` | POST / GET | Bearer token (Console/Root/Admin) | 见各接口 | CDK 管理（生成/保存/删除/查询） |
 | `/api/asset/admin/*` | POST / GET | Bearer token (Console/Root/Admin) | 见各接口 | 资源（Asset）管理（增/改/查/删/列表） |
+| `/api/user/assets/active` | GET | Bearer token | 60 / 60s | 获取当前用户的激活资源列表 |
+| `/api/user/verify/asset/{assetId}/raw` | GET | Bearer token | 60 / 60s | 返回用户对 asset 的原始激活记录（activatedAt / expiresAt） |
+| `/api/user/verify/asset/{assetId}/remaining` | GET | Bearer token | 60 / 60s | 返回 asset 的剩余时间（秒），永久返回 -1 |
+| `/api/asset/name/{assetId}` | GET | 无（公开） | 120 / 60s | 通过 assetId 获取资源名（用于 UI 显示） |
 
 ---
 
@@ -93,6 +97,67 @@
 - 参数：`assetId` 必须为 > 0 的整数
 - 错误：401（未授权）、403（被封禁）、400（assetId 无效）
 - 速率：60 次 / 60 秒（触发回调）
+
+---
+
+### 6) 获取当前用户的激活资源列表 — GET /api/user/assets/active
+- 认证：Bearer token
+- 返回（HTTP 200）样例：
+   ```json
+   {
+      "code": 0,
+      "message": "成功",
+      "data": [
+         { "id": 1, "assetId": 123, "activatedAt": 1670000000000, "expiresAt": 0, "remainingSeconds": -1 },
+         { "id": 2, "assetId": 124, "activatedAt": 1670001000000, "expiresAt": 1672593000000, "remainingSeconds": 2592000 }
+      ]
+   }
+   ```
+- 字段说明：
+   - id: 激活记录 id（内部使用）
+   - assetId: 资源 id
+   - activatedAt / expiresAt: 以毫秒为单位的时间戳（UTC）
+   - remainingSeconds: 剩余秒数；若永久则为 -1
+- 错误：401（未授权）、403（被封禁）、404（用户不存在）
+- 速率：60 次 / 60 秒
+
+---
+
+### 7) 返回资产原始激活记录（raw）— GET /api/user/verify/asset/{assetId}/raw
+- 认证：Bearer token
+- 返回（HTTP 200）样例：
+   - 拥有： `{ "assetId": 123, "activatedAt": 1670000000000, "expiresAt": 0, "has": true, "code": 0 }`
+   - 不拥有： `{ "assetId": 123, "activatedAt": 0, "expiresAt": 0, "has": false, "code": 2004 }`
+- 参数：`assetId` 必须为 > 0 的整数
+- 错误：401（未授权）、403（被封禁）、400（assetId 无效）
+- 速率：60 次 / 60 秒
+
+---
+
+### 8) 返回资产剩余时间 — GET /api/user/verify/asset/{assetId}/remaining
+- 认证：Bearer token
+- 返回（HTTP 200）样例：
+   - 拥有且永久： `{ "assetId": 123, "has": true, "remainingSeconds": -1, "code": 0 }`
+   - 拥有但已过期： `{ "assetId": 123, "has": false, "remainingSeconds": 0, "code": 2004 }`
+   - 未拥有： `{ "assetId": 123, "has": false, "remainingSeconds": 0, "code": 2004 }`
+- 说明：当资源为永久时返回 remainingSeconds = -1
+- 错误：401（未授权）、403（被封禁）、400（assetId 无效）
+- 速率：60 次 / 60 秒
+
+---
+
+### 9) 通过 assetId 获取资源名 — GET /api/asset/name/{assetId}
+- 认证：公开（无需 token），用于前端在无需鉴权场景下显示资源名
+- 返回（HTTP 200）样例： `{ "assetId": 123, "name": "My Resource", "code": 0 }`
+- 资源不存在时返回 HTTP 404 携带 `{ "assetId": 123, "name": "", "code": 2004 }`
+- 参数：`assetId` 必须为 > 0 的整数
+- 错误：400（assetId 无效）、500（服务器错误）
+- 速率：120 次 / 60 秒（较高的公开读取限流）
+
+示例（无需登录）：
+```
+curl http://host/api/asset/name/123
+```
 
 ---
 

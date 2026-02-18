@@ -634,4 +634,7 @@
         document.addEventListener('DOMContentLoaded', function () { window.initGlobalTopbar && window.initGlobalTopbar(); });
     }
 
+    // 暴露 initCustomSelects 到全局作用域
+    window.initCustomSelects = initCustomSelects;
+
 })();

@@ -62,9 +62,34 @@ namespace Drx.Sdk.Network.DataBase.Sqlite
         /// </summary>
         private bool _isInitialized;
 
+        /// <summary>
+        /// 缓存的可序列化属性列表（在第一次使用时初始化）
+        /// 确保所有 SQL 生成和参数绑定使用相同的属性顺序
+        /// </summary>
+        private List<System.Reflection.PropertyInfo>? _cachedProperties;
+
         #endregion
 
-        #region 属性
+        #region 属性缓存方法
+
+        /// <summary>
+        /// 获取类型 T 的所有可序列化属性列表（带缓存）
+        /// 确保顺序一致，避免 SQL 和参数绑定不匹配
+        /// </summary>
+        private List<System.Reflection.PropertyInfo> GetProperties()
+        {
+            if (_cachedProperties == null)
+            {
+                _cachedProperties = typeof(T).GetProperties(
+                    System.Reflection.BindingFlags.Public |
+                    System.Reflection.BindingFlags.Instance |
+                    System.Reflection.BindingFlags.IgnoreCase)
+                    .Where(p => p.CanRead && p.CanWrite && p.GetIndexParameters().Length == 0)
+                    .OrderBy(p => p.Name)
+                    .ToList();
+            }
+            return _cachedProperties;
+        }
 
         /// <summary>
         /// 集合中的项目数
@@ -339,6 +364,89 @@ namespace Drx.Sdk.Network.DataBase.Sqlite
         #region 智能同步方法
 
         /// <summary>
+        /// 确保表具有所有必要的列（向后兼容迁移）
+        /// 如果表中缺少某些属性对应的列，自动添加这些列
+        /// </summary>
+        private void EnsureTableSchema(SqliteConnection connection, SqliteTransaction transaction)
+        {
+            if (string.IsNullOrEmpty(_tableName))
+                return;
+
+            try
+            {
+                // 获取表中已存在的列名
+                var existingColumns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                var pragma = $"PRAGMA table_info([{_tableName}])";
+                using var cmd = new SqliteCommand(pragma, connection);
+                cmd.Transaction = transaction;
+                
+                using var reader = cmd.ExecuteReader();
+                {
+                    while (reader.Read())
+                    {
+                        var colName = reader["name"] as string;
+                        if (!string.IsNullOrEmpty(colName))
+                            existingColumns.Add(colName);
+                    }
+                }
+
+                // 检查并添加缺失的列
+                var properties = GetProperties();
+                foreach (var prop in properties)
+                {
+                    if (!existingColumns.Contains(prop.Name))
+                    {
+                        // 根据属性类型推断 SQLite 数据类型
+                        var sqlType = InferSqliteType(prop.PropertyType);
+                        var alterSql = $"ALTER TABLE [{_tableName}] ADD COLUMN [{prop.Name}] {sqlType}";
+                        
+                        using var alterCmd = new SqliteCommand(alterSql, connection);
+                        alterCmd.Transaction = transaction;
+                        alterCmd.ExecuteNonQuery();
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                // 避免表迁移失败导致同步操作失败
+                throw new InvalidOperationException($"表结构迁移失败（{_tableName}）：{ex.Message}", ex);
+            }
+        }
+
+        /// <summary>
+        /// 根据 C# 类型推断对应的 SQLite 数据类型
+        /// </summary>
+        private static string InferSqliteType(Type propertyType)
+        {
+            var underlyingType = Nullable.GetUnderlyingType(propertyType) ?? propertyType;
+
+            if (underlyingType == typeof(int) || underlyingType == typeof(uint) || 
+                underlyingType == typeof(short) || underlyingType == typeof(ushort) ||
+                underlyingType == typeof(byte) || underlyingType == typeof(sbyte) ||
+                underlyingType == typeof(bool))
+                return "INTEGER";
+
+            if (underlyingType == typeof(long) || underlyingType == typeof(ulong))
+                return "INTEGER";
+
+            if (underlyingType == typeof(float) || underlyingType == typeof(double) || underlyingType == typeof(decimal))
+                return "REAL";
+
+            if (underlyingType == typeof(DateTime) || underlyingType == typeof(DateTimeOffset))
+                return "INTEGER";  // 以 Unix 时间戳存储
+
+            if (underlyingType == typeof(byte[]))
+                return "BLOB";
+
+            // 默认为 TEXT
+            return "TEXT";
+        }
+
+        #endregion
+
+        #region 智能同步方法
+
+        /// <summary>
         /// 同步所有变更到数据库
         /// 由 SqliteV2 的 Update 方法调用，在主表更新的同一个事务中完成
         /// 采用智能合并策略：仅同步 added/modified/deleted 的项目
@@ -350,6 +458,9 @@ namespace Drx.Sdk.Network.DataBase.Sqlite
 
             try
             {
+                // 0. 表结构迁移：确保表中存在所有必要的列
+                EnsureTableSchema(connection, transaction);
+
                 // 1. 批量插入新添加的项目
                 if (_addedItems.Count > 0)
                 {
@@ -372,13 +483,13 @@ namespace Drx.Sdk.Network.DataBase.Sqlite
                 // 2. 批量更新已修改的项目
                 if (_modifiedItems.Count > 0)
                 {
-                    var sql = BuildUpdateSql();
-                    using var cmd = new SqliteCommand(sql, connection);
-                    cmd.Transaction = transaction;
-
                     var itemsToUpdate = _modifiedItems.Select(id => _items[id]).ToList();
                     foreach (var item in itemsToUpdate)
                     {
+                        var sql = BuildUpdateSql();
+                        using var cmd = new SqliteCommand(sql, connection);
+                        cmd.Transaction = transaction;
+
                         BindUpdateParameters(cmd, item);
                         cmd.ExecuteNonQuery();
                     }
@@ -390,18 +501,25 @@ namespace Drx.Sdk.Network.DataBase.Sqlite
                 if (_deletedItems.Count > 0)
                 {
                     var idsToDelete = _deletedItems.ToList();
-                    var placeholders = string.Join(",", Enumerable.Range(0, idsToDelete.Count).Select((_, i) => $"@id{i}"));
-                    var sql = $"DELETE FROM [{_tableName}] WHERE [Id] IN ({placeholders})";
+                    const int batchSize = 500;  // SQLite 默认 SQLITE_MAX_VARIABLE_NUMBER 为 999，分批以安全处理
 
-                    using var cmd = new SqliteCommand(sql, connection);
-                    cmd.Transaction = transaction;
-
-                    for (int i = 0; i < idsToDelete.Count; i++)
+                    for (int batch = 0; batch < idsToDelete.Count; batch += batchSize)
                     {
-                        cmd.Parameters.AddWithValue($"@id{i}", idsToDelete[i]);
+                        var batchIds = idsToDelete.Skip(batch).Take(batchSize).ToList();
+                        var placeholders = string.Join(",", Enumerable.Range(0, batchIds.Count).Select((_, i) => $"@id{i}"));
+                        var sql = $"DELETE FROM [{_tableName}] WHERE [Id] IN ({placeholders})";
+
+                        using var cmd = new SqliteCommand(sql, connection);
+                        cmd.Transaction = transaction;
+
+                        for (int i = 0; i < batchIds.Count; i++)
+                        {
+                            cmd.Parameters.AddWithValue($"@id{i}", batchIds[i]);
+                        }
+
+                        cmd.ExecuteNonQuery();
                     }
 
-                    int deleted = cmd.ExecuteNonQuery();
                     _deletedItems.Clear();
                 }
             }
@@ -549,13 +667,20 @@ namespace Drx.Sdk.Network.DataBase.Sqlite
         private string BuildInsertSql(IEnumerable<T> items)
         {
             var sb = new StringBuilder();
-            sb.Append($"INSERT INTO [{_tableName}] ([Id], [ParentId], [CreatedAt], [UpdatedAt]) VALUES ");
+            var properties = GetProperties();
+            
+            // 构建列名列表
+            var columnNames = string.Join("], [", properties.Select(p => p.Name));
+            sb.Append($"INSERT INTO [{_tableName}] ([{columnNames}]) VALUES ");
 
             var itemList = items.ToList();
             for (int i = 0; i < itemList.Count; i++)
             {
                 if (i > 0) sb.Append(", ");
-                sb.Append($"(@id{i}, @parentId{i}, @createdAt{i}, @updatedAt{i})");
+                
+                // 为每个属性添加参数占位符
+                var paramPlaceholders = string.Join(", ", properties.Select((_, idx) => $"@p{i}_{idx}"));
+                sb.Append($"({paramPlaceholders})");
             }
 
             return sb.ToString();
@@ -563,29 +688,50 @@ namespace Drx.Sdk.Network.DataBase.Sqlite
 
         private string BuildUpdateSql()
         {
-            return $"UPDATE [{_tableName}] SET [UpdatedAt] = @updatedAt WHERE [Id] = @id";
+            var properties = GetProperties();
+            // 构建 SET 子句：所有属性除了 Id 和 ParentId（这些不可变）
+            var updateProps = properties.Where(p => p.Name != "Id" && p.Name != "ParentId").ToList();
+            var setClause = string.Join(", ", updateProps.Select(p => $"[{p.Name}] = @{p.Name}"));
+            
+            return $"UPDATE [{_tableName}] SET {setClause} WHERE [Id] = @id";
         }
 
         private void BindInsertParameters(SqliteCommand cmd, T item)
         {
-            cmd.Parameters.AddWithValue("@id", item.Id ?? Guid.NewGuid().ToString());
-            cmd.Parameters.AddWithValue("@parentId", _parentId);
-            cmd.Parameters.AddWithValue("@createdAt", item.CreatedAt);
-            cmd.Parameters.AddWithValue("@updatedAt", item.UpdatedAt);
+            var properties = GetProperties();
+            // 为所有属性绑定参数（不需要索引，单个项使用属性名作为参数名）
+            foreach (var prop in properties)
+            {
+                var value = prop.GetValue(item);
+                cmd.Parameters.AddWithValue($"@{prop.Name}", value ?? DBNull.Value);
+            }
         }
 
         private void BindInsertParametersBatch(SqliteCommand cmd, T item, int index)
         {
-            cmd.Parameters.AddWithValue($"@id{index}", item.Id ?? Guid.NewGuid().ToString());
-            cmd.Parameters.AddWithValue($"@parentId{index}", _parentId);
-            cmd.Parameters.AddWithValue($"@createdAt{index}", item.CreatedAt);
-            cmd.Parameters.AddWithValue($"@updatedAt{index}", item.UpdatedAt);
+            var properties = GetProperties();
+            // 为批量插入绑定参数（使用 @p{index}_{propIndex} 格式）
+            for (int propIndex = 0; propIndex < properties.Count; propIndex++)
+            {
+                var prop = properties[propIndex];
+                var value = prop.GetValue(item);
+                cmd.Parameters.AddWithValue($"@p{index}_{propIndex}", value ?? DBNull.Value);
+            }
         }
 
         private void BindUpdateParameters(SqliteCommand cmd, T item)
         {
+            var properties = GetProperties();
+            // 为更新绑定参数（所有属性除了 Id 和 ParentId）
+            var updateProps = properties.Where(p => p.Name != "Id" && p.Name != "ParentId").ToList();
+            foreach (var prop in updateProps)
+            {
+                var value = prop.GetValue(item);
+                cmd.Parameters.AddWithValue($"@{prop.Name}", value ?? DBNull.Value);
+            }
+            
+            // 绑定 WHERE 条件的 Id
             cmd.Parameters.AddWithValue("@id", item.Id);
-            cmd.Parameters.AddWithValue("@updatedAt", item.UpdatedAt);
         }
 
         #endregion

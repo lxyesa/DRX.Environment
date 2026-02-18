@@ -1,11 +1,27 @@
 <!-- Partial / fallback for <input-box>
      用法（前端）：
      <input-box id="inputName" label="显示名称" placeholder="请输入显示名称"></input-box>
-
-     该文件仅作为服务器端 include 的降级/示例内容；实际交互由 /components/inputbox.js 提供。
+该文件仅作为服务器端 include 的降级/示例内容；实际交互由 /components/inputbox.js 提供。
 -->
+<style>
+  /* 防止浏览器自动填充改变输入框背景色 */
+  input:-webkit-autofill,
+  textarea:-webkit-autofill,
+  select:-webkit-autofill,
+  input:-webkit-autofill:hover,
+  textarea:-webkit-autofill:hover,
+  select:-webkit-autofill:hover,
+  input:-webkit-autofill:focus,
+  textarea:-webkit-autofill:focus,
+  select:-webkit-autofill:focus {
+    -webkit-box-shadow: 0 0 0 30px rgba(255, 255, 255, 0.01) inset !important;
+    -webkit-text-fill-color: var(--muted-strong) !important;
+    background-color: rgb(187, 0, 0) !important;
+  }
+</style>
 <div class="field">
   <label class="label">示例标签</label>
-  <div class="label-divider" style="height:1px;background:rgba(255,255,255,0.03);margin:6px 0 8px;border-radius:1px;" aria-hidden="true"></div>
+  <div class="label-divider" style="height:1px;background:rgba(255,255,255,0.03);margin:6px 0 8px;border-radius:1px;"
+    aria-hidden="true"></div>
   <input title="示例标签" placeholder="请输入内容" />
 </div>

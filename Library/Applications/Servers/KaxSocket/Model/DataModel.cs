@@ -34,6 +34,7 @@ namespace KaxSocket
         public long LastLoginAt { get; set; }
         public string LoginToken { get; set; }
         public string DisplayName { get; set; }
+        public string Signature { get; set; } = string.Empty;
         public string Bio { get; set; } = string.Empty;
         public UserPermissionGroup PermissionGroup { get; set; } = UserPermissionGroup.User;
 

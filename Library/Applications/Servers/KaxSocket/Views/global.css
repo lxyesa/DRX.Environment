@@ -72,9 +72,8 @@ body {
 /* 顶部固定 Topbar（共享） */
 :root {
     --topbar-height: 64px;
-    --topbar-border: rgba(255, 255, 255, 0.08);
+    --topbar-border: rgb(36, 36, 36);
 }
-
 .topbar {
     position: fixed;
     top: 0;
@@ -84,11 +83,13 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    background: rgba(15, 15, 15, 0.75);
+    background: rgba(14, 14, 14, 0.822);
     z-index: 1000;
     transition: border-bottom 200ms ease, background 200ms ease;
     border-bottom: 0 solid transparent;
     line-height: 1;
+    -webkit-backdrop-filter: blur(16px);
+    backdrop-filter: blur(16px);
 }
 
 .topbar--scrolled {
@@ -188,7 +189,7 @@ body {
     position: relative;
     display: inline-block;
     padding: 12px 14px;
-    border-radius: 10px;
+    border-radius: 4px;
     background: var(--white, #ffffff);
     color: var(--bg, #0f0f0f);
     font-weight: 700;
@@ -442,7 +443,7 @@ body {
     color: var(--muted-strong, rgba(255, 255, 255, 0.9));
     border: 1px solid rgba(255, 255, 255, 0.08);
     padding: 12px 14px;
-    border-radius: 10px;
+    border-radius: 4px;
     transition: background .22s ease, color .18s ease, transform .22s cubic-bezier(.2, .9, .2, 1), box-shadow .22s ease;
     overflow: hidden;
     /* 修复：裁切光泽 */
@@ -471,7 +472,7 @@ body {
     padding: 0px 10px;
     height: 36px;
     font-size: 0.9rem;
-    border-radius: 8px;
+    border-radius: 4px;
 }
 
 /* Block / full-width 按钮（复用） */
@@ -532,13 +533,13 @@ select[disabled],
 select::-ms-expand {
     display: none;
 }
-
 /* 下拉项（受限但支持颜色/背景） */
 option {
     background: linear-gradient(180deg, rgba(20, 20, 20, 1), rgba(12, 12, 12, 1));
     color: var(--white);
     padding: 6px 8px;
 }
+
 
 /* 自定义下拉（完全可定制的替代 native select） */
 .custom-dropdown {
@@ -561,7 +562,7 @@ option {
     border: 1px solid rgba(255, 255, 255, 0.06);
     color: var(--white);
     padding: 8px 12px;
-    border-radius: 8px;
+    border-radius: 4px;
     cursor: pointer;
     min-height: 36px;
     font-family: 'Poppins', sans-serif;
@@ -671,7 +672,7 @@ option {
     color: #fff;
     border: 1px solid rgba(0, 0, 0, 0.12);
     transition: background .16s ease, transform .14s cubic-bezier(.2, .9, .2, 1), border-color .14s ease, box-shadow .18s ease;
-    border-radius: 10px;
+    border-radius: 4px;
 }
 
 .btn.danger:hover {
@@ -707,7 +708,7 @@ option {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    border-radius: 10px;
+    border-radius: 4px;
     overflow: hidden;
     transition: transform .22s cubic-bezier(.2, .9, .2, 1), box-shadow .22s ease;
 }
@@ -749,7 +750,7 @@ option {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    border-radius: 50%;
+    border-radius: 4px;
     /* 圆形，更贴近 material icon 按钮 */
     background: transparent;
     color: var(--muted-strong, rgba(255, 255, 255, 0.72));
@@ -820,7 +821,7 @@ option {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    border-radius: 10px;
+    border-radius: 4px;
 }
 
 /* 复制按钮（独立交互目标，含成功态反馈） */
@@ -832,7 +833,7 @@ option {
     align-items: center;
     justify-content: center;
     color: rgba(255, 255, 255, 0.6);
-    border-radius: 9px;
+    border-radius: 4px;
     transition: color .18s cubic-bezier(.2, .9, .2, 1), background .18s ease, transform .18s ease, box-shadow .18s ease;
     background: rgba(255, 255, 255, 0.01);
     border: 1px solid rgba(255, 255, 255, 0.03);
@@ -906,7 +907,7 @@ option {
     align-items: center;
     justify-content: center;
     color: rgba(255, 255, 255, 0.62);
-    border-radius: 9px;
+    border-radius: 4px;
     background: rgba(255, 255, 255, 0.01);
     border: 1px solid rgba(255, 255, 255, 0.03);
     cursor: pointer;
@@ -930,7 +931,7 @@ option {
     width: 36px;
     height: 36px;
     padding: 6px;
-    border-radius: 9px;
+    border-radius: 4px;
     background: transparent;
     color: var(--muted-strong, rgba(255, 255, 255, 0.8));
     border: 1px solid rgba(255, 255, 255, 0.03);
@@ -971,126 +972,4 @@ option {
     filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.35));
 }
 
-/* 用户头像下拉菜单（参考 GitHub 风格） */
-.user-menu {
-    /* 使用 fixed 定位以便精确放置在头像下方；JS 会设置 left/top 值 */
-    position: fixed;
-    width: 280px;
-    background: rgba(22, 22, 22, 0.92);
-    /* 轻微透明、单色，无渐变 */
-    border: 0.8px solid rgba(255, 255, 255, 0.06);
-    /* 细线边框 */
-    border-radius: 12px;
-    box-shadow: 0 8px 18px rgba(0, 0, 0, 0.12);
-    /* 较轻的阴影 */
-    padding: 6px;
-    z-index: 1400;
-    transform-origin: top left;
-    transform: translateY(-6px);
-    opacity: 0;
-    pointer-events: none;
-    transition: opacity .18s ease, transform .18s ease;
-    /* 简洁的淡入/位移动画 */
-}
 
-.user-menu.open {
-    opacity: 0.98;
-    transform: translateY(0);
-    pointer-events: auto;
-}
-
-.user-menu.closing {
-    opacity: 0;
-    transform: translateY(-6px);
-    pointer-events: none;
-}
-
-.user-menu-card {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-}
-
-.user-menu-header {
-    display: flex;
-    gap: 10px;
-    align-items: center;
-    padding: 10px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.03);
-}
-
-.menu-avatar {
-    width: 40px;
-    height: 40px;
-    border-radius: 999px;
-    object-fit: cover;
-    border: 1px solid rgba(255, 255, 255, 0.06);
-}
-
-.user-menu-info {
-    display: flex;
-    flex-direction: column;
-    min-width: 0;
-}
-
-.user-menu-name {
-    font-weight: 700;
-    color: #fff;
-    font-size: 0.95rem;
-    line-height: 1;
-}
-
-.user-menu-bio {
-    color: rgba(255, 255, 255, 0.62);
-    font-size: 0.82rem;
-    margin-top: 6px;
-}
-
-.user-menu-section {
-    display: flex;
-    flex-direction: column;
-    padding: 6px;
-    gap: 6px;
-}
-
-.user-menu-item {
-    display: flex;
-    gap: 10px;
-    align-items: center;
-    padding: 8px 10px;
-    border-radius: 8px;
-    color: rgba(255, 255, 255, 0.95);
-    text-decoration: none;
-    font-size: 0.95rem;
-}
-
-.user-menu-item .material-icons {
-    font-size: 18px;
-    color: rgba(255, 255, 255, 0.6);
-}
-
-.user-menu-item:hover,
-.user-menu-item:focus {
-    background: rgba(255, 255, 255, 0.02);
-    outline: none;
-}
-
-.separator {
-    height: 1px;
-    background: rgba(255, 255, 255, 0.03);
-    margin: 6px 0;
-    border-radius: 2px;
-}
-
-#signOutBtn {
-    color: #fff;
-    font-weight: 700;
-}
-
-@media (max-width: 768px) {
-    .user-menu {
-        right: 8px;
-        left: 8px;
-        width: auto;
-    }
-}

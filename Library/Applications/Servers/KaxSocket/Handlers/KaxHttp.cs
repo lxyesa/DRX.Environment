@@ -338,6 +338,9 @@ public class KaxHttp
         var respBio = string.Empty;
         var bioProp = user.GetType().GetProperty("Bio");
         if (bioProp != null) respBio = (bioProp.GetValue(user) as string) ?? string.Empty;
+        var respSignature = string.Empty;
+        var signatureProp = user.GetType().GetProperty("Signature");
+        if (signatureProp != null) respSignature = (signatureProp.GetValue(user) as string) ?? string.Empty;
         var respRegisteredAt = user.RegisteredAt;
         var respLastLoginAt = user.LastLoginAt;
 
@@ -366,6 +369,7 @@ public class KaxHttp
             displayName = respDisplayName,
             email = respEmail,
             bio = respBio,
+            signature = respSignature,
             registeredAt = respRegisteredAt,
             lastLoginAt = respLastLoginAt,
             permissionGroup = (int)user.PermissionGroup,
@@ -380,6 +384,91 @@ public class KaxHttp
             recentActivity = recentActivity,
             cdkCount = cdkCount
         });
+    }
+
+    // GET /api/user/profile/{uid} -> 返回指定用户的资料（公开信息）
+    [HttpHandle("/api/user/profile/{uid}", "GET", RateLimitMaxRequests = 60, RateLimitWindowSeconds = 60, RateLimitCallbackMethodName = nameof(RateLimitCallback))]
+    public static async Task<IActionResult> Get_UserProfileByUid(HttpRequest request)
+    {
+        var token = request.Headers[HttpHeaders.Authorization]?.Replace("Bearer ", "");
+        var principal = KaxGlobal.ValidateToken(token!);
+        if (principal == null) return new JsonResult(new { message = "未授权" }, 401);
+
+        var currentUserName = principal.Identity?.Name;
+        if (string.IsNullOrWhiteSpace(currentUserName)) return new JsonResult(new { message = "未授权" }, 401);
+
+        if (await KaxGlobal.IsUserBanned(currentUserName)) return new JsonResult(new { message = "账号被封禁" }, 403);
+
+        // 从路径中提取 uid
+        var uidStr = request.Path.Split('/').LastOrDefault();
+        if (!long.TryParse(uidStr, out var uid))
+            return new JsonResult(new { message = "无效的用户 ID" }, 400);
+
+        try
+        {
+            var user = (await KaxGlobal.UserDatabase.SelectWhereAsync("Id", uid)).FirstOrDefault();
+            if (user == null) return new JsonResult(new { message = "用户不存在" }, 404);
+
+            // 检查目标用户是否被封禁
+            if (user.Status != null && user.Status.IsBanned)
+                return new JsonResult(new { message = "该用户已被封禁" }, 403);
+
+            var respDisplayName = string.IsNullOrEmpty(user.DisplayName) ? user.UserName : user.DisplayName;
+            var respEmail = user.Email ?? string.Empty;
+            var respBio = string.Empty;
+            var bioProp = user.GetType().GetProperty("Bio");
+            if (bioProp != null) respBio = (bioProp.GetValue(user) as string) ?? string.Empty;
+            var respSignature = string.Empty;
+            var signatureProp = user.GetType().GetProperty("Signature");
+            if (signatureProp != null) respSignature = (signatureProp.GetValue(user) as string) ?? string.Empty;
+            var respRegisteredAt = user.RegisteredAt;
+            var respLastLoginAt = user.LastLoginAt;
+
+            // 若存在服务器头像文件，则提供可访问的头像 URL
+            string avatarUrl = string.Empty;
+            try
+            {
+                var avatarPath = KaxGlobal.GetUserAvatarPathById(user.Id);
+                if (!string.IsNullOrEmpty(avatarPath))
+                {
+                    var stamp = respLastLoginAt > 0 ? respLastLoginAt : DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+                    avatarUrl = $"/api/user/avatar/{user.Id}?v={stamp}";
+                }
+            }
+            catch { }
+
+            // 额外动态字段
+            var resourceCount = 0; var contribution = 0; var recentActivity = 0; var cdkCount = 0;
+            try { resourceCount = user.ResourceCount; contribution = user.Contribution; recentActivity = user.RecentActivity; } catch { }
+            try { cdkCount = await KaxGlobal.GetUserCdkCountAsync(user.UserName); } catch { }
+
+            return new JsonResult(new
+            {
+                id = user.Id,
+                user = user.UserName,
+                displayName = respDisplayName,
+                email = respEmail,
+                bio = respBio,
+                signature = respSignature,
+                registeredAt = respRegisteredAt,
+                lastLoginAt = respLastLoginAt,
+                permissionGroup = (int)user.PermissionGroup,
+                isBanned = user.Status != null && user.Status.IsBanned,
+                bannedAt = user.Status != null ? user.Status.BannedAt : 0,
+                banExpiresAt = user.Status != null ? user.Status.BanExpiresAt : 0,
+                banReason = user.Status != null ? (user.Status.BanReason ?? string.Empty) : string.Empty,
+                avatarUrl = avatarUrl,
+                resourceCount = resourceCount,
+                contribution = contribution,
+                recentActivity = recentActivity,
+                cdkCount = cdkCount
+            });
+        }
+        catch (Exception ex)
+        {
+            Logger.Error("获取用户资料时出错: " + ex.Message);
+            return new JsonResult(new { message = "服务器错误" }, 500);
+        }
     }
 
     [HttpHandle("/api/user/profile", "POST", RateLimitMaxRequests = 10, RateLimitWindowSeconds = 60, RateLimitCallbackMethodName = nameof(RateLimitCallback))]
@@ -402,6 +491,7 @@ public class KaxHttp
         var displayName = body["displayName"]?.ToString()?.Trim() ?? string.Empty;
         var email = body["email"]?.ToString()?.Trim() ?? string.Empty;
         var bio = body["bio"]?.ToString() ?? string.Empty;
+        var signature = body["signature"]?.ToString() ?? string.Empty;
 
         // 基础校验
         if (!string.IsNullOrEmpty(email) && !CommonUtility.IsValidEmail(email))
@@ -411,6 +501,14 @@ public class KaxHttp
         {
             var user = (await KaxGlobal.UserDatabase.SelectWhereAsync("UserName", userName)).FirstOrDefault();
             if (user == null) return new JsonResult(new { message = "用户不存在" }, 404);
+
+            // 安全验证：确保只能更新自己的资料
+            // 这是一个防御性检查，防止通过 API 直接修改他人资料
+            if (!string.Equals(user.UserName, userName, StringComparison.OrdinalIgnoreCase))
+            {
+                Logger.Warn($"用户 {userName} 尝试修改他人资料（目标用户: {user.UserName}），请求被拒绝");
+                return new JsonResult(new { message = "无权修改他人资料" }, 403);
+            }
 
             // 如果邮箱发生变化，检查唯一性
             if (!string.IsNullOrEmpty(email) && !string.Equals(user.Email ?? string.Empty, email, StringComparison.OrdinalIgnoreCase))
@@ -429,8 +527,13 @@ public class KaxHttp
             var prop = user.GetType().GetProperty("Bio");
             if (prop != null) prop.SetValue(user, bio ?? string.Empty);
 
+            // 如果模型支持 Signature 字段则保存
+            var signatureProp = user.GetType().GetProperty("Signature");
+            if (signatureProp != null) signatureProp.SetValue(user, signature ?? string.Empty);
+
             await KaxGlobal.UserDatabase.UpdateAsync(user);
 
+            Logger.Info($"用户 {userName} 成功更新了自己的资料");
             return new JsonResult(new { message = "资料已更新" });
         }
         catch (Exception ex)
@@ -471,6 +574,14 @@ public class KaxHttp
         {
             var user = (await KaxGlobal.UserDatabase.SelectWhereAsync("UserName", userName)).FirstOrDefault();
             if (user == null) return new JsonResult(new { message = "用户不存在" }, 404);
+
+            // 安全验证：确保只能修改自己的密码
+            // 这是一个防御性检查，防止通过 API 直接修改他人密码
+            if (!string.Equals(user.UserName, userName, StringComparison.OrdinalIgnoreCase))
+            {
+                Logger.Warn($"用户 {userName} 尝试修改他人密码（目标用户: {user.UserName}），请求被拒绝");
+                return new JsonResult(new { message = "无权修改他人密码" }, 403);
+            }
 
             var oldHash = CommonUtility.ComputeSHA256Hash(oldPassword);
             if (!string.Equals(user.PasswordHash ?? string.Empty, oldHash, StringComparison.Ordinal))
@@ -565,6 +676,14 @@ public class KaxHttp
         var user = (await KaxGlobal.UserDatabase.SelectWhereAsync("UserName", userName)).FirstOrDefault();
         if (user == null) return new JsonResult(new { message = "用户不存在" }, 404);
 
+        // 安全验证：确保只能上传自己的头像
+        // 这是一个防御性检查，防止通过 API 直接修改他人头像
+        if (!string.Equals(user.UserName, userName, StringComparison.OrdinalIgnoreCase))
+        {
+            Logger.Warn($"用户 {userName} 尝试修改他人头像（目标用户: {user.UserName}），请求被拒绝");
+            return new JsonResult(new { message = "无权修改他人头像" }, 403);
+        }
+
         var ext = fileExt;
 
         var iconsDir = Path.Combine(AppContext.BaseDirectory, "resources", "user", "icon");
@@ -604,6 +723,7 @@ public class KaxHttp
         }
 
         var url = $"/api/user/avatar/{user.Id}?v={DateTimeOffset.UtcNow.ToUnixTimeSeconds()}";
+        Logger.Info($"用户 {userName} 成功上传了头像");
         return new JsonResult(new { message = "头像已上传", url = url });
     }
 
@@ -1373,6 +1493,29 @@ public class KaxHttp
         {
             Logger.Error($"读取资源列表失败: {ex.Message}");
             return new JsonResult(new { message = "无法读取资源列表" }, 500);
+        }
+    }
+
+    [HttpHandle("/api/asset/name/{assetId}", "GET", RateLimitMaxRequests = 120, RateLimitWindowSeconds = 60, RateLimitCallbackMethodName = nameof(RateLimitCallback))]
+    public static async Task<IActionResult> Get_AssetName(HttpRequest request)
+    {
+        if (!request.PathParameters.TryGetValue("assetId", out var assetIdString) || !int.TryParse(assetIdString, out var assetId) || assetId <= 0)
+            return new JsonResult(new { message = "assetId 参数必须是大于 0 的整数" }, 400);
+
+        try
+        {
+            var asset = await KaxGlobal.AssetDataBase.SelectByIdAsync(assetId);
+            if (asset == null)
+            {
+                return new JsonResult(new { assetId = assetId, name = string.Empty, code = 2004 }, 404);
+            }
+
+            return new JsonResult(new { assetId = asset.Id, name = asset.Name ?? string.Empty, code = 0 }, 200);
+        }
+        catch (Exception ex)
+        {
+            Logger.Error($"Get_AssetName 失败: {ex.Message}");
+            return new JsonResult(new { message = "服务器错误" }, 500);
         }
     }
 

@@ -432,7 +432,7 @@ public static class KaxGlobal
         }
         catch (Exception ex)
         {
-            Logger.Error($"激活 CDK 失败（用户: {userName}, CDK: {cdkCode}）: {ex.Message}");
+            Logger.Error($"激活 CDK 失败（用户: {userName}, CDK: {cdkCode}）: {ex.Message}, {ex.StackTrace}");
             return (500, "服务器错误");
         }
     }

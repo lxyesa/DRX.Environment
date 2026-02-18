@@ -22,14 +22,14 @@
       --accent: #3b82f6;
       --success: #22c55e;
       --danger: #ef4444;
-      /* 已移除渐变变量（扁平化风格） */
-      --radius: 12px;
+      --radius: 8px;
       --max-width: 1100px;
+      --transition: 0.18s ease;
     }
 
     html,
     body {
-      height: 100%
+      height: 100%;
     }
 
     body {
@@ -102,6 +102,12 @@
       gap: 18px;
     }
 
+    @media (max-width: 768px) {
+      .grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
     /* 卡片风格 */
     .card {
       background: var(--card);
@@ -143,12 +149,12 @@
       height: 100%;
       object-fit: cover;
       display: block;
-      transition: filter .18s ease, transform .18s ease;
+      transition: filter var(--transition), transform var(--transition);
     }
 
     .avatar { position: relative; cursor: pointer; }
-    .avatar-overlay { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.32); border-radius: inherit; opacity: 0; transition: opacity .18s ease; pointer-events: none; }
-    .avatar-plus { color: #fff; font-size: 28px; transform: scale(.6); transition: transform .22s cubic-bezier(.2,.9,.2,1), opacity .18s ease; opacity: 0; }
+    .avatar-overlay { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.32); border-radius: inherit; opacity: 0; transition: opacity var(--transition); pointer-events: none; }
+    .avatar-plus { color: #fff; font-size: 28px; transform: scale(.6); transition: transform 0.22s cubic-bezier(.2,.9,.2,1), opacity var(--transition); opacity: 0; }
     .avatar:hover .avatar-overlay, .avatar:focus-within .avatar-overlay { opacity: 1; }
     .avatar:hover img, .avatar:focus-within img { filter: blur(2px) brightness(.9); transform: scale(1.02); }
     .avatar:hover .avatar-plus, .avatar:focus-within .avatar-plus { transform: scale(1); opacity: 1; }
@@ -291,11 +297,11 @@
       font-size: 0.95rem;
     }
 
-    textarea {
-      min-height: 96px;
-      resize: vertical;
-    }
-
+     textarea {
+       min-height: 96px;
+       resize: vertical;
+     }
+     
     .actions {
       display: flex;
       gap: 8px;
@@ -371,12 +377,68 @@
       .avatar { width:64px; height:64px; border-radius:10px; }
       .profile-info { margin-left:12px; margin-top:0; }
     }
+
+    /* 错误页面样式 */
+    .error-container {
+      display: none;
+      text-align: center;
+      padding: 60px 24px;
+      min-height: 60vh;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .error-container.show {
+      display: flex;
+    }
+
+    .error-icon {
+      font-size: 64px;
+      color: var(--danger);
+      margin-bottom: 24px;
+      opacity: 0.8;
+    }
+
+    .error-title {
+      font-size: 1.75rem;
+      font-weight: 700;
+      margin-bottom: 12px;
+      color: var(--muted-strong);
+    }
+
+    .error-message {
+      font-size: 1rem;
+      color: var(--muted);
+      margin-bottom: 32px;
+      max-width: 500px;
+    }
+
+    .error-actions {
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
   </style>
 </head>
 
 <body class="has-global-topbar">
   <div class="container">
-    <div class="page-header" role="banner">
+    <!-- 错误页面 -->
+    <div class="error-container" id="errorContainer">
+      <div class="error-icon">⚠️</div>
+      <div class="error-title">资料不存在</div>
+      <div class="error-message">抱歉，你访问的用户资料不存在或已被删除。请检查 UID 是否正确。</div>
+      <div class="error-actions">
+        <button class="btn ghost" onclick="location.href='/'">返回首页</button>
+        <button class="btn" onclick="location.href='/profile'">查看我的资料</button>
+      </div>
+    </div>
+
+    <!-- 主要内容 -->
+    <div id="mainContent">
+      <div class="page-header" role="banner">
       <div class="brand">
         <div class="logo">◆</div>
         <div>
@@ -465,7 +527,10 @@
       <section>
         <div class="card" aria-labelledby="basicTitle">
           <div class="section-title">
-            <h2 id="basicTitle" style="margin:0;font-size:1rem">基本信息</h2>
+            <div style="display:flex;align-items:center;gap:8px;">
+              <span class="material-icons" style="color:var(--accent);font-size:20px;">person</span>
+              <h2 id="basicTitle" style="margin:0;font-size:1rem">基本信息</h2>
+            </div>
             <div class="small-hint">已连接后端：保存将调用 /api/user/profile（需要登录）</div>
           </div>
 
@@ -490,6 +555,10 @@
               <textarea id="inputBio">热爱开发与产品，负责 KaxHub 平台的后端与管理功能。</textarea>
             </div>
 
+            <div style="margin-top:12px;">
+              <input-box id="inputSignature" label="个性签名" placeholder="输入个性签名" textarea rows="3"></input-box>
+            </div>
+
             <div class="actions" style="justify-content:flex-end;">
               <button type="button" class="btn ghost" id="cancelBtn">取消</button>
               <button type="submit" class="btn primary" id="saveBtn">保存更改</button>
@@ -499,7 +568,10 @@
 
         <div class="card" style="margin-top:12px;">
           <div class="section-title">
-            <h3 style="margin:0;font-size:1rem">安全与偏好</h3>
+            <div style="display:flex;align-items:center;gap:8px;">
+              <span class="material-icons" style="color:var(--accent);font-size:20px;">security</span>
+              <h3 style="margin:0;font-size:1rem">安全与偏好</h3>
+            </div>
             <div class="small-hint">密码与安全设置</div>
           </div>
 
@@ -520,21 +592,9 @@
                 </div>
               </div>
               <div class="small-hint">密码长度至少 8 位</div>
-              <div style="margin-top:8px;">
+              <div style="margin-top:8px;display:flex;justify-content:flex-end;">
                 <button class="btn" id="changePwBtn">更新密码</button>
               </div>
-            </div>
-          </div>
-        </div>
-
-        <div class="card danger-zone" style="margin-top:12px;">
-          <div style="display:flex;justify-content:space-between;align-items:center;">
-            <div>
-              <div style="font-weight:700;color:var(--muted-strong)">危险操作</div>
-              <div class="small-hint">删除账户将无法恢复，请谨慎操作。</div>
-            </div>
-            <div>
-              <button class="btn danger" id="deleteAccountBtn">删除账户</button>
             </div>
           </div>
         </div>
@@ -549,7 +609,7 @@
             <span id="assetsCount" style="font-size:0.9rem;color:var(--muted);">加载中...</span>
           </div>
 
-          <div id="assetsContainer" style="max-height:400px;overflow-y:auto;padding-right:6px;">
+           <div id="assetsContainer" style="max-height:400px;overflow-y:auto;padding-right:6px;border-radius:4px;">
             <div id="assetsLoading" style="text-align:center;color:var(--muted);padding:12px;font-size:0.95rem;">
               正在加载资产列表...
             </div>
@@ -562,7 +622,10 @@
 
         <div class="card" style="margin-top:12px;">
           <div class="section-title">
-            <h3 style="margin:0;font-size:1rem">CDK 激活</h3>
+            <div style="display:flex;align-items:center;gap:8px;">
+              <span class="material-icons" style="color:var(--accent);font-size:20px;">card_giftcard</span>
+              <h3 style="margin:0;font-size:1rem">CDK 激活</h3>
+            </div>
             <div class="small-hint">输入 CDK 代码激活资源</div>
           </div>
 
@@ -586,6 +649,7 @@
         </div>
       </section>
     </main>
+    </div>
   </div>
 
   <script>
@@ -598,7 +662,20 @@
     const formInputs = Array.from(document.querySelectorAll('#profileForm input, #profileForm textarea, #profileForm input-box'));
 
     // 记录初始数据（将在从后端加载后填充），便于取消恢复
-    let originalProfile = { name: '', handle: '', email: '', role: '', bio: '', avatarSrc: '' };
+    let originalProfile = { name: '', handle: '', email: '', role: '', bio: '', signature: '', avatarSrc: '' };
+
+    // 从 URL 中提取目标用户 uid（若存在），用于访问他人资料
+    let targetUid = null;
+    const pathParts = window.location.pathname.split('/').filter(p => p);
+    if (pathParts.length >= 2 && pathParts[0] === 'profile' && pathParts[1]) {
+      targetUid = pathParts[1];
+    }
+
+    // 当前登录用户的 uid（将在加载资料后设置）
+    let currentUserUid = null;
+
+    // 判断是否为查看他人资料
+    let isViewingOtherProfile = false;
 
     // 格式化 Unix 时间（秒）为本地可读字符串
     function formatUnix(ts) {
@@ -616,13 +693,47 @@
       }
     }
 
+    // 显示错误页面并隐藏主要内容
+    function showErrorPage(message = '资料不存在或已被删除。请检查 UID 是否正确。') {
+      const errorContainer = document.getElementById('errorContainer');
+      const mainContent = document.getElementById('mainContent');
+      const errorMsg = errorContainer.querySelector('.error-message');
+      
+      if (errorMsg) {
+        errorMsg.textContent = message;
+      }
+      
+      errorContainer.classList.add('show');
+      mainContent.style.display = 'none';
+    }
+
     // 从后端读取用户资料并填充到表单（若未登录则重定向到 /login）
     async function loadProfileFromServer() {
       const token = localStorage.getItem('kax_login_token');
       if (!token) { location.href = '/login'; return; }
 
       try {
-        const resp = await fetch('/api/user/profile', { headers: { 'Authorization': 'Bearer ' + token } });
+        // 确定要加载的资料端点：若指定了 targetUid 则加载他人资料，否则加载自己的
+        const endpoint = targetUid ? `/api/user/profile/${targetUid}` : '/api/user/profile';
+        
+        // 检查本地缓存的头像，快速显示
+        const cachedAvatar = localStorage.getItem('userAvatarCache');
+        const cacheTimestamp = localStorage.getItem('userAvatarCacheTime');
+        const now = Date.now();
+        const cacheExpiry = 24 * 60 * 60 * 1000; // 24小时缓存
+
+        if (cachedAvatar && cacheTimestamp && (now - parseInt(cacheTimestamp)) < cacheExpiry) {
+          if (cachedAvatar !== '/default-avatar.jpg') {
+            avatarImg.src = cachedAvatar;
+            avatarImg.style.display = 'block';
+            avatarInitials.style.display = 'none';
+          } else {
+            avatarImg.style.display = 'none';
+            avatarInitials.style.display = 'block';
+          }
+        }
+
+        const resp = await fetch(endpoint, { headers: { 'Authorization': 'Bearer ' + token } });
         if (resp.status === 200) {
           const data = await resp.json();
           const user = data.user || '';
@@ -641,8 +752,21 @@
 
           // 先处理后端返回的持久化头像（若存在）
           const serverAvatar = data.avatarUrl || '';
-          if (serverAvatar) { avatarImg.src = serverAvatar; avatarImg.style.display = 'block'; avatarInitials.style.display = 'none'; }
-          else { avatarImg.style.display = 'none'; avatarInitials.style.display = 'block'; }
+          if (serverAvatar) {
+            avatarImg.src = serverAvatar;
+            avatarImg.style.display = 'block';
+            avatarInitials.style.display = 'none';
+            // 缓存头像URL
+            localStorage.setItem('userAvatarCache', serverAvatar);
+            localStorage.setItem('userAvatarCacheTime', Date.now().toString());
+          }
+          else {
+            avatarImg.style.display = 'none';
+            avatarInitials.style.display = 'block';
+            // 缓存默认头像标记
+            localStorage.setItem('userAvatarCache', '/default-avatar.jpg');
+            localStorage.setItem('userAvatarCacheTime', Date.now().toString());
+          }
 
           // 填充界面和表单
           document.getElementById('displayName').textContent = displayName;
@@ -652,6 +776,7 @@
           document.getElementById('inputEmail').value = email;
           document.getElementById('inputRole').value = roleText;
           document.getElementById('inputBio').value = bio;
+          document.getElementById('inputSignature').value = data.signature || '';
 
           const leftEmail = document.getElementById('email'); if (leftEmail) { leftEmail.textContent = email; leftEmail.title = email; }
           document.getElementById('joined').textContent = formatUnix(registeredAt);
@@ -675,7 +800,22 @@
             document.getElementById('statContribution').textContent = (data.contribution || 0).toLocaleString();
           } catch (e) { /* 忽略 DOM 更新错误 */ }
 
-          originalProfile = { name: displayName, handle: user, email: email, role: roleText, bio: bio, avatarSrc: serverAvatar || (avatarImg.src || '') };
+          originalProfile = { name: displayName, handle: user, email: email, role: roleText, bio: bio, signature: data.signature || '', avatarSrc: serverAvatar || (avatarImg.src || '') };
+
+          // 设置当前登录用户的 uid
+          if (uid) {
+            currentUserUid = uid;
+          }
+
+          // 判断是否查看他人资料：若指定了 targetUid 且与当前用户 uid 不同，则为查看他人资料
+          if (targetUid && currentUserUid && targetUid !== String(currentUserUid)) {
+            isViewingOtherProfile = true;
+          } else {
+            isViewingOtherProfile = false;
+          }
+
+          // 控制编辑功能的显示/隐藏
+          updateEditableState();
         } else if (resp.status === 401) {
           // token 无效或过期
           localStorage.removeItem('kax_login_token');
@@ -683,23 +823,78 @@
         } else if (resp.status === 403) {
           alert('账号被封禁，无法访问资料页。');
           location.href = '/login';
+        } else if (resp.status === 404) {
+          // 用户不存在
+          showErrorPage('抱歉，你访问的用户资料不存在或已被删除。请检查 UID 是否正确。');
         } else {
           console.warn('读取用户资料失败：', resp.status);
+          showErrorPage('加载资料失败，请稍后重试。');
         }
       } catch (err) {
         console.error('加载用户资料时发生错误：', err);
+        showErrorPage('加载资料时发生错误，请稍后重试。');
+      }
+    }
+
+    // 根据是否查看他人资料来控制编辑功能的显示/隐藏
+    function updateEditableState() {
+      const profileForm = document.getElementById('profileForm');
+      const saveBtn = document.getElementById('saveBtn');
+      const cancelBtn = document.getElementById('cancelBtn');
+      const avatarElement = document.querySelector('.avatar');
+      const avatarOverlay = document.querySelector('.avatar-overlay');
+      const avatarPlus = document.querySelector('.avatar-plus');
+
+      if (isViewingOtherProfile) {
+        // 隐藏编辑表单
+        if (profileForm) profileForm.style.display = 'none';
+        
+        // 隐藏保存/取消按钮
+        if (saveBtn) saveBtn.style.display = 'none';
+        if (cancelBtn) cancelBtn.style.display = 'none';
+
+        // 禁用头像修改：移除悬停效果和点击功能
+        if (avatarElement) {
+          avatarElement.style.cursor = 'default';
+          avatarElement.style.pointerEvents = 'none';
+        }
+        if (avatarOverlay) avatarOverlay.style.display = 'none';
+        if (avatarPlus) avatarPlus.style.display = 'none';
+      } else {
+        // 显示编辑表单
+        if (profileForm) profileForm.style.display = 'block';
+        
+        // 显示保存/取消按钮
+        if (saveBtn) saveBtn.style.display = 'inline-block';
+        if (cancelBtn) cancelBtn.style.display = 'inline-block';
+
+        // 启用头像修改
+        if (avatarElement) {
+          avatarElement.style.cursor = 'pointer';
+          avatarElement.style.pointerEvents = 'auto';
+        }
+        if (avatarOverlay) avatarOverlay.style.display = 'flex';
+        if (avatarPlus) avatarPlus.style.display = 'block';
       }
     }
 
     // 表单提交：保存到后端 /api/user/profile（需要登录）
     document.getElementById('profileForm').addEventListener('submit', async (ev) => {
       ev.preventDefault();
+
+      // 防止在查看他人资料时提交表单
+      if (isViewingOtherProfile) {
+        alert('无法编辑他人资料');
+        return;
+      }
+
       const token = localStorage.getItem('kax_login_token');
       if (!token) { location.href = '/login'; return; }
 
       const displayName = document.getElementById('inputName').value.trim();
       const email = document.getElementById('inputEmail').value.trim();
       const bio = document.getElementById('inputBio').value || '';
+      const signature = document.getElementById('inputSignature').value || '';
 
       saveBtn.disabled = true;
       try {
@@ -713,8 +908,13 @@
           const upJson = await upResp.json().catch(() => ({}));
           if (upResp.status === 200 || upResp.status === 201) {
             if (upJson.url) {
-              avatarImg.src = upJson.url; avatarImg.style.display = 'block'; avatarInitials.style.display = 'none';
+              avatarImg.src = upJson.url;
+              avatarImg.style.display = 'block';
+              avatarInitials.style.display = 'none';
               originalProfile.avatarSrc = upJson.url;
+              // 更新头像缓存
+              localStorage.setItem('userAvatarCache', upJson.url);
+              localStorage.setItem('userAvatarCacheTime', Date.now().toString());
             }
           } else if (upResp.status === 401) {
             localStorage.removeItem('kax_login_token'); location.href = '/login'; return;
@@ -728,7 +928,7 @@
         const resp = await fetch('/api/user/profile', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
-          body: JSON.stringify({ displayName: displayName, email: email, bio: bio })
+          body: JSON.stringify({ displayName: displayName, email: email, bio: bio, signature: signature })
         });
 
         const result = await resp.json().catch(() => ({}));
@@ -738,6 +938,7 @@
           originalProfile.name = displayName || originalProfile.name;
           originalProfile.email = email || originalProfile.email;
           originalProfile.bio = bio || originalProfile.bio;
+          originalProfile.signature = signature || originalProfile.signature;
 
           const leftEmail = document.getElementById('email'); if (leftEmail) { leftEmail.textContent = originalProfile.email; leftEmail.title = originalProfile.email; }
           alert(result.message || '资料已保存');
@@ -762,13 +963,19 @@
       document.getElementById('inputEmail').value = originalProfile.email;
       document.getElementById('inputRole').value = originalProfile.role;
       document.getElementById('inputBio').value = originalProfile.bio;
+      document.getElementById('inputSignature').value = originalProfile.signature;
       // 恢复左侧邮箱显示与 title
       const leftEmail = document.getElementById('email');
       if (leftEmail) { leftEmail.textContent = originalProfile.email; leftEmail.title = originalProfile.email; }
-      // 恢复头像预览
+      // 恢复头像预览（从缓存或原始值）
       if (originalProfile.avatarSrc && !originalProfile.avatarSrc.endsWith('/default-avatar.jpg')) {
-        avatarImg.src = originalProfile.avatarSrc; avatarImg.style.display = 'block'; avatarInitials.style.display = 'none';
-      } else { avatarImg.style.display = 'none'; avatarInitials.style.display = 'block'; }
+        avatarImg.src = originalProfile.avatarSrc;
+        avatarImg.style.display = 'block';
+        avatarInitials.style.display = 'none';
+      } else {
+        avatarImg.style.display = 'none';
+        avatarInitials.style.display = 'block';
+      }
     });
 
     // 头像上传预览（文件输入位于 .avatar 内，点击头像触发）
@@ -777,9 +984,18 @@
     const avatarInitials = document.getElementById('avatarInitials');
     const avatarContainer = document.getElementById('avatarContainer');
 
-    // 点击 / 回车 / 空格 触发文件选择（仅界面演示）
-    avatarContainer.addEventListener('click', () => avatarFile.click());
-    avatarContainer.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); avatarFile.click(); } });
+    // 点击 / 回车 / 空格 触发文件选择（仅在查看自己的资料时）
+    avatarContainer.addEventListener('click', () => {
+      if (!isViewingOtherProfile) {
+        avatarFile.click();
+      }
+    });
+    avatarContainer.addEventListener('keydown', (e) => {
+      if (!isViewingOtherProfile && (e.key === 'Enter' || e.key === ' ')) {
+        e.preventDefault();
+        avatarFile.click();
+      }
+    });
 
     avatarFile.addEventListener('change', (ev) => {
       const file = ev.target.files[0];
@@ -851,12 +1067,6 @@
       } finally { btn.disabled = false; }
     });
 
-    document.getElementById('deleteAccountBtn').addEventListener('click', () => {
-      if (confirm('确定要删除账户吗？此操作不可恢复。')) {
-        alert('已删除（示例）');
-      }
-    });
-
     // 加载用户的激活资产列表
     async function loadActiveAssets() {
       const token = localStorage.getItem('kax_login_token');
@@ -885,8 +1095,24 @@
             assetsEmpty.style.display = 'none';
             assetsCount.textContent = `${assets.length} 个`;
 
-            assetsList.innerHTML = assets.map(asset => {
-              // 格式化时间戳（毫秒）
+            // 使用异步方式为每个 asset 请求名称（并缓存），避免阻塞主渲染
+            const assetNameCache = {};
+            async function fetchAssetName(id) {
+              if (assetNameCache[id]) return assetNameCache[id];
+              try {
+                const r = await fetch(`/api/asset/name/${id}`);
+                if (r.status === 200) {
+                  const j = await r.json().catch(() => ({}));
+                  assetNameCache[id] = j.name || `资源 #${id}`;
+                  return assetNameCache[id];
+                }
+              } catch (e) { /* ignore */ }
+              assetNameCache[id] = `资源 #${id}`;
+              return assetNameCache[id];
+            }
+
+            assetsList.innerHTML = '';
+            for (const asset of assets) {
               const activatedTime = new Date(asset.activatedAt).toLocaleString();
               let expiresText = '';
               let remainingText = '';
@@ -915,10 +1141,12 @@
                 }
               }
 
-              return `
+              const name = await fetchAssetName(asset.assetId);
+
+              assetsList.insertAdjacentHTML('beforeend', `
                 <div style="padding:12px;border-radius:8px;background:rgba(255,255,255,0.01);border:1px solid rgba(255,255,255,0.05);">
                   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-                    <div style="font-weight:600;color:var(--muted-strong);">资源 #${asset.assetId}</div>
+                    <div style="font-weight:600;color:var(--muted-strong);">${name}</div>
                     <div style="font-size:0.85rem;padding:4px 8px;border-radius:6px;background:${asset.remainingSeconds < 0 ? 'rgba(239,68,68,0.1)' : 'rgba(34,197,94,0.1)'};">
                       <span style="color:${asset.remainingSeconds < 0 ? 'var(--danger)' : 'var(--success)'};">${remainingText}</span>
                     </div>
@@ -934,8 +1162,8 @@
                     </div>
                   </div>
                 </div>
-              `;
-            }).join('');
+              `);
+            }
           }
         } else if (resp.status === 401) {
           localStorage.removeItem('kax_login_token');
@@ -1075,18 +1303,50 @@
       }
     });
 
-    // 在页面加载完成后尝试从后端读取真实资料（若未登录则重定向）
-    loadProfileFromServer();
-    loadActiveAssets();
+    // 初始化页面：先获取当前用户信息，再根据 targetUid 决定加载自己或他人的资料
+    async function initializePage() {
+      const token = localStorage.getItem('kax_login_token');
+      if (!token) { location.href = '/login'; return; }
 
-    // 初始化：隐藏头像 img（如无真实图片）
-    if (!avatarImg.src || avatarImg.src.endsWith('/default-avatar.jpg')) {
-      avatarImg.style.display = 'none';
-      avatarInitials.style.display = 'block';
+      try {
+        // 先获取当前登录用户的 uid
+        const currentResp = await fetch('/api/user/profile', { headers: { 'Authorization': 'Bearer ' + token } });
+        if (currentResp.status === 200) {
+          const currentData = await currentResp.json();
+          currentUserUid = (typeof currentData.id !== 'undefined') ? currentData.id : null;
+
+          // 若指定了 targetUid 且与当前用户不同，则标记为查看他人资料
+          if (targetUid && currentUserUid && targetUid !== String(currentUserUid)) {
+            isViewingOtherProfile = true;
+          }
+        }
+      } catch (err) {
+        console.error('获取当前用户信息失败：', err);
+      }
+
+      // 加载资料（自己或他人）
+      await loadProfileFromServer();
+      await loadActiveAssets();
+
+      // 初始化：隐藏头像 img（如无真实图片）
+      if (!avatarImg.src || avatarImg.src.endsWith('/default-avatar.jpg')) {
+        avatarImg.style.display = 'none';
+        avatarInitials.style.display = 'block';
+      }
+
+      // 初始化：为邮箱设置 title（方便 hover 查看完整文本）
+      try {
+        const emailEl = document.getElementById('email');
+        if (emailEl && (!emailEl.title || emailEl.title.trim() === '')) {
+          emailEl.title = emailEl.textContent.trim();
+        }
+      } catch (error) {
+        console.warn('Failed to set email title:', error);
+      }
     }
 
-    // 初始化：为邮箱设置 title（方便 hover 查看完整文本）
-    try { var le = document.getElementById('email'); if (le && (!le.title || le.title.trim()==='')) le.title = le.textContent.trim(); } catch (_) {}
+    // 页面加载完成后初始化
+    initializePage();
   </script>
 </body>
 
