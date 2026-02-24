@@ -41,6 +41,12 @@ namespace KaxSocket
         public UserStatus Status { get; set; } = new UserStatus();
         public TableList<ActiveAssets> ActiveAssets { get; set; }
 
+        // 新增：用户收藏的资源（子表，仅记录 assetId）
+        public TableList<UserFavoriteAsset> FavoriteAssets { get; set; }
+
+        // 新增：用户购物车中记录的资源（子表，仅记录 assetId）
+        public TableList<UserCartItem> CartItems { get; set; }
+
         // 新增字段：最近活动计数（后续由业务逻辑累加）
         public int RecentActivity { get; set; } = 0;
 
@@ -73,6 +79,40 @@ namespace KaxSocket
         public long ExpiresAt { get; set; }
         
         public string TableName => nameof(ActiveAssets);
+    }
+
+    /// <summary>
+    /// 用户收藏的资源记录（子表），仅保存 AssetId
+    /// </summary>
+    public class UserFavoriteAsset : IDataTableV2
+    {
+        public string Id { get; set; } = Guid.NewGuid().ToString();
+        public int ParentId { get; set; }
+        public long CreatedAt { get; set; } = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+
+        /// <summary>被收藏的资源 ID</summary>
+        public int AssetId { get; set; }
+
+        public string TableName => nameof(UserFavoriteAsset);
+
+        public long UpdatedAt { get; set; } = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+    }
+
+    /// <summary>
+    /// 用户购物车中的条目（子表），仅保存 AssetId（若后续需要数量可以扩展）
+    /// </summary>
+    public class UserCartItem : IDataTableV2
+    {
+        public string Id { get; set; } = Guid.NewGuid().ToString();
+        public int ParentId { get; set; }
+        public long CreatedAt { get; set; } = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+
+        /// <summary>购物车中记录的资源 ID</summary>
+        public int AssetId { get; set; }
+
+        public string TableName => nameof(UserCartItem);
+
+        public long UpdatedAt { get; set; } = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
     }
 
     public class UserStatus : IDataTable

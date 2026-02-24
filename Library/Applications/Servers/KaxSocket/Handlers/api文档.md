@@ -11,6 +11,9 @@
 | `/api/user/register` | POST | 无 | 3 / 60s | 注册用户 |
 | `/api/user/login` | POST | 无 | 5 / 60s | 登录，返回 `login_token` |
 | `/api/user/verify/account` | POST | Bearer token | 60 / 60s | 验证令牌并返回权限信息 |
+| `/api/user/profile` | GET | Bearer token | 60 / 60s | 获取当前登录用户的资料 |
+| `/api/user/profile/{uid}` | GET | Bearer token | 60 / 60s | 获取指定用户的资料（公开信息） |
+| `/api/user/profile` | POST | Bearer token | 10 / 60s | 更新当前用户的资料（需 targetUid 参数） |
 | `/api/user/unban?{userName}?{dev_code}` | POST | 无（需 dev_code） | — | 解除封禁（开发者码） |
 | `/api/user/verify/asset/{assetId}` | GET | Bearer token | 60 / 60s | 校验用户是否拥有指定 asset |
 | `/api/cdk/admin/*` | POST / GET | Bearer token (Console/Root/Admin) | 见各接口 | CDK 管理（生成/保存/删除/查询） |
@@ -79,6 +82,69 @@
   ```
 - 错误：401（无效令牌）、403（账号被封禁）、404（用户不存在）
 - 速率：60 次 / 60 秒（触发回调）
+
+---
+
+### 3.5) 获取用户资料 — GET /api/user/profile 与 GET /api/user/profile/{uid}
+- 认证：必须带 `Authorization: Bearer <token>`
+- 说明：
+  - `GET /api/user/profile` — 返回当前登录用户的资料（完整信息）
+  - `GET /api/user/profile/{uid}` — 返回指定 UID 用户的资料（公开信息）
+- 返回示例：
+  ```json
+  {
+    "id": 123,
+    "user": "alice",
+    "displayName": "Alice Smith",
+    "email": "alice@example.com",
+    "bio": "Software Engineer",
+    "signature": "Best regards",
+    "registeredAt": 1670000000,
+    "lastLoginAt": 1670100000,
+    "permissionGroup": 3,
+    "isBanned": false,
+    "bannedAt": 0,
+    "banExpiresAt": 0,
+    "banReason": "",
+    "avatarUrl": "/api/user/avatar/123?v=1670100000",
+    "resourceCount": 5,
+    "contribution": 100,
+    "recentActivity": 10,
+    "cdkCount": 3
+  }
+  ```
+- 错误：401（未授权）、403（账号被封禁）、404（用户不存在）
+- 速率：60 次 / 60 秒（触发回调）
+
+---
+
+### 3.6) 更新用户资料 — POST /api/user/profile
+- 认证：必须带 `Authorization: Bearer <token>`
+- 请求体（JSON）：
+  ```json
+  {
+    "displayName": "Alice Smith",
+    "email": "alice@example.com",
+    "bio": "Software Engineer",
+    "signature": "Best regards",
+    "targetUid": 123
+  }
+  ```
+- 参数说明：
+  - `displayName`（可选）：显示名称，1–100 字符
+  - `email`（可选）：电子邮箱，必须合法且唯一
+  - `bio`（可选）：个人简介，最多 500 字符
+  - `signature`（可选）：签名，最多 200 字符
+  - `targetUid`（必填）：目标用户 ID，**必须与当前登录用户 ID 一致**，否则返回 403
+- 成功响应（200）：
+  ```json
+  { "message": "资料已更新" }
+  ```
+- 权限验证：
+  - 若 `targetUid` 与当前用户 ID 不一致，返回 **403 Forbidden**（无权修改他人资料）
+  - 若 `targetUid` 参数缺失或无效，返回 **400 Bad Request**
+- 错误：400（参数无效）、401（未授权）、403（无权修改他人资料）、404（用户不存在）、409（邮箱已被占用）
+- 速率：10 次 / 60 秒（触发回调）
 
 ---
 

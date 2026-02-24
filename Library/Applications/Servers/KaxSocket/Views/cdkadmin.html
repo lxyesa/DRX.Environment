@@ -979,14 +979,23 @@
                         var orig = deleteAllBtn.textContent;
                         deleteAllBtn.textContent = '删除中...';
 
-                        var deleted = 0;
-                        for (var i = 0; i < filteredCdks.length; i++) {
-                            var ok = await deleteCdkSilent(filteredCdks[i].code);
-                            if (ok) deleted++;
-                        }
+                        var token = localStorage.getItem('kax_login_token');
+                        var codes = filteredCdks.map(function(c){ return c.code; });
+                        var resp = await fetch('/api/cdk/admin/delete', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+                            body: JSON.stringify({ codes: codes })
+                        });
 
-                        alert('操作完成：已删除 ' + deleted + ' / ' + count + ' 条 CDK');
-                        loadCdkList();
+                        if (resp.status === 200) {
+                            var data = await resp.json().catch(function(){ return {}; });
+                            var removed = data.removed || 0;
+                            alert('操作完成：已删除 ' + removed + ' / ' + count + ' 条 CDK');
+                            loadCdkList();
+                        } else {
+                            var data = await resp.json().catch(function(){ return { message: '未知错误' }; });
+                            alert('批量删除失败: ' + (data.message || '未知错误'));
+                        }
                     } catch (err) {
                         console.error('批量删除错误：', err);
                         alert('删除过程中发生错误：' + (err.message || err));

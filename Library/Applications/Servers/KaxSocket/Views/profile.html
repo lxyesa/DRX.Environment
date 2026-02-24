@@ -924,11 +924,11 @@
           }
         }
 
-        // 2) 提交资料更新请求
+        // 2) 提交资料更新请求（需要包含 targetUid 参数以验证权限）
         const resp = await fetch('/api/user/profile', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
-          body: JSON.stringify({ displayName: displayName, email: email, bio: bio, signature: signature })
+          body: JSON.stringify({ displayName: displayName, email: email, bio: bio, signature: signature, targetUid: currentUserUid })
         });
 
         const result = await resp.json().catch(() => ({}));

@@ -8,17 +8,21 @@ using System.Text;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
-
 using Drx.Sdk.Network.V2.Web;
 using Drx.Sdk.Shared;
 using Drx.Sdk.Shared.Utility;
 using System.Drawing;
 using System.Drawing.Imaging;
+using KaxSocket.Cache;
+using KaxSocket;
+using Drx.Sdk.Network.V2.Web.Results;
 
 namespace KaxSocket.Handlers;
 
 public class KaxHttp
 {
+    private static readonly AvatarCacheManager _avatarCache = new(maxCacheSize: 100, cacheExpirationSeconds: 3600);
+
     [DynamicDependency(DynamicallyAccessedMemberTypes.All, typeof(KaxHttp))]
     public KaxHttp()
     {
@@ -492,21 +496,28 @@ public class KaxHttp
         var email = body["email"]?.ToString()?.Trim() ?? string.Empty;
         var bio = body["bio"]?.ToString() ?? string.Empty;
         var signature = body["signature"]?.ToString() ?? string.Empty;
+        var targetUidStr = body["targetUid"]?.ToString() ?? string.Empty;
 
         // 基础校验
         if (!string.IsNullOrEmpty(email) && !CommonUtility.IsValidEmail(email))
             return new JsonResult(new { message = "无效的电子邮箱地址" }, 400);
+
+        // 验证 targetUid 参数
+        if (string.IsNullOrEmpty(targetUidStr))
+            return new JsonResult(new { message = "targetUid 参数缺失" }, 400);
+
+        if (!long.TryParse(targetUidStr, out var targetUid) || targetUid <= 0)
+            return new JsonResult(new { message = "targetUid 参数无效" }, 400);
 
         try
         {
             var user = (await KaxGlobal.UserDatabase.SelectWhereAsync("UserName", userName)).FirstOrDefault();
             if (user == null) return new JsonResult(new { message = "用户不存在" }, 404);
 
-            // 安全验证：确保只能更新自己的资料
-            // 这是一个防御性检查，防止通过 API 直接修改他人资料
-            if (!string.Equals(user.UserName, userName, StringComparison.OrdinalIgnoreCase))
+            // 权限验证：确保只能更新自己的资料（当前用户 ID 必须与 targetUid 一致）
+            if (user.Id != targetUid)
             {
-                Logger.Warn($"用户 {userName} 尝试修改他人资料（目标用户: {user.UserName}），请求被拒绝");
+                Logger.Warn($"用户 {userName}(ID:{user.Id}) 尝试修改他人资料（目标 UID: {targetUid}），请求被拒绝");
                 return new JsonResult(new { message = "无权修改他人资料" }, 403);
             }
 
@@ -610,12 +621,31 @@ public class KaxHttp
         if (!request.PathParameters.TryGetValue("userId", out var idStr) || !int.TryParse(idStr, out var userId) || userId <= 0)
             return new JsonResult(new { message = "userId 参数无效" }, 400);
 
+        // 尝试从缓存获取头像
+        if (_avatarCache.TryGetAvatar(userId, out var cachedImageData, out var cachedContentType))
+        {
+            return new BytesResult(cachedImageData, cachedContentType ?? "image/png");
+        }
+
         var path = KaxGlobal.GetUserAvatarPathById(userId);
         if (string.IsNullOrEmpty(path)) return new JsonResult(new { message = "未找到头像" }, 404);
 
-        var ext = Path.GetExtension(path).ToLowerInvariant();
-        var contentType = ext == ".png" ? "image/png" : "image/jpeg";
-        return new FileResult(path, null, contentType);
+        try
+        {
+            var imageData = await File.ReadAllBytesAsync(path);
+            var ext = Path.GetExtension(path).ToLowerInvariant();
+            var contentType = ext == ".png" ? "image/png" : "image/jpeg";
+
+            // 将读取的数据存入缓存
+            _avatarCache.SetAvatar(userId, imageData, contentType);
+
+            return new BytesResult(imageData, contentType);
+        }
+        catch (Exception ex)
+        {
+            Logger.Error($"读取用户头像失败 (userId: {userId}): {ex.Message}");
+            return new JsonResult(new { message = "读取头像失败" }, 500);
+        }
     }
 
     // GET /api/user/stats -> 返回当前登录用户的统计信息（resourceCount / cdkCount / recentActivity / contribution）
@@ -722,6 +752,9 @@ public class KaxHttp
             return new JsonResult(new { message = "保存头像失败（无效的图片或服务器错误）" }, 500);
         }
 
+        // 清除该用户的头像缓存，使下次请求重新加载
+        _avatarCache.InvalidateAvatar(user.Id);
+
         var url = $"/api/user/avatar/{user.Id}?v={DateTimeOffset.UtcNow.ToUnixTimeSeconds()}";
         Logger.Info($"用户 {userName} 成功上传了头像");
         return new JsonResult(new { message = "头像已上传", url = url });
@@ -760,6 +793,172 @@ public class KaxHttp
             .ToList();
 
         return new JsonResult(new { code = 0, message = "成功", data = activeAssets }, 200);
+    }
+
+    // 用户收藏相关 API
+    [HttpHandle("/api/user/favorites", "GET", RateLimitMaxRequests = 60, RateLimitWindowSeconds = 60, RateLimitCallbackMethodName = nameof(RateLimitCallback))]
+    public static async Task<IActionResult> Get_UserFavorites(HttpRequest request)
+    {
+        var token = request.Headers[HttpHeaders.Authorization]?.Replace("Bearer ", "");
+        var principal = KaxGlobal.ValidateToken(token ?? string.Empty);
+        if (principal == null) return new JsonResult(new { code = 401, message = "未授权" }, 401);
+
+        var userName = principal.Identity?.Name;
+        if (string.IsNullOrWhiteSpace(userName)) return new JsonResult(new { code = 400, message = "用户名无效" }, 400);
+
+        var user = (await KaxGlobal.UserDatabase.SelectWhereAsync("UserName", userName)).FirstOrDefault();
+        if (user == null) return new JsonResult(new { code = 404, message = "用户不存在" }, 404);
+
+        var favs = user.FavoriteAssets?.Select(f => f.AssetId).ToList() ?? new List<int>();
+        return new JsonResult(new { code = 0, message = "成功", data = favs }, 200);
+    }
+
+    [HttpHandle("/api/user/favorites", "POST", RateLimitMaxRequests = 60, RateLimitWindowSeconds = 60, RateLimitCallbackMethodName = nameof(RateLimitCallback))]
+    public static async Task<IActionResult> Post_AddFavorite(HttpRequest request)
+    {
+        var token = request.Headers[HttpHeaders.Authorization]?.Replace("Bearer ", "");
+        var principal = KaxGlobal.ValidateToken(token ?? string.Empty);
+        if (principal == null) return new JsonResult(new { code = 401, message = "未授权" }, 401);
+
+        var userName = principal.Identity?.Name;
+        if (string.IsNullOrWhiteSpace(userName)) return new JsonResult(new { code = 400, message = "用户名无效" }, 400);
+
+        if (string.IsNullOrEmpty(request.Body)) return new JsonResult(new { code = 400, message = "请求体不能为空" }, 400);
+
+        var body = JsonNode.Parse(request.Body);
+        if (body == null) return new JsonResult(new { code = 400, message = "无法解析请求体" }, 400);
+        if (!int.TryParse(body["assetId"]?.ToString(), out var assetId) || assetId <= 0)
+            return new JsonResult(new { code = 400, message = "assetId 无效" }, 400);
+
+        var user = (await KaxGlobal.UserDatabase.SelectWhereAsync("UserName", userName)).FirstOrDefault();
+        if (user == null) return new JsonResult(new { code = 404, message = "用户不存在" }, 404);
+
+        var asset = await KaxGlobal.AssetDataBase.SelectByIdAsync(assetId);
+        if (asset == null) return new JsonResult(new { code = 404, message = "资源不存在" }, 404);
+
+        // 已收藏则直接返回成功
+        if (user.FavoriteAssets != null && user.FavoriteAssets.Any(f => f.AssetId == assetId))
+            return new JsonResult(new { code = 0, message = "已收藏", favoriteCount = asset.FavoriteCount }, 200);
+
+        // 添加收藏子项
+        var fav = new UserFavoriteAsset { ParentId = user.Id, AssetId = assetId };
+        if (user.FavoriteAssets == null) user.FavoriteAssets = new Drx.Sdk.Network.DataBase.Sqlite.TableList<UserFavoriteAsset>();
+        user.FavoriteAssets.Add(fav);
+
+        // 更新资产收藏计数
+        asset.FavoriteCount = Math.Max(0, asset.FavoriteCount + 1);
+
+        await KaxGlobal.AssetDataBase.UpdateAsync(asset);
+        await KaxGlobal.UserDatabase.UpdateAsync(user);
+
+        return new JsonResult(new { code = 0, message = "收藏成功", favoriteCount = asset.FavoriteCount }, 200);
+    }
+
+    [HttpHandle("/api/user/favorites/{assetId}", "DELETE", RateLimitMaxRequests = 60, RateLimitWindowSeconds = 60, RateLimitCallbackMethodName = nameof(RateLimitCallback))]
+    public static async Task<IActionResult> Delete_Favorite(HttpRequest request)
+    {
+        var token = request.Headers[HttpHeaders.Authorization]?.Replace("Bearer ", "");
+        var principal = KaxGlobal.ValidateToken(token ?? string.Empty);
+        if (principal == null) return new JsonResult(new { code = 401, message = "未授权" }, 401);
+
+        var userName = principal.Identity?.Name;
+        if (string.IsNullOrWhiteSpace(userName)) return new JsonResult(new { code = 400, message = "用户名无效" }, 400);
+
+        if (!request.PathParameters.TryGetValue("assetId", out var idStr) || !int.TryParse(idStr, out var assetId) || assetId <= 0)
+            return new JsonResult(new { code = 400, message = "assetId 参数无效" }, 400);
+
+        var user = (await KaxGlobal.UserDatabase.SelectWhereAsync("UserName", userName)).FirstOrDefault();
+        if (user == null) return new JsonResult(new { code = 404, message = "用户不存在" }, 404);
+
+        var existing = user.FavoriteAssets?.FirstOrDefault(f => f.AssetId == assetId);
+        if (existing == null) return new JsonResult(new { code = 0, message = "未收藏" }, 200);
+
+        // 移除
+        if (user.FavoriteAssets != null) user.FavoriteAssets.Remove(existing);
+
+        var asset = await KaxGlobal.AssetDataBase.SelectByIdAsync(assetId);
+        if (asset != null)
+        {
+            asset.FavoriteCount = Math.Max(0, asset.FavoriteCount - 1);
+            await KaxGlobal.AssetDataBase.UpdateAsync(asset);
+        }
+
+        await KaxGlobal.UserDatabase.UpdateAsync(user);
+
+        return new JsonResult(new { code = 0, message = "已取消收藏", favoriteCount = asset?.FavoriteCount ?? 0 }, 200);
+    }
+
+    // 用户购物车（仅记录 assetId）
+    [HttpHandle("/api/user/cart", "GET", RateLimitMaxRequests = 60, RateLimitWindowSeconds = 60, RateLimitCallbackMethodName = nameof(RateLimitCallback))]
+    public static async Task<IActionResult> Get_UserCart(HttpRequest request)
+    {
+        var token = request.Headers[HttpHeaders.Authorization]?.Replace("Bearer ", "");
+        var principal = KaxGlobal.ValidateToken(token ?? string.Empty);
+        if (principal == null) return new JsonResult(new { code = 401, message = "未授权" }, 401);
+
+        var userName = principal.Identity?.Name;
+        if (string.IsNullOrWhiteSpace(userName)) return new JsonResult(new { code = 400, message = "用户名无效" }, 400);
+
+        var user = (await KaxGlobal.UserDatabase.SelectWhereAsync("UserName", userName)).FirstOrDefault();
+        if (user == null) return new JsonResult(new { code = 404, message = "用户不存在" }, 404);
+
+        var items = user.CartItems?.Select(c => c.AssetId).ToList() ?? new List<int>();
+        return new JsonResult(new { code = 0, message = "成功", data = items }, 200);
+    }
+
+    [HttpHandle("/api/user/cart", "POST", RateLimitMaxRequests = 60, RateLimitWindowSeconds = 60, RateLimitCallbackMethodName = nameof(RateLimitCallback))]
+    public static async Task<IActionResult> Post_AddCart(HttpRequest request)
+    {
+        var token = request.Headers[HttpHeaders.Authorization]?.Replace("Bearer ", "");
+        var principal = KaxGlobal.ValidateToken(token ?? string.Empty);
+        if (principal == null) return new JsonResult(new { code = 401, message = "未授权" }, 401);
+
+        var userName = principal.Identity?.Name;
+        if (string.IsNullOrWhiteSpace(userName)) return new JsonResult(new { code = 400, message = "用户名无效" }, 400);
+
+        if (string.IsNullOrEmpty(request.Body)) return new JsonResult(new { code = 400, message = "请求体不能为空" }, 400);
+        var body = JsonNode.Parse(request.Body);
+        if (body == null) return new JsonResult(new { code = 400, message = "无法解析请求体" }, 400);
+        if (!int.TryParse(body["assetId"]?.ToString(), out var assetId) || assetId <= 0)
+            return new JsonResult(new { code = 400, message = "assetId 无效" }, 400);
+
+        var user = (await KaxGlobal.UserDatabase.SelectWhereAsync("UserName", userName)).FirstOrDefault();
+        if (user == null) return new JsonResult(new { code = 404, message = "用户不存在" }, 404);
+
+        if (user.CartItems == null) user.CartItems = new Drx.Sdk.Network.DataBase.Sqlite.TableList<UserCartItem>();
+        if (!user.CartItems.Any(c => c.AssetId == assetId))
+        {
+            user.CartItems.Add(new UserCartItem { ParentId = user.Id, AssetId = assetId });
+            await KaxGlobal.UserDatabase.UpdateAsync(user);
+        }
+
+        return new JsonResult(new { code = 0, message = "已加入购物车" }, 200);
+    }
+
+    [HttpHandle("/api/user/cart/{assetId}", "DELETE", RateLimitMaxRequests = 60, RateLimitWindowSeconds = 60, RateLimitCallbackMethodName = nameof(RateLimitCallback))]
+    public static async Task<IActionResult> Delete_CartItem(HttpRequest request)
+    {
+        var token = request.Headers[HttpHeaders.Authorization]?.Replace("Bearer ", "");
+        var principal = KaxGlobal.ValidateToken(token ?? string.Empty);
+        if (principal == null) return new JsonResult(new { code = 401, message = "未授权" }, 401);
+
+        var userName = principal.Identity?.Name;
+        if (string.IsNullOrWhiteSpace(userName)) return new JsonResult(new { code = 400, message = "用户名无效" }, 400);
+
+        if (!request.PathParameters.TryGetValue("assetId", out var idStr) || !int.TryParse(idStr, out var assetId) || assetId <= 0)
+            return new JsonResult(new { code = 400, message = "assetId 参数无效" }, 400);
+
+        var user = (await KaxGlobal.UserDatabase.SelectWhereAsync("UserName", userName)).FirstOrDefault();
+        if (user == null) return new JsonResult(new { code = 404, message = "用户不存在" }, 404);
+
+        var existing = user.CartItems?.FirstOrDefault(c => c.AssetId == assetId);
+        if (existing != null && user.CartItems != null)
+        {
+            user.CartItems.Remove(existing);
+            await KaxGlobal.UserDatabase.UpdateAsync(user);
+        }
+
+        return new JsonResult(new { code = 0, message = "已从购物车移除" }, 200);
     }
 
     [HttpHandle("/api/user/unban?{userName}?{dev_code}", "POST")]
@@ -1104,24 +1303,67 @@ public class KaxHttp
         var body = JsonNode.Parse(request.Body);
         if (body == null) return new JsonResult(new { message = "无效的 JSON" }, 400);
 
-        var code = body["code"]?.ToString()?.Trim();
-        if (string.IsNullOrEmpty(code)) return new JsonResult(new { message = "缺少 code 字段" }, 400);
+        // 支持批量删除：请求体可包含单个字段 "code" 或数组字段 "codes"
+        var codesNode = body["codes"] as JsonArray;
+        var singleCode = body["code"]?.ToString()?.Trim();
+
+        if ((codesNode == null || codesNode.Count == 0) && string.IsNullOrEmpty(singleCode))
+            return new JsonResult(new { message = "缺少 code 或 codes 字段" }, 400);
 
         try
         {
-            // 在数据库中以大小写不敏感方式查找并删除匹配项
             var all = await KaxGlobal.CdkDatabase.SelectAllAsync();
-            var matches = all.Where(c => string.Equals(c.Code, code, StringComparison.OrdinalIgnoreCase)).ToList();
-            if (matches.Count == 0) return new JsonResult(new { message = "未找到指定 CDK" }, 404);
 
-            var removed = 0;
-            foreach (var m in matches)
+            // 结果汇总
+            var totalRemoved = 0;
+            var perCode = new System.Collections.Generic.List<object>();
+
+            // 处理 codes 数组（优先）
+            if (codesNode != null && codesNode.Count > 0)
             {
-                KaxGlobal.CdkDatabase.DeleteById(m.Id);
-                removed++;
+                foreach (var it in codesNode)
+                {
+                    if (it == null) continue;
+                    var code = it.ToString()?.Trim();
+                    if (string.IsNullOrEmpty(code))
+                    {
+                        perCode.Add(new { code = code, removed = 0, status = "invalid" });
+                        continue;
+                    }
+
+                    var matches = all.Where(c => string.Equals(c.Code, code, StringComparison.OrdinalIgnoreCase)).ToList();
+                    if (matches.Count == 0)
+                    {
+                        perCode.Add(new { code = code, removed = 0, status = "not_found" });
+                        continue;
+                    }
+
+                    var removed = 0;
+                    foreach (var m in matches)
+                    {
+                        KaxGlobal.CdkDatabase.DeleteById(m.Id);
+                        removed++;
+                    }
+                    totalRemoved += removed;
+                    perCode.Add(new { code = code, removed = removed, status = "ok" });
+                }
+
+                return new JsonResult(new { message = "批量删除完成", removed = totalRemoved, results = perCode });
             }
 
-            return new JsonResult(new { message = "删除成功", removed = removed });
+            // 处理单个 code
+            var codeToDelete = singleCode!;
+            var singleMatches = all.Where(c => string.Equals(c.Code, codeToDelete, StringComparison.OrdinalIgnoreCase)).ToList();
+            if (singleMatches.Count == 0) return new JsonResult(new { message = "未找到指定 CDK" }, 404);
+
+            var singleRemoved = 0;
+            foreach (var m in singleMatches)
+            {
+                KaxGlobal.CdkDatabase.DeleteById(m.Id);
+                singleRemoved++;
+            }
+
+            return new JsonResult(new { message = "删除成功", removed = singleRemoved });
         }
         catch (Exception ex)
         {
@@ -1219,6 +1461,67 @@ public class KaxHttp
                 LastUpdatedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds()
             };
 
+            // 可选字段：价格（整数，后端以最小单位存储，如分）和库存
+            if (body["price"] != null && int.TryParse(body["price"]?.ToString(), out var p) && p >= 0)
+            {
+                asset.Price = p;
+            }
+            if (body["stock"] != null && int.TryParse(body["stock"]?.ToString(), out var s) && s >= 0)
+            {
+                asset.Stock = s;
+            }
+            // 可选字段：分类、原始价格、文件大小、折扣率
+            if (body["category"] != null)
+            {
+                asset.Category = body["category"]?.ToString() ?? string.Empty;
+            }
+            if (body["originalPrice"] != null && int.TryParse(body["originalPrice"]?.ToString(), out var op) && op >= 0)
+            {
+                asset.OriginalPrice = op;
+            }
+            if (body["fileSize"] != null && long.TryParse(body["fileSize"]?.ToString(), out var fs) && fs >= 0)
+            {
+                asset.FileSize = fs;
+            }
+            if (body["discountRate"] != null && double.TryParse(body["discountRate"]?.ToString(), out var dr))
+            {
+                // 限制折扣率在 0.0 - 1.0 范围
+                asset.DiscountRate = Math.Max(0.0, Math.Min(1.0, dr));
+            }
+            // 可选字段：折后价、评分、评论数、兼容性、下载次数、上传时间、许可证、下载地址
+            if (body["salePrice"] != null && int.TryParse(body["salePrice"]?.ToString(), out var sp) && sp >= 0)
+            {
+                asset.SalePrice = sp;
+            }
+            if (body["rating"] != null && double.TryParse(body["rating"]?.ToString(), out var rating))
+            {
+                asset.Rating = Math.Max(0.0, Math.Min(5.0, rating));
+            }
+            if (body["reviewCount"] != null && int.TryParse(body["reviewCount"]?.ToString(), out var rc) && rc >= 0)
+            {
+                asset.ReviewCount = rc;
+            }
+            if (body["compatibility"] != null)
+            {
+                asset.Compatibility = body["compatibility"]?.ToString() ?? string.Empty;
+            }
+            if (body["downloads"] != null && int.TryParse(body["downloads"]?.ToString(), out var dl) && dl >= 0)
+            {
+                asset.Downloads = dl;
+            }
+            if (body["uploadDate"] != null && long.TryParse(body["uploadDate"]?.ToString(), out var ud) && ud > 0)
+            {
+                asset.UploadDate = ud;
+            }
+            if (body["license"] != null)
+            {
+                asset.License = body["license"]?.ToString() ?? string.Empty;
+            }
+            if (body["downloadUrl"] != null)
+            {
+                asset.DownloadUrl = body["downloadUrl"]?.ToString() ?? string.Empty;
+            }
+
             KaxGlobal.AssetDataBase.Insert(asset);
 
             Logger.Info($"用户 {userName} 创建了资源: {name} (v{version})");
@@ -1275,6 +1578,66 @@ public class KaxHttp
             asset.Description = description;
             asset.LastUpdatedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
 
+            // 可选更新价格和库存
+            if (body["price"] != null && int.TryParse(body["price"]?.ToString(), out var newPrice) && newPrice >= 0)
+            {
+                asset.Price = newPrice;
+            }
+            if (body["stock"] != null && int.TryParse(body["stock"]?.ToString(), out var newStock) && newStock >= 0)
+            {
+                asset.Stock = newStock;
+            }
+            // 可选更新：分类、原始价格、文件大小、折扣率
+            if (body["category"] != null)
+            {
+                asset.Category = body["category"]?.ToString() ?? string.Empty;
+            }
+            if (body["originalPrice"] != null && int.TryParse(body["originalPrice"]?.ToString(), out var newOriginalPrice) && newOriginalPrice >= 0)
+            {
+                asset.OriginalPrice = newOriginalPrice;
+            }
+            if (body["fileSize"] != null && long.TryParse(body["fileSize"]?.ToString(), out var newFileSize) && newFileSize >= 0)
+            {
+                asset.FileSize = newFileSize;
+            }
+            if (body["discountRate"] != null && double.TryParse(body["discountRate"]?.ToString(), out var newDiscountRate))
+            {
+                asset.DiscountRate = Math.Max(0.0, Math.Min(1.0, newDiscountRate));
+            }
+            // 可选更新：折后价、评分、评论数、兼容性、下载次数、上传时间、许可证、下载地址
+            if (body["salePrice"] != null && int.TryParse(body["salePrice"]?.ToString(), out var newSalePrice) && newSalePrice >= 0)
+            {
+                asset.SalePrice = newSalePrice;
+            }
+            if (body["rating"] != null && double.TryParse(body["rating"]?.ToString(), out var newRating))
+            {
+                asset.Rating = Math.Max(0.0, Math.Min(5.0, newRating));
+            }
+            if (body["reviewCount"] != null && int.TryParse(body["reviewCount"]?.ToString(), out var newReviewCount) && newReviewCount >= 0)
+            {
+                asset.ReviewCount = newReviewCount;
+            }
+            if (body["compatibility"] != null)
+            {
+                asset.Compatibility = body["compatibility"]?.ToString() ?? string.Empty;
+            }
+            if (body["downloads"] != null && int.TryParse(body["downloads"]?.ToString(), out var newDownloads) && newDownloads >= 0)
+            {
+                asset.Downloads = newDownloads;
+            }
+            if (body["uploadDate"] != null && long.TryParse(body["uploadDate"]?.ToString(), out var newUploadDate) && newUploadDate > 0)
+            {
+                asset.UploadDate = newUploadDate;
+            }
+            if (body["license"] != null)
+            {
+                asset.License = body["license"]?.ToString() ?? string.Empty;
+            }
+            if (body["downloadUrl"] != null)
+            {
+                asset.DownloadUrl = body["downloadUrl"]?.ToString() ?? string.Empty;
+            }
+
             await KaxGlobal.AssetDataBase.UpdateAsync(asset);
 
             Logger.Info($"用户 {userName} 修改了资源: {asset.Name} (id={id})");
@@ -1324,6 +1687,23 @@ public class KaxHttp
                     version = asset.Version,
                     author = asset.Author,
                     description = asset.Description,
+                    price = asset.Price,
+                    originalPrice = asset.OriginalPrice,
+                    salePrice = asset.SalePrice,
+                    category = asset.Category,
+                    fileSize = asset.FileSize,
+                    discountRate = asset.DiscountRate,
+                    rating = asset.Rating,
+                    reviewCount = asset.ReviewCount,
+                    compatibility = asset.Compatibility,
+                    downloads = asset.Downloads,
+                    uploadDate = asset.UploadDate,
+                    license = asset.License,
+                    downloadUrl = asset.DownloadUrl,
+                    stock = asset.Stock,
+                    purchaseCount = asset.PurchaseCount,
+                    favoriteCount = asset.FavoriteCount,
+                    viewCount = asset.ViewCount,
                     lastUpdatedAt = asset.LastUpdatedAt,
                     isDeleted = asset.IsDeleted,
                     deletedAt = asset.DeletedAt
@@ -1496,6 +1876,141 @@ public class KaxHttp
         }
     }
 
+    // 公共接口：前端商品列表（分页，支持 q 搜索）
+    [HttpHandle("/api/asset/list", "GET", RateLimitMaxRequests = 60, RateLimitWindowSeconds = 60)]
+    public static async Task<IActionResult> Get_PublicAssetList(HttpRequest request)
+    {
+        try
+        {
+            var q = request.Query[("q")] ?? string.Empty;
+            var categoryFilter = request.Query[("category")] ?? string.Empty;
+            var minPriceStr = request.Query[("minPrice")] ?? string.Empty;
+            var maxPriceStr = request.Query[("maxPrice")] ?? string.Empty;
+            var sort = request.Query[("sort")] ?? "updated"; // updated | price_asc | price_desc
+
+            int page = 1;
+            int pageSize = 24;
+            if (!int.TryParse(request.Query[("page")], out page) || page <= 0) page = 1;
+            if (!int.TryParse(request.Query[("pageSize")], out pageSize) || pageSize <= 0) pageSize = 24;
+
+            int.TryParse(minPriceStr, out var minPrice);
+            int.TryParse(maxPriceStr, out var maxPrice);
+
+            var all = await KaxGlobal.AssetDataBase.SelectAllAsync();
+            var filtered = all.AsQueryable();
+
+            if (!string.IsNullOrWhiteSpace(q))
+            {
+                var qLower = q.ToLower();
+                filtered = filtered.Where(a => (a.Name ?? string.Empty).ToLower().Contains(qLower) || (a.Description ?? string.Empty).ToLower().Contains(qLower));
+            }
+
+            if (!string.IsNullOrWhiteSpace(categoryFilter))
+            {
+                var cat = categoryFilter.ToLowerInvariant();
+                filtered = filtered.Where(a => (a.Category ?? string.Empty).ToLowerInvariant() == cat).AsQueryable();
+            }
+
+            if (minPrice > 0)
+            {
+                filtered = filtered.Where(a => a.Price >= minPrice).AsQueryable();
+            }
+            if (maxPrice > 0)
+            {
+                filtered = filtered.Where(a => a.Price <= maxPrice).AsQueryable();
+            }
+
+            // 排序
+            IQueryable<Model.AssetModel> ordered;
+            if (sort == "price_asc") ordered = filtered.OrderBy(a => a.Price).AsQueryable();
+            else if (sort == "price_desc") ordered = filtered.OrderByDescending(a => a.Price).AsQueryable();
+            else ordered = filtered.OrderByDescending(a => a.LastUpdatedAt).AsQueryable();
+
+            var total = ordered.Count();
+            var pageItems = ordered.Skip((page - 1) * pageSize).Take(pageSize).ToList();
+
+            var result = pageItems.Select(a => new
+            {
+                id = a.Id,
+                name = a.Name,
+                version = a.Version,
+                author = a.Author,
+                description = a.Description,
+                category = a.Category,
+                price = a.Price,
+                originalPrice = a.OriginalPrice,
+                fileSize = a.FileSize,
+                discountRate = a.DiscountRate,
+                // 优先使用存储的 SalePrice，如未提供则根据 discountRate 计算
+                salePrice = a.SalePrice > 0 ? a.SalePrice : (int)Math.Round(a.Price * (1.0 - a.DiscountRate)),
+                rating = a.Rating,
+                reviewCount = a.ReviewCount,
+                downloads = a.Downloads,
+                license = a.License,
+                downloadUrl = a.DownloadUrl,
+                stock = a.Stock,
+                purchaseCount = a.PurchaseCount,
+                favoriteCount = a.FavoriteCount,
+                viewCount = a.ViewCount,
+                lastUpdatedAt = a.LastUpdatedAt
+            }).ToList();
+
+            return new JsonResult(new { code = 0, message = "成功", data = new { total = total, page = page, pageSize = pageSize, items = result } }, 200);
+        }
+        catch (Exception ex)
+        {
+            Logger.Error($"获取公共资产列表失败: {ex.Message}");
+            return new JsonResult(new { code = 500, message = "服务器错误" }, 500);
+        }
+    }
+
+    // 按分类获取资源列表
+    [HttpHandle("/api/asset/category/{category}", "GET", RateLimitMaxRequests = 60, RateLimitWindowSeconds = 60)]
+    public static async Task<IActionResult> Get_AssetsByCategory(HttpRequest request)
+    {
+        if (!request.PathParameters.TryGetValue("category", out var category) || string.IsNullOrWhiteSpace(category))
+            return new JsonResult(new { message = "category 参数不能为空" }, 400);
+
+        try
+        {
+            int page = 1;
+            int pageSize = 24;
+            if (!int.TryParse(request.Query[("page")], out page) || page <= 0) page = 1;
+            if (!int.TryParse(request.Query[("pageSize")], out pageSize) || pageSize <= 0) pageSize = 24;
+
+            var all = await KaxGlobal.AssetDataBase.SelectAllAsync();
+            var filtered = all.Where(a => string.Equals(a.Category ?? string.Empty, category, StringComparison.OrdinalIgnoreCase)).AsQueryable();
+            var total = filtered.Count();
+            var items = filtered.OrderByDescending(a => a.LastUpdatedAt).Skip((page - 1) * pageSize).Take(pageSize)
+                .Select(a => new
+                {
+                    id = a.Id,
+                    name = a.Name,
+                    version = a.Version,
+                    author = a.Author,
+                    description = a.Description,
+                    category = a.Category,
+                    price = a.Price,
+                    originalPrice = a.OriginalPrice,
+                    fileSize = a.FileSize,
+                    discountRate = a.DiscountRate,
+                    salePrice = (int)Math.Round(a.Price * (1.0 - a.DiscountRate)),
+                    stock = a.Stock,
+                    purchaseCount = a.PurchaseCount,
+                    favoriteCount = a.FavoriteCount,
+                    viewCount = a.ViewCount,
+                    lastUpdatedAt = a.LastUpdatedAt
+                }).ToList();
+
+            return new JsonResult(new { code = 0, message = "成功", data = new { total = total, page = page, pageSize = pageSize, items = items } }, 200);
+        }
+        catch (Exception ex)
+        {
+            Logger.Error($"按分类获取资源列表失败: {ex.Message}");
+            return new JsonResult(new { code = 500, message = "服务器错误" }, 500);
+        }
+    }
+
     [HttpHandle("/api/asset/name/{assetId}", "GET", RateLimitMaxRequests = 120, RateLimitWindowSeconds = 60, RateLimitCallbackMethodName = nameof(RateLimitCallback))]
     public static async Task<IActionResult> Get_AssetName(HttpRequest request)
     {
@@ -1515,6 +2030,69 @@ public class KaxHttp
         catch (Exception ex)
         {
             Logger.Error($"Get_AssetName 失败: {ex.Message}");
+            return new JsonResult(new { message = "服务器错误" }, 500);
+        }
+    }
+
+    // 公共接口：获取资源详情（包含价格/库存/统计信息）
+    [HttpHandle("/api/asset/detail/{id}", "GET", RateLimitMaxRequests = 120, RateLimitWindowSeconds = 60, RateLimitCallbackMethodName = nameof(RateLimitCallback))]
+    public static async Task<IActionResult> Get_AssetDetail(HttpRequest request)
+    {
+        if (!request.PathParameters.TryGetValue("id", out var idStr) || !int.TryParse(idStr, out var assetId) || assetId <= 0)
+            return new JsonResult(new { message = "id 参数必须是大于 0 的整数" }, 400);
+
+        try
+        {
+            var asset = await KaxGlobal.AssetDataBase.SelectByIdAsync(assetId);
+            if (asset == null)
+                return new JsonResult(new { message = "资源不存在", id = assetId }, 404);
+
+            // 增加一次浏览量（尝试更新，不阻塞主响应）
+            try
+            {
+                asset.ViewCount = (asset.ViewCount <= 0) ? 1 : asset.ViewCount + 1;
+                await KaxGlobal.AssetDataBase.UpdateAsync(asset);
+            }
+            catch (Exception ex)
+            {
+                Logger.Warn($"更新资源 {assetId} viewCount 失败: {ex.Message}");
+            }
+
+            var result = new
+            {
+                id = asset.Id,
+                name = asset.Name,
+                version = asset.Version,
+                author = asset.Author,
+                description = asset.Description,
+                price = asset.Price,
+                originalPrice = asset.OriginalPrice,
+                category = asset.Category,
+                fileSize = asset.FileSize,
+                discountRate = asset.DiscountRate,
+                // 优先使用存储的 SalePrice，如未提供则根据 discountRate 计算
+                salePrice = asset.SalePrice > 0 ? asset.SalePrice : (int)Math.Round(asset.Price * (1.0 - asset.DiscountRate)),
+                rating = asset.Rating,
+                reviewCount = asset.ReviewCount,
+                compatibility = asset.Compatibility,
+                downloads = asset.Downloads,
+                uploadDate = asset.UploadDate,
+                license = asset.License,
+                downloadUrl = asset.DownloadUrl,
+                stock = asset.Stock,
+                purchaseCount = asset.PurchaseCount,
+                favoriteCount = asset.FavoriteCount,
+                viewCount = asset.ViewCount,
+                // 如需额外字段（如 License/FileSize/DownloadUrl），请在 AssetModel 中添加相应属性
+                lastUpdatedAt = asset.LastUpdatedAt,
+                isDeleted = asset.IsDeleted
+            };
+
+            return new JsonResult(new { code = 0, message = "成功", data = result }, 200);
+        }
+        catch (Exception ex)
+        {
+            Logger.Error($"Get_AssetDetail 失败: {ex.Message}");
             return new JsonResult(new { message = "服务器错误" }, 500);
         }
     }
