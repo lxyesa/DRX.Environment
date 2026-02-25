@@ -2,7 +2,7 @@ using System;
 using System.Threading.Channels;
 using System.Threading.Tasks;
 
-namespace Drx.Sdk.Network.V2.Web
+namespace Drx.Sdk.Network.V2.Web.Performance
 {
     /// <summary>
     /// 基于 Channel 的简单消息队列（线程安全，带有边界容量）

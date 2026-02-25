@@ -4,8 +4,9 @@ using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
 using Drx.Sdk.Shared;
+using Drx.Sdk.Network.V2.Web.Core;
 
-namespace Drx.Sdk.Network.V2.Web
+namespace Drx.Sdk.Network.V2.Web.Http
 {
     /// <summary>
     /// 常用的 IActionResult 实现集合：ContentResult/HtmlResult/HtmlResultFromFile/JsonResult/FileResult/RedirectResult/StatusResult

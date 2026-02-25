@@ -482,10 +482,6 @@
                     <label for="categorySelect">分类</label>
                     <select id="categorySelect" data-custom-select>
                         <option value="">全部分类</option>
-                        <option value="mod">模组</option>
-                        <option value="texture">材质包</option>
-                        <option value="map">地图</option>
-                        <option value="plugin">插件</option>
                     </select>
                 </div>
                 <div class="filter-group">
@@ -597,15 +593,45 @@
                     id: Number(a.id) || a.id,
                     name: a.name,
                     desc: a.description || '',
-                    price: (a.price != null ? a.price : 0),
+                    // 支持新的prices子表结构：优先使用第一个价格方案，否则使用旧的price字段
+                    price: a.prices && a.prices.length > 0 ? a.prices[0].price : (a.price != null ? a.price : 0),
+                    prices: a.prices || [],  // 保留完整的prices数据供详细显示
                     stock: a.stock != null ? a.stock : 0,
+                    category: a.category || '',  // 添加分类字段
                     icon: '📦',
                     lastUpdatedAt: a.lastUpdatedAt
                 }));
                 filteredProducts = [...products];
+                populateCategories();  // 获取资产后动态填充分类
             } catch (e) {
                 console.error('拉取资产出错', e);
             }
+        }
+
+        function extractCategories() {
+            // 从所有产品中提取唯一的分类
+            const categories = new Set();
+            products.forEach(p => {
+                if (p.category && p.category.trim()) {
+                    categories.add(p.category.trim());
+                }
+            });
+            return Array.from(categories).sort();
+        }
+
+        function populateCategories() {
+            const categorySelect = document.getElementById('categorySelect');
+            if (!categorySelect) return;
+
+            const categories = extractCategories();
+
+            // 保留"全部分类"选项，添加动态分类
+            const options = ['<option value="">全部分类</option>'];
+            categories.forEach(cat => {
+                options.push(`<option value="${cat}">${cat}</option>`);
+            });
+
+            categorySelect.innerHTML = options.join('');
         }
 
         async function initShop() {
@@ -705,7 +731,7 @@
                         <div class="product-name">${p.name}</div>
                         <div class="product-desc">${p.desc}</div>
                         <div class="product-meta">
-                            <div class="product-price">需要:${p.price.toFixed(2)} 贡献点</div>
+                            <div class="product-price">¥${(p.price/100).toFixed(2)}</div>
                             <div class="product-stock ${p.stock < 10 ? 'low' : ''}">
                                 ${p.stock > 0 ? `库存: ${p.stock}` : '缺货'}
                             </div>

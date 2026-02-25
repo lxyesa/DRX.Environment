@@ -4,7 +4,7 @@ using System.Collections.Generic;
 using System.Net.Http;
 using System.Threading;
 
-namespace Drx.Sdk.Network.V2.Web
+namespace Drx.Sdk.Network.V2.Web.Performance
 {
     /// <summary>
     /// 路由匹配结果缓存：对热点路径的路由匹配结果进行缓存，避免每次请求都遍历所有路由并执行正则匹配。
@@ -168,22 +168,34 @@ namespace Drx.Sdk.Network.V2.Web
 
         /// <summary>
         /// 淘汰最久未访问的条目（保留最近 75% 的条目）
+        /// 优化：使用堆排序而非完整排序，减少内存分配和 CPU 开销
         /// </summary>
         private void EvictOldEntries()
         {
             var targetCount = _maxSize * 3 / 4;
-            var entries = new List<KeyValuePair<string, RouteMatchResult>>();
+            var toRemoveCount = _cache.Count - targetCount;
+            
+            if (toRemoveCount <= 0) return;
+
+            // 使用优先队列（最小堆）找出最久未访问的 toRemoveCount 个条目
+            var minHeap = new PriorityQueue<(string Key, long Timestamp), long>();
+            
             foreach (var kvp in _cache)
             {
-                entries.Add(kvp);
+                minHeap.Enqueue((kvp.Key, kvp.Value.LastAccessTimestamp), kvp.Value.LastAccessTimestamp);
+                
+                // 保持堆大小为 toRemoveCount，只保留最小的元素
+                if (minHeap.Count > toRemoveCount)
+                {
+                    minHeap.Dequeue();
+                }
             }
 
-            entries.Sort((a, b) => a.Value.LastAccessTimestamp.CompareTo(b.Value.LastAccessTimestamp));
-
-            int toRemove = entries.Count - targetCount;
-            for (int i = 0; i < toRemove && i < entries.Count; i++)
+            // 移除堆中的所有条目（这些是最久未访问的）
+            while (minHeap.Count > 0)
             {
-                if (_cache.TryRemove(entries[i].Key, out _))
+                var (key, _) = minHeap.Dequeue();
+                if (_cache.TryRemove(key, out _))
                 {
                     Interlocked.Decrement(ref _currentCount);
                 }

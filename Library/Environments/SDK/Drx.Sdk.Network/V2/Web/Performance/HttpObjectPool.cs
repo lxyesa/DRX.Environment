@@ -6,7 +6,7 @@ using System.IO;
 using System.Text;
 using System.Threading;
 
-namespace Drx.Sdk.Network.V2.Web
+namespace Drx.Sdk.Network.V2.Web.Performance
 {
     /// <summary>
     /// HTTP 请求/响应处理的对象池和缓冲区复用管理器。

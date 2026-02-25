@@ -1,6 +1,7 @@
 using System;
 using System.Net;
-using Drx.Sdk.Network.V2.Web;
+using Drx.Sdk.Network.V2.Web.Core;
+using Drx.Sdk.Network.V2.Web.Http;
 
 class Program
 {

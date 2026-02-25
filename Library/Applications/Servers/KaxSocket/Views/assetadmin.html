@@ -18,6 +18,8 @@
             --accent: #3b82f6;
             --white: #ffffff;
             --card-border: rgba(255, 255, 255, 0.05);
+            /* 可配置的粘性顶部偏移，方便根据全局顶部栏高度调整（已为 40px 顶部栏让出位置） */
+            --sticky-top-offset: 85px;
         }
 
         * {
@@ -44,7 +46,7 @@
             align-items: center;
             justify-content: space-between;
             padding-bottom: 8px;
-            border-bottom: 1px solid rgba(255,255,255,0.02);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.02);
         }
 
         .brand {
@@ -122,7 +124,7 @@
             justify-content: space-between;
             margin-bottom: 12px;
             padding-bottom: 8px;
-            border-bottom: 1px solid rgba(255,255,255,0.02);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.02);
         }
 
         .card-title {
@@ -148,8 +150,8 @@
             gap: 8px;
             align-items: center;
             position: relative;
-            background: rgba(255,255,255,0.01);
-            border: 1px solid rgba(255,255,255,0.06);
+            background: rgba(255, 255, 255, 0.01);
+            border: 1px solid rgba(255, 255, 255, 0.06);
             border-radius: 8px;
             padding: 4px 8px;
             transition: border-color .12s ease, box-shadow .12s ease, background .12s ease;
@@ -157,16 +159,18 @@
 
         .search-bar:hover,
         .search-bar:focus-within {
-            border-color: rgba(59,130,246,0.65);
-            box-shadow: 0 6px 20px rgba(59,130,246,0.04); /* 轻微发光 */
-            background: rgba(255,255,255,0.02);
+            border-color: rgba(59, 130, 246, 0.65);
+            box-shadow: 0 6px 20px rgba(59, 130, 246, 0.04);
+            /* 轻微发光 */
+            background: rgba(255, 255, 255, 0.02);
         }
 
         .search-icon {
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            color: rgba(255,255,255,0.44); /* 弱化图标 */
+            color: rgba(255, 255, 255, 0.44);
+            /* 弱化图标 */
             font-size: 18px;
             flex: 0 0 auto;
             margin: 0 4px 0 4px;
@@ -175,11 +179,12 @@
         /* 输入本身为透明、无边框 - 所有交互视觉都在容器上 */
         .search-input {
             flex: 1;
-            padding: 8px 36px 8px 0; /* 左侧由图标占位，右侧留 spinner */
+            padding: 8px 36px 8px 0;
+            /* 左侧由图标占位，右侧留 spinner */
             height: 36px;
             border: none !important;
             background: transparent !important;
-            color: rgba(255,255,255,0.92);
+            color: rgba(255, 255, 255, 0.92);
             font-size: 0.95rem;
             outline: none;
             font-family: 'Poppins', sans-serif;
@@ -192,7 +197,9 @@
             border-color: transparent !important;
         }
 
-        .search-input::placeholder { color: rgba(255,255,255,0.35); }
+        .search-input::placeholder {
+            color: rgba(255, 255, 255, 0.35);
+        }
 
         .search-spinner {
             position: absolute;
@@ -201,7 +208,7 @@
             transform: translateY(-50%);
             width: 18px;
             height: 18px;
-            border: 2px solid rgba(255,255,255,0.08);
+            border: 2px solid rgba(255, 255, 255, 0.08);
             border-top-color: var(--accent);
             border-radius: 50%;
             animation: spin .8s linear infinite;
@@ -210,9 +217,15 @@
             transition: opacity .12s ease;
         }
 
-        .search-spinner.active { opacity: 1; }
+        .search-spinner.active {
+            opacity: 1;
+        }
 
-        @keyframes spin { to { transform: translateY(-50%) rotate(360deg); } }
+        @keyframes spin {
+            to {
+                transform: translateY(-50%) rotate(360deg);
+            }
+        }
 
         .asset-list-container {
             max-height: 420px;
@@ -226,7 +239,7 @@
             justify-content: center;
             gap: 8px;
             padding: 12px 0;
-            border-top: 1px solid rgba(255,255,255,0.02);
+            border-top: 1px solid rgba(255, 255, 255, 0.02);
             margin-top: 12px;
         }
 
@@ -318,7 +331,7 @@
         /* 资源列表项 */
         .asset-list-item {
             padding: 12px 8px;
-            border-bottom: 1px dashed rgba(255,255,255,0.03);
+            border-bottom: 1px dashed rgba(255, 255, 255, 0.03);
             transition: background .12s ease, transform .12s ease, box-shadow .12s ease;
             cursor: default;
             display: flex;
@@ -330,7 +343,7 @@
         }
 
         .asset-list-item:nth-child(odd) {
-            background: rgba(255,255,255,0.005);
+            background: rgba(255, 255, 255, 0.005);
         }
 
         .asset-list-item:hover {
@@ -346,7 +359,7 @@
         }
 
         .asset-list-item.selected {
-            background: rgba(255,255,255,0.02);
+            background: rgba(255, 255, 255, 0.02);
             box-shadow: none;
         }
 
@@ -397,7 +410,8 @@
             display: flex;
             align-items: center;
             justify-content: flex-end;
-            min-width: 72px; /* 固定宽度用于对齐 */
+            min-width: 72px;
+            /* 固定宽度用于对齐 */
             margin-right: 6px;
         }
 
@@ -445,6 +459,19 @@
             width: 100%;
         }
 
+        /* 使资源列表面板在页面滚动时保持可见（粘性停靠在视口边缘） */
+        .content-area .card {
+            position: sticky;
+            top: var(--sticky-top-offset);
+            z-index: 5;
+            align-self: start; /* 确保在列的起始位置停靠 */
+            /* 恢复与容器一致的宽度，避免粘性后元素收缩 */
+            width: 100%;
+            box-sizing: border-box;
+            /* 保持视觉一致性：在粘性时不改变内边距或边界 */
+            max-width: none;
+        }
+
         .search-bar .material-icons {
             color: var(--muted);
             font-size: 18px;
@@ -453,7 +480,7 @@
         #assetDetailBackdrop {
             position: fixed;
             inset: 0;
-            background: rgba(0,0,0,0.45);
+            background: rgba(0, 0, 0, 0.45);
             display: none;
             opacity: 0;
             z-index: 40;
@@ -482,7 +509,7 @@
             transition: transform .22s cubic-bezier(.2, .9, .2, 1), opacity .14s ease;
             box-shadow: none;
             color: #ffffff;
-            background: rgba(255,255,255,0.02);
+            background: rgba(255, 255, 255, 0.02);
             border: 1px solid var(--card-border);
             /* 不在打开状态时阻止指针事件，避免遮挡后方控件 */
             pointer-events: none;
@@ -506,6 +533,7 @@
                 border-radius: 12px 12px 0 0;
                 transform: translateY(20px);
             }
+
             #assetDetailPanel.open {
                 transform: translateY(0);
                 opacity: 1;
@@ -513,32 +541,32 @@
         }
 
         .panel-header {
-            display:flex;
-            align-items:center;
-            justify-content:space-between;
-            gap:12px;
-            margin-bottom:14px;
-            padding-bottom:8px;
-            border-bottom: 1px solid rgba(255,255,255,0.02);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 14px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.02);
         }
 
         .panel-title {
-            font-weight:700;
-            color:var(--white);
-            font-size:1rem;
+            font-weight: 700;
+            color: var(--white);
+            font-size: 1rem;
         }
 
 
         #assetDetailPanel pre {
-            background: rgba(255,255,255,0.01);
+            background: rgba(255, 255, 255, 0.01);
             padding: 12px;
             border-radius: 8px;
             overflow: auto;
             font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, 'Roboto Mono', monospace;
-            font-size:0.9rem;
-            border: 1px solid rgba(255,255,255,0.02);
-            color:var(--white);
-            margin-top:8px;
+            font-size: 0.9rem;
+            border: 1px solid rgba(255, 255, 255, 0.02);
+            color: var(--white);
+            margin-top: 8px;
         }
 
         #assetDetailPanel .hint {
@@ -562,11 +590,69 @@
             font-size: 0.95rem;
         }
 
+        /* 价格计划列表样式 */
+        .price-list {
+            background: rgba(255, 255, 255, 0.01);
+        }
+
+        .price-list-item {
+            padding: 12px 8px;
+            border-bottom: 1px dashed rgba(255,255,255,0.03);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            transition: background .12s ease;
+        }
+
+        .price-list-item:nth-child(odd) {
+            background: rgba(255,255,255,0.005);
+        }
+
+        .price-list-item:hover {
+            background: rgba(255,255,255,0.02);
+        }
+
+        .price-item-info {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .price-item-main {
+            font-weight: 600;
+            color: var(--muted-strong);
+            font-size: 0.95rem;
+            margin-bottom: 4px;
+        }
+
+        .price-item-meta {
+            font-size: 0.8rem;
+            color: var(--muted);
+        }
+
+        .price-item-actions {
+            display: flex;
+            gap: 6px;
+            align-items: center;
+            flex: 0 0 auto;
+            margin-left: 8px;
+        }
+
+        .price-item-actions .info-btn {
+            padding: 4px 8px;
+            font-size: 0.9rem;
+        }
+
         /* 响应式设计 */
         @media (max-width: 1024px) {
             .main-content {
                 grid-template-columns: 1fr;
                 gap: 18px;
+            }
+            /* 小屏幕禁用粘性以避免布局异常（面板流式排列） */
+            .content-area .card {
+                position: static;
+                top: auto;
+                width: 100%;
             }
         }
 
@@ -574,38 +660,38 @@
             .container {
                 padding: 16px;
             }
-            
+
             header {
                 flex-direction: column;
                 align-items: flex-start;
                 gap: 12px;
                 margin-bottom: 24px;
             }
-            
+
             .controls {
                 width: 100%;
                 justify-content: space-between;
             }
-            
+
             .filters {
                 flex-direction: column;
                 gap: 8px;
                 width: 100%;
             }
-            
+
             .filters select {
                 width: 100%;
             }
-            
+
             .search-bar {
                 flex-direction: column;
                 gap: 8px;
             }
-            
+
             .search-input {
                 width: 100%;
             }
-            
+
             .pagination {
                 flex-direction: column;
                 gap: 12px;
@@ -646,14 +732,18 @@
                         <div class="card-header">
                             <h2 class="card-title">资源列表</h2>
                             <div class="filters">
-                                <select id="sortSelect" class="btn ghost small" data-custom-select="true" aria-hidden="true" tabindex="-1" style="position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden;">
+                                <select id="sortSelect" class="btn ghost small" data-custom-select="true"
+                                    aria-hidden="true" tabindex="-1"
+                                    style="position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden;">
                                     <option value="name">按名称排序</option>
                                     <option value="version">按版本排序</option>
                                     <option value="author">按作者排序</option>
                                     <option value="updated">按更新时间排序</option>
                                 </select>
                                 <!-- custom dropdown will be initialized from JS -->
-                                <select id="statusFilter" class="btn ghost small" data-custom-select="true" aria-hidden="true" tabindex="-1" style="position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden;">
+                                <select id="statusFilter" class="btn ghost small" data-custom-select="true"
+                                    aria-hidden="true" tabindex="-1"
+                                    style="position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden;">
                                     <option value="all">全部</option>
                                     <option value="active">活跃</option>
                                     <option value="deleted">已删除</option>
@@ -661,7 +751,7 @@
                                 <!-- custom dropdown will be initialized from JS -->
                             </div>
                         </div>
-                        
+
                         <div class="search-section">
                             <div class="search-bar" role="search" aria-label="搜索资源">
                                 <span class="search-icon material-icons" aria-hidden="true">search</span>
@@ -669,11 +759,11 @@
                                 <span id="searchSpinner" class="search-spinner" aria-hidden="true" title="搜索中"></span>
                             </div>
                         </div>
-                        
+
                         <div id="assetList" class="asset-list-container">
                             <p class="hint" style="text-align: center; padding: 40px 20px;">加载中...</p>
                         </div>
-                        
+
                         <div class="pagination">
                             <button id="prevPageBtn" class="btn ghost small">上一页</button>
                             <div id="pageInfo" class="page-info">第 1 页</div>
@@ -702,26 +792,17 @@
                             <label for="createDescription">描述</label>
                             <textarea id="createDescription" placeholder="资源描述信息" rows="3"></textarea>
 
-                            <label for="createPrice" style="margin-top:12px;">价格（分）</label>
-                            <input type="text" id="createPrice" placeholder="例如: 100 表示 1.00 单位" />
-
                             <label for="createStock" style="margin-top:12px;">库存</label>
                             <input type="text" id="createStock" placeholder="例如: 100" />
 
                             <label for="createCategory" style="margin-top:12px;">分类</label>
                             <input type="text" id="createCategory" placeholder="例如: 模组" />
 
-                            <label for="createOriginalPrice" style="margin-top:12px;">原始价格（分）</label>
-                            <input type="text" id="createOriginalPrice" placeholder="例如: 100 表示 1.00 单位" />
 
                             <label for="createFileSize" style="margin-top:12px;">文件大小（字节）</label>
                             <input type="text" id="createFileSize" placeholder="例如: 1048576" />
 
-                            <label for="createDiscountRate" style="margin-top:12px;">折扣率 (0.0-1.0)</label>
-                            <input type="text" id="createDiscountRate" placeholder="例如: 0.20 表示 20%" />
-
-                            <label for="createSalePrice" style="margin-top:12px;">折后价（分）</label>
-                            <input type="text" id="createSalePrice" placeholder="例如: 80" />
+                            <!-- 价格字段已移除，使用价格计划管理器创建/编辑价格 -->
 
                             <label for="createCompatibility" style="margin-top:12px;">兼容性</label>
                             <input type="text" id="createCompatibility" placeholder="例如: 1.16 - 1.20" />
@@ -757,7 +838,8 @@
 
                             <label for="cdkExpiresIn" style="margin-top:12px;">时效（可选，0表示永久）</label>
                             <div style="display: flex; gap: 8px; align-items: center;">
-                                <input type="text" id="cdkExpiresInValue" placeholder="时间量" value="0" style="flex: 1;" />
+                                <input type="text" id="cdkExpiresInValue" placeholder="时间量" value="0"
+                                    style="flex: 1;" />
                                 <select id="cdkExpiresInUnit" style="flex: 0 0 auto; width: 80px;">
                                     <option value="0">永久</option>
                                     <option value="3600">小时</option>
@@ -781,7 +863,8 @@
 
                             <div style="display:flex;gap:8px;margin-top:12px;">
                                 <button type="submit" id="createCdkBtn" class="btn" style="flex:1;">生成并保存</button>
-                                <button type="button" id="createCdkPreviewBtn" class="btn ghost" style="flex:1;">生成预览</button>
+                                <button type="button" id="createCdkPreviewBtn" class="btn ghost"
+                                    style="flex:1;">生成预览</button>
                             </div>
 
                             <label style="margin-top:12px;">生成结果</label>
@@ -789,9 +872,11 @@
 
                             <div style="display:flex;gap:8px;margin-top:8px;">
                                 <button type="button" id="createCdkSaveBtn" class="btn" style="flex:1;">保存</button>
-                                <button type="button" id="createCdkDownloadBtn" class="btn ghost" style="flex:1;">下载</button>
+                                <button type="button" id="createCdkDownloadBtn" class="btn ghost"
+                                    style="flex:1;">下载</button>
                             </div>
-                            <p class="hint" style="margin-top: 12px; margin-bottom: 0; text-align: center;">为选中资源快速创建 CDK</p>
+                            <p class="hint" style="margin-top: 12px; margin-bottom: 0; text-align: center;">为选中资源快速创建
+                                CDK</p>
                         </form>
                     </div>
 
@@ -819,26 +904,17 @@
                             <label for="updateDescription">描述</label>
                             <textarea id="updateDescription" placeholder="资源描述信息" rows="3"></textarea>
 
-                            <label for="updatePrice" style="margin-top:12px;">价格（分）</label>
-                            <input type="text" id="updatePrice" placeholder="例如: 100 表示 1.00 单位" />
-
                             <label for="updateStock" style="margin-top:12px;">库存</label>
                             <input type="text" id="updateStock" placeholder="例如: 100" />
 
                             <label for="updateCategory" style="margin-top:12px;">分类</label>
                             <input type="text" id="updateCategory" placeholder="例如: 模组" />
 
-                            <label for="updateOriginalPrice" style="margin-top:12px;">原始价格（分）</label>
-                            <input type="text" id="updateOriginalPrice" placeholder="例如: 100 表示 1.00 单位" />
 
                             <label for="updateFileSize" style="margin-top:12px;">文件大小（字节）</label>
                             <input type="text" id="updateFileSize" placeholder="例如: 1048576" />
 
-                            <label for="updateDiscountRate" style="margin-top:12px;">折扣率 (0.0-1.0)</label>
-                            <input type="text" id="updateDiscountRate" placeholder="例如: 0.20 表示 20%" />
-
-                            <label for="updateSalePrice" style="margin-top:12px;">折后价（分）</label>
-                            <input type="text" id="updateSalePrice" placeholder="例如: 80" />
+                            <!-- 价格字段已移除，使用价格计划管理器创建/编辑价格 -->
 
                             <label for="updateCompatibility" style="margin-top:12px;">兼容性</label>
                             <input type="text" id="updateCompatibility" placeholder="例如: 1.16 - 1.20" />
@@ -855,8 +931,65 @@
                             <label for="updateDownloadUrl" style="margin-top:12px;">下载地址</label>
                             <input type="text" id="updateDownloadUrl" placeholder="例如: https://..." />
 
-                            <button type="submit" class="btn" disabled id="updateBtn" style="width: 100%; margin-top: 16px;">更新资源</button>
-                            <p class="hint" style="margin-top: 12px; margin-bottom: 0; text-align: center;">修改已有资源的信息</p>
+                            <button type="submit" class="btn" disabled id="updateBtn"
+                                style="width: 100%; margin-top: 16px;">更新资源</button>
+                            <p class="hint" style="margin-top: 12px; margin-bottom: 0; text-align: center;">修改已有资源的信息
+                            </p>
+                        </form>
+                    </div>
+
+                    <!-- 价格计划管理卡片 -->
+                    <div class="card">
+                        <div class="card-header">
+                            <h2 class="card-title">价格计划</h2>
+                        </div>
+
+                        <div style="margin-bottom: 16px;">
+                            <label>选择资源</label>
+                            <div style="display: flex; gap: 8px; align-items: center;">
+                                <input type="text" id="priceAssetId" placeholder="资源ID" style="flex: 1;" readonly>
+                                <button type="button" id="addPricePlanBtn" class="btn small">新增计划</button>
+                            </div>
+                        </div>
+
+                        <div id="priceListContainer" style="margin-bottom: 16px;">
+                            <label>现有计划</label>
+                            <div id="priceList" class="price-list" style="max-height: 300px; overflow-y: auto; border: 1px solid rgba(255,255,255,0.06); border-radius: 4px;">
+                                <p class="hint" style="text-align: center; padding: 20px 0;">请先选择资源</p>
+                            </div>
+                        </div>
+
+                        <form id="pricePlanForm" style="display: none;">
+                            <input type="hidden" id="editingPriceId" value="">
+
+                            <label for="planPrice">价格（分）*</label>
+                            <input type="text" id="planPrice" placeholder="例如: 9900 表示 99.00" required>
+
+                            <label for="planUnit" style="margin-top:12px;">时间单位 *</label>
+                            <select id="planUnit" required>
+                                <option value="once">一次性</option>
+                                <option value="hour">小时</option>
+                                <option value="day">天</option>
+                                <option value="month">月</option>
+                                <option value="year">年</option>
+                            </select>
+
+                            <label for="planDuration" style="margin-top:12px;">持续时间 *</label>
+                            <input type="text" id="planDuration" placeholder="例如: 1" required>
+
+                            <label for="planOriginalPrice" style="margin-top:12px;">原始价格（分）</label>
+                            <input type="text" id="planOriginalPrice" placeholder="例如: 9900">
+
+                            <label for="planDiscountRate" style="margin-top:12px;">折扣率 (0.0-1.0)</label>
+                            <input type="text" id="planDiscountRate" placeholder="例如: 0.20 表示 20%" value="0">
+
+                            <label for="planSalePrice" style="margin-top:12px;">折后价（分）</label>
+                            <input type="text" id="planSalePrice" placeholder="自动计算" readonly>
+
+                            <div style="display:flex;gap:8px;margin-top:16px;">
+                                <button type="submit" class="btn" style="flex:1;">保存计划</button>
+                                <button type="button" id="cancelPricePlanBtn" class="btn ghost" style="flex:1;">取消</button>
+                            </div>
                         </form>
                     </div>
                 </div>
@@ -880,7 +1013,9 @@
         </div>
     </aside>
 
-    <div id="loading" style="min-height:60vh;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,0.7)"></div>
+    <div id="loading"
+        style="min-height:60vh;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,0.7)">
+    </div>
 
     <script>
         (function () {
@@ -1015,12 +1150,12 @@
                     params.append('page', page.toString());
                     params.append('pageSize', pageSize.toString());
                     if (q) params.append('q', q);
-                    
+
                     const sortSelect = document.getElementById('sortSelect');
                     const statusFilter = document.getElementById('statusFilter');
                     if (sortSelect.value !== 'name') params.append('sort', sortSelect.value);
                     if (statusFilter.value !== 'all') params.append('status', statusFilter.value);
-                    
+
                     const resp = await fetch('/api/asset/admin/list?' + params.toString(), {
                         method: 'GET',
                         headers: {
@@ -1049,13 +1184,13 @@
                     assets.forEach(asset => {
                         const item = document.createElement('div');
                         item.className = 'asset-list-item';
-const descriptionPreview = asset.description ? asset.description.substring(0, 100) + (asset.description.length > 100 ? '...' : '') : '无描述';
-                    // 状态徽章放到右侧固定区域（保证对齐）
-                    const statusBadgeHtml = asset.isDeleted
-                        ? '<span class="status-badge">已删除</span>'
-                        : '<span class="status-badge active">活跃</span>';
+                        const descriptionPreview = asset.description ? asset.description.substring(0, 100) + (asset.description.length > 100 ? '...' : '') : '无描述';
+                        // 状态徽章放到右侧固定区域（保证对齐）
+                        const statusBadgeHtml = asset.isDeleted
+                            ? '<span class="status-badge">已删除</span>'
+                            : '<span class="status-badge active">活跃</span>';
 
-                    item.innerHTML = `
+                        item.innerHTML = `
                             <div class="asset-left">
                                 <span class="material-icons asset-icon">folder</span>
                                 <div class="asset-text">
@@ -1110,6 +1245,12 @@ const descriptionPreview = asset.description ? asset.description.substring(0, 10
                             // 同步到快速创建 CDK 表单（如果存在）
                             var _cdkEl = document.getElementById('cdkAssetId');
                             if (_cdkEl) _cdkEl.value = asset.id;
+                            // 同步到价格计划管理器
+                            var _priceEl = document.getElementById('priceAssetId');
+                            if (_priceEl) {
+                                _priceEl.value = asset.id;
+                                loadPricePlans(asset.id);
+                            }
                         });
 
                         assetList.appendChild(item);
@@ -1195,20 +1336,20 @@ const descriptionPreview = asset.description ? asset.description.substring(0, 10
                     document.getElementById('updateVersion').value = asset.version;
                     document.getElementById('updateAuthor').value = asset.author;
                     document.getElementById('updateDescription').value = asset.description;
-                    // 如果后端提供 price/stock 字段则填充
-                    try { document.getElementById('updatePrice').value = asset.price || 0; } catch (_) {}
-                    try { document.getElementById('updateStock').value = asset.stock || 0; } catch (_) {}
-                    // 填充新增字段（兼容性：部分字段可能不存在）
-                    try { document.getElementById('updateCategory').value = asset.category || asset.type || ''; } catch (_) {}
-                    try { document.getElementById('updateOriginalPrice').value = asset.originalPrice || 0; } catch (_) {}
-                    try { document.getElementById('updateFileSize').value = asset.fileSize || 0; } catch (_) {}
-                    try { document.getElementById('updateDiscountRate').value = (asset.discountRate !== undefined && asset.discountRate !== null) ? asset.discountRate : 0.0; } catch (_) {}
-                    try { document.getElementById('updateSalePrice').value = asset.salePrice || 0; } catch (_) {}
-                    try { document.getElementById('updateCompatibility').value = asset.compatibility || ''; } catch (_) {}
-                    try { document.getElementById('updateDownloads').value = asset.downloads || 0; } catch (_) {}
-                    try { document.getElementById('updateUploadDate').value = asset.uploadDate || asset.lastUpdatedAt || 0; } catch (_) {}
-                    try { document.getElementById('updateLicense').value = asset.license || ''; } catch (_) {}
-                    try { document.getElementById('updateDownloadUrl').value = asset.downloadUrl || ''; } catch (_) {}
+                    // 填充已有字段（注意：价格数据由价格计划管理器维护）
+                    try { document.getElementById('updateStock').value = asset.stock || 0; } catch (_) { }
+                    try { document.getElementById('updateCategory').value = asset.category || asset.type || ''; } catch (_) { }
+                    try { document.getElementById('updateFileSize').value = asset.fileSize || 0; } catch (_) { }
+                    try { document.getElementById('updateCompatibility').value = asset.compatibility || ''; } catch (_) { }
+                    try { document.getElementById('updateDownloads').value = asset.downloads || 0; } catch (_) { }
+                    try { document.getElementById('updateUploadDate').value = asset.uploadDate || asset.lastUpdatedAt || 0; } catch (_) { }
+                    try { document.getElementById('updateLicense').value = asset.license || ''; } catch (_) { }
+                    try { document.getElementById('updateDownloadUrl').value = asset.downloadUrl || ''; } catch (_) { }
+                    try { document.getElementById('updateCompatibility').value = asset.compatibility || ''; } catch (_) { }
+                    try { document.getElementById('updateDownloads').value = asset.downloads || 0; } catch (_) { }
+                    try { document.getElementById('updateUploadDate').value = asset.uploadDate || asset.lastUpdatedAt || 0; } catch (_) { }
+                    try { document.getElementById('updateLicense').value = asset.license || ''; } catch (_) { }
+                    try { document.getElementById('updateDownloadUrl').value = asset.downloadUrl || ''; } catch (_) { }
                     document.getElementById('updateBtn').disabled = false;
 
                     closeDetailPanel();
@@ -1310,13 +1451,14 @@ const descriptionPreview = asset.description ? asset.description.substring(0, 10
                 const version = document.getElementById('createVersion').value.trim();
                 const author = document.getElementById('createAuthor').value.trim();
                 const description = document.getElementById('createDescription').value.trim();
-                const price = parseInt(document.getElementById('createPrice').value, 10) || 0;
+                // 价格由价格计划管理器维护，创建资源时不再提交单一 price 字段
+                const price = undefined;
                 const stock = parseInt(document.getElementById('createStock').value, 10) || 0;
                 const category = document.getElementById('createCategory').value.trim();
-                const originalPrice = parseInt(document.getElementById('createOriginalPrice').value, 10) || 0;
+                const originalPrice = undefined;
                 const fileSize = parseInt(document.getElementById('createFileSize').value, 10) || 0;
-                const discountRate = parseFloat(document.getElementById('createDiscountRate').value) || 0.0;
-                const salePrice = parseInt(document.getElementById('createSalePrice').value, 10) || 0;
+                const discountRate = undefined;
+                const salePrice = undefined;
                 const compatibility = document.getElementById('createCompatibility').value.trim();
                 const downloads = parseInt(document.getElementById('createDownloads').value, 10) || 0;
                 const uploadDate = parseInt(document.getElementById('createUploadDate').value, 10) || 0;
@@ -1331,8 +1473,10 @@ const descriptionPreview = asset.description ? asset.description.substring(0, 10
                             'Content-Type': 'application/json',
                             'Authorization': 'Bearer ' + token
                         },
-                        body: JSON.stringify({ name, version, author, description, price, stock,
-                            category, originalPrice, fileSize, discountRate, salePrice, compatibility, downloads, uploadDate, license, downloadUrl })
+                        body: JSON.stringify({
+                            name, version, author, description, stock,
+                            category, fileSize, compatibility, downloads, uploadDate, license, downloadUrl
+                        })
                     });
 
                     if (resp.status === 200) {
@@ -1496,6 +1640,273 @@ const descriptionPreview = asset.description ? asset.description.substring(0, 10
                 await loadToUpdateForm(parseInt(assetId));
             });
 
+            // ========== 价格计划管理 ==========
+            const priceAssetIdInput = document.getElementById('priceAssetId');
+            const addPricePlanBtn = document.getElementById('addPricePlanBtn');
+            const pricePlanForm = document.getElementById('pricePlanForm');
+            const cancelPricePlanBtn = document.getElementById('cancelPricePlanBtn');
+            const priceList = document.getElementById('priceList');
+            const editingPriceId = document.getElementById('editingPriceId');
+            const planPrice = document.getElementById('planPrice');
+            const planUnit = document.getElementById('planUnit');
+            const planDuration = document.getElementById('planDuration');
+            const planOriginalPrice = document.getElementById('planOriginalPrice');
+            const planDiscountRate = document.getElementById('planDiscountRate');
+            const planSalePrice = document.getElementById('planSalePrice');
+
+            let currentAssetData = null;
+
+            function formatPrice(cents) {
+                return (cents / 100).toFixed(2);
+            }
+
+            function calculateSalePrice() {
+                const price = parseInt(planPrice.value) || 0;
+                const discountRate = parseFloat(planDiscountRate.value) || 0;
+                const salePrice = Math.round(price * (1 - discountRate));
+                planSalePrice.value = salePrice;
+            }
+
+            planPrice.addEventListener('input', calculateSalePrice);
+            planDiscountRate.addEventListener('input', calculateSalePrice);
+
+            function showPricePlanForm(priceId = null) {
+                pricePlanForm.style.display = 'block';
+                editingPriceId.value = priceId || '';
+
+                if (priceId && currentAssetData && currentAssetData.prices) {
+                    const price = currentAssetData.prices.find(p => p.id === priceId);
+                    if (price) {
+                        planPrice.value = price.price || 0;
+                        planUnit.value = price.unit || 'month';
+                        planDuration.value = price.duration || 1;
+                        planOriginalPrice.value = price.originalPrice || 0;
+                        planDiscountRate.value = price.discountRate || 0;
+                        calculateSalePrice();
+                    }
+                } else {
+                    planPrice.value = '';
+                    planUnit.value = 'month';
+                    planDuration.value = '1';
+                    planOriginalPrice.value = '';
+                    planDiscountRate.value = '0';
+                    planSalePrice.value = '';
+                }
+            }
+
+            function hidePricePlanForm() {
+                pricePlanForm.style.display = 'none';
+                editingPriceId.value = '';
+            }
+
+            async function loadPricePlans(assetId) {
+                if (!assetId) {
+                    priceList.innerHTML = '<p class="hint" style="text-align: center; padding: 20px 0;">请先选择资源</p>';
+                    return;
+                }
+
+                try {
+                    const token = localStorage.getItem('kax_login_token');
+                    const resp = await fetch('/api/asset/admin/inspect', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': 'Bearer ' + token
+                        },
+                        body: JSON.stringify({ id: assetId })
+                    });
+
+                    if (!resp.ok) throw new Error('加载失败');
+                    const data = await resp.json();
+                    currentAssetData = data.data;
+
+                    const prices = currentAssetData.prices || [];
+                    priceList.innerHTML = '';
+
+                    if (prices.length === 0) {
+                        priceList.innerHTML = '<p class="hint" style="text-align: center; padding: 20px 0;">暂无价格计划</p>';
+                        return;
+                    }
+
+                    prices.forEach(price => {
+                        const item = document.createElement('div');
+                        item.className = 'price-list-item';
+                        const unitMap = { 'once': '一次性', 'hour': '小时', 'day': '天', 'month': '月', 'year': '年' };
+                        const unitLabel = unitMap[price.unit] || price.unit;
+                        const durationText = price.unit === 'once' ? '' : `${price.duration}${unitLabel}`;
+                        const salePrice = Math.round(price.price * (1 - (price.discountRate || 0)));
+
+                        item.innerHTML = `
+                            <div class="price-item-info">
+                                <div class="price-item-main">¥${formatPrice(price.price)} ${durationText}</div>
+                                <div class="price-item-meta">原价: ¥${formatPrice(price.originalPrice || price.price)} | 折扣: ${((price.discountRate || 0) * 100).toFixed(0)}% | 折后: ¥${formatPrice(salePrice)}</div>
+                            </div>
+                            <div class="price-item-actions">
+                                <button class="info-btn" aria-label="编辑" style="padding: 4px 8px;">
+                                    <span class="material-icons" style="font-size: 1rem;">edit</span>
+                                </button>
+                                <button class="info-btn danger-icon" aria-label="删除" style="color: #ef4444; padding: 4px 8px;">
+                                    <span class="material-icons" style="font-size: 1rem;">delete</span>
+                                </button>
+                            </div>
+                        `;
+
+                        const editBtn = item.querySelector('.info-btn:not(.danger-icon)');
+                        const deleteBtn = item.querySelector('.danger-icon');
+
+                        editBtn.addEventListener('click', (e) => {
+                            e.stopPropagation();
+                            showPricePlanForm(price.id);
+                        });
+
+                        deleteBtn.addEventListener('click', async (e) => {
+                            e.stopPropagation();
+                            if (confirm('确定要删除此价格计划吗？')) {
+                                await deletePricePlan(price.id);
+                            }
+                        });
+
+                        priceList.appendChild(item);
+                    });
+                } catch (err) {
+                    console.error('加载价格计划失败', err);
+                    priceList.innerHTML = '<p class="hint" style="text-align: center; padding: 20px 0;">加载失败</p>';
+                }
+            }
+
+            async function savePricePlan() {
+                const assetId = parseInt(priceAssetIdInput.value);
+                const price = parseInt(planPrice.value) || 0;
+                const unit = planUnit.value;
+                const duration = parseInt(planDuration.value) || 1;
+                const originalPrice = parseInt(planOriginalPrice.value) || price;
+                const discountRate = parseFloat(planDiscountRate.value) || 0;
+                const priceId = editingPriceId.value;
+
+                if (!assetId || price <= 0) {
+                    alert('请输入有效的资源ID和价格');
+                    return;
+                }
+
+                if (discountRate < 0 || discountRate > 1) {
+                    alert('折扣率必须在 0.0-1.0 之间');
+                    return;
+                }
+
+                try {
+                    const token = localStorage.getItem('kax_login_token');
+                    const prices = currentAssetData.prices || [];
+
+                    if (priceId) {
+                        const idx = prices.findIndex(p => p.id === priceId);
+                        if (idx >= 0) {
+                            prices[idx] = { id: priceId, price, unit, duration, originalPrice, discountRate };
+                        }
+                    } else {
+                        prices.push({ id: 'new_' + Date.now(), price, unit, duration, originalPrice, discountRate });
+                    }
+
+                    const resp = await fetch('/api/asset/admin/update', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': 'Bearer ' + token
+                        },
+                        body: JSON.stringify({
+                            id: assetId,
+                            name: currentAssetData.name,
+                            version: currentAssetData.version,
+                            author: currentAssetData.author,
+                            description: currentAssetData.description,
+                            prices: prices
+                        })
+                    });
+
+                    if (resp.status === 200) {
+                        alert(priceId ? '价格计划已更新' : '价格计划已创建');
+                        hidePricePlanForm();
+                        await loadPricePlans(assetId);
+                    } else {
+                        const error = await resp.json().catch(() => ({}));
+                        alert(`保存失败: ${error.message || '未知错误'}`);
+                    }
+                } catch (err) {
+                    console.error('保存价格计划失败', err);
+                    alert('保存失败');
+                }
+            }
+
+            async function deletePricePlan(priceId) {
+                const assetId = parseInt(priceAssetIdInput.value);
+                if (!assetId) return;
+
+                try {
+                    const token = localStorage.getItem('kax_login_token');
+                    const prices = (currentAssetData.prices || []).filter(p => p.id !== priceId);
+
+                    const resp = await fetch('/api/asset/admin/update', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': 'Bearer ' + token
+                        },
+                        body: JSON.stringify({
+                            id: assetId,
+                            name: currentAssetData.name,
+                            version: currentAssetData.version,
+                            author: currentAssetData.author,
+                            description: currentAssetData.description,
+                            prices: prices
+                        })
+                    });
+
+                    if (resp.status === 200) {
+                        alert('价格计划已删除');
+                        await loadPricePlans(assetId);
+                    } else {
+                        const error = await resp.json().catch(() => ({}));
+                        alert(`删除失败: ${error.message || '未知错误'}`);
+                    }
+                } catch (err) {
+                    console.error('删除价格计划失败', err);
+                    alert('删除失败');
+                }
+            }
+
+            addPricePlanBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                if (!priceAssetIdInput.value) {
+                    alert('请先选择资源');
+                    return;
+                }
+                showPricePlanForm();
+            });
+
+            cancelPricePlanBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                hidePricePlanForm();
+            });
+
+            pricePlanForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                await savePricePlan();
+            });
+
+            // 当在修改资源表单中加载资源时，同时加载价格计划
+            const originalLoadToUpdateForm = loadToUpdateForm;
+            window.loadToUpdateForm = async function(assetId) {
+                await originalLoadToUpdateForm(assetId);
+                priceAssetIdInput.value = assetId;
+                await loadPricePlans(assetId);
+            };
+
+            // 当选择资源列表项时，同步到价格计划管理器
+            const originalAssetListClick = function() {};
+            document.addEventListener('assetSelected', (e) => {
+                priceAssetIdInput.value = e.detail.assetId;
+                loadPricePlans(e.detail.assetId);
+            });
+
             // 搜索由输入变更（debounced）或按 Enter 触发；不再使用独立按钮
 
             prevPageBtn.addEventListener('click', async (e) => {
@@ -1522,13 +1933,14 @@ const descriptionPreview = asset.description ? asset.description.substring(0, 10
                 const version = document.getElementById('updateVersion').value.trim();
                 const author = document.getElementById('updateAuthor').value.trim();
                 const description = document.getElementById('updateDescription').value.trim();
-                const price = parseInt(document.getElementById('updatePrice').value, 10) || 0;
+                // 价格字段由价格计划管理器维护，更新资源时不再提交单一 price 字段
+                const price = undefined;
                 const stock = parseInt(document.getElementById('updateStock').value, 10) || 0;
                 const category = document.getElementById('updateCategory').value.trim();
-                const originalPrice = parseInt(document.getElementById('updateOriginalPrice').value, 10) || 0;
+                const originalPrice = undefined;
                 const fileSize = parseInt(document.getElementById('updateFileSize').value, 10) || 0;
-                const discountRate = parseFloat(document.getElementById('updateDiscountRate').value) || 0.0;
-                const salePrice = parseInt(document.getElementById('updateSalePrice').value, 10) || 0;
+                const discountRate = undefined;
+                const salePrice = undefined;
                 const compatibility = document.getElementById('updateCompatibility').value.trim();
                 const downloads = parseInt(document.getElementById('updateDownloads').value, 10) || 0;
                 const uploadDate = parseInt(document.getElementById('updateUploadDate').value, 10) || 0;
@@ -1543,8 +1955,10 @@ const descriptionPreview = asset.description ? asset.description.substring(0, 10
                             'Content-Type': 'application/json',
                             'Authorization': 'Bearer ' + token
                         },
-                        body: JSON.stringify({ id, name, version, author, description, price, stock,
-                            category, originalPrice, fileSize, discountRate, salePrice, compatibility, downloads, uploadDate, license, downloadUrl })
+                        body: JSON.stringify({
+                            id, name, version, author, description, stock,
+                            category, fileSize, compatibility, downloads, uploadDate, license, downloadUrl
+                        })
                     });
 
                     if (resp.status === 200) {

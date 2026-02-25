@@ -4,7 +4,7 @@ using System.Collections.Concurrent;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace Drx.Sdk.Network.V2.Web
+namespace Drx.Sdk.Network.V2.Web.Performance
 {
     /// <summary>
     /// 轻量级线程池管理器，接收 Action/Func<Task> 并在线程池 worker 上执行

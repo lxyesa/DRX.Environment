@@ -300,6 +300,14 @@ namespace Drx.Sdk.Network.DataBase.Sqlite
         #region LINQ 支持
 
         /// <summary>
+        /// 返回所有元素的 List 副本
+        /// </summary>
+        public List<T> ToList()
+        {
+            return _items.Values.ToList();
+        }
+
+        /// <summary>
         /// 返回满足条件的项目
         /// </summary>
         public IEnumerable<T> Where(Func<T, bool> predicate)

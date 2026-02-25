@@ -1,5 +1,6 @@
-using Drx.Sdk.Network.V2.Web;
 using System.Threading.Tasks;
+using Drx.Sdk.Network.V2.Web.Core;
+using Drx.Sdk.Network.V2.Web.Http;
 
 namespace Drx.Sdk.Network.V2.Web.Results
 {

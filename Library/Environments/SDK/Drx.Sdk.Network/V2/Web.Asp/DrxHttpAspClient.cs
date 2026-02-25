@@ -3,7 +3,8 @@ using System.Net.Http;
 using System.Text;
 using System.Threading.Tasks;
 using System.Collections.Specialized;
-using Drx.Sdk.Network.V2.Web;
+using Drx.Sdk.Network.V2.Web.Core;
+using Drx.Sdk.Network.V2.Web.Http;
 using System.Net.Http.Headers;
 using System.Text.Json;
 

@@ -6,8 +6,9 @@ using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.Collections.Concurrent;
 using System.Linq;
+using Drx.Sdk.Network.V2.Web.Http;
 
-namespace Drx.Sdk.Network.V2.Web
+namespace Drx.Sdk.Network.V2.Web.Auth
 {
     /// <summary>
     /// JWT 帮助类，提供快速生成和验证 JWT 令牌的功能

@@ -586,8 +586,8 @@
                             <label for="length" style="margin-top: 12px;">代码长度</label>
                             <input type="text" id="length" placeholder="4 - 256" value="8" />
 
-                            <label for="assetId" style="margin-top: 12px;">AssetId *</label>
-                            <input type="text" id="assetId" placeholder="必填" required />
+                            <label for="assetId" style="margin-top: 12px;">AssetId（可选）</label>
+                            <input type="text" id="assetId" placeholder="可选，若为空则仅使用贡献值" />
 
                             <label for="contributionValue" style="margin-top: 12px;">贡献值（可选）</label>
                             <input type="text" id="contributionValue" placeholder="0" value="0" />
@@ -1027,7 +1027,7 @@
                 var length = parseInt(document.getElementById('length').value, 10) || 8;
                 var assetId = parseInt(document.getElementById('assetId').value, 10) || 0;
 
-                if (assetId <= 0) { alert('请输入有效的 AssetId'); return; }
+                // 允许不填写 assetId，仅生成代码；保存时会校验 assetId 或 contributionValue
                 count = Math.max(1, Math.min(1000, count));
                 length = Math.max(4, Math.min(256, length));
 
@@ -1058,9 +1058,10 @@
                 var expiresInValue = parseInt(document.getElementById('expiresInValue').value, 10) || 0;
                 var expiresInUnit = parseInt(document.getElementById('expiresInUnit').value, 10) || 0;
                 var expiresInSeconds = expiresInValue > 0 ? expiresInValue * expiresInUnit : 0;
-                var description = document.getElementById('cdkDescription').value.trim();
 
-                if (assetId <= 0) { alert('请填写有效的 AssetId'); return; }
+                // 至少需要 assetId 或 contributionValue
+                if (assetId <= 0 && contributionValue <= 0) { alert('请填写 AssetId 或贡献值（contributionValue），两者不能同时为空或为 0'); return; }
+                var description = document.getElementById('cdkDescription').value.trim();
 
                 try {
                     var orig = saveBtn.textContent;

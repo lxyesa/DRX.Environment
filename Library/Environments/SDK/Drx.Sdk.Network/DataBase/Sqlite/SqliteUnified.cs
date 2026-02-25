@@ -1787,7 +1787,7 @@ namespace Drx.Sdk.Network.DataBase.Sqlite
         /// <param name="values">条件值</param>
         /// <param name="cancellationToken">取消令牌</param>
         /// <returns>删除的记录数</returns>
-        private async Task<int> DeleteChildRecordsInternalAsync(string childTableName, string fieldName, 
+        private async Task<int> DeleteChildRecordsInternalAsync(string childTableName, string fieldName,
             string operatorType, object?[] values, CancellationToken cancellationToken = default)
         {
             if (string.IsNullOrWhiteSpace(childTableName))
@@ -1859,7 +1859,7 @@ namespace Drx.Sdk.Network.DataBase.Sqlite
         /// <param name="values">条件值数组</param>
         /// <param name="cancellationToken">取消令牌</param>
         /// <returns>删除的记录数</returns>
-        public async Task<int> DeleteChildRecordsAsync(string childTableName, string fieldName, 
+        public async Task<int> DeleteChildRecordsAsync(string childTableName, string fieldName,
             string operatorType, object?[] values, CancellationToken cancellationToken = default)
         {
             return await DeleteChildRecordsInternalAsync(childTableName, fieldName, operatorType, values, cancellationToken).ConfigureAwait(false);

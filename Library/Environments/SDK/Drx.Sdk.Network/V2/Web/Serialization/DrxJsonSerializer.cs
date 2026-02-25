@@ -5,7 +5,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Drx.Sdk.Shared;
 
-namespace Drx.Sdk.Network.V2.Web
+namespace Drx.Sdk.Network.V2.Web.Serialization
 {
     /// <summary>
     /// JSON 序列化管理器接口，用于支持可配置的序列化策略

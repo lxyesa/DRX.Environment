@@ -5,7 +5,7 @@ using System.Text;
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.Extensions.Primitives;
 
-namespace Drx.Sdk.Network.V2.Web
+namespace Drx.Sdk.Network.V2.Web.Utilities
 {
     /// <summary>
     /// URL 与 Query 处理工具类：为服务端与客户端提供统一的编码/解码、解析与构造方法。

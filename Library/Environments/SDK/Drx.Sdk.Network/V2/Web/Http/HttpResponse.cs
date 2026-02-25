@@ -4,7 +4,7 @@ using System.Text.Json;
 using System.Dynamic;
 using System.Collections.Generic;
 
-namespace Drx.Sdk.Network.V2.Web
+namespace Drx.Sdk.Network.V2.Web.Http
 {
     /// <summary>
     /// 表示 HTTP 响应

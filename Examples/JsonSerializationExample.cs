@@ -1,6 +1,7 @@
 using System;
 using System.Threading.Tasks;
-using Drx.Sdk.Network.V2.Web;
+using Drx.Sdk.Network.V2.Web.Core;
+using Drx.Sdk.Network.V2.Web.Http;
 
 namespace KaxSocket.Examples
 {

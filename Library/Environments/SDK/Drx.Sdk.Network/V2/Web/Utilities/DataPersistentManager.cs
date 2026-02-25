@@ -9,7 +9,7 @@ using Drx.Sdk.Network.DataBase.Sqlite;
 using System.Reflection;
 using System.IO;
 
-namespace Drx.Sdk.Network.V2.Web
+namespace Drx.Sdk.Network.V2.Web.Utilities
 {
     /// <summary>
     /// 数据持久化管理器（内存 + 持久化到 sqlite）

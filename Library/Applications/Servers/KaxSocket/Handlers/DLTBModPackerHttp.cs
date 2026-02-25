@@ -1,7 +1,10 @@
 ﻿using System.Diagnostics.CodeAnalysis;
 using System.Dynamic;
 using System.Text.Json.Nodes;
-using Drx.Sdk.Network.V2.Web;
+using Drx.Sdk.Network.V2.Web.Core;
+using Drx.Sdk.Network.V2.Web.Http;
+using Drx.Sdk.Network.V2.Web.Configs;
+using Drx.Sdk.Network.V2.Web.Results;
 using Drx.Sdk.Shared;
 using Drx.Sdk.Shared.Serialization;
 using Drx.Sdk.Shared.Utility;

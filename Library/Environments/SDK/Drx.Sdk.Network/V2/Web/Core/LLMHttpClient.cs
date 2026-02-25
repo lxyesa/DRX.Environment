@@ -7,9 +7,8 @@ using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
 using System.Threading;
-using System.Threading.Tasks;
-
-namespace Drx.Sdk.Network.V2.Web
+using System.Threading.Tasks;using Drx.Sdk.Network.V2.Web.Http;
+namespace Drx.Sdk.Network.V2.Web.Core
 {
     /// <summary>
     /// 面向大语言模型的 HTTP 客户端，继承自框架内的 HttpClient，提供便捷的 POST 请求与流式响应读取能力。

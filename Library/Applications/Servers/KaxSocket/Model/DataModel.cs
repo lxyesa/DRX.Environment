@@ -1,88 +1,134 @@
 ﻿using Drx.Sdk.Network.DataBase.Sqlite;
 using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace KaxSocket
 {
+    /// <summary>
+    /// 数据模型基类，提供数据库主键 Id
+    /// </summary>
     public abstract class DataModel : IDataBase
     {
+        /// <summary>数据库主键</summary>
         public int Id { get; set; }
     }
 
+    /// <summary>
+    /// Mod 元数据（基础信息）
+    /// </summary>
     public class ModInfo : DataModel
     {
+        /// <summary>Mod 唯一标识</summary>
         public string ModId { get; set; }
+
+        /// <summary>Mod 名称</summary>
         public string ModName { get; set; }
+
+        /// <summary>Mod 版本</summary>
         public string ModVersion { get; set; }
+
+        /// <summary>作者</summary>
         public string ModAuthor { get; set; }
+
+        /// <summary>描述</summary>
         public string ModDescription { get; set; }
+
+        /// <summary>最后更新时间（Unix 毫秒）</summary>
         public long LastUpdatedAt { get; set; }
     }
 
     /// <summary>
-    /// 用户数据模型
+    /// 用户数据模型，包含用户基本信息与若干子表引用
     /// </summary>
     public class UserData : DataModel
     {
+        /// <summary>登录用户名</summary>
         public string UserName { get; set; }
+
+        /// <summary>密码哈希</summary>
         public string PasswordHash { get; set; }
+
+        /// <summary>邮箱</summary>
         public string Email { get; set; }
+
+        /// <summary>注册时间（Unix 毫秒）</summary>
         public long RegisteredAt { get; set; }
+
+        /// <summary>最后一次登录时间（Unix 毫秒）</summary>
         public long LastLoginAt { get; set; }
+
+        /// <summary>登录令牌（可用于会话）</summary>
         public string LoginToken { get; set; }
+
+        /// <summary>显示名称</summary>
         public string DisplayName { get; set; }
+
+        /// <summary>签名</summary>
         public string Signature { get; set; } = string.Empty;
+
+        /// <summary>个人简介</summary>
         public string Bio { get; set; } = string.Empty;
+
+        /// <summary>权限分组，默认普通用户</summary>
         public UserPermissionGroup PermissionGroup { get; set; } = UserPermissionGroup.User;
 
+        /// <summary>用户状态（封禁等信息）</summary>
         public UserStatus Status { get; set; } = new UserStatus();
+
+        /// <summary>激活的资源集合（子表）</summary>
         public TableList<ActiveAssets> ActiveAssets { get; set; }
 
-        // 新增：用户收藏的资源（子表，仅记录 assetId）
+        /// <summary>收藏的资源（子表，仅保存 AssetId）</summary>
         public TableList<UserFavoriteAsset> FavoriteAssets { get; set; }
 
-        // 新增：用户购物车中记录的资源（子表，仅记录 assetId）
+        /// <summary>购物车条目（子表，仅保存 AssetId，后续可扩展数量等字段）</summary>
         public TableList<UserCartItem> CartItems { get; set; }
+        
+        /// <summary>邮箱是否已验证</summary>
+        public bool EmailVerified { get; set; } = false;
 
-        // 新增字段：最近活动计数（后续由业务逻辑累加）
+        /// <summary>最近活动计数（业务逻辑累计）</summary>
         public int RecentActivity { get; set; } = 0;
 
-        // 新增字段：资源数（例如用户拥有的资源/作品数量）
+        /// <summary>资源数（例如用户拥有的作品数量）</summary>
         public int ResourceCount { get; set; } = 0;
 
-        // 新增字段：贡献值（平台贡献积分/分数）
+        /// <summary>贡献值（平台积分/分数）</summary>
         public int Contribution { get; set; } = 0;
     }
 
     /// <summary>
-    /// 用户激活的资源/Mod - 子表实例
-    /// 实现 IDataTableV2 接口，使用 String 类型的 ID、毫秒时间戳和追踪字段
-    /// 所有时间戳使用 Unix Milliseconds 确保精度和一致性
+    /// 表示用户激活的资源（子表项）
+    /// 使用 IDataTableV2 约定：Id 为字符串、包含 ParentId 与时间追踪字段，时间使用 Unix 毫秒。
     /// </summary>
     public class ActiveAssets : IDataTableV2
     {
+        /// <summary>子表项唯一 Id（字符串）</summary>
         public string Id { get; set; } = Guid.NewGuid().ToString();
+
+        /// <summary>父表主键（所属 UserData.Id）</summary>
         public int ParentId { get; set; }
+
+        /// <summary>创建时间（Unix 毫秒）</summary>
         public long CreatedAt { get; set; } = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+
+        /// <summary>更新时间（Unix 毫秒）</summary>
         public long UpdatedAt { get; set; } = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-        
-        /// <summary>激活的资源 ID，例如正在使用中的 Mod 资源 ID</summary>
+
+        /// <summary>激活的资源 Id</summary>
         public int AssetId { get; set; }
-        
-        /// <summary>资源被激活的时间（Unix Milliseconds）</summary>
+
+        /// <summary>激活时间（Unix 毫秒）</summary>
         public long ActivatedAt { get; set; } = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-        
-        /// <summary>资源的过期时间（Unix Milliseconds），0 表示永不过期</summary>
+
+        /// <summary>过期时间（Unix 毫秒），0 表示永不过期</summary>
         public long ExpiresAt { get; set; }
-        
+
+        /// <summary>表名</summary>
         public string TableName => nameof(ActiveAssets);
     }
 
     /// <summary>
-    /// 用户收藏的资源记录（子表），仅保存 AssetId
+    /// 用户收藏资源（子表项），仅保存 AssetId
     /// </summary>
     public class UserFavoriteAsset : IDataTableV2
     {
@@ -90,16 +136,16 @@ namespace KaxSocket
         public int ParentId { get; set; }
         public long CreatedAt { get; set; } = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
 
-        /// <summary>被收藏的资源 ID</summary>
+        /// <summary>收藏的资源 Id</summary>
         public int AssetId { get; set; }
 
-        public string TableName => nameof(UserFavoriteAsset);
-
         public long UpdatedAt { get; set; } = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+
+        public string TableName => nameof(UserFavoriteAsset);
     }
 
     /// <summary>
-    /// 用户购物车中的条目（子表），仅保存 AssetId（若后续需要数量可以扩展）
+    /// 购物车条目（子表项），仅存 AssetId（可扩展数量/选项）
     /// </summary>
     public class UserCartItem : IDataTableV2
     {
@@ -107,36 +153,79 @@ namespace KaxSocket
         public int ParentId { get; set; }
         public long CreatedAt { get; set; } = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
 
-        /// <summary>购物车中记录的资源 ID</summary>
+        /// <summary>资源 Id</summary>
         public int AssetId { get; set; }
 
-        public string TableName => nameof(UserCartItem);
-
         public long UpdatedAt { get; set; } = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-    }
 
-    public class UserStatus : IDataTable
-    {
-        public int ParentId { get; set; }
-        public bool IsBanned { get; set; }
-        public long BannedAt { get; set; }
-        public long BanExpiresAt { get; set; }
-        public string BanReason { get; set; }   // 封禁原因
-        public string TableName => nameof(UserStatus);
-        public int Id { get; set; }
+        public string TableName => nameof(UserCartItem);
     }
 
     /// <summary>
-    /// 用户权限组枚举（存储为整数）
+    /// 资产价格项（子表），描述一种购买选项（如时长、单位、价格、折扣等）
+    /// </summary>
+    public class AssetPrice : IDataTableV2
+    {
+        public string Id { get; set; } = Guid.NewGuid().ToString();
+        public int ParentId { get; set; }
+        public long CreatedAt { get; set; } = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        public long UpdatedAt { get; set; } = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+
+        /// <summary>价格（以最小货币单位，例如分）</summary>
+        public int Price { get; set; }
+
+        /// <summary>单位（如 "year", "month", "day", "hour", "once"）</summary>
+        public string Unit { get; set; } = "once";
+
+        /// <summary>单位数量（如 Duration=1 且 Unit="year" 表示 1 年）</summary>
+        public int Duration { get; set; } = 1;
+
+        /// <summary>原始价格（未折扣前，最小货币单位）</summary>
+        public int OriginalPrice { get; set; }
+
+        /// <summary>折扣率（0.0-1.0，例如 0.15 表示 15% 折扣）</summary>
+        public double DiscountRate { get; set; } = 0.0;
+
+        public string TableName => nameof(AssetPrice);
+    }
+
+    /// <summary>
+    /// 用户状态信息（如封禁、封禁时间等）
+    /// </summary>
+    public class UserStatus : IDataTable
+    {
+        public int Id { get; set; }
+        public int ParentId { get; set; }
+
+        /// <summary>是否被封禁</summary>
+        public bool IsBanned { get; set; }
+
+        /// <summary>封禁时间（Unix 毫秒）</summary>
+        public long BannedAt { get; set; }
+
+        /// <summary>封禁到期时间（Unix 毫秒）</summary>
+        public long BanExpiresAt { get; set; }
+
+        /// <summary>封禁原因</summary>
+        public string BanReason { get; set; }
+
+        public string TableName => nameof(UserStatus);
+    }
+
+    /// <summary>
+    /// 用户权限组枚举（用于持久化为整数）
     /// </summary>
     public enum UserPermissionGroup
     {
         /// <summary>控制台（系统控制台）</summary>
         Console = 0,
+
         /// <summary>最高权限</summary>
         Root = 1,
+
         /// <summary>管理员</summary>
         Admin = 2,
+
         /// <summary>普通用户（默认）</summary>
         User = 100
     }

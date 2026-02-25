@@ -2,7 +2,7 @@ using System;
 using System.Collections.Concurrent;
 using System.Threading;
 
-namespace Drx.Sdk.Network.V2.Web
+namespace Drx.Sdk.Network.V2.Web.Auth
 {
     /// <summary>
     /// 令牌桶速率限制器：替代基于 Queue&lt;DateTime&gt; 的滑动窗口算法。
@@ -83,12 +83,14 @@ namespace Drx.Sdk.Network.V2.Web
 
     /// <summary>
     /// 令牌桶管理器：管理全局和路由级别的令牌桶实例。
-    /// 使用 ConcurrentDictionary 按 (IP + 路由键) 维护独立的令牌桶，
+    /// 使用分片 ConcurrentDictionary 按 (IP + 路由键) 维护独立的令牌桶，
     /// 并提供过期桶的定期清理功能以防止内存泄漏。
+    /// 分片设计减少锁竞争，提高并发性能。
     /// </summary>
     internal sealed class TokenBucketManager : IDisposable
     {
-        private readonly ConcurrentDictionary<string, TokenBucketEntry> _buckets = new();
+        private const int ShardCount = 16;
+        private readonly ConcurrentDictionary<string, TokenBucketEntry>[] _bucketShards = new ConcurrentDictionary<string, TokenBucketEntry>[ShardCount];
         private readonly Timer _cleanupTimer;
         private const int CleanupIntervalMs = 60_000;
         private const int BucketExpirationMs = 300_000;
@@ -107,7 +109,19 @@ namespace Drx.Sdk.Network.V2.Web
 
         public TokenBucketManager()
         {
+            for (int i = 0; i < ShardCount; i++)
+            {
+                _bucketShards[i] = new ConcurrentDictionary<string, TokenBucketEntry>();
+            }
             _cleanupTimer = new Timer(CleanupExpiredBuckets, null, CleanupIntervalMs, CleanupIntervalMs);
+        }
+
+        /// <summary>
+        /// 根据键获取对应的分片索引
+        /// </summary>
+        private int GetShardIndex(string key)
+        {
+            return Math.Abs(key.GetHashCode()) % ShardCount;
         }
 
         /// <summary>
@@ -120,7 +134,9 @@ namespace Drx.Sdk.Network.V2.Web
         /// <returns>true 表示令牌可用（请求通过），false 表示被限流</returns>
         public bool TryConsume(string key, int maxTokens, double windowMilliseconds)
         {
-            var entry = _buckets.GetOrAdd(key, _ => new TokenBucketEntry(new TokenBucket(maxTokens, windowMilliseconds)));
+            var shardIndex = GetShardIndex(key);
+            var shard = _bucketShards[shardIndex];
+            var entry = shard.GetOrAdd(key, _ => new TokenBucketEntry(new TokenBucket(maxTokens, windowMilliseconds)));
             entry.LastAccessTimestamp = Environment.TickCount64;
             return entry.Bucket.TryConsume();
         }
@@ -130,7 +146,9 @@ namespace Drx.Sdk.Network.V2.Web
         /// </summary>
         public int GetAvailableTokens(string key)
         {
-            if (_buckets.TryGetValue(key, out var entry))
+            var shardIndex = GetShardIndex(key);
+            var shard = _bucketShards[shardIndex];
+            if (shard.TryGetValue(key, out var entry))
                 return entry.Bucket.AvailableTokens;
             return -1;
         }
@@ -141,11 +159,15 @@ namespace Drx.Sdk.Network.V2.Web
         private void CleanupExpiredBuckets(object? state)
         {
             var now = Environment.TickCount64;
-            foreach (var kvp in _buckets)
+            for (int shardIndex = 0; shardIndex < ShardCount; shardIndex++)
             {
-                if (now - kvp.Value.LastAccessTimestamp > BucketExpirationMs)
+                var shard = _bucketShards[shardIndex];
+                foreach (var kvp in shard)
                 {
-                    _buckets.TryRemove(kvp.Key, out _);
+                    if (now - kvp.Value.LastAccessTimestamp > BucketExpirationMs)
+                    {
+                        shard.TryRemove(kvp.Key, out _);
+                    }
                 }
             }
         }
@@ -153,7 +175,10 @@ namespace Drx.Sdk.Network.V2.Web
         public void Dispose()
         {
             _cleanupTimer?.Dispose();
-            _buckets.Clear();
+            for (int i = 0; i < ShardCount; i++)
+            {
+                _bucketShards[i].Clear();
+            }
         }
     }
 }

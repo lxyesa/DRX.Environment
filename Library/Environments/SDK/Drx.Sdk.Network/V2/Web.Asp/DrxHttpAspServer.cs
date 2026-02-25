@@ -10,6 +10,8 @@ using System.Text;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net;
+using Drx.Sdk.Network.V2.Web.Core;
+using Drx.Sdk.Network.V2.Web.Http;
 
 namespace Drx.Sdk.Network.V2.Web.Asp
 {
@@ -22,7 +24,7 @@ namespace Drx.Sdk.Network.V2.Web.Asp
         private IHost? _host;
         private readonly int _port;
         private readonly Action<IApplicationBuilder>? _configureApp;
-        private readonly Func<Drx.Sdk.Network.V2.Web.HttpRequest, Task<Drx.Sdk.Network.V2.Web.HttpResponse>>? _requestHandler;
+        private readonly Func<Drx.Sdk.Network.V2.Web.Http.HttpRequest, Task<Drx.Sdk.Network.V2.Web.Http.HttpResponse>>? _requestHandler;
         private readonly ILoggerFactory? _loggerFactory;
 
         /// <summary>
@@ -38,7 +40,7 @@ namespace Drx.Sdk.Network.V2.Web.Asp
         /// <param name="configureApp">用于注册路由/中间件的委托（可选）。</param>
         /// <param name="requestHandler">框架层请求处理器，签名为 Func&lt;HttpRequest, Task&lt;HttpResponse&gt;&gt;（可选）。</param>
         /// <param name="loggerFactory">可选日志工厂。</param>
-        public DrxHttpAspServer(int port = 5000, Action<IApplicationBuilder>? configureApp = null, Func<Drx.Sdk.Network.V2.Web.HttpRequest, Task<Drx.Sdk.Network.V2.Web.HttpResponse>>? requestHandler = null, ILoggerFactory? loggerFactory = null)
+        public DrxHttpAspServer(int port = 5000, Action<IApplicationBuilder>? configureApp = null, Func<Drx.Sdk.Network.V2.Web.Http.HttpRequest, Task<Drx.Sdk.Network.V2.Web.Http.HttpResponse>>? requestHandler = null, ILoggerFactory? loggerFactory = null)
         {
             _port = port;
             _configureApp = configureApp;
@@ -104,7 +106,7 @@ namespace Drx.Sdk.Network.V2.Web.Asp
             await _host.StartAsync();
         }
 
-        private static async Task<Drx.Sdk.Network.V2.Web.HttpRequest> ToFrameworkRequestAsync(HttpContext ctx)
+        private static async Task<Drx.Sdk.Network.V2.Web.Http.HttpRequest> ToFrameworkRequestAsync(HttpContext ctx)
         {
             var fr = new Drx.Sdk.Network.V2.Web.HttpRequest();
             fr.Method = ctx.Request.Method;
@@ -160,7 +162,7 @@ namespace Drx.Sdk.Network.V2.Web.Asp
             return fr;
         }
 
-        private static async Task ApplyFrameworkResponseAsync(HttpContext ctx, Drx.Sdk.Network.V2.Web.HttpResponse resp)
+        private static async Task ApplyFrameworkResponseAsync(HttpContext ctx, Drx.Sdk.Network.V2.Web.Http.HttpResponse resp)
         {
             if (resp == null)
             {

@@ -18,8 +18,15 @@ using System.Diagnostics;
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.Net.Http.Headers;
 using Drx.Sdk.Network.Email;
+using System.Collections.Concurrent;
+using Drx.Sdk.Network.V2.Web.Configs;
+using Drx.Sdk.Network.V2.Web.Http;
+using Drx.Sdk.Network.V2.Web.Serialization;
+using Drx.Sdk.Network.V2.Web.Performance;
+using Drx.Sdk.Network.V2.Web.Auth;
+using Drx.Sdk.Network.V2.Web.Utilities;
 
-namespace Drx.Sdk.Network.V2.Web
+namespace Drx.Sdk.Network.V2.Web.Core
 {
     /// <summary>
     /// 动作结果接口：允许处理器返回一个可被框架执行为 HttpResponse 的对象
@@ -34,46 +41,6 @@ namespace Drx.Sdk.Network.V2.Web
         /// <param name="server">服务器实例，供实现者访问辅助方法或配置</param>
         /// <returns>HttpResponse 对象</returns>
         Task<HttpResponse> ExecuteAsync(HttpRequest request, DrxHttpServer server);
-    }
-
-    /// <summary>
-    /// Cookie选项类
-    /// </summary>
-    public class CookieOptions
-    {
-        public bool HttpOnly { get; set; } = true;
-        public bool Secure { get; set; } = false;
-        public string? SameSite { get; set; } = "Lax";
-        public string? Path { get; set; } = "/";
-        public string? Domain { get; set; }
-        public DateTime? Expires { get; set; }
-        public TimeSpan? MaxAge { get; set; }
-    }
-
-    /// <summary>
-    /// 当路由级回调需要放弃自定义处理并让框架执行默认限流行为时，可调用此对象的 Default() 返回值（返回 null 表示使用默认行为）。
-    /// 包含一些上下文信息，供回调参考或记录（只读）。
-    /// </summary>
-    public class OverrideContext
-    {
-        public string RouteKey { get; }
-        public int MaxRequests { get; }
-        public int WindowSeconds { get; }
-        public DateTime TimestampUtc { get; }
-
-        public OverrideContext(string routeKey, int maxRequests, int windowSeconds)
-        {
-            RouteKey = routeKey;
-            MaxRequests = maxRequests;
-            WindowSeconds = windowSeconds;
-            TimestampUtc = DateTime.UtcNow;
-        }
-
-        /// <summary>
-        /// 回调可以返回此方法的返回值以告知框架使用默认行为（即返回 429）。
-        /// 返回值类型为 HttpResponse?（null 表示默认行为）。
-        /// </summary>
-        public HttpResponse? Default() => null;
     }
 
     public class DrxHttpServer : IAsyncDisposable
@@ -186,6 +153,9 @@ namespace Drx.Sdk.Network.V2.Web
         private readonly object _routesLock = new();
         private readonly System.Collections.Generic.Dictionary<string, string> _rateLimitKeyCache = new();
         private readonly object _rateLimitKeyCacheLock = new();
+        // 路由缓存：快速路径缓存（精确匹配）和完整缓存（所有路由）
+        private readonly System.Collections.Concurrent.ConcurrentDictionary<string, RouteEntry?> _routeCache = new();
+        private readonly object _routeCacheLock = new();
         // raw route entries 包含可选的速率限制字段
         // 最后一项为可选的路由级速率触发回调（见 RouteEntry.RateLimitCallback 签名）
         private readonly System.Collections.Generic.List<(string Template, Func<HttpListenerContext, Task> Handler, int RateLimitMaxRequests, int RateLimitWindowSeconds, Func<int, HttpRequest, OverrideContext, Task<HttpResponse?>>? RateLimitCallback)> _rawRoutes = new();
@@ -201,7 +171,6 @@ namespace Drx.Sdk.Network.V2.Web
         // 交互式控制台实例（在 StartAsync 时启动）
         private InteractiveCommandConsole? _interactiveConsole;
         private Task? _interactiveConsoleTask;
-        private readonly System.Threading.AsyncLocal<Session?> _currentSession = new();
 
         private CancellationTokenSource _cts;
         private readonly Channel<HttpListenerContext> _requestChannel;
@@ -353,6 +322,19 @@ namespace Drx.Sdk.Network.V2.Web
         }
 
         /// <summary>
+        /// 添加原始路由（raw handler），处理方法可选接收 server 参数
+        /// </summary>
+        public void AddRawRoute(string path, Func<HttpListenerContext, DrxHttpServer, Task> handler, int rateLimitMaxRequests = 0, int rateLimitWindowSeconds = 0)
+        {
+            if (string.IsNullOrEmpty(path) || handler == null) return;
+            if (!path.StartsWith("/")) path = "/" + path;
+            // 包装为不带 server 的 raw handler
+            Func<HttpListenerContext, Task> wrapped = ctx => handler(ctx, this);
+            _raw_routes_add(path, wrapped, rateLimitMaxRequests, rateLimitWindowSeconds);
+            Logger.Info($"添加原始路由: {path}");
+        }
+
+        /// <summary>
         /// 添加中间件
         /// </summary>
         /// <param name="middleware">中间件处理委托</param>
@@ -389,6 +371,40 @@ namespace Drx.Sdk.Network.V2.Web
                 _cachedSortedMiddlewares = null;
             }
             Logger.Info($"添加中间件: {path ?? "全局"} (优先级: {priority})");
+        }
+
+        /// <summary>
+        /// 添加中间件，支持注入 server 参数
+        /// </summary>
+        public void AddMiddleware(Func<HttpListenerContext, DrxHttpServer, Task> middleware, string? path = null, int priority = -1, bool overrideGlobal = false)
+        {
+            if (middleware == null) return;
+            // 包装为原始 ctx-only middleware
+            Func<HttpListenerContext, Task> wrapped = ctx => middleware(ctx, this);
+            AddMiddleware(wrapped, path, priority, overrideGlobal);
+        }
+
+        /// <summary>
+        /// 添加基于 HttpRequest 的中间件，支持注入 server 参数
+        /// </summary>
+        public void AddMiddleware(Func<HttpRequest, Func<HttpRequest, Task<HttpResponse?>>, DrxHttpServer, Task<HttpResponse?>> requestMiddleware, string? path = null, int priority = -1, bool overrideGlobal = false)
+        {
+            if (requestMiddleware == null) return;
+            var entry = new MiddlewareEntry
+            {
+                RequestMiddleware = (req, next) => requestMiddleware(req, next, this),
+                Path = path,
+                Priority = priority == -1 ? (path == null ? 0 : 100) : priority,
+                OverrideGlobal = overrideGlobal,
+                AddOrder = _middlewareCounter++
+            };
+
+            _middlewares.Add(entry);
+            lock (_middlewareCacheLock)
+            {
+                _cachedSortedMiddlewares = null;
+            }
+            Logger.Info($"添加中间件: {path ?? "全局"} (优先级: {entry.Priority})");
         }
 
         private void _raw_routes_add(string path, Func<HttpListenerContext, Task> handler, int rateLimitMaxRequests, int rateLimitWindowSeconds)
@@ -445,6 +461,63 @@ namespace Drx.Sdk.Network.V2.Web
                     try
                     {
                         resp = await handler(req).ConfigureAwait(false) ?? new HttpResponse(500, "Internal Server Error");
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Error($"执行 StreamUpload处理方法时发生错误: {ex.InnerException?.Message ?? ex.Message}\n{ex.InnerException?.StackTrace ?? ex.StackTrace}");
+                        resp = new HttpResponse(500, $"Internal Server Error: {ex.InnerException?.Message ?? ex.Message}");
+                    }
+
+                    SendResponse(ctx.Response, resp ?? new HttpResponse(500, "Internal Server Error"));
+                }
+                catch (Exception ex)
+                {
+                    Logger.Error($"StreamUpload raw handler 错误: {ex}");
+                    try { ctx.Response.StatusCode = 500; using var sw = new StreamWriter(ctx.Response.OutputStream, Encoding.UTF8, leaveOpen: false); sw.Write("Internal Server Error"); } catch { }
+                }
+            };
+
+            _raw_routes_add(path, rawHandler, rateLimitMaxRequests, rateLimitWindowSeconds);
+            Logger.Info($"添加流式上传路由: {path}");
+        }
+
+        /// <summary>
+        /// 添加流式上传路由，handler 支持可选的 server 参数
+        /// </summary>
+        public void AddStreamUploadRoute(string path, Func<HttpRequest, DrxHttpServer, Task<HttpResponse>> handler, int rateLimitMaxRequests = 0, int rateLimitWindowSeconds = 0)
+        {
+            if (handler == null) return;
+            // 包装为原始 handler
+            Func<HttpListenerContext, Task> rawHandler = async ctx =>
+            {
+                try
+                {
+                    var listenerReq = ctx.Request;
+                    var req = new HttpRequest
+                    {
+                        Method = listenerReq.HttpMethod,
+                        Path = listenerReq.Url?.AbsolutePath ?? "/",
+                        Url = listenerReq.Url?.ToString(),
+                        Query = listenerReq.QueryString,
+                        Headers = listenerReq.Headers,
+                        RemoteEndPoint = listenerReq.RemoteEndPoint,
+                        ClientAddress = HttpRequest.Address.FromEndPoint(listenerReq.RemoteEndPoint, listenerReq.Headers),
+                        ListenerContext = ctx
+                    };
+
+                    req.UploadFile = new HttpRequest.UploadFileDescriptor
+                    {
+                        Stream = listenerReq.InputStream,
+                        FileName = listenerReq.Headers["X-File-Name"] ?? Path.GetFileName(req.Path),
+                        FieldName = "file",
+                        Progress = null,
+                        CancellationToken = CancellationToken.None
+                    };
+
+                    HttpResponse? resp;
+                    try
+                    {
+                        resp = await handler(req, this).ConfigureAwait(false) ?? new HttpResponse(500, "Internal Server Error");
                     }
                     catch (Exception ex)
                     {
@@ -583,6 +656,34 @@ namespace Drx.Sdk.Network.V2.Web
             }
         }
 
+        // 同步路由（支持注入 server 参数）
+        public void AddRoute(HttpMethod method, string path, Func<HttpRequest, DrxHttpServer, HttpResponse> handler)
+        {
+            try
+            {
+                var route = new RouteEntry
+                {
+                    Template = path,
+                    Method = method,
+                    Handler = async (request) => await Task.FromResult(handler(request, this)),
+                    ExtractParameters = CreateParameterExtractor(path)
+                };
+                lock (_routesLock)
+                {
+                    _routes.Add(route);
+                    if (!_routesByMethod.ContainsKey(method))
+                        _routesByMethod[method] = new();
+                    _routesByMethod[method].Add(route);
+                    _routeMatchCache?.Invalidate();
+                }
+                Logger.Info($"添加同步路由: {method} {path}");
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"添加同步路由 {method} {path} 时发生错误: {ex}");
+            }
+        }
+
         // 同步路由的可选速率限制重载
         public void AddRoute(HttpMethod method, string path, Func<HttpRequest, HttpResponse> handler, int rateLimitMaxRequests = 0, int rateLimitWindowSeconds = 0)
         {
@@ -593,6 +694,36 @@ namespace Drx.Sdk.Network.V2.Web
                     Template = path,
                     Method = method,
                     Handler = async (request) => await Task.FromResult(handler(request)),
+                    ExtractParameters = CreateParameterExtractor(path),
+                    RateLimitMaxRequests = rateLimitMaxRequests,
+                    RateLimitWindowSeconds = rateLimitWindowSeconds
+                };
+                lock (_routesLock)
+                {
+                    _routes.Add(route);
+                    if (!_routesByMethod.ContainsKey(method))
+                        _routesByMethod[method] = new();
+                    _routesByMethod[method].Add(route);
+                    _routeMatchCache?.Invalidate();
+                }
+                Logger.Info($"添加同步路由: {method} {path} (rate={rateLimitMaxRequests}/{rateLimitWindowSeconds}s)");
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"添加同步路由 {method} {path} 时发生错误: {ex}");
+            }
+        }
+
+        // 同步路由的可选速率限制重载（支持 server 参数）
+        public void AddRoute(HttpMethod method, string path, Func<HttpRequest, DrxHttpServer, HttpResponse> handler, int rateLimitMaxRequests = 0, int rateLimitWindowSeconds = 0)
+        {
+            try
+            {
+                var route = new RouteEntry
+                {
+                    Template = path,
+                    Method = method,
+                    Handler = async (request) => await Task.FromResult(handler(request, this)),
                     ExtractParameters = CreateParameterExtractor(path),
                     RateLimitMaxRequests = rateLimitMaxRequests,
                     RateLimitWindowSeconds = rateLimitWindowSeconds
@@ -647,6 +778,35 @@ namespace Drx.Sdk.Network.V2.Web
             }
         }
 
+        // 异步路由，支持注入 server 参数
+        public void AddRoute(HttpMethod method, string path, Func<HttpRequest, DrxHttpServer, Task<HttpResponse>> handler)
+        {
+            try
+            {
+                var route = new RouteEntry
+                {
+                    Template = path,
+                    Method = method,
+                    Handler = (request) => handler(request, this),
+                    ExtractParameters = CreateParameterExtractor(path),
+                    RateLimitMaxRequests = 0,
+                    RateLimitWindowSeconds = 0
+                };
+                lock (_routesLock)
+                {
+                    _routes.Add(route);
+                    if (!_routesByMethod.ContainsKey(method))
+                        _routesByMethod[method] = new();
+                    _routesByMethod[method].Add(route);
+                }
+                Logger.Info($"添加异步路由: {method} {path}");
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"添加异步路由 {method} {path} 时发生错误: {ex}");
+            }
+        }
+
         // 异步路由的可选速率限制重载（带可选回调）
         public void AddRoute(HttpMethod method, string path, Func<HttpRequest, Task<HttpResponse>> handler, int rateLimitMaxRequests = 0, int rateLimitWindowSeconds = 0, Func<int, HttpRequest, OverrideContext, Task<HttpResponse?>>? rateLimitCallback = null)
         {
@@ -657,6 +817,36 @@ namespace Drx.Sdk.Network.V2.Web
                     Template = path,
                     Method = method,
                     Handler = handler,
+                    ExtractParameters = CreateParameterExtractor(path),
+                    RateLimitMaxRequests = rateLimitMaxRequests,
+                    RateLimitWindowSeconds = rateLimitWindowSeconds,
+                    RateLimitCallback = rateLimitCallback
+                };
+                lock (_routesLock)
+                {
+                    _routes.Add(route);
+                    if (!_routesByMethod.ContainsKey(method))
+                        _routesByMethod[method] = new();
+                    _routesByMethod[method].Add(route);
+                }
+                Logger.Info($"添加异步路由: {method} {path} (rate={rateLimitMaxRequests}/{rateLimitWindowSeconds}s)");
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"添加异步路由 {method} {path} 时发生错误: {ex}");
+            }
+        }
+
+        // 异步路由的可选速率限制重载（带可选回调），支持 server 参数
+        public void AddRoute(HttpMethod method, string path, Func<HttpRequest, DrxHttpServer, Task<HttpResponse>> handler, int rateLimitMaxRequests = 0, int rateLimitWindowSeconds = 0, Func<int, HttpRequest, OverrideContext, Task<HttpResponse?>>? rateLimitCallback = null)
+        {
+            try
+            {
+                var route = new RouteEntry
+                {
+                    Template = path,
+                    Method = method,
+                    Handler = (request) => handler(request, this),
                     ExtractParameters = CreateParameterExtractor(path),
                     RateLimitMaxRequests = rateLimitMaxRequests,
                     RateLimitWindowSeconds = rateLimitWindowSeconds,
@@ -695,6 +885,41 @@ namespace Drx.Sdk.Network.V2.Web
                     Handler = async (request) =>
                     {
                         var action = handler(request);
+                        if (action == null)
+                            return await Task.FromResult(new HttpResponse(204, string.Empty));
+                        return await action.ExecuteAsync(request, this).ConfigureAwait(false);
+                    },
+                    ExtractParameters = CreateParameterExtractor(path)
+                };
+                lock (_routesLock)
+                {
+                    _routes.Add(route);
+                    if (!_routesByMethod.ContainsKey(method))
+                        _routesByMethod[method] = new();
+                    _routesByMethod[method].Add(route);
+                    _routeMatchCache?.Invalidate();
+                }
+                Logger.Info($"添加同步路由: {method} {path}");
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"添加同步路由 {method} {path} 时发生错误: {ex}");
+            }
+        }
+
+        // IActionResult 同步路由，支持注入 server 参数
+        public void AddRoute(HttpMethod method, string path, Func<HttpRequest, DrxHttpServer, IActionResult> handler)
+        {
+            if (handler == null) return;
+            try
+            {
+                var route = new RouteEntry
+                {
+                    Template = path,
+                    Method = method,
+                    Handler = async (request) =>
+                    {
+                        var action = handler(request, this);
                         if (action == null)
                             return await Task.FromResult(new HttpResponse(204, string.Empty));
                         return await action.ExecuteAsync(request, this).ConfigureAwait(false);
@@ -758,6 +983,42 @@ namespace Drx.Sdk.Network.V2.Web
             }
         }
 
+        // IActionResult 异步路由，支持注入 server 参数
+        public void AddRoute(HttpMethod method, string path, Func<HttpRequest, DrxHttpServer, Task<IActionResult>> handler)
+        {
+            if (handler == null) return;
+            try
+            {
+                var route = new RouteEntry
+                {
+                    Template = path,
+                    Method = method,
+                    Handler = async (request) =>
+                    {
+                        var action = await handler(request, this).ConfigureAwait(false);
+                        if (action == null)
+                            return new HttpResponse(204, string.Empty);
+                        return await action.ExecuteAsync(request, this).ConfigureAwait(false);
+                    },
+                    ExtractParameters = CreateParameterExtractor(path),
+                    RateLimitMaxRequests = 0,
+                    RateLimitWindowSeconds = 0
+                };
+                lock (_routesLock)
+                {
+                    _routes.Add(route);
+                    if (!_routesByMethod.ContainsKey(method))
+                        _routesByMethod[method] = new();
+                    _routesByMethod[method].Add(route);
+                }
+                Logger.Info($"添加异步路由: {method} {path}");
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"添加异步路由 {method} {path} 时发生错误: {ex}");
+            }
+        }
+
         /// <summary>
         /// 添加返回 Task&lt;IActionResult&gt; 的异步路由（带速率限制重载）
         /// </summary>
@@ -773,6 +1034,43 @@ namespace Drx.Sdk.Network.V2.Web
                     Handler = async (request) =>
                     {
                         var action = await handler(request).ConfigureAwait(false);
+                        if (action == null)
+                            return new HttpResponse(204, string.Empty);
+                        return await action.ExecuteAsync(request, this).ConfigureAwait(false);
+                    },
+                    ExtractParameters = CreateParameterExtractor(path),
+                    RateLimitMaxRequests = rateLimitMaxRequests,
+                    RateLimitWindowSeconds = rateLimitWindowSeconds,
+                    RateLimitCallback = rateLimitCallback
+                };
+                lock (_routesLock)
+                {
+                    _routes.Add(route);
+                    if (!_routesByMethod.ContainsKey(method))
+                        _routesByMethod[method] = new();
+                    _routesByMethod[method].Add(route);
+                }
+                Logger.Info($"添加异步路由: {method} {path} (rate={rateLimitMaxRequests}/{rateLimitWindowSeconds}s)");
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"添加异步路由 {method} {path} 时发生错误: {ex}");
+            }
+        }
+
+        // Task<IActionResult> 的异步路由（带速率限制重载），支持 server 参数
+        public void AddRoute(HttpMethod method, string path, Func<HttpRequest, DrxHttpServer, Task<IActionResult>> handler, int rateLimitMaxRequests = 0, int rateLimitWindowSeconds = 0, Func<int, HttpRequest, OverrideContext, Task<HttpResponse?>>? rateLimitCallback = null)
+        {
+            if (handler == null) return;
+            try
+            {
+                var route = new RouteEntry
+                {
+                    Template = path,
+                    Method = method,
+                    Handler = async (request) =>
+                    {
+                        var action = await handler(request, this).ConfigureAwait(false);
                         if (action == null)
                             return new HttpResponse(204, string.Empty);
                         return await action.ExecuteAsync(request, this).ConfigureAwait(false);
@@ -944,11 +1242,48 @@ namespace Drx.Sdk.Network.V2.Web
                             continue;
                         }
 
+                        // 支持老式 (HttpListenerContext, DrxHttpServer) 中间件
+                        if (parameters.Length == 2 && parameters[0].ParameterType == typeof(HttpListenerContext) && parameters[1].ParameterType == typeof(DrxHttpServer))
+                        {
+                            Func<HttpListenerContext, Task> mw;
+                            if (typeof(Task).IsAssignableFrom(method.ReturnType))
+                            {
+                                if (method.IsStatic)
+                                {
+                                    mw = ctx => (Task)method.Invoke(null, new object[] { ctx, this })!;
+                                }
+                                else
+                                {
+                                    mw = ctx => (Task)method.Invoke(Activator.CreateInstance(targetType), new object[] { ctx, this })!;
+                                }
+                            }
+                            else if (method.ReturnType == typeof(void))
+                            {
+                                if (method.IsStatic)
+                                {
+                                    mw = ctx => { method.Invoke(null, new object[] { ctx, this }); return Task.CompletedTask; };
+                                }
+                                else
+                                {
+                                    mw = ctx => { method.Invoke(Activator.CreateInstance(targetType), new object[] { ctx, this }); return Task.CompletedTask; };
+                                }
+                            }
+                            else
+                            {
+                                Logger.Warn($"不能注册中间件: 方法 {method.Name} 返回类型不受支持: {method.ReturnType}");
+                                continue;
+                            }
+
+                            AddMiddleware(mw, ma.Path, ma.Priority, ma.OverrideGlobal);
+                            registeredMiddlewares++;
+                            continue;
+                        }
+
                         // 支持新的 (HttpRequest, next) 风格中间件
                         // 常见签名示例：
                         // Task<HttpResponse?> M(HttpRequest req, Func<HttpRequest, Task<HttpResponse?>> next)
                         // HttpResponse M(HttpRequest req, Func<HttpRequest, HttpResponse> next)
-                        if (parameters.Length == 2 && parameters[0].ParameterType == typeof(HttpRequest))
+                        if ((parameters.Length == 2 || parameters.Length == 3) && parameters[0].ParameterType == typeof(HttpRequest))
                         {
                             // 构造一个将 MethodInfo 调用适配为 RequestMiddleware 的包装
                             Func<HttpRequest, Func<HttpRequest, Task<HttpResponse?>>, Task<HttpResponse?>> requestMw = async (req, next) =>
@@ -991,8 +1326,17 @@ namespace Drx.Sdk.Network.V2.Web
                                         return null;
                                     }
 
-                                    var args = new object?[] { req, secondArg };
-                                    var result = method.Invoke(instance, args);
+                                    object? result;
+                                    if (parameters.Length == 3 && parameters[2].ParameterType == typeof(DrxHttpServer))
+                                    {
+                                        var args = new object?[] { req, secondArg, this };
+                                        result = method.Invoke(instance, args);
+                                    }
+                                    else
+                                    {
+                                        var args = new object?[] { req, secondArg };
+                                        result = method.Invoke(instance, args);
+                                    }
 
                                     if (result is Task task)
                                     {
@@ -2195,7 +2539,8 @@ namespace Drx.Sdk.Network.V2.Web
         /// </summary>
         private async Task StreamFileToResponseAsync(HttpListenerContext context, string filePath, long start, long end, bool isPartial, long totalLength)
         {
-            const int BufferSize = 64 * 1024;
+            // 使用更优的缓冲区大小（256KB 适合现代系统）
+            const int BufferSize = 256 * 1024;
             var resp = context.Response;
 
             // 自动附加常用响应头（仅在调用方未设置时添加），以提升兼容性和客户端体验
@@ -2401,7 +2746,6 @@ namespace Drx.Sdk.Network.V2.Web
                         throw;
                     }
 
-                    httpRequest.SessionId = _currentSession.Value?.Id;
                     return httpRequest;
                 }
 
@@ -2431,7 +2775,6 @@ namespace Drx.Sdk.Network.V2.Web
                 httpRequest.BodyBytes = bodyBytes;
                 httpRequest.Content = new System.Dynamic.ExpandoObject();
                 try { ((System.Collections.Generic.IDictionary<string, object>)httpRequest.Content)["Text"] = body; } catch { }
-                httpRequest.SessionId = _currentSession.Value?.Id;
                 return httpRequest;
             }
             catch (Exception ex)
@@ -2497,7 +2840,8 @@ namespace Drx.Sdk.Network.V2.Web
                     {
                         try
                         {
-                            const int BufferSize = 64 * 1024;
+                            // 使用更优的缓冲区大小（256KB 适合现代系统）
+                            const int BufferSize = 256 * 1024;
                             var buffer = new byte[BufferSize];
 
                             long localRemaining = -1;
@@ -2999,6 +3343,21 @@ namespace Drx.Sdk.Network.V2.Web
         }
 
         /// <summary>
+        /// Fire-and-forget 异步操作辅助方法，避免 Task.Run 的堆分配
+        /// </summary>
+        private static async Task FireAndForgetAsync(Func<Task> operation)
+        {
+            try
+            {
+                await operation().ConfigureAwait(false);
+            }
+            catch
+            {
+                // 异常已在调用处处理
+            }
+        }
+
+        /// <summary>
         /// 检查指定IP是否超出全局速率限制（使用令牌桶算法）。
         /// 如果未设置限制或令牌可用则返回 false；否则返回 true 并触发回调。
         /// 相比基于 Queue<DateTime> 的滑动窗口，令牌桶提供 O(1) 复杂度和固定内存占用。
@@ -3025,7 +3384,8 @@ namespace Drx.Sdk.Network.V2.Web
                     var availableTokens = _tokenBucketManager!.GetAvailableTokens(ip);
                     var triggeredCount = Math.Max(1, Math.Abs(availableTokens));
                     var cb = OnGlobalRateLimitExceeded;
-                    _ = Task.Run(async () =>
+                    // 使用 Fire-and-forget 模式避免 Task.Run 的堆分配
+                    _ = FireAndForgetAsync(async () =>
                     {
                         try
                         {
@@ -3058,7 +3418,7 @@ namespace Drx.Sdk.Network.V2.Web
         {
             if (maxRequests <= 0 || windowSeconds <= 0) return (false, null);
 
-            var dictKey = ip + "#" + routeKey;
+            var dictKey = string.Concat(ip, "#", routeKey);
             var windowMs = windowSeconds * 1000.0;
             var hasToken = _tokenBucketManager!.TryConsume(dictKey, maxRequests, windowMs);
 
@@ -3079,7 +3439,7 @@ namespace Drx.Sdk.Network.V2.Web
                         if (OnRouteRateLimitExceeded != null)
                         {
                             var cb = OnRouteRateLimitExceeded;
-                            _ = Task.Run(async () =>
+                            _ = FireAndForgetAsync(async () =>
                             {
                                 try { await cb(triggeredCount, request, routeKey).ConfigureAwait(false); }
                                 catch (Exception ex) { Logger.Warn($"执行路由速率限制通知回调时发生错误: {ex.Message}"); }
@@ -3098,7 +3458,7 @@ namespace Drx.Sdk.Network.V2.Web
                 if (OnRouteRateLimitExceeded != null)
                 {
                     var cb = OnRouteRateLimitExceeded;
-                    _ = Task.Run(async () =>
+                    _ = FireAndForgetAsync(async () =>
                     {
                         try { await cb(triggeredCount, request, routeKey).ConfigureAwait(false); }
                         catch (Exception ex) { Logger.Warn($"执行路由速率限制通知回调时发生错误: {ex.Message}"); }
@@ -3153,64 +3513,58 @@ namespace Drx.Sdk.Network.V2.Web
         }
 
         /// <summary>
-        /// 添加会话中间件（便捷方法）
-        /// 该中间件会自动管理会话Cookie和会话数据
+        /// <summary>
+        /// 添加标准HTTP/S会话中间件。
+        /// 此中间件遵循 RFC 6265 标准，验证并清理过期的会话 Cookie。
+        /// 注意：不会为每个请求自动创建新会话，应在路由处理器中显式调用会话管理器。
         /// </summary>
-        /// <param name="cookieName">会话Cookie名称，默认"session_id"</param>
-        /// <param name="cookieOptions">Cookie选项</param>
-        public void AddSessionMiddleware(string cookieName = "session_id", CookieOptions? cookieOptions = null)
+        /// <param name="cookieName">会话 Cookie 名称，默认"SessionId"</param>
+        /// <param name="cookieOptions">Cookie 选项</param>
+        public void AddSessionMiddleware(string cookieName = "SessionId", CookieOptions? cookieOptions = null)
         {
             cookieOptions ??= new CookieOptions
             {
                 HttpOnly = true,
-                Secure = false, // 本地开发设为false，生产环境应为true
+                Secure = false,
+                SameSite = "Lax",
                 Path = "/",
                 MaxAge = TimeSpan.FromMinutes(30)
             };
 
             AddMiddleware(async ctx =>
             {
-                // 从请求Cookie获取会话ID
-                var sessionId = ctx.Request.Cookies[cookieName]?.Value;
-
-                // 获取或创建会话
-                var session = _sessionManager.GetOrCreateSession(sessionId);
-
-                // 将会话存储到AsyncLocal
-                _currentSession.Value = session;
-
-                // 如果是新会话或ID不同，设置Cookie
-                if (session.IsNew || sessionId != session.Id)
+                try
                 {
-                    var cookie = new Cookie(cookieName, session.Id)
+                    var sessionId = ctx.Request.Cookies[cookieName]?.Value;
+                    if (!string.IsNullOrEmpty(sessionId))
                     {
-                        HttpOnly = cookieOptions.HttpOnly,
-                        Secure = cookieOptions.Secure,
-                        Path = cookieOptions.Path ?? "/",
-                        Domain = cookieOptions.Domain,
-                        Expires = cookieOptions.Expires ?? DateTime.UtcNow.Add(cookieOptions.MaxAge ?? TimeSpan.FromMinutes(30))
-                    };
-                    ctx.Response.Cookies.Add(cookie);
+                        var session = _sessionManager.GetSession(sessionId);
+                        if (session == null)
+                        {
+                            // 会话已过期，清除客户端上的无效 Cookie
+                            var expiredCookie = new Cookie(cookieName, string.Empty)
+                            {
+                                HttpOnly = cookieOptions.HttpOnly,
+                                Secure = cookieOptions.Secure,
+                                Path = cookieOptions.Path ?? "/",
+                                Expires = DateTime.UtcNow.AddDays(-1)
+                            };
+                            ctx.Response.Cookies.Add(expiredCookie);
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Logger.Warn($"执行会话中间件时发生错误: {ex.Message}");
                 }
             });
         }
 
         /// <summary>
-        /// 获取会话管理器
+        /// 获取会话管理器，供外部调用者显式使用。
+        /// 处理器应该通过此属性获取会话管理器，然后使用 GetOrCreateSession() 或 GetSession() 来管理会话。
         /// </summary>
         public SessionManager SessionManager => _sessionManager;
-        
-        /// <summary>
-        /// 根据会话 id 获取会话对象，若不存在返回 null。该方法只是对内部 SessionManager.GetSession 的封装，
-        /// 便于外部调用者使用会话 id 解析会话对象。
-        /// </summary>
-        /// <param name="sessionId">会话 id</param>
-        /// <returns>Session 对象或 null</returns>
-        public Session? GetSessionById(string? sessionId)
-        {
-            if (string.IsNullOrEmpty(sessionId)) return null;
-            return _sessionManager.GetSession(sessionId);
-        }
 
         /// <summary>
         /// 获取授权管理器
@@ -3560,272 +3914,140 @@ namespace Drx.Sdk.Network.V2.Web
     }
 
     /// <summary>
-    /// HTTP处理方法特性
-    /// 支持通过属性标注该方法为原始（Raw）处理，或用于流式上传/下载场景。
-    /// </summary>
-    [AttributeUsage(AttributeTargets.Method, AllowMultiple = true)]
-    public class HttpHandleAttribute : Attribute
-    {
-        /// <summary>
-        /// 请求路径
-        /// </summary>
-        public string Path { get; }
-
-        /// <summary>
-        /// HTTP 方法字符串（例如 "GET"、"POST"）
-        /// </summary>
-        public string Method { get; }
-
-        /// <summary>
-        /// 标记该处理器为原始处理（Raw），方法可以直接接收 HttpListenerContext进行流式处理
-        /// </summary>
-        public bool Raw { get; set; }
-
-        /// <summary>
-        /// 标记该处理器用于流式上传（服务器接收大文件流）
-        /// 相当于 Raw 的语义扩展，用于可读性和过滤
-        /// </summary>
-        public bool StreamUpload { get; set; }
-
-        /// <summary>
-        /// 标记该处理器用于流式下载（服务器直接写入响应流）
-        /// 相当于 Raw 的语义扩展
-        /// </summary>
-        public bool StreamDownload { get; set; }
-
-        /// <summary>
-        /// 可选：为该处理器设置路由级速率限制（最大请求数）。
-        /// 默认 0 表示不启用路由级限流。
-        /// 使用示例： [HttpHandle("/api/foo", "GET", RateLimitMaxRequests = 10, RateLimitWindowSeconds = 60)]
-        /// </summary>
-        public int RateLimitMaxRequests { get; set; }
-
-        /// <summary>
-        /// 可选：路由级速率限制的时间窗口，单位为秒。
-        /// 与 RateLimitMaxRequests 一起使用表示在该时间窗内最多允许的请求数。
-        /// </summary>
-        public int RateLimitWindowSeconds { get; set; }
-
-        /// <summary>
-        /// 可选：指定用于路由级速率触发回调的方法名（字符串）。
-        /// 若指定，`RegisterHandlersFromAssembly` 会尝试在声明此属性的类型或通过 RateLimitCallbackType 指定的类型中查找此静态方法并绑定为回调。
-        /// </summary>
-        public string? RateLimitCallbackMethodName { get; set; }
-
-        /// <summary>
-        /// 可选：指定回调方法所在的类型（当回调方法不在声明该路由的方法所在类型中时使用）。
-        /// </summary>
-        public Type? RateLimitCallbackType { get; set; }
-
-        /// <summary>
-        /// 新的构造重载，允许通过字符串直接指定回调方法名（在同一类型内查找）。
-        /// 使用示例： [HttpHandle("/api/hello", "GET", "TestRateLimit")]（将在当前定义类型中查找静态方法 TestRateLimit）
-        /// </summary>
-        /// <param name="path"></param>
-        /// <param name="method"></param>
-        /// <param name="rateLimitCallbackMethodName"></param>
-        public HttpHandleAttribute(string path, string method, string rateLimitCallbackMethodName)
-        {
-            Path = path;
-            Method = method;
-            RateLimitCallbackMethodName = rateLimitCallbackMethodName;
-        }
-
-        /// <summary>
-        /// 构造函数
-        /// </summary>
-        /// <param name="path">请求路径</param>
-        /// <param name="method">HTTP 方法字符串</param>
-        public HttpHandleAttribute(string path, string method)
-        {
-            Path = path;
-            Method = method;
-        }
-    }
-
-    /// <summary>
-    /// HTTP中间件特性
-    /// 支持通过属性标注该方法为中间件处理。
-    /// </summary>
-    [AttributeUsage(AttributeTargets.Method, AllowMultiple = true)]
-    public class HttpMiddlewareAttribute : Attribute
-    {
-        /// <summary>
-        /// 请求路径前缀，为 null 或空表示全局中间件
-        /// </summary>
-        public string? Path { get; set; }
-
-        /// <summary>
-        /// 优先级，-1 表示使用默认
-        /// </summary>
-        public int Priority { get; set; } = -1;
-
-        /// <summary>
-        /// 是否覆盖全局优先级
-        /// </summary>
-        public bool OverrideGlobal { get; set; }
-
-        /// <summary>
-        /// 构造函数
-        /// </summary>
-        /// <param name="path">路径前缀，可为 null</param>
-        public HttpMiddlewareAttribute(string? path = null)
-        {
-            Path = path;
-        }
-    }
-
-    /// <summary>
-    /// 会话数据类
-    /// </summary>
-    public class Session
-    {
-        /// <summary>
-        /// 会话ID
-        /// </summary>
-        public string Id { get; set; }
-
-        /// <summary>
-        /// 会话数据存储
-        /// </summary>
-        public System.Collections.Concurrent.ConcurrentDictionary<string, object> Data { get; } = new();
-
-        /// <summary>
-        /// 最后访问时间
-        /// </summary>
-        public DateTime LastAccess { get; set; }
-
-        /// <summary>
-        /// 创建时间
-        /// </summary>
-        public DateTime Created { get; set; }
-
-        /// <summary>
-        /// 是否为新会话
-        /// </summary>
-        public bool IsNew { get; set; }
-
-        /// <summary>
-        /// 构造函数
-        /// </summary>
-        /// <param name="id">会话ID</param>
-        public Session(string id)
-        {
-            Id = id;
-            Created = DateTime.UtcNow;
-            LastAccess = Created;
-            IsNew = true;
-        }
-
-        /// <summary>
-        /// 更新最后访问时间
-        /// </summary>
-        public void UpdateAccess()
-        {
-            LastAccess = DateTime.UtcNow;
-            IsNew = false;
-        }
-    }
-
-    /// <summary>
-    /// 会话管理器
+    /// 标准 HTTP/S 会话管理器。
+    /// 遵循 RFC 6265 (Cookies) 规范，完全基于 Cookie 进行会话标识传输。
+    /// 服务器端存储会话数据，仅通过 HttpOnly Secure Cookie 传输会话 ID。
     /// </summary>
     public class SessionManager
     {
         private readonly System.Collections.Concurrent.ConcurrentDictionary<string, Session> _sessions = new();
         private readonly TimeSpan _timeout;
         private readonly Timer _cleanupTimer;
+        private readonly object _disposeLock = new();
+        private volatile bool _disposed = false;
 
         /// <summary>
-        /// 构造函数
+        /// 创建会话管理器
         /// </summary>
-        /// <param name="timeoutMinutes">会话超时时间（分钟），默认30分钟</param>
+        /// <param name="timeoutMinutes">会话超时时间（分钟，默认30分钟）</param>
         public SessionManager(int timeoutMinutes = 30)
         {
+            if (timeoutMinutes < 1) timeoutMinutes = 30;
             _timeout = TimeSpan.FromMinutes(timeoutMinutes);
-            // 每5分钟清理一次过期会话
+            // 定期清理过期会话（每5分钟检查一次）
             _cleanupTimer = new Timer(CleanupExpiredSessions, null, TimeSpan.FromMinutes(5), TimeSpan.FromMinutes(5));
         }
 
         /// <summary>
         /// 创建新会话
         /// </summary>
-        /// <returns>新会话</returns>
+        /// <returns>新建的会话对象</returns>
         public Session CreateSession()
         {
-            var id = GenerateSessionId();
+            var id = GenerateSecureSessionId();
             var session = new Session(id);
             _sessions[id] = session;
             return session;
         }
 
         /// <summary>
-        /// 获取会话，如果不存在则返回null
+        /// 获取指定 ID 的会话，并更新其最后访问时间。
+        /// 如果会话不存在或已过期，返回 null。
         /// </summary>
-        /// <param name="id">会话ID</param>
-        /// <returns>会话对象或null</returns>
-        public Session? GetSession(string id)
+        /// <param name="id">会话标识符</param>
+        /// <returns>会话对象或 null</returns>
+        public Session? GetSession(string? id)
         {
+            if (string.IsNullOrEmpty(id)) return null;
+
             if (_sessions.TryGetValue(id, out var session))
             {
-                session.UpdateAccess();
+                // 验证会话是否已过期
+                if (IsExpired(session))
+                {
+                    _sessions.TryRemove(id, out _);
+                    return null;
+                }
+                // 更新最后访问时间
+                session.UpdateLastAccess();
                 return session;
             }
             return null;
         }
 
         /// <summary>
-        /// 获取或创建会话
+        /// 获取或创建会话。如果提供的会话 ID 有效，则返回该会话；否则创建新会话。
         /// </summary>
-        /// <param name="id">会话ID，如果为null或空则创建新会话</param>
+        /// <param name="id">现有会话 ID（可为 null）</param>
         /// <returns>会话对象</returns>
         public Session GetOrCreateSession(string? id)
         {
-            if (!string.IsNullOrEmpty(id) && _sessions.TryGetValue(id, out var existing))
+            if (!string.IsNullOrEmpty(id))
             {
-                existing.UpdateAccess();
-                return existing;
+                var session = GetSession(id);  // GetSession 已处理过期检查
+                if (session != null) return session;
             }
             return CreateSession();
         }
 
         /// <summary>
-        /// 移除会话
+        /// 删除指定 ID 的会话（用于显式注销）
         /// </summary>
-        /// <param name="id">会话ID</param>
-        public void RemoveSession(string id)
+        /// <param name="id">会话标识符</param>
+        public void RemoveSession(string? id)
         {
-            _sessions.TryRemove(id, out _);
+            if (!string.IsNullOrEmpty(id))
+            {
+                _sessions.TryRemove(id, out _);
+            }
         }
 
         /// <summary>
-        /// 清理过期会话
+        /// 检查会话是否已过期
+        /// </summary>
+        private bool IsExpired(Session session)
+        {
+            return (DateTime.UtcNow - session.LastAccessAt) > _timeout;
+        }
+
+        /// <summary>
+        /// 清理所有已过期的会话（由内部定时器自动调用）
         /// </summary>
         private void CleanupExpiredSessions(object? state)
         {
-            var cutoff = DateTime.UtcNow - _timeout;
-            var expiredKeys = _sessions.Where(kvp => kvp.Value.LastAccess < cutoff)
-                                      .Select(kvp => kvp.Key)
-                                      .ToList();
+            if (_disposed) return;
 
-            foreach (var key in expiredKeys)
+            try
             {
-                _sessions.TryRemove(key, out _);
+                var now = DateTime.UtcNow;
+                var expiredKeys = _sessions
+                    .Where(kvp => (now - kvp.Value.LastAccessAt) > _timeout)
+                    .Select(kvp => kvp.Key)
+                    .ToList();
+
+                foreach (var key in expiredKeys)
+                {
+                    _sessions.TryRemove(key, out _);
+                }
+
+                if (expiredKeys.Count > 0)
+                {
+                    Logger.Info($"已清理 {expiredKeys.Count} 个过期会话");
+                }
             }
-
-            if (expiredKeys.Count > 0)
+            catch (Exception ex)
             {
-                Logger.Info($"清理了 {expiredKeys.Count} 个过期会话");
+                Logger.Warn($"清理过期会话时发生错误: {ex.Message}");
             }
         }
 
         /// <summary>
-        /// 生成唯一会话ID
+        /// 生成安全的会话 ID（使用 GUID + 时间戳组合）
         /// </summary>
-        /// <returns>会话ID</returns>
-        private string GenerateSessionId()
+        private static string GenerateSecureSessionId()
         {
-            return Guid.NewGuid().ToString("N") + DateTime.UtcNow.Ticks.ToString();
+            // 使用加密强度 GUID 确保唯一性和不可预测性
+            return Guid.NewGuid().ToString("N") + DateTime.UtcNow.Ticks.ToString("X");
         }
 
         /// <summary>
@@ -3833,77 +4055,15 @@ namespace Drx.Sdk.Network.V2.Web
         /// </summary>
         public void Dispose()
         {
-            _cleanupTimer?.Dispose();
+            lock (_disposeLock)
+            {
+                if (_disposed) return;
+                _disposed = true;
+
+                try { _cleanupTimer?.Dispose(); } catch { }
+                _sessions.Clear();
+            }
         }
-    }
-
-    /// <summary>
-    /// 授权记录数据类
-    /// </summary>
-    public class AuthorizationRecord
-    {
-        /// <summary>
-        /// 授权码，唯一标识
-        /// </summary>
-        public string Code { get; set; }
-
-        /// <summary>
-        /// 授权用户名
-        /// </summary>
-        public string UserName { get; set; }
-
-        /// <summary>
-        /// 应用名称（用于展示）
-        /// </summary>
-        public string ApplicationName { get; set; }
-
-        /// <summary>
-        /// 应用描述
-        /// </summary>
-        public string ApplicationDescription { get; set; }
-
-        /// <summary>
-        /// 授权请求时间
-        /// </summary>
-        public DateTime CreatedAt { get; set; }
-
-        /// <summary>
-        /// 授权超时时间（分钟）
-        /// </summary>
-        public int ExpirationMinutes { get; set; }
-
-        /// <summary>
-        /// 是否已授权完成
-        /// </summary>
-        public bool IsAuthorized { get; set; }
-
-        /// <summary>
-        /// 授权完成时间
-        /// </summary>
-        public DateTime? AuthorizedAt { get; set; }
-
-        /// <summary>
-        /// 授权范围/权限列表（逗号分隔）
-        /// </summary>
-        public string Scopes { get; set; }
-
-        public AuthorizationRecord(string code, string userName, string applicationName, string applicationDescription = "", int expirationMinutes = 5, string scopes = "")
-        {
-            Code = code;
-            UserName = userName;
-            ApplicationName = applicationName;
-            ApplicationDescription = applicationDescription;
-            CreatedAt = DateTime.UtcNow;
-            ExpirationMinutes = expirationMinutes;
-            IsAuthorized = false;
-            AuthorizedAt = null;
-            Scopes = scopes;
-        }
-
-        /// <summary>
-        /// 检查授权码是否已过期
-        /// </summary>
-        public bool IsExpired => (DateTime.UtcNow - CreatedAt).TotalMinutes > ExpirationMinutes;
     }
 
     /// <summary>
@@ -4060,9 +4220,11 @@ namespace Drx.Sdk.Network.V2.Web
 
         private readonly System.Collections.Generic.List<CommandEntry> _commands = new();
         private readonly object _commandLock = new object();
+        private static readonly ConcurrentDictionary<Type, MethodInfo[]> _methodCache = new();
 
         /// <summary>
         /// 从指定类型扫描所有带 CommandAttribute 的方法，自动注册命令。
+        /// 使用缓存避免重复反射调用。
         /// </summary>
         public void RegisterCommandsFromType(Type type)
         {
@@ -4070,7 +4232,12 @@ namespace Drx.Sdk.Network.V2.Web
 
             try
             {
-                var methods = type.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Instance);
+                // 使用缓存的反射结果
+                if (!_methodCache.TryGetValue(type, out var methods))
+                {
+                    methods = type.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Instance);
+                    _methodCache.TryAdd(type, methods);
+                }
 
                 foreach (var method in methods)
                 {
@@ -4336,27 +4503,6 @@ namespace Drx.Sdk.Network.V2.Web
             public bool IsRequired { get; set; }
         }
 
-        /// <summary>
-        /// 解析结果
-        /// </summary>
-        public class ParseResult
-        {
-            /// <summary>
-            /// 解析是否成功
-            /// </summary>
-            public bool IsValid { get; set; }
-
-            /// <summary>
-            /// 提取的参数字典（参数名 -> 值）
-            /// </summary>
-            public Dictionary<string, string> Parameters { get; set; } = new();
-
-            /// <summary>
-            /// 错误消息
-            /// </summary>
-            public string ErrorMessage { get; set; }
-        }
-
         public string CommandName { get; private set; }
         private List<ParameterInfo> _parameters = new();
         private string _originalFormat;
@@ -4412,9 +4558,9 @@ namespace Drx.Sdk.Network.V2.Web
         /// <summary>
         /// 解析输入的参数列表
         /// </summary>
-        public ParseResult Parse(List<string> args)
+        public CommandParseResult Parse(List<string> args)
         {
-            var result = new ParseResult { IsValid = true, Parameters = new Dictionary<string, string>() };
+            var result = new CommandParseResult { IsValid = true, Parameters = new Dictionary<string, string>() };
 
             var requiredCount = _parameters.Count(p => p.IsRequired);
             var providedCount = args.Count;

@@ -5,8 +5,9 @@ using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using System.Threading.Channels;
+using Drx.Sdk.Network.V2.Web.Http;
 
-namespace Drx.Sdk.Network.V2.Web
+namespace Drx.Sdk.Network.V2.Web.Core
 {
     /// <summary>
     /// HTTP 客户端，用于发送各类 HTTP 请求并支持流式上传与下载。

@@ -1,7 +1,8 @@
 using System;
 using System.Collections.Specialized;
+using Drx.Sdk.Network.V2.Web.Http;
 
-namespace Drx.Sdk.Network.V2.Web;
+namespace Drx.Sdk.Network.V2.Web.Utilities;
 
 public static class DrxClientHelper
 {

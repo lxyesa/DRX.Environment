@@ -1,9 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.WebUtilities;
@@ -11,11 +8,12 @@ using Microsoft.Net.Http.Headers;
 using Microsoft.Extensions.Primitives;
 using System.Collections.Specialized;
 using System.Dynamic;
-using System.Collections.Generic;
 using System.Net;
 using System.IO;
+using Drx.Sdk.Network.V2.Web.Core;
+using Drx.Sdk.Network.V2.Web.Configs;
 
-namespace Drx.Sdk.Network.V2.Web
+namespace Drx.Sdk.Network.V2.Web.Http
 {
     /// <summary>
     /// 表示 HTTP 请求

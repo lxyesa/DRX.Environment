@@ -2,7 +2,8 @@
 using Drx.Sdk.Network.DataBase.Sqlite.V2;
 using Drx.Sdk.Network.DataBase.Sqlite.V2.Tests;
 using Drx.Sdk.Network.V2.Socket;
-using Drx.Sdk.Network.V2.Web;
+using Drx.Sdk.Network.V2.Web.Core;
+using Drx.Sdk.Network.V2.Web.Http;
 using Drx.Sdk.Network.V2.Web.Models;
 using Drx.Sdk.Shared;
 using Drx.Sdk.Shared.Serialization;
@@ -69,6 +70,7 @@ public class Program
             server.AddRoute(HttpMethod.Get, "/shop", req => new HtmlResultFromFile($"{AppDomain.CurrentDomain.BaseDirectory}Views/shop.html"));
             server.AddRoute(HttpMethod.Get, "/asset", req => new HtmlResultFromFile($"{AppDomain.CurrentDomain.BaseDirectory}Views/shop.html"));
             server.AddRoute(HttpMethod.Get, "/asset/detail/{id}", req => new HtmlResultFromFile($"{AppDomain.CurrentDomain.BaseDirectory}Views/shop_detail.html"));
+            server.AddRoute(HttpMethod.Get, "/user/verify-email", req => new HtmlResultFromFile($"{AppDomain.CurrentDomain.BaseDirectory}Views/verify-email.html"));
             server.RegisterHandlersFromAssembly(typeof(DLTBModPackerHttp));
             server.RegisterHandlersFromAssembly(typeof(KaxHttp));
             server.RegisterCommandsFromType(typeof(KaxCommandHandler));

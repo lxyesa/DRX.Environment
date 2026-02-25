@@ -298,62 +298,60 @@
             padding: 20px 0;
         }
 
-        .quantity-selector {
-            display: flex;
-            align-items: center;
+        /* 价格套餐卡片 */
+        .price-plans-card {
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 8px;
+            padding: 20px;
+            margin-top: 20px;
+        }
+
+        .plans-title {
+            font-size: 0.95rem;
+            font-weight: 600;
+            margin-bottom: 16px;
+            color: var(--text-primary);
+        }
+
+        .plans-grid {
+            display: grid;
+            grid-template-columns: 1fr;
             gap: 12px;
         }
 
-        .quantity-label {
-            color: var(--text-secondary);
-            font-size: 0.95rem;
-            min-width: 50px;
-        }
-
-        .quantity-control {
-            display: flex;
-            align-items: center;
-            gap: 0;
-            border: 1px solid rgba(255, 255, 255, 0.1);
+        .plan-item {
+            padding: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.08);
             border-radius: 4px;
-            overflow: hidden;
-        }
-
-        .quantity-btn {
-            width: 32px;
-            height: 32px;
-            border: none;
-            background: transparent;
-            color: var(--text-primary);
             cursor: pointer;
-            transition: background 0.2s ease;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 18px;
-        }
-
-        .quantity-btn:hover {
-            background: rgba(255, 255, 255, 0.08);
-        }
-
-        .quantity-input {
-            width: 50px;
-            height: 32px;
-            border: none;
-            border-left: 1px solid rgba(255, 255, 255, 0.1);
-            border-right: 1px solid rgba(255, 255, 255, 0.1);
+            transition: all 0.2s ease;
             background: transparent;
             color: var(--text-primary);
-            text-align: center;
+            text-align: left;
             font-family: 'Poppins', sans-serif;
-            font-size: 0.95rem;
+            font-size: 0.9rem;
         }
 
-        .quantity-input::-webkit-inner-spin-button,
-        .quantity-input::-webkit-outer-spin-button {
-            -webkit-appearance: none;
-            margin: 0;
+        .plan-item:hover {
+            background: rgba(59, 130, 246, 0.05);
+            border-color: var(--accent);
+        }
+
+        .plan-item.selected {
+            background: rgba(59, 130, 246, 0.15);
+            border-color: var(--accent);
+        }
+
+        .plan-name {
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .plan-details {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            margin-top: 4px;
         }
 
         .purchase-actions {
@@ -378,10 +376,16 @@
             align-items: center;
             justify-content: center;
             gap: 8px;
+            width: 100%;
         }
 
         .btn-cart:hover {
             background: #2563eb;
+        }
+
+        .btn-cart:disabled {
+            background: rgba(59, 130, 246, 0.5);
+            cursor: not-allowed;
         }
 
         .purchase-options-second {
@@ -609,8 +613,8 @@
                             <span class="meta-value" id="productCompatibility">100%</span>
                         </div>
                         <div class="meta-item">
-                            <span class="meta-label">下载量</span>
-                            <span class="meta-value" id="productDownloads">1.2K</span>
+                            <span class="meta-label">下载 / 购买</span>
+                            <span class="meta-value"><span id="productDownloads">1.2K</span> / <span id="productPurchases">0</span></span>
                         </div>
                     </div>
                 </div>
@@ -651,29 +655,24 @@
 
                     <!-- 购买选项 -->
                     <div class="purchase-options">
-                        <div class="quantity-selector">
-                            <label class="quantity-label">数量</label>
-                            <div class="quantity-control">
-                                <button class="quantity-btn" id="quantityMinus">−</button>
-                                <!-- 使用自定义 input-box 组件（降级回退为原生 input 保持兼容性） -->
-                                <input-box id="quantityInputBox" label="数量" placeholder="1"></input-box>
-                                <!-- 原生 input 作为回退（脚本会优先查找内部 input） -->
-                                <input type="number" class="quantity-input" id="quantityInput" value="1" min="1"
-                                    max="999" style="display:none;" aria-hidden="true">
-                                <button class="quantity-btn" id="quantityPlus">+</button>
-                            </div>
-                        </div>
-
                         <div class="stock-info" id="stockInfo">
                             ✓ 库存充足，立即发货
                         </div>
                     </div>
 
+                    <!-- 价格套餐卡片 -->
+                    <div class="price-plans-card" id="pricePlansCard">
+                        <div class="plans-title">选择购买套餐</div>
+                        <div class="plans-grid" id="plansGrid">
+                            <!-- 动态生成 -->
+                        </div>
+                    </div>
+
                     <!-- 操作按钮 -->
                     <div class="purchase-actions">
-                        <button class="btn-cart" id="addToCartBtn">
-                            <span class="material-icons">shopping_cart</span>
-                            加入购物车
+                        <button class="btn-cart" id="purchaseBtn" disabled>
+                            <span class="material-icons">shopping_bag</span>
+                            立即购买
                         </button>
 
                         <div class="purchase-options-second">
@@ -854,12 +853,14 @@
                             version: asset.version ?? '--',
                             compatibility: asset.compatibility ?? '--',
                             downloads: asset.downloads ?? '--',
+                            purchaseCount: asset.purchaseCount ?? '--',
                             fileSize: fileSizeStr,
                             uploadDate: asset.uploadDate ?? asset.createdAt ?? '--',
                             author: asset.author ?? asset.uploader ?? '--',
                             license: asset.license ?? '--',
                             stock: (asset.stock !== undefined && asset.stock !== null) ? asset.stock : '--',
-                            discountRate: (asset.discountRate !== undefined && asset.discountRate !== null) ? Number(asset.discountRate) : null
+                            discountRate: (asset.discountRate !== undefined && asset.discountRate !== null) ? Number(asset.discountRate) : null,
+                            prices: Array.isArray(asset.prices) ? asset.prices : (Array.isArray(asset.Prices) ? asset.Prices : [])
                         };
                     }
                 }
@@ -901,9 +902,24 @@
             document.getElementById('productVersion').textContent = orDash(product.version);
             document.getElementById('productCompatibility').textContent = orDash(product.compatibility);
             document.getElementById('productDownloads').textContent = showDownloads(product.downloads);
-            // 显示价格：优先显示折后价（后端可能返回 salePrice 或 discountRate）
-            const displayOriginal = product.originalPrice != null ? product.originalPrice : null;
-            const displayCurrent = (product.salePrice != null) ? product.salePrice : product.price;
+            // 显示购买次数
+            const purchasesEl = document.getElementById('productPurchases');
+            if (purchasesEl) purchasesEl.textContent = showDownloads(product.purchaseCount);
+            // 显示价格：优先使用价格表第一个方案（若存在），否则使用后端兼容字段
+            let displayOriginal = null;
+            let displayCurrent = null;
+            if (product.prices && Array.isArray(product.prices) && product.prices.length > 0) {
+                const p0 = product.prices[0];
+                const origCents = (p0.originalPrice != null ? Number(p0.originalPrice) : Number(p0.price || 0));
+                const saleCents = Math.round(Number(p0.price || 0) * (1 - (Number(p0.discountRate) || 0)));
+                displayOriginal = origCents / 100.0;
+                displayCurrent = saleCents / 100.0;
+                // expose discountRate for badge
+                product.discountRate = (p0.discountRate != null) ? Number(p0.discountRate) : product.discountRate;
+            } else {
+                displayOriginal = product.originalPrice != null ? product.originalPrice : null;
+                displayCurrent = (product.salePrice != null) ? product.salePrice : product.price;
+            }
 
             const priceOriginalEl = document.getElementById('priceOriginal');
             const priceCurrentEl = document.getElementById('priceCurrent');
@@ -954,16 +970,16 @@
             // 库存状态
             const stockInfo = document.getElementById('stockInfo');
             if (product.stock === '--' || product.stock === null || product.stock === undefined) {
-                stockInfo.textContent = '--';
+                stockInfo.textContent = '库存：--';
                 stockInfo.classList.add('low');
             } else if (Number(product.stock) > 50) {
-                stockInfo.textContent = '✓ 库存充足，立即发货';
+                stockInfo.textContent = `库存：${product.stock}（充足）`;
                 stockInfo.classList.remove('low');
             } else if (Number(product.stock) > 0) {
-                stockInfo.textContent = '⚠ 库存有限';
+                stockInfo.textContent = `库存：${product.stock}（有限）`;
                 stockInfo.classList.add('low');
             } else {
-                stockInfo.textContent = '✗ 暂无库存';
+                stockInfo.textContent = '库存：0（暂无）';
                 stockInfo.classList.add('low');
             }
 
@@ -994,86 +1010,122 @@
 
         // 设置事件监听器
         function setupEventListeners() {
-            // 兼容：优先查找原生 input（回退），否则查找自定义 input-box 内部的 input
-            let quantityInput = document.getElementById('quantityInput');
-            const quantityBox = document.getElementById('quantityInputBox');
-            if ((!quantityInput || quantityInput.style.display === 'none') && quantityBox) {
-                const inner = quantityBox.querySelector && quantityBox.querySelector('input');
-                if (inner) quantityInput = inner;
-                else {
-                    // 如果 input-box 没有内部 input，创建一个隐藏的回退 input 放入其中
-                    const created = document.createElement('input');
-                    created.type = 'number';
-                    created.className = 'quantity-input';
-                    created.id = 'quantityInput';
-                    created.value = '1';
-                    created.min = 1;
-                    created.max = 999;
-                    created.style.display = 'none';
-                    created.setAttribute('aria-hidden', 'true');
-                    quantityBox.appendChild(created);
-                    quantityInput = created;
-                }
-            }
-
-            const quantityMinus = document.getElementById('quantityMinus');
-            const quantityPlus = document.getElementById('quantityPlus');
-            const addToCartBtn = document.getElementById('addToCartBtn');
+            // 获取购买按钮
+            const purchaseBtn = document.getElementById('purchaseBtn');
+            const plansGrid = document.getElementById('plansGrid');
             const favBtn = document.getElementById('favBtn');
             const shareBtn = document.getElementById('shareBtn');
+            
+            // 存储当前选中的价格方案ID
+            let selectedPriceId = null;
 
-            // 数量控制
-            quantityMinus.addEventListener('click', () => {
-                const val = parseInt(quantityInput.value) || 1;
-                if (val > 1) quantityInput.value = val - 1;
-            });
-
-            quantityPlus.addEventListener('click', () => {
-                const val = parseInt(quantityInput.value) || 1;
-                if (val < 999) quantityInput.value = val + 1;
-            });
-
-            quantityInput.addEventListener('change', () => {
-                let val = parseInt(quantityInput.value) || 1;
-                if (val < 1) val = 1;
-                if (val > 999) val = 999;
-                quantityInput.value = val;
-            });
-
-            // 加入购物车 — 仅支持后端 API（未登录已跳转登录页）
-            addToCartBtn.addEventListener('click', async (e) => {
-                const quantity = parseInt(quantityInput.value) || 1;
+            // 动态生成和显示价格套餐
+            function loadPricePlans() {
                 const product = window.currentProduct;
-
-                // 飞行动画与添加动画
-                const cartBtn = document.getElementById('cartButton');
-                if (cartBtn) {
-                    const rect = addToCartBtn.getBoundingClientRect();
-                    const cartRect = cartBtn.getBoundingClientRect();
-                    createFlyingIcon(rect, cartRect);
+                if (!product || !product.prices || product.prices.length === 0) {
+                    plansGrid.innerHTML = '<div style="color: var(--text-muted); padding: 12px;">暂无价格方案</div>';
+                    purchaseBtn.disabled = true;
+                    return;
                 }
+
+                plansGrid.innerHTML = '';
+                product.prices.forEach((price, index) => {
+                    // 根据unit和duration生成显示文本
+                    let durationText = '';
+                    switch (price.unit?.toLowerCase()) {
+                        case 'year': durationText = `${price.duration}年`; break;
+                        case 'month': durationText = `${price.duration}个月`; break;
+                        case 'day': durationText = `${price.duration}天`; break;
+                        case 'hour': durationText = `${price.duration}小时`; break;
+                        default: durationText = '一次性';
+                    }
+
+                    const salePrice = price.price * (1 - (price.discountRate || 0));
+                    const hasDiscount = price.discountRate && price.discountRate > 0;
+                    
+                    const planItem = document.createElement('button');
+                    planItem.className = 'plan-item' + (index === 0 ? ' selected' : '');
+                    planItem.type = 'button';
+                    planItem.innerHTML = `
+                        <div class="plan-name">${durationText}</div>
+                        <div class="plan-details">
+                            ${hasDiscount ? `<span style="text-decoration: line-through; color: var(--text-muted); margin-right: 4px;">¥${(price.originalPrice / 100).toFixed(2)}</span>` : ''}
+                            <span style="color: var(--accent); font-weight: 600;">¥${(salePrice / 100).toFixed(2)}</span>
+                        </div>
+                    `;
+                    
+                    planItem.addEventListener('click', () => {
+                        // 移除其他选中状态
+                        document.querySelectorAll('.plan-item').forEach(item => item.classList.remove('selected'));
+                        planItem.classList.add('selected');
+                        selectedPriceId = price.id;
+                        purchaseBtn.disabled = false;
+                    });
+
+                    plansGrid.appendChild(planItem);
+                    
+                    // 默认选中第一个
+                    if (index === 0) {
+                        selectedPriceId = price.id;
+                        purchaseBtn.disabled = false;
+                    }
+                });
+            }
+
+            // 加载价格套餐
+            loadPricePlans();
+
+            // 立即购买按钮
+            purchaseBtn.addEventListener('click', async (e) => {
+                if (!selectedPriceId) {
+                    alert('请选择购买方案');
+                    return;
+                }
+
+                const product = window.currentProduct;
+                const token = localStorage.getItem('kax_login_token');
+
+                if (!token) {
+                    alert('请先登录');
+                    location.href = '/login';
+                    return;
+                }
+
+                purchaseBtn.disabled = true;
+                purchaseBtn.textContent = '处理中...';
 
                 try {
-                    const resp = await fetch('/api/user/cart', {
+                    const resp = await fetch('/api/shop/purchase', {
                         method: 'POST',
-                        headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ assetId: product.id, quantity })
+                        headers: {
+                            'Authorization': 'Bearer ' + token,
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            assetId: product.id,
+                            priceId: selectedPriceId
+                        })
                     });
-                    if (resp.ok) {
-                        // 更新远端购物车计数（通过刷新 badge）
-                        await updateCartBadge();
+
+                    const data = await resp.json();
+
+                    if (resp.ok && data.code === 0) {
+                        purchaseBtn.textContent = '✓ 购买成功';
+                        setTimeout(() => {
+                            alert('购买成功！');
+                            location.reload();
+                        }, 1500);
                     } else {
-                        console.warn('加入购物车失败', resp.status);
+                        alert('购买失败: ' + (data.message || '未知错误'));
+                        purchaseBtn.textContent = '立即购买';
+                        purchaseBtn.disabled = false;
                     }
                 } catch (e) {
-                    console.error('加入购物车出错', e);
+                    console.error('购买失败', e);
+                    alert('网络错误，请稍后重试');
+                    purchaseBtn.textContent = '立即购买';
+                    purchaseBtn.disabled = false;
                 }
-
-                // 提示反馈
-                addToCartBtn.textContent = '✓ 已添加到购物车';
-                setTimeout(() => {
-                    addToCartBtn.textContent = '加入购物车';
-                }, 2000);
             });
 
             // 收藏按钮 — 使用后端 API（登录用户），未登录则跳转登录
@@ -1122,7 +1174,7 @@
             shareBtn.addEventListener('click', () => {
                 const product = window.currentProduct;
                 const shareUrl = window.location.href;
-                const shareText = `我发现了一个不错的模组：${product.name}，价格 ¥${product.price}，快来看看吧！`;
+                const shareText = `我发现了一个不错的模组：${product.name}，快来看看吧！`;
 
                 if (navigator.share) {
                     navigator.share({
