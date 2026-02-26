@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KaxHub 商城 - 游戏模组平台</title>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <link href="/css/global.css" rel="stylesheet">
+    <script src="/js/global.js"></script>
+        <link href="/css/shop.css" rel="stylesheet">
+</head>
+
+<body class="has-global-topbar">
+    <section class="shop-header">
+        <div class="shop-header-content">
+            <h1>KaxHub 商城</h1>
+            <p>发现与购买优质游戏模组、资源包与扩展内容</p>
+        </div>
+    </section>
+
+    <div class="shop-container">
+        <div class="shop-controls">
+            <div class="search-box">
+                <span class="material-icons">search</span>
+                <input type="text" id="searchInput" placeholder="搜索商品...">
+            </div>
+            <div class="shop-filters">
+                <div class="filter-group">
+                    <label for="categorySelect">分类</label>
+                    <select id="categorySelect" data-custom-select>
+                        <option value="">全部分类</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label for="sortSelect">排序</label>
+                    <select id="sortSelect" data-custom-select>
+                        <option value="newest">最新</option>
+                        <option value="popular">热门</option>
+                        <option value="price-low">价格低到高</option>
+                        <option value="price-high">价格高到低</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <div class="shop-grid" id="productGrid">
+            <!-- 产品卡片将通过 JavaScript 动态生成 -->
+        </div>
+
+        <div class="empty-state" id="emptyState" style="display: none;">
+            <span class="material-icons">shopping_bag</span>
+            <h3>未找到商品</h3>
+            <p>尝试调整搜索条件或筛选条件</p>
+        </div>
+
+        <div class="pagination" id="pagination">
+            <!-- 分页按钮将通过 JavaScript 动态生成 -->
+        </div>
+    </div>
+
+    <div class="cart-button" id="cartButton">
+        <span class="material-icons">shopping_cart</span>
+        <span id="cartCount">0</span>
+    </div>
+
+        <script src="/js/shop.js"></script>
+</body>
+
+</html>

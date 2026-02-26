@@ -1,8 +1,8 @@
-using System;
+﻿using System;
 using System.IO;
 using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
-using Drx.Sdk.Network.DataBase.Sqlite;
+using Drx.Sdk.Network.DataBase;
 using KaxServer.Models;
 using Microsoft.AspNetCore.Http;
 using Drx.Sdk.Shared.Cryptography;
@@ -25,9 +25,9 @@ public static class UserManager
     private static readonly string DbPath;
 
     /// <summary>
-    /// 用户数据表操作对象（SqliteUnified 封装）
+    /// 用户数据表操作对象（SqliteV2 封装）
     /// </summary>
-    public static SqliteUnified<UserData> UserSql;
+    public static SqliteV2<UserData> UserSql;
 
     /// <summary>
     /// 登录延迟（毫秒），用于防止暴力破解
@@ -40,7 +40,7 @@ public static class UserManager
     private const int REGISTER_DELAY_MS = 1500; // 注册延迟1.5秒
 
     /// <summary>
-    /// 静态构造函数。初始化用户数据库路径和SqliteUnified实例。
+    /// 静态构造函数。初始化用户数据库路径和SqliteV2实例。
     /// </summary>
     static UserManager()
     {
@@ -58,7 +58,7 @@ public static class UserManager
         // 拼接数据库文件路径
         DbPath = Path.Combine(dataDirectory, "user.db");
         // 初始化用户数据表操作对象
-        UserSql = new SqliteUnified<UserData>(DbPath);
+        UserSql = new SqliteV2<UserData>(DbPath);
     }
 
     /// <summary>
@@ -156,14 +156,14 @@ public static class UserManager
             await Task.Delay(REGISTER_DELAY_MS);
             return new RegisterResult { Success = false, Message = "验证码无效或已过期" };
         }
-        var existingUsers = await UserSql.QueryAsync("Username", userName);
+        var existingUsers = await UserSql.SelectWhereAsync("Username", userName);
         var existingUser = existingUsers?.Count > 0 ? existingUsers[0] : null;
         if (existingUser != null)
         {
             await Task.Delay(REGISTER_DELAY_MS);
             return new RegisterResult { Success = false, Message = "用户名已被使用" };
         }
-        var emailUsers = await UserSql.QueryAsync("Email", email);
+        var emailUsers = await UserSql.SelectWhereAsync("Email", email);
         existingUser = emailUsers?.Count > 0 ? emailUsers[0] : null;
         if (existingUser != null)
         {
@@ -183,7 +183,7 @@ public static class UserManager
                     EmailNotifications = true // 默认开启邮件通知
                 }
             };
-            await UserSql.PushAsync(userData);
+            await UserSql.InsertAsync(userData);
             Logger.Info($"用户注册成功: {userName} ({email})");
             await Task.Delay(REGISTER_DELAY_MS);
             return new RegisterResult
@@ -225,11 +225,11 @@ public static class UserManager
                 await Task.Delay(LOGIN_DELAY_MS);
                 return new LoginResult { Success = false, Message = "用户名/邮箱和密码不能为空" };
             }
-            var userDataList = await UserSql.QueryAsync("Username", userNameOrEmail);
+            var userDataList = await UserSql.SelectWhereAsync("Username", userNameOrEmail);
             UserData userData = userDataList?.Count > 0 ? userDataList[0] : null;
             if (userData == null)
             {
-                var emailList = await UserSql.QueryAsync("Email", userNameOrEmail);
+                var emailList = await UserSql.SelectWhereAsync("Email", userNameOrEmail);
                 userData = emailList?.Count > 0 ? emailList[0] : null;
             }
             if (userData == null)
@@ -268,7 +268,7 @@ public static class UserManager
         if (userId <= 0)
             return false;
 
-        var userDataList = await UserSql.QueryAsync("Id", userId);
+        var userDataList = await UserSql.SelectWhereAsync("Id", userId);
         if (userDataList?.Count > 0)
         {
             var userData = userDataList[0];
@@ -293,7 +293,7 @@ public static class UserManager
     [ScriptExport]
     public static async Task<CommandResult?> LoginAppAsync(string userNameOrEmail, string password)
     {
-        var userDataList = await UserSql.QueryAsync("Username", userNameOrEmail);
+        var userDataList = await UserSql.SelectWhereAsync("Username", userNameOrEmail);
         if (userDataList?.Count > 0)
         {
             var userData = userDataList[0];
@@ -332,7 +332,7 @@ public static class UserManager
         }
         else
         {
-            userDataList = await UserSql.QueryAsync("Email", userNameOrEmail);
+            userDataList = await UserSql.SelectWhereAsync("Email", userNameOrEmail);
             if (userDataList?.Count > 0)
             {
                 var userData = userDataList[0];
@@ -430,14 +430,14 @@ public static class UserManager
     {
         if (userId <= 0)
             return null;
-        var userList = await UserSql.QueryAsync("Id", userId.ToString());
+        var userList = await UserSql.SelectWhereAsync("Id", userId.ToString());
         return userList?.Count > 0 ? userList[0] : null;
     }
     public static async Task<UserData> GetUserByAppTokenAsync(string appToken)
     {
         if (string.IsNullOrEmpty(appToken))
             return null;
-        var userList = await UserSql.QueryAsync("AppToken", appToken);
+        var userList = await UserSql.SelectWhereAsync("AppToken", appToken);
         return userList?.Count > 0 ? userList[0] : null;
     }
     [ScriptExport]
@@ -445,7 +445,7 @@ public static class UserManager
     {
         if (string.IsNullOrEmpty(username))
             return null;
-        var userList = await UserSql.QueryAsync("Username", username);
+        var userList = await UserSql.SelectWhereAsync("Username", username);
         return userList?.Count > 0 ? userList[0] : null;
     }
 
@@ -459,7 +459,7 @@ public static class UserManager
         if (userId <= 0)
             return false;
 
-        var userDataList = await UserSql.QueryAsync("Id", userId);
+        var userDataList = await UserSql.SelectWhereAsync("Id", userId);
         if (userDataList?.Count > 0)
         {
             var userData = userDataList[0];
@@ -500,7 +500,7 @@ public static class UserManager
         }
         if (userId.HasValue)
         {
-            var userList = await UserSql.QueryAsync("Id", userId.Value.ToString());
+            var userList = await UserSql.SelectWhereAsync("Id", userId.Value.ToString());
             return userList?.Count > 0 ? userList[0] : null;
         }
         return null;
@@ -516,7 +516,7 @@ public static class UserManager
     {
         if (user == null || string.IsNullOrEmpty(newUserName))
             return false;
-        var existingUsers = await UserSql.QueryAsync("Username", newUserName);
+        var existingUsers = await UserSql.SelectWhereAsync("Username", newUserName);
         if (existingUsers?.Count > 0 && existingUsers[0].Id != user.Id)
         {
             return false;
@@ -551,7 +551,7 @@ public static class UserManager
     /// <returns>用户列表</returns>
     public static async Task<List<UserData>> GetAllUsersAsync()
     {
-        return await UserSql.GetAllAsync();
+        return await UserSql.SelectAllAsync();
     }
 
     /// <summary>

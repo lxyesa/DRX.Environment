@@ -1,4 +1,4 @@
-﻿using Drx.Sdk.Network.DataBase.Sqlite;
+using Drx.Sdk.Network.DataBase;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -9,7 +9,7 @@ namespace KaxSocket
 {
     public class DLTBModPackerGlobal
     {
-        private readonly SqliteUnified<ModInfo> modInfoDb;
+        private readonly SqliteV2<ModInfo> modInfoDb;
         private readonly static DLTBModPackerGlobal inst = new DLTBModPackerGlobal();
         public readonly static DLTBModPackerGlobal Instance = inst;
 
@@ -18,7 +18,7 @@ namespace KaxSocket
 
         private DLTBModPackerGlobal()
         {
-            modInfoDb = new SqliteUnified<ModInfo>(DLTB_DatabaseFile);
+            modInfoDb = new SqliteV2<ModInfo>(DLTB_DatabaseFile);
             Init();
         }
 
@@ -26,13 +26,13 @@ namespace KaxSocket
         {
             // 从数据库加载 ModInfos
             ModInfos.Clear();
-            foreach (var mod in modInfoDb.QueryAll())
+            foreach (var mod in modInfoDb.SelectAll())
             {
                 ModInfos.Add(mod);
             }
         }
 
-        public SqliteUnified<ModInfo> GetModInfoDataBase()
+        public SqliteV2<ModInfo> GetModInfoDataBase()
         {
             return modInfoDb;
         }

@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KaxHub - 页面未找到</title>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <link href="/css/global.css" rel="stylesheet">
+    <link href="/css/404.css" rel="stylesheet">
+</head>
+
+<body class="has-global-topbar">
+    <section class="error-hero" role="main" aria-labelledby="errorTitle">
+        <div class="error-content">
+            <div class="error-code" aria-hidden="true">404</div>
+            <h1 id="errorTitle">页面未找到</h1>
+            <p class="error-description">
+                你访问的页面不存在、已被移除，或链接已失效。<br>
+                请检查地址是否正确，或返回首页继续浏览。
+            </p>
+            <div class="error-meta">
+                <span class="material-icons" aria-hidden="true">info_outline</span>
+                <span id="errorPath"></span>
+            </div>
+            <div class="error-actions">
+                <a href="/" class="btn" role="button">返回首页</a>
+                <button class="btn ghost" onclick="history.back()" type="button">返回上一页</button>
+            </div>
+        </div>
+    </section>
+
+    <script src="/js/global.js" defer></script>
+    <script>
+        (function () {
+            var pathEl = document.getElementById('errorPath');
+            if (pathEl) {
+                pathEl.textContent = '请求路径：' + location.pathname;
+            }
+        })();
+    </script>
+</body>
+
+</html>

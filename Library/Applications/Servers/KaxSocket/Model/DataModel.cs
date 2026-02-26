@@ -1,4 +1,4 @@
-﻿using Drx.Sdk.Network.DataBase.Sqlite;
+using Drx.Sdk.Network.DataBase;
 using System;
 
 namespace KaxSocket
@@ -92,8 +92,8 @@ namespace KaxSocket
         /// <summary>资源数（例如用户拥有的作品数量）</summary>
         public int ResourceCount { get; set; } = 0;
 
-        /// <summary>贡献值（平台积分/分数）</summary>
-        public int Contribution { get; set; } = 0;
+        /// <summary>金币（平台积分/分数）</summary>
+        public int Gold { get; set; } = 0;
     }
 
     /// <summary>

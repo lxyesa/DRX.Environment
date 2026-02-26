@@ -1,6 +1,6 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using System.Text.Json.Nodes;
-using Drx.Sdk.Network.V2.Web.Core;
+using Drx.Sdk.Network.Http;
 using Drx.Sdk.Shared;
 using Newtonsoft.Json.Linq;
 
@@ -15,7 +15,7 @@ if (processes.Length > 0)
 }
 
 Logger.Info("正在请求最新版本...");
-await using var client = new Drx.Sdk.Network.V2.Web.DrxHttpClient();
+await using var client = new Drx.Sdk.Network.Http.DrxHttpClient();
 
 var request = new HttpRequest()
 {

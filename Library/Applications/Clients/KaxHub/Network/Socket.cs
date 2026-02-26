@@ -1,4 +1,4 @@
-﻿using Drx.Sdk.Network.V2.Socket.Client;
+using Drx.Sdk.Network.Tcp.Client;
 using Drx.Sdk.Shared;
 using System;
 using System.Collections.Generic;

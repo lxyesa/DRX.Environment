@@ -1,5 +1,5 @@
 using System;
-using Drx.Sdk.Network.V2.Socket;
+using Drx.Sdk.Network.Tcp;
 
 namespace Drx.Sdk.Network.Email
 {

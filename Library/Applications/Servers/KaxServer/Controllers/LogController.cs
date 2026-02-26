@@ -4,7 +4,7 @@ using System.Linq;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Drx.Sdk.Network.Extensions;
-using Drx.Sdk.Network.Socket;
+using Drx.Sdk.Network.Legacy.Socket;
 using Drx.Sdk.Shared.JavaScript;
 
 namespace KaxServer.Controllers

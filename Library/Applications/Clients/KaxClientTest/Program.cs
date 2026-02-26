@@ -1,6 +1,6 @@
-﻿using System.Collections.Specialized;
+using System.Collections.Specialized;
 using System.Text.Json.Nodes;
-using Drx.Sdk.Network.V2.Web.Core;
+using Drx.Sdk.Network.Http;
 using Drx.Sdk.Shared;
 
 var client = new DrxHttpClient();

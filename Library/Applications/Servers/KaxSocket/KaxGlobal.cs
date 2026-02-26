@@ -3,12 +3,13 @@ using System.IO;
 using System.Security.Claims;
 using System.Linq;
 using Microsoft.Data.Sqlite;
-using Drx.Sdk.Network.DataBase.Sqlite.V2;
-using Drx.Sdk.Network.V2.Web.Core;
-using Drx.Sdk.Network.V2.Web.Http;
-using Drx.Sdk.Network.V2.Web.Configs;
+using Drx.Sdk.Network.DataBase;
+using Drx.Sdk.Network.Http;
+using Drx.Sdk.Network.Http.Protocol;
+using Drx.Sdk.Network.Http.Configs;
 using Drx.Sdk.Shared;
 using KaxSocket.Model;
+using Drx.Sdk.Network.Http.Auth;
 
 namespace KaxSocket;
 
@@ -339,13 +340,13 @@ public static class KaxGlobal
     }
 
     /// <summary>
-    /// 公共 API：返回用户的贡献值（来自 UserData.Contribution）
+    /// 公共 API：返回用户的金币（来自 UserData.Gold）
     /// </summary>
-    public static async Task<int> GetUserContributionAsync(string userName)
+    public static async Task<int> GetUserGoldAsync(string userName)
     {
         if (string.IsNullOrWhiteSpace(userName)) return 0;
         var user = (await UserDatabase.SelectWhereAsync("UserName", userName)).FirstOrDefault();
-        return user?.Contribution ?? 0;
+        return user?.Gold ?? 0;
     }
 
     /// <summary>
@@ -421,15 +422,15 @@ public static class KaxGlobal
                 await AddActiveAssetToUser(userName, cdk.AssetId, cdk.ExpiresInSeconds);
             }
 
-            // 如果 CDK 有贡献值，添加到用户的贡献值中（可选功能，暂未实现）
-            if (cdk.ContributionValue > 0)
+            // 如果 CDK 有金币，添加到用户的金币中（可选功能）
+            if (cdk.GoldValue > 0)
             {
-                user.Contribution += cdk.ContributionValue;
+                user.Gold += cdk.GoldValue;
                 await UserDatabase.UpdateAsync(user);
-                Logger.Info($"用户 {userName} 激活CDK后增加贡献值 {cdk.ContributionValue}");
+                Logger.Info($"用户 {userName} 激活CDK后增加金币 {cdk.GoldValue}");
             }
 
-            Logger.Info($"用户 {userName} 成功激活 CDK {cdk.Code}（关联资源: {cdk.AssetId}, 贡献值: {cdk.ContributionValue}）");
+            Logger.Info($"用户 {userName} 成功激活 CDK {cdk.Code}（关联资源: {cdk.AssetId}, 金币: {cdk.GoldValue}）");
             return (0, "成功激活 CDK");
         }
         catch (Exception ex)

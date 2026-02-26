@@ -1,4 +1,4 @@
-using Drx.Sdk.Network.DataBase.Sqlite;
+using Drx.Sdk.Network.DataBase;
 using Drx.Sdk.Shared;
 using KaxServer.Models;
 using KaxServer.Services;
@@ -7,7 +7,7 @@ using System.Security.Cryptography;
 
 public static class StoreManager
 {
-    public static readonly SqliteUnified<StoreItem> StoreItemSqlite;
+    public static readonly SqliteV2<StoreItem> StoreItemSqlite;
 
     // 一次性令牌（内存，10分钟过期，首次验证即销毁）
     private static readonly ConcurrentDictionary<string, (int UserId, int ItemId, DateTime Expire, string OrderId)> PurchaseTokens
@@ -22,7 +22,7 @@ public static class StoreManager
         }
 
         StoreItemSqlite =
-            new SqliteUnified<StoreItem>(Path.Combine(dbDirectory, "store.db"));
+            new SqliteV2<StoreItem>(Path.Combine(dbDirectory, "store.db"));
     }
 
     public static async Task<bool> CreateStoreItemAsync(string title, string description, int ownerId, int itemID)
@@ -52,7 +52,7 @@ public static class StoreManager
 
         try
         {
-            await StoreItemSqlite.PushAsync(storeItem);
+            await StoreItemSqlite.InsertAsync(storeItem);
             return true;
         }
         catch (Exception ex)
@@ -64,13 +64,13 @@ public static class StoreManager
 
     public static async Task<List<StoreItem>> GetAllStoreItemsAsync()
     {
-        var items = await StoreItemSqlite.QueryAllAsync();
+        var items = await StoreItemSqlite.SelectAllAsync();
         return items.ToList();
     }
 
     public static async Task<StoreItem> GetStoreItemByIdAsync(int id)
     {
-        var item = await StoreItemSqlite.QueryByIdAsync(id);
+        var item = await StoreItemSqlite.SelectByIdAsync(id);
         return item;
     }
 
@@ -92,7 +92,7 @@ public static class StoreManager
     {
         try
         {
-            await StoreItemSqlite.DeleteAsync(id);
+            await StoreItemSqlite.DeleteByIdAsync(id);
             return true;
         }
         catch (Exception ex)
@@ -154,7 +154,7 @@ public static class StoreManager
 
     public static async Task<BuyResult> BuyItemAsync(UserData user, int itemId, int priceIndex = 0)
     {
-        var item = await StoreItemSqlite.QueryByIdAsync(itemId);
+        var item = await StoreItemSqlite.SelectByIdAsync(itemId);
         var price = item?.StoreItemPrices[priceIndex].Price * item?.StoreItemPrices[priceIndex].Rebate ?? 0;    // 计算实际价格
         if (item == null)
         {

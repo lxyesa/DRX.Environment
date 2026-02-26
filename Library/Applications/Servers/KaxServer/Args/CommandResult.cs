@@ -1,4 +1,4 @@
-using Drx.Sdk.Network.Socket;
+using Drx.Sdk.Network.Legacy.Socket;
 
 public struct CommandResult
 {

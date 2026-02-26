@@ -1,11 +1,11 @@
 using Web.KaxServer.Services;
 using Drx.Sdk.Network.Session;
 using Web.KaxServer.Models;
-using Drx.Sdk.Network.Socket;
+using Drx.Sdk.Network.Legacy.Socket;
 using System.Xml.Linq;
 using Web.KaxServer.SocketCommands;
 using Drx.Sdk.Network.Security;
-using Drx.Sdk.Network.Socket.Services;
+using Drx.Sdk.Network.Legacy.Socket.Services;
 using Drx.Sdk.Text.Serialization;
 using Microsoft.AspNetCore.OutputCaching;
 

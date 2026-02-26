@@ -1,10 +1,10 @@
 using System.Runtime.Intrinsics.Arm;
 using System.Threading.Tasks;
 using Drx.Sdk.Network.Security;
-using Drx.Sdk.Network.V2.Socket.Client;
-using Drx.Sdk.Network.V2.Socket.Handler;
-using Drx.Sdk.Network.V2.Socket.Packet;
-using Drx.Sdk.Network.V2.Socket.Server;
+using Drx.Sdk.Network.Tcp.Client;
+using Drx.Sdk.Network.Tcp.Handler;
+using Drx.Sdk.Network.Tcp.Packet;
+using Drx.Sdk.Network.Tcp.Server;
 using Drx.Sdk.Shared;
 using Drx.Sdk.Shared.Serialization;
 

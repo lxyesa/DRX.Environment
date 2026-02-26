@@ -1,7 +1,7 @@
 using KaxServer.Services;
 using Microsoft.AspNetCore.Http;
 using Drx.Sdk.Network.Extensions;
-using Drx.Sdk.Network.Socket;
+using Drx.Sdk.Network.Legacy.Socket;
 using System.Runtime.Intrinsics.Arm;
 using Drx.Sdk.Network.Security;
 using Drx.Sdk.Shared.JavaScript;

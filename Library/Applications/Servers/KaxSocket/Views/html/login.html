@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KaxHub - 登录</title>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <link href="/css/global.css" rel="stylesheet">
+    <link href="/css/login.css" rel="stylesheet">
+</head>
+
+<body class="has-global-topbar">
+    <!-- 登录页面：简洁表单，风格与 index.html 保持一致 -->
+    <div class="card" role="main" aria-labelledby="loginTitle">
+        <div class="brand">
+            <div>
+                <h1 id="loginTitle">KaxHub 登录</h1>
+                <p class="lead">使用你的账号加入测试。立刻登录。</p>
+            </div>
+        </div>
+
+        <form id="loginForm" autocomplete="on" novalidate>
+            <div class="field">
+                <label for="username">用户名 / 邮箱</label>
+                <input id="username" name="username" type="text" placeholder="请输入用户名或邮箱" required />
+            </div>
+
+            <div class="field">
+                <label for="password">密码</label>
+                <input id="password" name="password" type="password" placeholder="请输入密码" required />
+            </div>
+            <div id="error" class="hint" aria-live="polite" style="color:rgba(255,100,100,0.9);display:none"></div>
+
+            <button type="submit" class="btn" id="submitBtn">登录</button>
+            <button type="button" id="backBtn" class="btn ghost">返回首页</button>
+
+            <!-- 注册链接（位置调整为底部，视觉弱化） -->
+            <div class="register-cta" style="margin-top:12px; text-align:center;">
+                <a href="register" class="register-link" id="registerBtn">没有账号？立刻注册</a>
+            </div>
+        </form>
+    </div>
+
+    <script src="/js/login.js"></script>
+    <script src="/js/global.js" defer></script>
+    <!-- JS 已提取到外部文件 -->
+</body>
+
+</html>

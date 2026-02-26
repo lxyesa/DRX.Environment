@@ -37,7 +37,7 @@ End-user applications built on the SDK:
 
 ### Code Patterns
 - **Serialization**: Use `DrxSerializationData` for type-safe key-value serialization
-- **Networking**: Use `NetworkClient`/`NetworkServer` from `Drx.Sdk.Network.V2.Socket`
+- **Networking**: Use `NetworkClient`/`NetworkServer` from `Drx.Sdk.Network.Tcp`
 - **JavaScript Integration**: Export .NET classes to JavaScript using the script execution engine
 - **Error Handling**: Comprehensive exception handling with detailed stack traces
 
@@ -89,7 +89,7 @@ dotnet watch run --project DRX.Environment.sln
 - **Methods**: `SetString()`, `SetInt()`, `SetObject()`, `TryGetString()`, `Serialize()`
 
 ### Networking (V2)
-- **Classes**: `NetworkClient`, `NetworkServer` in `Drx.Sdk.Network.V2.Socket`
+- **Classes**: `NetworkClient`, `NetworkServer` in `Drx.Sdk.Network.Tcp`
 - **Protocols**: TCP and UDP support
 - **Events**: `OnConnected`, `OnDataReceived`, `OnError`
 - **Example**: Simple TCP/UDP server-client communication with serialization

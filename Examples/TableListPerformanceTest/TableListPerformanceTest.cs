@@ -3,9 +3,9 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Threading.Tasks;
-using Drx.Sdk.Network.DataBase.Sqlite;
+using Drx.Sdk.Network.Database.Sqlite;
 
-namespace Drx.Sdk.Network.DataBase.Sqlite.V2.Tests;
+namespace Drx.Sdk.Network.Database.Sqlite.V2.Tests;
 
 /// <summary>
 /// TableList 性能测试 - 测试新的子表系统

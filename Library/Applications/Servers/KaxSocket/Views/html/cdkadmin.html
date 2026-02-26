@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KaxHub - CDK 控制台</title>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <link href="/css/global.css" rel="stylesheet">
+    <script src="/js/global.js" defer></script>
+        <link href="/css/cdkadmin.css" rel="stylesheet">
+</head>
+
+<body class="has-global-topbar">
+    <!-- 页面内容默认隐藏，直到完成登录验证 -->
+    <div id="page" class="hidden">
+        <div class="container">
+            <header>
+                <div class="brand">
+                    <div class="logo">◆</div>
+                    <div>
+                        <h1>CDK 管理</h1>
+                        <p class="lead">KaxHub 核心 CDK 管理控制台</p>
+                    </div>
+                </div>
+                <div class="controls">
+                    <button id="homeBtn" class="btn ghost">返回首页</button>
+                    <button id="logoutBtn" class="btn">登出</button>
+                </div>
+            </header>
+
+            <div class="main-content">
+                <!-- 左侧：CDK列表 -->
+                <div class="content-area">
+                    <div class="card">
+                        <div class="card-header">
+                            <h2 class="card-title">CDK 列表</h2>
+                        </div>
+                        
+                        <div class="search-section">
+                            <div class="search-bar" role="search">
+                                <span class="search-icon material-icons">search</span>
+                                <input id="searchInput" class="search-input" type="text" placeholder="搜索 CDK 代码、AssetId..." />
+                                <span id="searchSpinner" class="search-spinner"></span>
+                            </div>
+                            <button id="deleteAllBtn" class="btn danger small" title="删除当前筛选的所有 CDK">删除所有</button>
+                        </div>
+                        
+                        <div id="cdkList" class="cdk-list-container">
+                            <p class="hint" style="text-align: center; padding: 40px 20px;">加载中...</p>
+                        </div>
+                        
+                        <div class="pagination">
+                            <button id="prevPageBtn" class="btn ghost small">上一页</button>
+                            <div id="pageInfo" class="page-info">第 1 页</div>
+                            <button id="nextPageBtn" class="btn ghost small">下一页</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 右侧：操作面板 -->
+                <div class="sidebar">
+                    <!-- 生成 CDK 卡片 -->
+                    <div class="card">
+                        <div class="card-header">
+                            <h2 class="card-title">生成 CDK</h2>
+                        </div>
+                        <form id="generateForm">
+                            <label for="prefix">前缀（可选）</label>
+                            <input type="text" id="prefix" placeholder="例如：CDK-" />
+
+                            <label for="count" style="margin-top: 12px;">生成数量</label>
+                            <input type="text" id="count" placeholder="1 - 1000" value="10" />
+
+                            <label for="length" style="margin-top: 12px;">代码长度</label>
+                            <input type="text" id="length" placeholder="4 - 256" value="8" />
+
+                            <label for="assetId" style="margin-top: 12px;">AssetId（可选）</label>
+                            <input type="text" id="assetId" placeholder="可选，若为空则仅使用金币" />
+
+                            <label for="goldValue" style="margin-top: 12px;">使用“金币”（可选）</label>
+                            <input type="text" id="goldValue" placeholder="0" value="0" />
+
+                            <label for="expiresIn" style="margin-top: 12px;">时效（可选，0表示永久）</label>
+                            <div style="display: flex; gap: 8px; align-items: center;">
+                                <input type="text" id="expiresInValue" placeholder="时间量" value="0" style="flex: 1;" />
+                                <select id="expiresInUnit" style="flex: 0 0 auto; width: 80px;">
+                                    <option value="0">永久</option>
+                                    <option value="3600">小时</option>
+                                    <option value="86400">天</option>
+                                    <option value="604800">周</option>
+                                    <option value="2592000">月</option>
+                                </select>
+                            </div>
+
+                            <label for="cdkDescription" style="margin-top: 12px;">描述（可选）</label>
+                            <input type="text" id="cdkDescription" placeholder="为 CDK 添加描述" />
+
+                            <button type="submit" class="btn" style="width: 100%; margin-top: 16px;">生成</button>
+                            <p class="hint" style="margin-top: 12px; margin-bottom: 0; text-align: center;">生成新的 CDK 代码</p>
+                        </form>
+                    </div>
+
+                    <!-- 操作卡片 -->
+                    <div class="card">
+                        <div class="card-header">
+                            <h2 class="card-title">快速操作</h2>
+                        </div>
+                        
+                        <label>已生成代码</label>
+                        <textarea id="resultArea" readonly style="min-height: 100px;"></textarea>
+                        
+                        <div style="display: flex; gap: 8px; margin-top: 12px;">
+                            <button type="button" id="saveBtn" class="btn" style="flex: 1;">保存</button>
+                            <button type="button" id="downloadBtn" class="btn ghost" style="flex: 1;">下载</button>
+                        </div>
+                        <p class="hint" style="margin-top: 12px; margin-bottom: 0; text-align: center;">管理已生成的 CDK</p>
+                    </div>
+                </div>
+            </div>
+
+
+        </div>
+    </div>
+
+    <!-- 详情面板 -->
+    <div id="cdkDetailBackdrop" aria-hidden="true"></div>
+    <aside id="cdkDetailPanel" aria-hidden="true" role="dialog" aria-labelledby="cdkDetailTitle">
+        <div class="panel-header">
+            <h3 id="cdkDetailTitle" class="panel-title">CDK 详情</h3>
+            <button class="panel-close" id="closeDetailPanelBtn" aria-label="关闭">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            </button>
+        </div>
+        <div id="cdkDetailContent">
+            <p class="hint">加载中...</p>
+        </div>
+    </aside>
+
+    <div id="loading" style="min-height:60vh;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,0.7)"></div>
+
+        <script src="/js/cdkadmin.js"></script>
+</body>
+
+</html>

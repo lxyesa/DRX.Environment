@@ -1,5 +1,5 @@
-using Drx.Sdk.Network.Socket;
-using Drx.Sdk.Network.Socket.Services;
+using Drx.Sdk.Network.Legacy.Socket;
+using Drx.Sdk.Network.Legacy.Socket.Services;
 using Drx.Sdk.Shared;
 using KaxServer.Services;
 

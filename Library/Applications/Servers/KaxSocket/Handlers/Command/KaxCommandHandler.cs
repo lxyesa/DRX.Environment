@@ -1,6 +1,7 @@
 using System;
-using Drx.Sdk.Network.V2.Web.Core;
-using Drx.Sdk.Network.V2.Web.Http;
+using Drx.Sdk.Network.Http;
+using Drx.Sdk.Network.Http.Commands;
+using Drx.Sdk.Network.Http.Protocol;
 using Drx.Sdk.Shared;
 
 namespace KaxSocket.Handlers.Command;

@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KaxHub - 注册</title>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <link href="/css/global.css" rel="stylesheet">
+        <link href="/css/register.css" rel="stylesheet">
+</head>
+
+<body class="has-global-topbar">
+    <div class="card" role="main" aria-labelledby="registerTitle">
+        <div class="brand">
+            <div>
+                <h1 id="registerTitle">创建 KaxHub 账号</h1>
+                <p class="lead">仅需几步即可加入测试，立刻开始体验模组管理。</p>
+            </div>
+        </div>
+
+        <form id="registerForm" autocomplete="on" novalidate>
+            <div class="field">
+                <label for="r-username">用户名</label>
+                <input id="r-username" name="username" type="text" placeholder="请输入用户名（唯一）" required />
+            </div>
+
+            <div class="field">
+                <label for="r-email">邮箱</label>
+                <input id="r-email" name="email" type="text" placeholder="用于找回密码" required />
+            </div>
+
+            <div class="field">
+                <label for="r-password">密码</label>
+                <input id="r-password" name="password" type="password" placeholder="至少 8 位" required />
+            </div>
+
+            <div class="field">
+                <label for="r-password2">确认密码</label>
+                <input id="r-password2" name="password2" type="password" placeholder="再次输入密码" required />
+            </div>
+
+            <div id="error" class="hint" aria-live="polite" style="color:rgba(255,100,100,0.9);display:none"></div>
+
+            <button type="submit" class="btn" id="registerSubmit">创建账号</button>
+            <button type="button" id="backToLogin" class="btn ghost">返回登录</button>
+
+            <div class="register-meta">
+                点击“创建账号”即表示您同意我们的 <a href="#">用户协议</a> 与 <a href="#">隐私政策</a>。
+            </div>
+        </form>
+    </div>
+
+        <script src="/js/register.js"></script>
+    <script src="/js/global.js" defer></script>
+        <!-- JS 已提取到外部文件 -->
+</body>
+
+</html>

@@ -1,0 +1,130 @@
+:root {
+            --topbar-height: 64px;
+            --topbar-border: rgba(255, 255, 255, 0.08);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Poppins', sans-serif;
+            background: #0f0f0f;
+            color: #ffffff;
+            overflow-x: hidden;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        .hero {
+            /* 把 hero 的高度减去头部高度，避免被 fixed header 覆盖 */
+            min-height: calc(100vh - var(--topbar-height));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            position: relative;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .hero-content {
+            max-width: 700px;
+            padding: 0 20px;
+        }
+
+        .hero h1 {
+            font-size: 3.5rem;
+            font-weight: 600;
+            margin-bottom: 1.5rem;
+            letter-spacing: -1px;
+            color: #ffffff;
+        }
+
+        .hero p {
+            font-size: 1.1rem;
+            margin-bottom: 2.5rem;
+            opacity: 0.75;
+            line-height: 1.7;
+            font-weight: 300;
+        }
+
+        .features {
+            padding: 100px 20px;
+            background: #0f0f0f;
+        }
+
+        .features h2 {
+            text-align: center;
+            font-size: 2.2rem;
+            margin-bottom: 4rem;
+            color: #ffffff;
+            font-weight: 600;
+        }
+
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 3rem;
+            max-width: 1100px;
+            margin: 0 auto;
+        }
+
+        .feature-card {
+            padding: 2rem;
+            text-align: center;
+            transition: all 0.25s ease;
+            border-left: 3px solid rgba(255, 255, 255, 0);
+        }
+
+        .feature-card:hover {
+            border-left-color: #ffffff;
+            transform: translateX(5px);
+        }
+
+        .feature-icon {
+            font-size: 2.2rem;
+            margin-bottom: 1rem;
+            display: block;
+            opacity: 0.85;
+        }
+
+        .feature-card h3 {
+            font-size: 1.15rem;
+            margin-bottom: 0.6rem;
+            color: #ffffff;
+            font-weight: 600;
+        }
+
+        .feature-card p {
+            opacity: 0.65;
+            line-height: 1.6;
+            font-size: 0.95rem;
+            font-weight: 300;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        @media (max-width: 768px) {
+            .hero h1 {
+                font-size: 2.2rem;
+            }
+
+            .hero p {
+                font-size: 1rem;
+            }
+
+            .features h2 {
+                font-size: 1.8rem;
+            }
+
+            .topnav {
+                display: none;
+            }
+
+            :root {
+                --topbar-height: 56px;
+            }
+        }

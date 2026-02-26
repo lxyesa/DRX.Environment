@@ -1,6 +1,5 @@
 using Drx.Sdk.Network.DataBase;
 using Drx.Sdk.Network.Email;
-using Drx.Sdk.Network.Sqlite;
 using System;
 using System.Collections.Generic;
 using System.Globalization;

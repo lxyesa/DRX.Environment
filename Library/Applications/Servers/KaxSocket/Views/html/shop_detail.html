@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>商品详情 - KaxHub 商城</title>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <link href="/css/global.css" rel="stylesheet">
+    <script src="/js/global.js"></script>
+        <link href="/css/shop_detail.css" rel="stylesheet">
+</head>
+
+<body class="has-global-topbar">
+    <!-- 面包屑导航 -->
+    <div class="detail-container">
+        <div class="breadcrumb">
+            <a href="/shop">商城</a>
+            <span>/</span>
+            <span class="current" id="breadcrumbCategory">模组</span>
+        </div>
+    </div>
+
+    <!-- 主内容区域 -->
+    <div class="detail-container">
+        <div class="detail-main">
+            <!-- 左侧：产品图片与详细信息 -->
+            <div class="detail-left">
+                <!-- 产品图库 -->
+                <div class="product-gallery">
+                    <div class="product-main-image" id="mainImage">🎮</div>
+                    <div class="product-thumbnails" id="thumbnailContainer">
+                        <div class="product-thumbnail active">🎮</div>
+                    </div>
+                </div>
+
+                <!-- 产品基本信息 -->
+                <div class="product-info-card">
+                    <h1 class="product-name" id="productName">加载中...</h1>
+
+                    <div class="product-rating">
+                        <div class="rating-stars" id="ratingStars">⭐⭐⭐⭐⭐</div>
+                        <span class="rating-text" id="ratingScore">5.0</span>
+                        <span class="rating-count" id="ratingCount">(128 条评价)</span>
+                    </div>
+
+                    <p class="product-description" id="productDescription">
+                        加载中...
+                    </p>
+
+                    <div class="product-meta">
+                        <div class="meta-item">
+                            <span class="meta-label">版本</span>
+                            <span class="meta-value" id="productVersion">1.0.0</span>
+                        </div>
+                        <div class="meta-item">
+                            <span class="meta-label">兼容性</span>
+                            <span class="meta-value" id="productCompatibility">100%</span>
+                        </div>
+                        <div class="meta-item">
+                            <span class="meta-label">下载 / 购买</span>
+                            <span class="meta-value"><span id="productDownloads">1.2K</span> / <span id="productPurchases">0</span></span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 详细规格 -->
+                <div class="specs-section">
+                    <h2 class="section-title">详细规格</h2>
+                    <div class="specs-list" id="specsList">
+                        <div class="spec-item">
+                            <span class="spec-label">文件大小</span>
+                            <span class="spec-value">256 MB</span>
+                        </div>
+                        <div class="spec-item">
+                            <span class="spec-label">上传时间</span>
+                            <span class="spec-value">2026-02-20</span>
+                        </div>
+                        <div class="spec-item">
+                            <span class="spec-label">作者</span>
+                            <span class="spec-value">开发者</span>
+                        </div>
+                        <div class="spec-item">
+                            <span class="spec-label">许可证</span>
+                            <span class="spec-value">MIT</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 右侧：购买面板 -->
+            <div class="detail-right">
+                <div class="purchase-panel">
+                    <!-- 价格 -->
+                    <div class="price-section">
+                        <div class="price-original" id="priceOriginal">💰99.99</div>
+                        <div class="price-current" id="priceCurrent">💰79.99</div>
+                        <span class="price-badge" id="priceBadge">20% OFF</span>
+                    </div>
+
+                    <!-- 购买选项 -->
+                    <div class="purchase-options">
+                        <div class="stock-info" id="stockInfo">
+                            ✓ 库存充足，立即发货
+                        </div>
+                    </div>
+
+                    <!-- 价格套餐卡片 -->
+                    <div class="price-plans-card" id="pricePlansCard">
+                        <div class="plans-title">选择购买套餐</div>
+                        <div class="plans-grid" id="plansGrid">
+                            <!-- 动态生成 -->
+                        </div>
+                    </div>
+
+                    <!-- 操作按钮 -->
+                    <div class="purchase-actions">
+                        <button class="btn-cart" id="purchaseBtn" disabled>
+                            <span class="material-icons">shopping_bag</span>
+                            立即购买
+                        </button>
+
+                        <div class="purchase-options-second">
+                            <button class="btn-secondary" id="favBtn" title="收藏">
+                                <span class="material-icons">favorite_border</span>
+                                <span>收藏</span>
+                            </button>
+                            <button class="btn-secondary" id="shareBtn" title="分享">
+                                <span class="material-icons">share</span>
+                                <span>分享</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 相关产品推荐 -->
+        <div class="related-products">
+            <h2 class="related-title">热门推荐</h2>
+            <div class="related-grid" id="relatedProductsGrid">
+                <div class="related-card" onclick="goToShopDetail(1)">
+                    <div class="related-image">🎮</div>
+                    <div class="related-content">
+                        <div class="related-name">热门模组 1</div>
+                        <div class="related-price">💰59.99</div>
+                    </div>
+                </div>
+                <div class="related-card" onclick="goToShopDetail(2)">
+                    <div class="related-image">🎮</div>
+                    <div class="related-content">
+                        <div class="related-name">热门模组 2</div>
+                        <div class="related-price">💰49.99</div>
+                    </div>
+                </div>
+                <div class="related-card" onclick="goToShopDetail(3)">
+                    <div class="related-image">🎮</div>
+                    <div class="related-content">
+                        <div class="related-name">热门模组 3</div>
+                        <div class="related-price">💰69.99</div>
+                    </div>
+                </div>
+                <div class="related-card" onclick="goToShopDetail(4)">
+                    <div class="related-image">🎮</div>
+                    <div class="related-content">
+                        <div class="related-name">热门模组 4</div>
+                        <div class="related-price">💰79.99</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+        <script src="/js/shop_detail.js"></script>
+</body>
+
+</html>

@@ -1,4 +1,4 @@
-using Drx.Sdk.Network.V2.Web.Asp;
+using Drx.Sdk.Network.Http.Asp;
 using Microsoft.AspNetCore.Builder;
 
 // 添加一个简单的路由，返回一个 cshtml（作为 text/html 响应返回）

@@ -1,10 +1,8 @@
-﻿using Drx.Sdk.Network.DataBase.Sqlite;
-using Drx.Sdk.Network.DataBase.Sqlite.V2;
-using Drx.Sdk.Network.DataBase.Sqlite.V2.Tests;
-using Drx.Sdk.Network.V2.Socket;
-using Drx.Sdk.Network.V2.Web.Core;
-using Drx.Sdk.Network.V2.Web.Http;
-using Drx.Sdk.Network.V2.Web.Models;
+using Drx.Sdk.Network.DataBase;
+using Drx.Sdk.Network.Tcp;
+using Drx.Sdk.Network.Http;
+using Drx.Sdk.Network.Http.Protocol;
+using Drx.Sdk.Network.Http.Models;
 using Drx.Sdk.Shared;
 using Drx.Sdk.Shared.Serialization;
 using Drx.Sdk.Shared.Utility;
@@ -59,19 +57,19 @@ public class Program
             }
 
             server.FileRootPath = $"{AppDomain.CurrentDomain.BaseDirectory}Views";
+            server.NotFoundPagePath = $"{AppDomain.CurrentDomain.BaseDirectory}Views/html/404.html";
 
-            server.AddRoute(HttpMethod.Get, "/", req => new HtmlResultFromFile($"{AppDomain.CurrentDomain.BaseDirectory}Views/index.html"));
-            server.AddRoute(HttpMethod.Get, "/login", req => new HtmlResultFromFile($"{AppDomain.CurrentDomain.BaseDirectory}Views/login.html"));
-            server.AddRoute(HttpMethod.Get, "/register", req => new HtmlResultFromFile($"{AppDomain.CurrentDomain.BaseDirectory}Views/register.html"));
-            server.AddRoute(HttpMethod.Get, "/cdk/admin", req=> new HtmlResultFromFile($"{AppDomain.CurrentDomain.BaseDirectory}Views/cdkadmin.html"));
-            server.AddRoute(HttpMethod.Get, "/asset/admin", req => new HtmlResultFromFile($"{AppDomain.CurrentDomain.BaseDirectory}Views/assetadmin.html"));
-            server.AddRoute(HttpMethod.Get, "/profile", req => new HtmlResultFromFile($"{AppDomain.CurrentDomain.BaseDirectory}Views/profile.html"));
-            server.AddRoute(HttpMethod.Get, "/profile/{uid}", req => new HtmlResultFromFile($"{AppDomain.CurrentDomain.BaseDirectory}Views/profile.html"));
-            server.AddRoute(HttpMethod.Get, "/shop", req => new HtmlResultFromFile($"{AppDomain.CurrentDomain.BaseDirectory}Views/shop.html"));
-            server.AddRoute(HttpMethod.Get, "/asset", req => new HtmlResultFromFile($"{AppDomain.CurrentDomain.BaseDirectory}Views/shop.html"));
-            server.AddRoute(HttpMethod.Get, "/asset/detail/{id}", req => new HtmlResultFromFile($"{AppDomain.CurrentDomain.BaseDirectory}Views/shop_detail.html"));
-            server.AddRoute(HttpMethod.Get, "/user/verify-email", req => new HtmlResultFromFile($"{AppDomain.CurrentDomain.BaseDirectory}Views/verify-email.html"));
-            server.RegisterHandlersFromAssembly(typeof(DLTBModPackerHttp));
+            server.AddRoute(HttpMethod.Get, "/", req => new HtmlResultFromFile($"{AppDomain.CurrentDomain.BaseDirectory}Views/html/index.html"));
+            server.AddRoute(HttpMethod.Get, "/login", req => new HtmlResultFromFile($"{AppDomain.CurrentDomain.BaseDirectory}Views/html/login.html"));
+            server.AddRoute(HttpMethod.Get, "/register", req => new HtmlResultFromFile($"{AppDomain.CurrentDomain.BaseDirectory}Views/html/register.html"));
+            server.AddRoute(HttpMethod.Get, "/cdk/admin", req => new HtmlResultFromFile($"{AppDomain.CurrentDomain.BaseDirectory}Views/html/cdkadmin.html"));
+            server.AddRoute(HttpMethod.Get, "/asset/admin", req => new HtmlResultFromFile($"{AppDomain.CurrentDomain.BaseDirectory}Views/html/assetadmin.html"));
+            server.AddRoute(HttpMethod.Get, "/profile", req => new HtmlResultFromFile($"{AppDomain.CurrentDomain.BaseDirectory}Views/html/profile.html"));
+            server.AddRoute(HttpMethod.Get, "/profile/{uid}", req => new HtmlResultFromFile($"{AppDomain.CurrentDomain.BaseDirectory}Views/html/profile.html"));
+            server.AddRoute(HttpMethod.Get, "/shop", req => new HtmlResultFromFile($"{AppDomain.CurrentDomain.BaseDirectory}Views/html/shop.html"));
+            server.AddRoute(HttpMethod.Get, "/asset", req => new HtmlResultFromFile($"{AppDomain.CurrentDomain.BaseDirectory}Views/html/shop.html"));
+            server.AddRoute(HttpMethod.Get, "/asset/detail/{id}", req => new HtmlResultFromFile($"{AppDomain.CurrentDomain.BaseDirectory}Views/html/shop_detail.html"));
+            server.AddRoute(HttpMethod.Get, "/user/verify-email", req => new HtmlResultFromFile($"{AppDomain.CurrentDomain.BaseDirectory}Views/html/verify-email.html"));
             server.RegisterHandlersFromAssembly(typeof(KaxHttp));
             server.RegisterCommandsFromType(typeof(KaxCommandHandler));
 

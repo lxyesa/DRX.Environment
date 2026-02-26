@@ -1,4 +1,4 @@
-using Drx.Sdk.Network.Socket;
+using Drx.Sdk.Network.Legacy.Socket;
 using Drx.Sdk.Network.Session;
 using Web.KaxServer.Models;
 using Web.KaxServer.Services;
@@ -9,7 +9,7 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using Drx.Sdk.Network.Socket.Services;
+using Drx.Sdk.Network.Legacy.Socket.Services;
 using Drx.Sdk.Network.DataBase;
 using Web.KaxServer.Services.Repositorys;
 

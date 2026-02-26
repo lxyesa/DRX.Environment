@@ -148,7 +148,7 @@ public class CdkModel : IDataBase
     public long UsedAt { get; set; }           // 使用时间戳
     public string UsedBy { get; set; }         // 使用者用户名
     public int AssetId { get; set; }           // 关联资源 ID
-    public int ContributionValue { get; set; } // 贡献值
+    public int GoldValue { get; set; } // 金币
     public long ExpiresInSeconds { get; set; } // 有效期（秒）
 }
 ```
