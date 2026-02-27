@@ -61,21 +61,26 @@
         // 确定要加载的资料端点：若指定了 targetUid 则加载他人资料，否则加载自己的
         const endpoint = targetUid ? `/api/user/profile/${targetUid}` : '/api/user/profile';
         
-        // 检查本地缓存的头像，快速显示
-        const cachedAvatar = localStorage.getItem('userAvatarCache');
-        const cacheTimestamp = localStorage.getItem('userAvatarCacheTime');
-        const now = Date.now();
-        const cacheExpiry = 24 * 60 * 60 * 1000; // 24小时缓存
+        // 检查本地缓存的头像，快速显示（使用 AvatarCache 模块）
+        const cachedAvatar = localStorage.getItem('kax_avatar_versions');
+        const hasCachedVersions = cachedAvatar && cachedAvatar !== '{}';
+        if (hasCachedVersions) {
+          // 有缓存记录，暂不设置 src，等待 AvatarCache 模块处理
+        } else {
+          avatarImg.style.display = 'none';
+          avatarInitials.style.display = 'block';
+        }
 
-        if (cachedAvatar && cacheTimestamp && (now - parseInt(cacheTimestamp)) < cacheExpiry) {
-          if (cachedAvatar !== '/default-avatar.jpg') {
-            avatarImg.src = cachedAvatar;
-            avatarImg.style.display = 'block';
-            avatarInitials.style.display = 'none';
-          } else {
-            avatarImg.style.display = 'none';
-            avatarInitials.style.display = 'block';
-          }
+        // 若访问他人资料，先并行获取当前登录用户自己的 uid，用于后续判断是否为他人资料
+        let selfUid = null;
+        if (targetUid) {
+          try {
+            const selfResp = await fetch('/api/user/profile', { headers: { 'Authorization': 'Bearer ' + token } });
+            if (selfResp.status === 200) {
+              const selfData = await selfResp.json();
+              selfUid = (typeof selfData.id !== 'undefined') ? selfData.id : null;
+            }
+          } catch (e) { /* 忽略，容错处理 */ }
         }
 
         const resp = await fetch(endpoint, { headers: { 'Authorization': 'Bearer ' + token } });
@@ -95,22 +100,27 @@
           const banReason = data.banReason || '';
           const banExpiresAt = data.banExpiresAt || 0;
 
-          // 先处理后端返回的持久化头像（若存在）
+          // 使用 AvatarCache 模块获取头像（缓存命中或从服务器拉取）
           const serverAvatar = data.avatarUrl || '';
-          if (serverAvatar) {
+          if (serverAvatar && window.AvatarCache) {
+            try {
+              const resolvedUrl = await AvatarCache.getAvatar(serverAvatar);
+              avatarImg.src = resolvedUrl;
+              avatarImg.style.display = 'block';
+              avatarInitials.style.display = 'none';
+            } catch (e) {
+              avatarImg.src = serverAvatar;
+              avatarImg.style.display = 'block';
+              avatarInitials.style.display = 'none';
+            }
+          } else if (serverAvatar) {
             avatarImg.src = serverAvatar;
             avatarImg.style.display = 'block';
             avatarInitials.style.display = 'none';
-            // 缓存头像URL
-            localStorage.setItem('userAvatarCache', serverAvatar);
-            localStorage.setItem('userAvatarCacheTime', Date.now().toString());
           }
           else {
             avatarImg.style.display = 'none';
             avatarInitials.style.display = 'block';
-            // 缓存默认头像标记
-            localStorage.setItem('userAvatarCache', '/default-avatar.jpg');
-            localStorage.setItem('userAvatarCacheTime', Date.now().toString());
           }
 
           // 填充界面和表单
@@ -150,13 +160,14 @@
 
           originalProfile = { name: displayName, handle: user, email: email, role: roleText, bio: bio, signature: data.signature || '', avatarSrc: serverAvatar || (avatarImg.src || '') };
 
-          // 设置当前登录用户的 uid
+          // 设置当前登录用户的 uid（若无 targetUid，则 currentUserUid 就是自己；否则使用提前获取的 selfUid）
           if (uid) {
-            currentUserUid = uid;
+            currentUserUid = targetUid ? selfUid : uid;
           }
 
-          // 判断是否查看他人资料：若指定了 targetUid 且与当前用户 uid 不同，则为查看他人资料
-          if (targetUid && currentUserUid && targetUid !== String(currentUserUid)) {
+          // 判断是否查看他人资料：有 targetUid 且 targetUid 与自己的 uid 不同
+          const resolvedSelfUid = targetUid ? selfUid : uid;
+          if (targetUid && resolvedSelfUid && targetUid !== String(resolvedSelfUid)) {
             isViewingOtherProfile = true;
           } else {
             isViewingOtherProfile = false;
@@ -192,6 +203,24 @@
       const avatarElement = document.querySelector('.avatar');
       const avatarOverlay = document.querySelector('.avatar-overlay');
       const avatarPlus = document.querySelector('.avatar-plus');
+      
+      // 获取所有右侧卡片（基本信息、安全与偏好、资产管理）
+      const profileSections = document.querySelector('.profile-sections');
+      const collapsibleCards = profileSections ? profileSections.querySelectorAll('collapsible-card') : [];
+      let basicInfoCard = null;
+      let assetsCard = null;
+      let passwordCard = null;
+      
+      for (const card of collapsibleCards) {
+        const title = card.getAttribute('title');
+        if (title === '基本信息') {
+          basicInfoCard = card;
+        } else if (title === '资产管理') {
+          assetsCard = card;
+        } else if (title === '安全与偏好') {
+          passwordCard = card;
+        }
+      }
 
       if (isViewingOtherProfile) {
         // 隐藏编辑表单
@@ -208,6 +237,15 @@
         }
         if (avatarOverlay) avatarOverlay.style.display = 'none';
         if (avatarPlus) avatarPlus.style.display = 'none';
+        
+        // 隐藏资产管理卡片
+        if (assetsCard) assetsCard.style.display = 'none';
+        
+        // 隐藏密码修改卡片
+        if (passwordCard) passwordCard.style.display = 'none';
+        
+        // 隐藏基本信息卡片
+        if (basicInfoCard) basicInfoCard.style.display = 'none';
       } else {
         // 显示编辑表单
         if (profileForm) profileForm.style.display = 'block';
@@ -223,6 +261,15 @@
         }
         if (avatarOverlay) avatarOverlay.style.display = 'flex';
         if (avatarPlus) avatarPlus.style.display = 'block';
+        
+        // 显示资产管理卡片
+        if (assetsCard) assetsCard.style.display = 'block';
+        
+        // 显示密码修改卡片
+        if (passwordCard) passwordCard.style.display = 'block';
+        
+        // 显示基本信息卡片
+        if (basicInfoCard) basicInfoCard.style.display = 'block';
       }
     }
 
@@ -256,13 +303,21 @@
           const upJson = await upResp.json().catch(() => ({}));
           if (upResp.status === 200 || upResp.status === 201) {
             if (upJson.url) {
-              avatarImg.src = upJson.url;
               avatarImg.style.display = 'block';
               avatarInitials.style.display = 'none';
               originalProfile.avatarSrc = upJson.url;
-              // 更新头像缓存
-              localStorage.setItem('userAvatarCache', upJson.url);
-              localStorage.setItem('userAvatarCacheTime', Date.now().toString());
+              // 使用 AvatarCache 更新缓存（传入原始文件避免重复拉取）
+              if (window.AvatarCache) {
+                try {
+                  await AvatarCache.updateCache(upJson.url, file);
+                  var resolvedUrl = await AvatarCache.getAvatar(upJson.url);
+                  avatarImg.src = resolvedUrl;
+                } catch (e) {
+                  avatarImg.src = upJson.url;
+                }
+              } else {
+                avatarImg.src = upJson.url;
+              }
             }
           } else if (upResp.status === 401) {
             localStorage.removeItem('kax_login_token'); location.href = '/login'; return;

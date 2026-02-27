@@ -29,6 +29,17 @@
 
                 <div class="separator"></div>
 
+                <!-- 管理员专属区域（由 JS 根据 isAdmin 控制可见性） -->
+                <div id="adminMenuSection" class="user-menu-section" style="display:none;" aria-hidden="true">
+                    <div class="user-menu-section-label">控制台</div>
+                    <a role="menuitem" tabindex="0" class="user-menu-item" href="/asset/admin"><span class="material-icons"
+                            aria-hidden="true">inventory_2</span> 资源控制台</a>
+                    <a role="menuitem" tabindex="0" class="user-menu-item" href="/cdk/admin"><span class="material-icons"
+                            aria-hidden="true">vpn_key</span> CDK 控制台</a>
+                </div>
+
+                <div id="adminMenuSeparator" class="separator" style="display:none;"></div>
+
                 <div class="user-menu-section">
                     <a role="menuitem" tabindex="0" class="user-menu-item" href="/profile"><span class="material-icons"
                             aria-hidden="true">person</span> 简介</a>
@@ -191,6 +202,16 @@
              background: rgba(255, 255, 255, 0.03);
              margin: 6px 0;
              border-radius: 2px;
+         }
+
+         /* 管理员区域分组标签 */
+         .user-menu-section-label {
+             font-size: 0.72rem;
+             font-weight: 600;
+             letter-spacing: 0.07em;
+             text-transform: uppercase;
+             color: rgba(255, 255, 255, 0.3);
+             padding: 4px 10px 2px;
          }
 
          #signOutBtn {

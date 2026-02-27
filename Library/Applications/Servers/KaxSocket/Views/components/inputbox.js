@@ -7,25 +7,75 @@
       :host{display:block;} 
       .field{ border-radius:4px; border:1px solid rgba(255,255,255,0.06); padding:10px 12px; background: rgba(255,255,255,0.01); box-sizing:border-box; }
       .label{ display:block; font-size:0.82rem; color:rgba(255,255,255,0.72); margin-bottom:6px; }
-      /* 分割线：放在 label 下面以增强视觉分区 */
       .label-divider{ height:1px; background:rgba(255,255,255,0.03); margin:6px 0 8px; border-radius:1px; }
-      input, textarea{ width:100%; border:none; background:transparent; color:var(--muted-strong, rgba(255,255,255,0.92)); font-size:0.95rem; padding:6px 0; outline:none; font-family:inherit; }
+      .input-row{ display:flex; align-items:flex-end; gap:8px; }
+      input, textarea{ flex:1; min-width:0; border:none; background:transparent; color:var(--muted-strong, rgba(255,255,255,0.92)); font-size:0.95rem; padding:6px 0; outline:none; font-family:inherit; }
       input:disabled, textarea:disabled{ opacity:0.6; }
       textarea{ resize:vertical; }
       :host(:focus-within) .field{ border-color: rgba(59,130,246,0.95); box-shadow: 0 0 0 4px rgba(59,130,246,0.04); }
-      /* Support compact variant when host sets compact attribute */
       :host([compact]) .field{ padding:8px 10px; }
+
+      /* size 档位：large */
+      :host([size="large"]) .field{ padding:14px 16px; }
+      :host([size="large"]) .label{ font-size:0.92rem; margin-bottom:8px; }
+      :host([size="large"]) input,
+      :host([size="large"]) textarea{ font-size:1.08rem; padding:8px 0; }
+
+      /* size 档位：small */
+      :host([size="small"]) .field{ padding:6px 8px; }
+      :host([size="small"]) .label{ font-size:0.75rem; margin-bottom:4px; }
+      :host([size="small"]) .label-divider{ margin:4px 0 5px; }
+      :host([size="small"]) input,
+      :host([size="small"]) textarea{ font-size:0.85rem; padding:4px 0; }
+
+      /* size 档位：headerless — 隐藏 label 和分割线 */
+      :host([size="headerless"]) .label,
+      :host([size="headerless"]) .label-divider{ display:none; }
+      :host([size="headerless"]) .field{ padding:6px 10px; }
+
+      /* 操作按钮槽位：默认隐藏，show-action 时显示 */
+      .action-slot{ flex-shrink:0; display:none; }
+      :host([show-action]) .action-slot{ display:flex; align-items:center; }
+
+      /* 强制槽位内按钮样式：由组件统一控制，外部不可覆盖 */
+      ::slotted(*){
+        all: unset !important;
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        padding: 4px 10px !important;
+        border-radius: 3px !important;
+        background: rgba(255,255,255,0.06) !important;
+        color: rgba(255,255,255,0.7) !important;
+        font-size: 0.82rem !important;
+        font-weight: 600 !important;
+        cursor: pointer !important;
+        white-space: nowrap !important;
+        transition: background 0.14s ease, color 0.14s ease !important;
+        line-height: 1.4 !important;
+        font-family: inherit !important;
+        box-sizing: border-box !important;
+      }
+      ::slotted(*:hover){
+        background: rgba(59,130,246,0.15) !important;
+        color: #60a5fa !important;
+      }
     </style>
     <div class="field">
       <label class="label" part="label"></label>
       <div class="label-divider" part="divider" aria-hidden="true"></div>
-      <input part="input" />
-      <textarea part="textarea" style="display:none;"></textarea>
+      <div class="input-row">
+        <input part="input" />
+        <textarea part="textarea" style="display:none;"></textarea>
+        <div class="action-slot" part="action">
+          <slot name="action"></slot>
+        </div>
+      </div>
     </div>
     `;
 
     class InputBox extends HTMLElement {
-        static get observedAttributes(){ return ['label','placeholder','type','value','readonly','disabled','minlength','name','autocomplete','textarea','rows']; }
+        static get observedAttributes(){ return ['label','placeholder','type','value','readonly','disabled','minlength','name','autocomplete','textarea','rows','show-action','size']; }
         constructor(){
             super();
             this._shadow = this.attachShadow({mode:'open'});
@@ -146,6 +196,14 @@
                 case 'textarea':
                     this._isTextarea = val !== null;
                     this._setupElement();
+                    break;
+                case 'show-action':
+                    // 'show-action' 属性只需要反映到 host 上即可
+                    // CSS 中已经通过 :host([show-action]) 来控制显示/隐藏
+                    break;
+                case 'size':
+                    // size 属性通过 CSS :host([size="..."]) 选择器控制样式
+                    // 合法值：large / small / headerless，不设置时为默认尺寸
                     break;
             }
         }

@@ -1,130 +1,182 @@
+/* === index.css — 首页专属样式 ===
+   依赖 global.css 提供的基础变量、.btn、.cta-button、topbar 等通用样式。
+*/
+
 :root {
-            --topbar-height: 64px;
-            --topbar-border: rgba(255, 255, 255, 0.08);
-        }
+    --accent: #3b82f6;
+    --muted: rgba(255, 255, 255, 0.65);
+    --card-border: rgba(255, 255, 255, 0.06);
+}
 
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+/* ------- Hero ------- */
+.hero {
+    min-height: calc(100vh - var(--topbar-height));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    position: relative;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    background-image:
+        radial-gradient(ellipse 80% 40% at 50% -10%, rgba(59, 130, 246, 0.06), transparent);
+}
 
-        body {
-            font-family: 'Poppins', sans-serif;
-            background: #0f0f0f;
-            color: #ffffff;
-            overflow-x: hidden;
-            -webkit-font-smoothing: antialiased;
-        }
+.hero-content {
+    max-width: 680px;
+    padding: 0 24px;
+}
 
-        .hero {
-            /* 把 hero 的高度减去头部高度，避免被 fixed header 覆盖 */
-            min-height: calc(100vh - var(--topbar-height));
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            text-align: center;
-            position: relative;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-        }
+/* 开发中标签 — 与其他页面 ".meta" 风格对齐 */
+.hero-badge {
+    display: inline-block;
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0.45);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 3px;
+    padding: 3px 10px;
+    margin-bottom: 20px;
+}
 
-        .hero-content {
-            max-width: 700px;
-            padding: 0 20px;
-        }
+.hero h1 {
+    font-size: 3.5rem;
+    font-weight: 700;
+    margin-bottom: 1.25rem;
+    letter-spacing: -1.5px;
+    color: #ffffff;
+    line-height: 1.1;
+}
 
-        .hero h1 {
-            font-size: 3.5rem;
-            font-weight: 600;
-            margin-bottom: 1.5rem;
-            letter-spacing: -1px;
-            color: #ffffff;
-        }
+.hero p {
+    font-size: 1.05rem;
+    margin-bottom: 2.5rem;
+    color: var(--muted);
+    line-height: 1.75;
+    font-weight: 300;
+}
 
-        .hero p {
-            font-size: 1.1rem;
-            margin-bottom: 2.5rem;
-            opacity: 0.75;
-            line-height: 1.7;
-            font-weight: 300;
-        }
+/* Hero 按钮组 */
+.hero-actions {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+    flex-wrap: wrap;
+    align-items: center;
+}
 
-        .features {
-            padding: 100px 20px;
-            background: #0f0f0f;
-        }
+/* ghost 变体（用于 cta-button） */
+.cta-button.ghost {
+    background: transparent;
+    color: rgba(255, 255, 255, 0.75);
+    border-color: rgba(255, 255, 255, 0.15);
+}
 
-        .features h2 {
-            text-align: center;
-            font-size: 2.2rem;
-            margin-bottom: 4rem;
-            color: #ffffff;
-            font-weight: 600;
-        }
+.cta-button.ghost:hover {
+    background: rgba(255, 255, 255, 0.04);
+    color: #ffffff;
+    border-color: rgba(255, 255, 255, 0.3);
+}
 
-        .features-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-            gap: 3rem;
-            max-width: 1100px;
-            margin: 0 auto;
-        }
+/* ------- Features ------- */
+.features {
+    padding: 100px 24px;
+}
 
-        .feature-card {
-            padding: 2rem;
-            text-align: center;
-            transition: all 0.25s ease;
-            border-left: 3px solid rgba(255, 255, 255, 0);
-        }
+.features-header {
+    text-align: center;
+    margin-bottom: 60px;
+}
 
-        .feature-card:hover {
-            border-left-color: #ffffff;
-            transform: translateX(5px);
-        }
+.features-header h2 {
+    font-size: 2rem;
+    font-weight: 700;
+    color: #ffffff;
+    letter-spacing: -0.5px;
+    margin-bottom: 10px;
+}
 
-        .feature-icon {
-            font-size: 2.2rem;
-            margin-bottom: 1rem;
-            display: block;
-            opacity: 0.85;
-        }
+.features-sub {
+    font-size: 0.95rem;
+    color: var(--muted);
+    font-weight: 300;
+}
 
-        .feature-card h3 {
-            font-size: 1.15rem;
-            margin-bottom: 0.6rem;
-            color: #ffffff;
-            font-weight: 600;
-        }
+.features-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 2px;
+    max-width: 1100px;
+    margin: 0 auto;
+    border: 1px solid var(--card-border);
+    border-radius: 8px;
+    overflow: hidden;
+}
 
-        .feature-card p {
-            opacity: 0.65;
-            line-height: 1.6;
-            font-size: 0.95rem;
-            font-weight: 300;
-        }
+.feature-card {
+    padding: 2rem 1.75rem;
+    border: 1px solid var(--card-border);
+    margin: -1px;
+    transition: background 0.2s ease;
+    position: relative;
+}
 
-        .hidden {
-            display: none;
-        }
+.feature-card:hover {
+    background: rgba(255, 255, 255, 0.02);
+}
 
-        @media (max-width: 768px) {
-            .hero h1 {
-                font-size: 2.2rem;
-            }
+/* "即将推出"卡片样式弱化 */
+.feature-card--upcoming .feature-icon,
+.feature-card--upcoming h3,
+.feature-card--upcoming p {
+    opacity: 0.45;
+}
 
-            .hero p {
-                font-size: 1rem;
-            }
+.feature-icon {
+    font-size: 1.5rem;
+    margin-bottom: 14px;
+    display: block;
+    color: rgba(255, 255, 255, 0.8);
+}
 
-            .features h2 {
-                font-size: 1.8rem;
-            }
+.feature-card h3 {
+    font-size: 1rem;
+    margin-bottom: 8px;
+    color: #ffffff;
+    font-weight: 600;
+}
 
-            .topnav {
-                display: none;
-            }
+.feature-card p {
+    color: var(--muted);
+    line-height: 1.65;
+    font-size: 0.9rem;
+    font-weight: 300;
+    margin: 0;
+}
 
-            :root {
-                --topbar-height: 56px;
-            }
-        }
+/* ------- 通用隐藏 ------- */
+.hidden {
+    display: none;
+}
+
+/* ------- 响应式 ------- */
+@media (max-width: 768px) {
+    .hero h1 {
+        font-size: 2.2rem;
+        letter-spacing: -1px;
+    }
+
+    .hero p {
+        font-size: 0.98rem;
+    }
+
+    .features-header h2 {
+        font-size: 1.6rem;
+    }
+
+    .features-grid {
+        grid-template-columns: 1fr;
+        gap: 0;
+    }
+}

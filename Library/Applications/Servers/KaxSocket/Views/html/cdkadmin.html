@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="zh-CN">
 
 <head>
@@ -9,7 +9,8 @@
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
     <link href="/css/global.css" rel="stylesheet">
     <script src="/js/global.js" defer></script>
-        <link href="/css/cdkadmin.css" rel="stylesheet">
+    <script src="/components/collapsible-card.js" defer></script>
+    <link href="/css/cdkadmin.css" rel="stylesheet">
 </head>
 
 <body class="has-global-topbar">
@@ -18,7 +19,7 @@
         <div class="container">
             <header>
                 <div class="brand">
-                    <div class="logo">◆</div>
+                    <div class="logo"></div>
                     <div>
                         <h1>CDK 管理</h1>
                         <p class="lead">KaxHub 核心 CDK 管理控制台</p>
@@ -37,7 +38,7 @@
                         <div class="card-header">
                             <h2 class="card-title">CDK 列表</h2>
                         </div>
-                        
+
                         <div class="search-section">
                             <div class="search-bar" role="search">
                                 <span class="search-icon material-icons">search</span>
@@ -46,11 +47,11 @@
                             </div>
                             <button id="deleteAllBtn" class="btn danger small" title="删除当前筛选的所有 CDK">删除所有</button>
                         </div>
-                        
+
                         <div id="cdkList" class="cdk-list-container">
                             <p class="hint" style="text-align: center; padding: 40px 20px;">加载中...</p>
                         </div>
-                        
+
                         <div class="pagination">
                             <button id="prevPageBtn" class="btn ghost small">上一页</button>
                             <div id="pageInfo" class="page-info">第 1 页</div>
@@ -61,11 +62,10 @@
 
                 <!-- 右侧：操作面板 -->
                 <div class="sidebar">
+
                     <!-- 生成 CDK 卡片 -->
-                    <div class="card">
-                        <div class="card-header">
-                            <h2 class="card-title">生成 CDK</h2>
-                        </div>
+                    <collapsible-card title="生成 CDK" subtitle="配置参数并批量生成新的 CDK 代码" open>
+                        <span slot="icon" class="material-icons">add_card</span>
                         <form id="generateForm">
                             <label for="prefix">前缀（可选）</label>
                             <input type="text" id="prefix" placeholder="例如：CDK-" />
@@ -79,13 +79,13 @@
                             <label for="assetId" style="margin-top: 12px;">AssetId（可选）</label>
                             <input type="text" id="assetId" placeholder="可选，若为空则仅使用金币" />
 
-                            <label for="goldValue" style="margin-top: 12px;">使用“金币”（可选）</label>
+                            <label for="goldValue" style="margin-top: 12px;">金币（可选）</label>
                             <input type="text" id="goldValue" placeholder="0" value="0" />
 
-                            <label for="expiresIn" style="margin-top: 12px;">时效（可选，0表示永久）</label>
+                            <label style="margin-top: 12px; display: block; font-size: 14px; font-weight: 500; color: var(--text-color);">时效（可选，0表示永久）</label>
                             <div style="display: flex; gap: 8px; align-items: center;">
-                                <input type="text" id="expiresInValue" placeholder="时间量" value="0" style="flex: 1;" />
-                                <select id="expiresInUnit" style="flex: 0 0 auto; width: 80px;">
+                                <input type="text" id="expiresInValue" title="时效数值" placeholder="时间量" value="0" style="flex: 1;" />
+                                <select id="expiresInUnit" title="时效单位" style="flex: 0 0 auto; width: 80px;">
                                     <option value="0">永久</option>
                                     <option value="3600">小时</option>
                                     <option value="86400">天</option>
@@ -98,25 +98,22 @@
                             <input type="text" id="cdkDescription" placeholder="为 CDK 添加描述" />
 
                             <button type="submit" class="btn" style="width: 100%; margin-top: 16px;">生成</button>
-                            <p class="hint" style="margin-top: 12px; margin-bottom: 0; text-align: center;">生成新的 CDK 代码</p>
                         </form>
-                    </div>
+                    </collapsible-card>
 
-                    <!-- 操作卡片 -->
-                    <div class="card">
-                        <div class="card-header">
-                            <h2 class="card-title">快速操作</h2>
-                        </div>
-                        
-                        <label>已生成代码</label>
-                        <textarea id="resultArea" readonly style="min-height: 100px;"></textarea>
-                        
+                    <!-- 快速操作卡片 -->
+                    <collapsible-card title="快速操作" subtitle="查看、保存或下载已生成的 CDK 代码">
+                        <span slot="icon" class="material-icons">bolt</span>
+
+                        <label for="resultArea">已生成代码</label>
+                        <textarea id="resultArea" readonly style="min-height: 100px; margin-top: 6px;"></textarea>
+
                         <div style="display: flex; gap: 8px; margin-top: 12px;">
                             <button type="button" id="saveBtn" class="btn" style="flex: 1;">保存</button>
                             <button type="button" id="downloadBtn" class="btn ghost" style="flex: 1;">下载</button>
                         </div>
-                        <p class="hint" style="margin-top: 12px; margin-bottom: 0; text-align: center;">管理已生成的 CDK</p>
-                    </div>
+                    </collapsible-card>
+
                 </div>
             </div>
 
@@ -140,7 +137,7 @@
 
     <div id="loading" style="min-height:60vh;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,0.7)"></div>
 
-        <script src="/js/cdkadmin.js"></script>
+    <script src="/js/cdkadmin.js"></script>
 </body>
 
 </html>

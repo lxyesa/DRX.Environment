@@ -13,30 +13,6 @@ namespace KaxSocket
     }
 
     /// <summary>
-    /// Mod 元数据（基础信息）
-    /// </summary>
-    public class ModInfo : DataModel
-    {
-        /// <summary>Mod 唯一标识</summary>
-        public string ModId { get; set; }
-
-        /// <summary>Mod 名称</summary>
-        public string ModName { get; set; }
-
-        /// <summary>Mod 版本</summary>
-        public string ModVersion { get; set; }
-
-        /// <summary>作者</summary>
-        public string ModAuthor { get; set; }
-
-        /// <summary>描述</summary>
-        public string ModDescription { get; set; }
-
-        /// <summary>最后更新时间（Unix 毫秒）</summary>
-        public long LastUpdatedAt { get; set; }
-    }
-
-    /// <summary>
     /// 用户数据模型，包含用户基本信息与若干子表引用
     /// </summary>
     public class UserData : DataModel

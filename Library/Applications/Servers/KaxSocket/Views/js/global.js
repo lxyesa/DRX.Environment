@@ -3,6 +3,13 @@
 (function () {
     'use strict';
 
+    // 动态加载头像缓存模块（若尚未加载）
+    if (!window.AvatarCache) {
+        var s = document.createElement('script');
+        s.src = '/js/avatarCache.js';
+        document.head.appendChild(s);
+    }
+
     // 尽早记录页面加载开始时间（供骨架屏计时使用）
     if (!window._pageLoadStartTime) window._pageLoadStartTime = Date.now();
 
@@ -313,7 +320,15 @@
 
                             try {
                                 var j = await resp.json();
-                                if (j && j.isAdmin) { var adminDiv = document.getElementById('adminLinks'); if (adminDiv) adminDiv.classList.remove('hidden'); }
+                                if (j && j.isAdmin) {
+                                    // 显示首页管理员入口（兼容旧逻辑）
+                                    var adminDiv = document.getElementById('adminLinks'); if (adminDiv) adminDiv.classList.remove('hidden');
+                                    // 显示 topbar 用户菜单中的管理员区域
+                                    var adminSection = document.getElementById('adminMenuSection');
+                                    var adminSep = document.getElementById('adminMenuSeparator');
+                                    if (adminSection) { adminSection.style.display = ''; adminSection.setAttribute('aria-hidden', 'false'); }
+                                    if (adminSep) { adminSep.style.display = ''; }
+                                }
 
                                 try {
                                     var header = document.getElementById('headerAuth');
@@ -321,13 +336,28 @@
                                         var seed = (j && j.user) ? encodeURIComponent(j.user) : (Math.random().toString(36).slice(2, 8));
                                         // 优先使用后端返回的持久化头像（若无则回退到 pravatar 占位图）
                                         var avatarUrl = (j && j.avatarUrl) ? j.avatarUrl : ('https://i.pravatar.cc/40?u=' + seed);
-                                        header.innerHTML = '<img class="avatar-image" role="button" tabindex="0" aria-haspopup="true" aria-expanded="false" src="' + avatarUrl + '" alt="avatar" title="' + (j && j.user ? j.user : '已登录') + '">';
+                                        var userName = (j && j.user ? j.user : '已登录');
+                                        
+                                        // 先使用原始 URL 设置头像（立即显示）
+                                        header.innerHTML = '<img class="avatar-image" role="button" tabindex="0" aria-haspopup="true" aria-expanded="false" src="' + avatarUrl + '" alt="avatar" title="' + userName + '">';
+                                        
+                                        // 通过 AvatarCache 获取缓存版本（异步）
+                                        if (window.AvatarCache && j && j.avatarUrl) {
+                                            AvatarCache.getAvatar(avatarUrl).then(function(cachedUrl) {
+                                                var avatarImg = header.querySelector('.avatar-image');
+                                                if (avatarImg) avatarImg.src = cachedUrl;
+                                                var uma = document.querySelector('#userMenuAvatar');
+                                                if (uma) uma.src = cachedUrl;
+                                            }).catch(function(e) {
+                                                console.warn('[Global] AvatarCache 获取失败:', e);
+                                            });
+                                        }
 
                                         try {
                                             var userMenu = document.getElementById('userMenu');
                                             if (userMenu) {
                                                 var uma = userMenu.querySelector('#userMenuAvatar'); if (uma) uma.src = avatarUrl;
-                                                var unameEl = userMenu.querySelector('#userMenuName'); if (unameEl) unameEl.textContent = (j && j.user) ? j.user : '已登录';
+                                                var unameEl = userMenu.querySelector('#userMenuName'); if (unameEl) unameEl.textContent = userName;
                                                 var ubioEl = userMenu.querySelector('#userMenuBio'); if (ubioEl) ubioEl.textContent = (j && j.bio) ? j.bio : '敲敲……';
                                             }
                                         } catch (_) { }

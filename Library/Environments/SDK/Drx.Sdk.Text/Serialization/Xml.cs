@@ -19,10 +19,12 @@ public class Xml
 {
     public static string Serialize<T>(T obj)
     {
+        if (obj == null) return string.Empty;
         StringBuilder sb = new StringBuilder();
         using (StringWriter sw = new StringWriter(sb))
         using (XmlWriter writer = XmlWriter.Create(sw, new XmlWriterSettings { Indent = true }))
         {
+            if (writer == null) throw new InvalidOperationException("无法创建 XmlWriter 实例");
             SerializeValue(writer, obj, CleanName(obj.GetType().Name));
         }
         return sb.ToString();
@@ -91,14 +93,14 @@ public class Xml
             if (!isPublic && !isProtected)
                 continue;
 
-            object value = property.GetValue(obj);
-            SerializeValue(writer, value, property.Name);
+            object? value = property.GetValue(obj);
+            SerializeValue(writer, value!, property.Name);
         }
 
         writer.WriteEndElement();
     }
 
-    private static void SerializeValue(XmlWriter writer, object value, string elementName)
+    private static void SerializeValue(XmlWriter writer, object? value, string elementName)
     {
         if (value == null)
         {
@@ -125,7 +127,7 @@ public class Xml
             foreach (var item in enumerable)
             {
                 string itemName = item != null ? CleanName(item.GetType().Name) : "Item";
-                SerializeValue(writer, item, itemName);
+                SerializeValue(writer, item!, itemName);
             }
             
             writer.WriteEndElement();
@@ -137,7 +139,7 @@ public class Xml
         }
     }
 
-    private static object DeserializeObject(XmlReader reader, Type type)
+    private static object? DeserializeObject(XmlReader reader, Type type)
     {
         // Skip until we find an element
         while (reader.NodeType != XmlNodeType.Element && reader.Read()) { }
@@ -152,7 +154,7 @@ public class Xml
             return null;
         }
 
-        object instance = Activator.CreateInstance(type);
+        object instance = Activator.CreateInstance(type) ?? throw new InvalidOperationException($"无法创建类型 {type} 的实例");
         Dictionary<string, PropertyInfo> properties = type.GetProperties(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)
                                                         .Where(p => p.GetCustomAttribute<NonSerzAttribute>() == null)
                                                         .ToDictionary(p => p.Name);
@@ -193,7 +195,7 @@ public class Xml
         return instance;
     }
 
-    private static object DeserializeValue(XmlReader reader, Type type)
+    private static object? DeserializeValue(XmlReader reader, Type type)
     {
         // Check for null
         if (reader.GetAttribute("null") == "true")
@@ -232,11 +234,11 @@ public class Xml
                 reader.Read(); // Consume the empty element
                 return Activator.CreateInstance(type); // Return an empty collection
             }
-            
+
             if (type.IsArray)
             {
-                List<object> items = new List<object>();
-                Type elementType = type.GetElementType();
+                List<object?> items = new List<object?>();
+                Type elementType = type.GetElementType() ?? typeof(object);
                 
                 reader.ReadStartElement();
                 while (reader.NodeType != XmlNodeType.EndElement)
@@ -261,7 +263,7 @@ public class Xml
             }
             else // It's a list or other collection
             {
-                IList list = (IList)Activator.CreateInstance(type);
+                IList list = (IList)(Activator.CreateInstance(type) ?? throw new InvalidOperationException($"无法创建类型 {type} 的实例"));
                 Type elementType = type.GetGenericArguments()[0];
 
                 reader.ReadStartElement();
@@ -269,17 +271,7 @@ public class Xml
                 {
                     if (reader.NodeType == XmlNodeType.Element)
                     {
-                        // Check if the element type is a primitive or string, which requires special handling
-                        if (elementType.IsPrimitive || elementType == typeof(string) || elementType == typeof(DateTime) || elementType == typeof(decimal))
-                        {
-                            // We expect the element name to be the type name, e.g., <string>...</string>
-                            list.Add(DeserializeValue(reader, elementType));
-                        }
-                        else
-                        {
-                            // For complex types, the element name is the property name, so we deserialize it as an object
-                             list.Add(DeserializeValue(reader, elementType));
-                        }
+                        list.Add(DeserializeValue(reader, elementType));
                     }
                     else
                     {

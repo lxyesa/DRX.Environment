@@ -9,7 +9,8 @@
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
     <link href="/css/global.css" rel="stylesheet">
     <script src="/js/global.js" defer></script>
-        <link href="/css/assetadmin.css" rel="stylesheet">
+    <script src="/components/collapsible-card.js" defer></script>
+    <link href="/css/assetadmin.css" rel="stylesheet">
 </head>
 
 <body class="has-global-topbar">
@@ -79,22 +80,21 @@
 
                 <!-- 右侧：创建和修改 -->
                 <div class="sidebar">
+
                     <!-- 创建资源卡片 -->
-                    <div class="card">
-                        <div class="card-header">
-                            <h2 class="card-title">创建资源</h2>
-                        </div>
+                    <collapsible-card title="创建资源" subtitle="填写信息以创建新资源项目" open>
+                        <span slot="icon" class="material-icons">add_box</span>
                         <form id="createAssetForm">
                             <label for="createName">资源名称</label>
                             <input type="text" id="createName" placeholder="例如: ModName" required>
 
-                            <label for="createVersion">版本</label>
+                            <label for="createVersion" style="margin-top:12px;">版本</label>
                             <input type="text" id="createVersion" placeholder="例如: 1.0.0" required>
 
-                            <label for="createAuthor">作者</label>
+                            <label for="createAuthor" style="margin-top:12px;">作者</label>
                             <input type="text" id="createAuthor" placeholder="资源作者名称" required>
 
-                            <label for="createDescription">描述</label>
+                            <label for="createDescription" style="margin-top:12px;">描述</label>
                             <textarea id="createDescription" placeholder="资源描述信息" rows="3"></textarea>
 
                             <label for="createStock" style="margin-top:12px;">库存</label>
@@ -103,11 +103,8 @@
                             <label for="createCategory" style="margin-top:12px;">分类</label>
                             <input type="text" id="createCategory" placeholder="例如: 模组" />
 
-
                             <label for="createFileSize" style="margin-top:12px;">文件大小（字节）</label>
                             <input type="text" id="createFileSize" placeholder="例如: 1048576" />
-
-                            <!-- 价格字段已移除，使用价格计划管理器创建/编辑价格 -->
 
                             <label for="createCompatibility" style="margin-top:12px;">兼容性</label>
                             <input type="text" id="createCompatibility" placeholder="例如: 1.16 - 1.20" />
@@ -125,26 +122,22 @@
                             <input type="text" id="createDownloadUrl" placeholder="例如: https://..." />
 
                             <button type="submit" class="btn" style="width: 100%; margin-top: 16px;">创建资源</button>
-                            <p class="hint" style="margin-top: 12px; margin-bottom: 0; text-align: center;">创建新的资源项目</p>
                         </form>
-                    </div>
+                    </collapsible-card>
 
                     <!-- 创建 CDK（快速） -->
-                    <div class="card">
-                        <div class="card-header">
-                            <h2 class="card-title">创建 CDK</h2>
-                        </div>
+                    <collapsible-card title="创建 CDK" subtitle="为选中资源快速创建 CDK">
+                        <span slot="icon" class="material-icons">redeem</span>
                         <form id="createCdkForm">
                             <label for="cdkAssetId">AssetId *</label>
-                            <input type="text" id="cdkAssetId" placeholder="使用右侧已选资源ID（或手动填写）" />
+                            <input type="text" id="cdkAssetId" placeholder="使用列表已选资源ID（或手动填写）" />
 
                             <label for="cdkGoldValue" style="margin-top:12px;">金币（可选）</label>
                             <input type="text" id="cdkGoldValue" placeholder="0" value="0" />
 
-                            <label for="cdkExpiresIn" style="margin-top:12px;">时效（可选，0表示永久）</label>
+                            <label style="margin-top:12px;">时效（可选，0表示永久）</label>
                             <div style="display: flex; gap: 8px; align-items: center;">
-                                <input type="text" id="cdkExpiresInValue" placeholder="时间量" value="0"
-                                    style="flex: 1;" />
+                                <input type="text" id="cdkExpiresInValue" placeholder="时间量" value="0" style="flex: 1;" />
                                 <select id="cdkExpiresInUnit" style="flex: 0 0 auto; width: 80px;" title="时效单位">
                                     <option value="0">永久</option>
                                     <option value="3600">小时</option>
@@ -166,10 +159,9 @@
                             <label for="cdkDesc" style="margin-top:12px;">描述（可选）</label>
                             <input type="text" id="cdkDesc" placeholder="为 CDK 添加描述" />
 
-                            <div style="display:flex;gap:8px;margin-top:12px;">
+                            <div style="display:flex;gap:8px;margin-top:16px;">
                                 <button type="submit" id="createCdkBtn" class="btn" style="flex:1;">生成并保存</button>
-                                <button type="button" id="createCdkPreviewBtn" class="btn ghost"
-                                    style="flex:1;">生成预览</button>
+                                <button type="button" id="createCdkPreviewBtn" class="btn ghost" style="flex:1;">生成预览</button>
                             </div>
 
                             <label for="createCdkResult" style="margin-top:12px;">生成结果</label>
@@ -177,19 +169,14 @@
 
                             <div style="display:flex;gap:8px;margin-top:8px;">
                                 <button type="button" id="createCdkSaveBtn" class="btn" style="flex:1;">保存</button>
-                                <button type="button" id="createCdkDownloadBtn" class="btn ghost"
-                                    style="flex:1;">下载</button>
+                                <button type="button" id="createCdkDownloadBtn" class="btn ghost" style="flex:1;">下载</button>
                             </div>
-                            <p class="hint" style="margin-top: 12px; margin-bottom: 0; text-align: center;">为选中资源快速创建
-                                CDK</p>
                         </form>
-                    </div>
+                    </collapsible-card>
 
                     <!-- 修改资源卡片 -->
-                    <div class="card">
-                        <div class="card-header">
-                            <h2 class="card-title">修改资源</h2>
-                        </div>
+                    <collapsible-card title="修改资源" subtitle="加载资源后编辑并提交更新">
+                        <span slot="icon" class="material-icons">edit</span>
                         <form id="updateAssetForm">
                             <label for="updateAssetId">选择资源</label>
                             <div style="display: flex; gap: 8px; margin-bottom: 16px; align-items: center;">
@@ -200,13 +187,13 @@
                             <label for="updateName">资源名称</label>
                             <input type="text" id="updateName" placeholder="资源名称">
 
-                            <label for="updateVersion">版本</label>
+                            <label for="updateVersion" style="margin-top:12px;">版本</label>
                             <input type="text" id="updateVersion" placeholder="版本" required>
 
-                            <label for="updateAuthor">作者</label>
+                            <label for="updateAuthor" style="margin-top:12px;">作者</label>
                             <input type="text" id="updateAuthor" placeholder="作者" required>
 
-                            <label for="updateDescription">描述</label>
+                            <label for="updateDescription" style="margin-top:12px;">描述</label>
                             <textarea id="updateDescription" placeholder="资源描述信息" rows="3"></textarea>
 
                             <label for="updateStock" style="margin-top:12px;">库存</label>
@@ -215,11 +202,8 @@
                             <label for="updateCategory" style="margin-top:12px;">分类</label>
                             <input type="text" id="updateCategory" placeholder="例如: 模组" />
 
-
                             <label for="updateFileSize" style="margin-top:12px;">文件大小（字节）</label>
                             <input type="text" id="updateFileSize" placeholder="例如: 1048576" />
-
-                            <!-- 价格字段已移除，使用价格计划管理器创建/编辑价格 -->
 
                             <label for="updateCompatibility" style="margin-top:12px;">兼容性</label>
                             <input type="text" id="updateCompatibility" placeholder="例如: 1.16 - 1.20" />
@@ -236,22 +220,17 @@
                             <label for="updateDownloadUrl" style="margin-top:12px;">下载地址</label>
                             <input type="text" id="updateDownloadUrl" placeholder="例如: https://..." />
 
-                            <button type="submit" class="btn" disabled id="updateBtn"
-                                style="width: 100%; margin-top: 16px;">更新资源</button>
-                            <p class="hint" style="margin-top: 12px; margin-bottom: 0; text-align: center;">修改已有资源的信息
-                            </p>
+                            <button type="submit" class="btn" disabled id="updateBtn" style="width: 100%; margin-top: 16px;">更新资源</button>
                         </form>
-                    </div>
+                    </collapsible-card>
 
                     <!-- 价格计划管理卡片 -->
-                    <div class="card">
-                        <div class="card-header">
-                            <h2 class="card-title">价格计划</h2>
-                        </div>
+                    <collapsible-card title="价格计划" subtitle="管理资源的订阅套餐与定价">
+                        <span slot="icon" class="material-icons">sell</span>
 
                         <div style="margin-bottom: 16px;">
                             <label>选择资源</label>
-                            <div style="display: flex; gap: 8px; align-items: center;">
+                            <div style="display: flex; gap: 8px; align-items: center; margin-top: 6px;">
                                 <input type="text" id="priceAssetId" placeholder="资源ID" style="flex: 1;" readonly>
                                 <button type="button" id="addPricePlanBtn" class="btn small">新增计划</button>
                             </div>
@@ -259,7 +238,7 @@
 
                         <div id="priceListContainer" style="margin-bottom: 16px;">
                             <label>现有计划</label>
-                            <div id="priceList" class="price-list" style="max-height: 300px; overflow-y: auto; border: 1px solid rgba(255,255,255,0.06); border-radius: 4px;">
+                            <div id="priceList" class="price-list" style="margin-top:6px; max-height: 300px; overflow-y: auto; border: 1px solid rgba(255,255,255,0.06); border-radius: 4px;">
                                 <p class="hint" style="text-align: center; padding: 20px 0;">请先选择资源</p>
                             </div>
                         </div>
@@ -298,7 +277,8 @@
                                 <button type="button" id="cancelPricePlanBtn" class="btn ghost" style="flex:1;">取消</button>
                             </div>
                         </form>
-                    </div>
+                    </collapsible-card>
+
                 </div>
             </div>
 
