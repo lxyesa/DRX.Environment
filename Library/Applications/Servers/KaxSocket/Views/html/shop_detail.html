@@ -4,175 +4,307 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>商品详情 - KaxHub 商城</title>
+    <title id="pageTitle">商品详情 - KaxHub</title>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
     <link href="/css/global.css" rel="stylesheet">
     <script src="/js/global.js"></script>
-        <link href="/css/shop_detail.css" rel="stylesheet">
+    <script src="/js/topbar.js" defer></script>
+    <link href="/css/shop_detail.css" rel="stylesheet">
 </head>
 
 <body class="has-global-topbar">
-    <!-- 面包屑导航 -->
-    <div class="detail-container">
-        <div class="breadcrumb">
-            <a href="/shop">商城</a>
-            <span>/</span>
-            <span class="current" id="breadcrumbCategory">模组</span>
-        </div>
-    </div>
 
-    <!-- 主内容区域 -->
-    <div class="detail-container">
-        <div class="detail-main">
-            <!-- 左侧：产品图片与详细信息 -->
-            <div class="detail-left">
-                <!-- 产品图库 -->
-                <div class="product-gallery">
-                    <div class="product-main-image" id="mainImage">🎮</div>
-                    <div class="product-thumbnails" id="thumbnailContainer">
-                        <div class="product-thumbnail active">🎮</div>
-                    </div>
+    <!-- ── 英雄头部区域 ── -->
+    <div class="product-hero" id="productHero" aria-hidden="false">
+        <div class="product-hero-bg" id="productHeroBg"></div>
+        <div class="product-hero-inner">
+            <!-- 面包屑 -->
+            <nav class="breadcrumb" aria-label="位置导航">
+                <a href="/asset">资源库</a>
+                <span class="breadcrumb-sep" aria-hidden="true"><span class="material-icons">chevron_right</span></span>
+                <a href="/shop">商城</a>
+                <span class="breadcrumb-sep" aria-hidden="true"><span class="material-icons">chevron_right</span></span>
+                <span class="breadcrumb-current" id="breadcrumbCategory">模组</span>
+            </nav>
+
+            <!-- 产品主标题行 -->
+            <div class="hero-product-row">
+                <!-- 产品图标 -->
+                <div class="hero-icon-wrap" id="heroIconWrap">
+                    <div class="hero-icon-placeholder" id="heroIcon" aria-hidden="true">🎮</div>
                 </div>
 
-                <!-- 产品基本信息 -->
-                <div class="product-info-card">
-                    <h1 class="product-name" id="productName">加载中...</h1>
-
-                    <div class="product-rating">
-                        <div class="rating-stars" id="ratingStars">⭐⭐⭐⭐⭐</div>
-                        <span class="rating-text" id="ratingScore">5.0</span>
-                        <span class="rating-count" id="ratingCount">(128 条评价)</span>
-                    </div>
-
-                    <p class="product-description" id="productDescription">
-                        加载中...
-                    </p>
-
-                    <div class="product-meta">
-                        <div class="meta-item">
-                            <span class="meta-label">版本</span>
-                            <span class="meta-value" id="productVersion">1.0.0</span>
-                        </div>
-                        <div class="meta-item">
-                            <span class="meta-label">兼容性</span>
-                            <span class="meta-value" id="productCompatibility">100%</span>
-                        </div>
-                        <div class="meta-item">
-                            <span class="meta-label">下载 / 购买</span>
-                            <span class="meta-value"><span id="productDownloads">1.2K</span> / <span id="productPurchases">0</span></span>
+                <!-- 产品标题 + 元信息 -->
+                <div class="hero-product-info">
+                    <h1 class="hero-product-name" id="productName">加载中…</h1>
+                    <div class="hero-product-meta">
+                        <span class="hero-meta-tag" id="heroCategory">模组</span>
+                        <span class="hero-meta-dot" aria-hidden="true">·</span>
+                        <span class="hero-meta-author" id="heroAuthor">开发者</span>
+                        <span class="hero-meta-dot" aria-hidden="true">·</span>
+                        <div class="hero-rating" id="heroRating" aria-label="评分">
+                            <span class="hero-rating-stars" id="heroStars" aria-hidden="true">★★★★★</span>
+                            <span class="hero-rating-val" id="heroRatingVal">5.0</span>
+                            <span class="hero-rating-count" id="heroRatingCount">(128)</span>
                         </div>
                     </div>
-                </div>
+                    <p class="hero-product-desc" id="heroDesc">加载中…</p>
 
-                <!-- 详细规格 -->
-                <div class="specs-section">
-                    <h2 class="section-title">详细规格</h2>
-                    <div class="specs-list" id="specsList">
-                        <div class="spec-item">
-                            <span class="spec-label">文件大小</span>
-                            <span class="spec-value">256 MB</span>
-                        </div>
-                        <div class="spec-item">
-                            <span class="spec-label">上传时间</span>
-                            <span class="spec-value">2026-02-20</span>
-                        </div>
-                        <div class="spec-item">
-                            <span class="spec-label">作者</span>
-                            <span class="spec-value">开发者</span>
-                        </div>
-                        <div class="spec-item">
-                            <span class="spec-label">许可证</span>
-                            <span class="spec-value">MIT</span>
-                        </div>
+                    <!-- 快捷标签 -->
+                    <div class="hero-tags" id="heroTags">
+                        <span class="hero-tag"><span class="material-icons">download</span><span id="heroDownloads">1.2K</span> 安装</span>
+                        <span class="hero-tag"><span class="material-icons">update</span> 版本 <span id="heroVersion">1.0.0</span></span>
+                        <span class="hero-tag"><span class="material-icons">verified</span> 已验证</span>
                     </div>
                 </div>
             </div>
+        </div>
+    </div>
 
-            <!-- 右侧：购买面板 -->
-            <div class="detail-right">
-                <div class="purchase-panel">
-                    <!-- 价格 -->
-                    <div class="price-section">
-                        <div class="price-original" id="priceOriginal">💰99.99</div>
-                        <div class="price-current" id="priceCurrent">💰79.99</div>
-                        <span class="price-badge" id="priceBadge">20% OFF</span>
+    <!-- ── 主内容区 ── -->
+    <div class="detail-page">
+        <div class="detail-layout">
+
+            <!-- 左侧主内容列 -->
+            <div class="detail-main-col">
+
+                <!-- 截图画廊 -->
+                <section class="gallery-section" aria-label="截图画廊">
+                    <div class="gallery-viewport" id="galleryViewport">
+                        <div class="gallery-track" id="galleryTrack">
+                            <!-- 动态生成 / 默认一张占位 -->
+                            <div class="gallery-slide active" id="mainImageSlide">
+                                <div class="gallery-placeholder" id="mainImage" aria-label="产品截图">🎮</div>
+                            </div>
+                        </div>
+                        <button class="gallery-arrow gallery-arrow-prev" id="galleryPrev" aria-label="上一张" disabled>
+                            <span class="material-icons">chevron_left</span>
+                        </button>
+                        <button class="gallery-arrow gallery-arrow-next" id="galleryNext" aria-label="下一张">
+                            <span class="material-icons">chevron_right</span>
+                        </button>
+                    </div>
+                    <div class="gallery-thumbs" id="thumbnailContainer" role="list" aria-label="截图缩略图">
+                        <div class="gallery-thumb active" role="listitem">🎮</div>
+                    </div>
+                </section>
+
+                <!-- Tab 导航 -->
+                <div class="detail-tabs" role="tablist" aria-label="详情页签">
+                    <button class="detail-tab active" role="tab" id="tab-overview" aria-selected="true" aria-controls="panel-overview" data-tab="overview">概述</button>
+                    <button class="detail-tab" role="tab" id="tab-specs" aria-selected="false" aria-controls="panel-specs" data-tab="specs">规格</button>
+                    <button class="detail-tab" role="tab" id="tab-reviews" aria-selected="false" aria-controls="panel-reviews" data-tab="reviews">评价</button>
+                </div>
+
+                <!-- Tab 面板 — 概述 -->
+                <div class="detail-tab-panel active" id="panel-overview" role="tabpanel" aria-labelledby="tab-overview">
+                    <div class="overview-section">
+                        <h2 class="section-heading">关于此产品</h2>
+                        <p class="overview-description" id="productDescription">加载中…</p>
                     </div>
 
-                    <!-- 购买选项 -->
-                    <div class="purchase-options">
-                        <div class="stock-info" id="stockInfo">
-                            ✓ 库存充足，立即发货
+                    <!-- 亮点特性 -->
+                    <div class="features-grid" id="featuresGrid">
+                        <div class="feature-item">
+                            <span class="feature-icon material-icons">bolt</span>
+                            <div>
+                                <div class="feature-title">高性能</div>
+                                <div class="feature-desc">优化的运行效率，流畅无卡顿</div>
+                            </div>
+                        </div>
+                        <div class="feature-item">
+                            <span class="feature-icon material-icons">shield</span>
+                            <div>
+                                <div class="feature-title">安全可靠</div>
+                                <div class="feature-desc">通过安全扫描，保护你的游戏环境</div>
+                            </div>
+                        </div>
+                        <div class="feature-item">
+                            <span class="feature-icon material-icons">update</span>
+                            <div>
+                                <div class="feature-title">持续更新</div>
+                                <div class="feature-desc">定期维护，跟进游戏版本</div>
+                            </div>
+                        </div>
+                        <div class="feature-item">
+                            <span class="feature-icon material-icons">people</span>
+                            <div>
+                                <div class="feature-title">社区支持</div>
+                                <div class="feature-desc">活跃社区，问题快速响应</div>
+                            </div>
                         </div>
                     </div>
+                </div>
 
-                    <!-- 价格套餐卡片 -->
-                    <div class="price-plans-card" id="pricePlansCard">
-                        <div class="plans-title">选择购买套餐</div>
-                        <div class="plans-grid" id="plansGrid">
+                <!-- Tab 面板 — 规格 -->
+                <div class="detail-tab-panel" id="panel-specs" role="tabpanel" aria-labelledby="tab-specs" hidden>
+                    <div class="specs-card">
+                        <h2 class="section-heading">系统与规格</h2>
+                        <div class="specs-list" id="specsList">
+                            <div class="spec-row">
+                                <span class="spec-label">文件大小</span>
+                                <span class="spec-value" id="specSize">—</span>
+                            </div>
+                            <div class="spec-row">
+                                <span class="spec-label">版本</span>
+                                <span class="spec-value" id="productVersion">—</span>
+                            </div>
+                            <div class="spec-row">
+                                <span class="spec-label">上传时间</span>
+                                <span class="spec-value" id="specDate">—</span>
+                            </div>
+                            <div class="spec-row">
+                                <span class="spec-label">作者</span>
+                                <span class="spec-value" id="specAuthor">—</span>
+                            </div>
+                            <div class="spec-row">
+                                <span class="spec-label">兼容性</span>
+                                <span class="spec-value" id="productCompatibility">100%</span>
+                            </div>
+                            <div class="spec-row">
+                                <span class="spec-label">许可证</span>
+                                <span class="spec-value" id="specLicense">—</span>
+                            </div>
+                            <div class="spec-row">
+                                <span class="spec-label">下载次数</span>
+                                <span class="spec-value" id="productDownloads">—</span>
+                            </div>
+                            <div class="spec-row">
+                                <span class="spec-label">购买次数</span>
+                                <span class="spec-value" id="productPurchases">—</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tab 面板 — 评价 -->
+                <div class="detail-tab-panel" id="panel-reviews" role="tabpanel" aria-labelledby="tab-reviews" hidden>
+                    <div class="reviews-header">
+                        <h2 class="section-heading">用户评价</h2>
+                        <div class="reviews-summary">
+                            <div class="reviews-score-big" id="reviewScoreBig">5.0</div>
+                            <div class="reviews-score-detail">
+                                <div class="reviews-stars-big" id="reviewStarsBig" aria-hidden="true">★★★★★</div>
+                                <span class="reviews-total" id="reviewsTotal">128 条评价</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="reviews-list" id="reviewsList">
+                        <div class="review-empty">暂无评价</div>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- 右侧购买面板 -->
+            <aside class="detail-side-col" aria-label="购买面板">
+                <div class="purchase-panel" id="purchasePanel">
+
+                    <!-- 价格区 -->
+                    <div class="purchase-price-area">
+                        <div class="purchase-price-row">
+                            <span class="price-current" id="priceCurrent">—</span>
+                            <span class="price-badge" id="priceBadge" hidden></span>
+                        </div>
+                        <div class="price-original" id="priceOriginal" hidden></div>
+                    </div>
+
+                    <!-- 库存状态 -->
+                    <div class="stock-status" id="stockInfo">
+                        <span class="material-icons stock-icon">check_circle</span>
+                        <span class="stock-text">库存充足</span>
+                    </div>
+
+                    <!-- 套餐选择 -->
+                    <div class="plans-section" id="pricePlansCard">
+                        <div class="plans-label">选择套餐</div>
+                        <div class="plans-list" id="plansGrid">
                             <!-- 动态生成 -->
                         </div>
                     </div>
 
-                    <!-- 操作按钮 -->
-                    <div class="purchase-actions">
-                        <button class="btn-cart" id="purchaseBtn" disabled>
+                    <!-- 操作按钮组 -->
+                    <div class="purchase-btn-group">
+                        <button class="btn-purchase" id="purchaseBtn" disabled aria-disabled="true">
                             <span class="material-icons">shopping_bag</span>
                             立即购买
                         </button>
-
-                        <div class="purchase-options-second">
-                            <button class="btn-secondary" id="favBtn" title="收藏">
+                        <div class="purchase-secondary-btns">
+                            <button class="btn-icon-action" id="favBtn" aria-label="收藏" title="收藏">
                                 <span class="material-icons">favorite_border</span>
-                                <span>收藏</span>
                             </button>
-                            <button class="btn-secondary" id="shareBtn" title="分享">
+                            <button class="btn-icon-action" id="shareBtn" aria-label="分享" title="分享">
                                 <span class="material-icons">share</span>
-                                <span>分享</span>
                             </button>
+                        </div>
+                    </div>
+
+                    <!-- 快速信息 -->
+                    <div class="panel-quick-info">
+                        <div class="pqi-item">
+                            <span class="material-icons pqi-icon">verified_user</span>
+                            <span>安全认证资源</span>
+                        </div>
+                        <div class="pqi-item">
+                            <span class="material-icons pqi-icon">support_agent</span>
+                            <span>官方技术支持</span>
+                        </div>
+                        <div class="pqi-item">
+                            <span class="material-icons pqi-icon">history</span>
+                            <span>版本更新保障</span>
+                        </div>
+                    </div>
+                </div>
+            </aside>
+        </div>
+
+        <!-- ── 相关推荐 ── -->
+        <section class="related-section" aria-label="相关推荐">
+            <div class="related-header">
+                <h2 class="related-title">热门推荐</h2>
+                <a class="related-more" href="/shop">查看更多 <span class="material-icons">arrow_forward</span></a>
+            </div>
+            <div class="related-track-wrap">
+                <div class="related-track" id="relatedProductsGrid">
+                    <div class="related-card" onclick="goToShopDetail(1)">
+                        <div class="related-thumb">🎮</div>
+                        <div class="related-info">
+                            <div class="related-name">热门模组 1</div>
+                            <div class="related-meta">模组</div>
+                            <div class="related-price">💰 59.99</div>
+                        </div>
+                    </div>
+                    <div class="related-card" onclick="goToShopDetail(2)">
+                        <div class="related-thumb">🎮</div>
+                        <div class="related-info">
+                            <div class="related-name">热门模组 2</div>
+                            <div class="related-meta">模组</div>
+                            <div class="related-price">💰 49.99</div>
+                        </div>
+                    </div>
+                    <div class="related-card" onclick="goToShopDetail(3)">
+                        <div class="related-thumb">🎮</div>
+                        <div class="related-info">
+                            <div class="related-name">热门模组 3</div>
+                            <div class="related-meta">模组</div>
+                            <div class="related-price">💰 69.99</div>
+                        </div>
+                    </div>
+                    <div class="related-card" onclick="goToShopDetail(4)">
+                        <div class="related-thumb">🎮</div>
+                        <div class="related-info">
+                            <div class="related-name">热门模组 4</div>
+                            <div class="related-meta">模组</div>
+                            <div class="related-price">💰 79.99</div>
                         </div>
                     </div>
                 </div>
             </div>
-        </div>
-
-        <!-- 相关产品推荐 -->
-        <div class="related-products">
-            <h2 class="related-title">热门推荐</h2>
-            <div class="related-grid" id="relatedProductsGrid">
-                <div class="related-card" onclick="goToShopDetail(1)">
-                    <div class="related-image">🎮</div>
-                    <div class="related-content">
-                        <div class="related-name">热门模组 1</div>
-                        <div class="related-price">💰59.99</div>
-                    </div>
-                </div>
-                <div class="related-card" onclick="goToShopDetail(2)">
-                    <div class="related-image">🎮</div>
-                    <div class="related-content">
-                        <div class="related-name">热门模组 2</div>
-                        <div class="related-price">💰49.99</div>
-                    </div>
-                </div>
-                <div class="related-card" onclick="goToShopDetail(3)">
-                    <div class="related-image">🎮</div>
-                    <div class="related-content">
-                        <div class="related-name">热门模组 3</div>
-                        <div class="related-price">💰69.99</div>
-                    </div>
-                </div>
-                <div class="related-card" onclick="goToShopDetail(4)">
-                    <div class="related-image">🎮</div>
-                    <div class="related-content">
-                        <div class="related-name">热门模组 4</div>
-                        <div class="related-price">💰79.99</div>
-                    </div>
-                </div>
-            </div>
-        </div>
+        </section>
     </div>
 
-        <script src="/js/shop_detail.js"></script>
+    <script src="/js/shop_detail.js"></script>
 </body>
 
 </html>

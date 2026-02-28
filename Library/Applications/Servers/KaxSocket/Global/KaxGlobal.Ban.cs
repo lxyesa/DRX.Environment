@@ -42,8 +42,6 @@ public static partial class KaxGlobal
         var user = (await UserDatabase.SelectWhereAsync("UserName", userName)).FirstOrDefault();
         if (user != null)
         {
-            Logger.Info($"检查用户 {userName} 的封禁状态: 状态={user.Status.IsBanned}, 到期时间={user.Status.BanExpiresAt}, 当前时间={DateTimeOffset.UtcNow.ToUnixTimeSeconds()}, 原因={user.Status.BanReason ?? "无"}");
-
             if (user.Status.IsBanned)
             {
                 var currentTime = DateTimeOffset.UtcNow.ToUnixTimeSeconds();

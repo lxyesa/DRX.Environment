@@ -152,6 +152,7 @@ namespace Drx.Sdk.Network.Http
                 if (timeoutMs > 0)
                 {
                     using var cts = new CancellationTokenSource(timeoutMs);
+                    cts.Token.Register(() => taskCompletionSource.TrySetCanceled());
                     return await taskCompletionSource.Task.ConfigureAwait(false);
                 }
                 else

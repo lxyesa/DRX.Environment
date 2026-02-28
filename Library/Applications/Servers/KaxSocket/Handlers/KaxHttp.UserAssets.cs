@@ -8,6 +8,7 @@ using Drx.Sdk.Network.Http.Results;
 using Drx.Sdk.Network.Http.Configs;
 using Drx.Sdk.Shared;
 using KaxSocket;
+using static KaxSocket.Model.AssetModel;
 
 namespace KaxSocket.Handlers;
 
@@ -96,7 +97,7 @@ public partial class KaxHttp
 
         // 已收藏则直接返回成功
         if (user.FavoriteAssets != null && user.FavoriteAssets.Any(f => f.AssetId == assetId))
-            return new JsonResult(new { code = 0, message = "已收藏", favoriteCount = asset.FavoriteCount }, 200);
+            return new JsonResult(new { code = 0, message = "已收藏", favoriteCount = (asset.Specs?.FavoriteCount ?? 0) }, 200);
 
         // 添加收藏子项
         var fav = new UserFavoriteAsset { ParentId = user.Id, AssetId = assetId };
@@ -104,12 +105,13 @@ public partial class KaxHttp
         user.FavoriteAssets.Add(fav);
 
         // 更新资产收藏计数
-        asset.FavoriteCount = Math.Max(0, asset.FavoriteCount + 1);
+        var specs = EnsureSpecs(asset);
+        specs.FavoriteCount = Math.Max(0, specs.FavoriteCount + 1);
 
         await KaxGlobal.AssetDataBase.UpdateAsync(asset);
         await KaxGlobal.UserDatabase.UpdateAsync(user);
 
-        return new JsonResult(new { code = 0, message = "收藏成功", favoriteCount = asset.FavoriteCount }, 200);
+        return new JsonResult(new { code = 0, message = "收藏成功", favoriteCount = specs.FavoriteCount }, 200);
     }
 
     [HttpHandle("/api/user/favorites/{assetId}", "DELETE", RateLimitMaxRequests = 60, RateLimitWindowSeconds = 60, RateLimitCallbackMethodName = nameof(RateLimitCallback))]
@@ -137,13 +139,14 @@ public partial class KaxHttp
         var asset = await KaxGlobal.AssetDataBase.SelectByIdAsync(assetId);
         if (asset != null)
         {
-            asset.FavoriteCount = Math.Max(0, asset.FavoriteCount - 1);
+            var assetSpecs = EnsureSpecs(asset);
+            assetSpecs.FavoriteCount = Math.Max(0, assetSpecs.FavoriteCount - 1);
             await KaxGlobal.AssetDataBase.UpdateAsync(asset);
         }
 
         await KaxGlobal.UserDatabase.UpdateAsync(user);
 
-        return new JsonResult(new { code = 0, message = "已取消收藏", favoriteCount = asset?.FavoriteCount ?? 0 }, 200);
+        return new JsonResult(new { code = 0, message = "已取消收藏", favoriteCount = asset?.Specs?.FavoriteCount ?? 0 }, 200);
     }
 
     // 用户购物车（仅记录 assetId）

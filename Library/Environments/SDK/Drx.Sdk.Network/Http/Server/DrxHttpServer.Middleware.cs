@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -88,6 +89,11 @@ namespace Drx.Sdk.Network.Http
         }
 
         /// <summary>
+        /// 路径级中间件列表缓存，避免每次请求都重新过滤和分配列表
+        /// </summary>
+        private readonly ConcurrentDictionary<string, List<MiddlewareEntry>> _pathMiddlewareCache = new(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>
         /// 执行中间件管道
         /// </summary>
         private async Task<HttpResponse?> ExecuteMiddlewarePipelineAsync(HttpListenerContext context, HttpRequest request, Func<HttpRequest, Task<HttpResponse?>> finalHandler)
@@ -112,17 +118,22 @@ namespace Drx.Sdk.Network.Http
                         return a.AddOrder.CompareTo(b.AddOrder);
                     });
                     _cachedSortedMiddlewares = applicableMiddlewares;
+                    _pathMiddlewareCache.Clear();
                 }
                 sortedMiddlewares = _cachedSortedMiddlewares;
             }
 
-            var applicableForPath = new List<MiddlewareEntry>(sortedMiddlewares.Count);
-            foreach (var m in sortedMiddlewares)
+            if (!_pathMiddlewareCache.TryGetValue(rawPath, out var applicableForPath))
             {
-                if (m.Path == null || rawPath.StartsWith(m.Path, StringComparison.OrdinalIgnoreCase))
+                applicableForPath = new List<MiddlewareEntry>(sortedMiddlewares.Count);
+                foreach (var m in sortedMiddlewares)
                 {
-                    applicableForPath.Add(m);
+                    if (m.Path == null || rawPath.StartsWith(m.Path, StringComparison.OrdinalIgnoreCase))
+                    {
+                        applicableForPath.Add(m);
+                    }
                 }
+                _pathMiddlewareCache.TryAdd(rawPath, applicableForPath);
             }
 
             Func<HttpRequest, Task<HttpResponse?>> pipeline = finalHandler;

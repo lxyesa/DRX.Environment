@@ -11,6 +11,17 @@
       .input-row{ display:flex; align-items:flex-end; gap:8px; }
       input, textarea{ flex:1; min-width:0; border:none; background:transparent; color:var(--muted-strong, rgba(255,255,255,0.92)); font-size:0.95rem; padding:6px 0; outline:none; font-family:inherit; }
       input:disabled, textarea:disabled{ opacity:0.6; }
+      /* 抵消浏览器自动填充注入的白色背景：使用超长过渡延迟让系统样式不可见 */
+      input:-webkit-autofill,
+      input:-webkit-autofill:hover,
+      input:-webkit-autofill:focus,
+      input:-webkit-autofill:active{
+        -webkit-box-shadow: 0 0 0 1000px transparent inset !important;
+        -webkit-text-fill-color: var(--muted-strong, rgba(255,255,255,0.92)) !important;
+        caret-color: var(--muted-strong, rgba(255,255,255,0.92)) !important;
+        transition: background-color 99999s ease-in-out 0s !important;
+        background-color: transparent !important;
+      }
       textarea{ resize:vertical; }
       :host(:focus-within) .field{ border-color: rgba(59,130,246,0.95); box-shadow: 0 0 0 4px rgba(59,130,246,0.04); }
       :host([compact]) .field{ padding:8px 10px; }
@@ -32,6 +43,12 @@
       :host([size="headerless"]) .label,
       :host([size="headerless"]) .label-divider{ display:none; }
       :host([size="headerless"]) .field{ padding:6px 10px; }
+
+      /* 图标：默认隐藏，有 icon 属性时显示 */
+      .field-icon{ display:none; flex-shrink:0; align-items:center; justify-content:center; margin-right:8px; color:rgba(255,255,255,0.45); font-size:18px; line-height:1; }
+      :host([icon]) .field-icon{ display:flex; }
+      :host([size="large"]) .field-icon{ font-size:22px; }
+      :host([size="small"]) .field-icon{ font-size:15px; margin-right:6px; }
 
       /* 操作按钮槽位：默认隐藏，show-action 时显示 */
       .action-slot{ flex-shrink:0; display:none; }
@@ -65,6 +82,7 @@
       <label class="label" part="label"></label>
       <div class="label-divider" part="divider" aria-hidden="true"></div>
       <div class="input-row">
+        <span class="field-icon material-icons" part="icon" aria-hidden="true"></span>
         <input part="input" />
         <textarea part="textarea" style="display:none;"></textarea>
         <div class="action-slot" part="action">
@@ -75,7 +93,7 @@
     `;
 
     class InputBox extends HTMLElement {
-        static get observedAttributes(){ return ['label','placeholder','type','value','readonly','disabled','minlength','name','autocomplete','textarea','rows','show-action','size']; }
+        static get observedAttributes(){ return ['label','placeholder','type','value','readonly','disabled','minlength','name','autocomplete','textarea','rows','show-action','size','icon']; }
         constructor(){
             super();
             this._shadow = this.attachShadow({mode:'open'});
@@ -83,6 +101,7 @@
             this._labelEl = this._shadow.querySelector('.label');
             this._inputEl = this._shadow.querySelector('input');
             this._textareaEl = this._shadow.querySelector('textarea');
+            this._iconEl = this._shadow.querySelector('.field-icon');
             this._isTextarea = this.hasAttribute('textarea');
             this._setupElement();
 
@@ -204,6 +223,10 @@
                 case 'size':
                     // size 属性通过 CSS :host([size="..."]) 选择器控制样式
                     // 合法值：large / small / headerless，不设置时为默认尺寸
+                    break;
+                case 'icon':
+                    // 图标名称使用 Material Icons 字体连字
+                    if (this._iconEl) this._iconEl.textContent = val || '';
                     break;
             }
         }

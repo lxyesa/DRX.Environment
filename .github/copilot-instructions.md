@@ -1,161 +1,194 @@
-# DRX.Environment - AI Coding Assistant Instructions
+# DRX.Environment Codebase Instructions
 
-## Project Architecture
+This document guides AI agents working on the DRX framework ecosystem, a comprehensive .NET 9.0 platform for building distributed applications with HTTP servers, serialization, memory operations, and custom networking.
 
-DRX.Environment is a modular .NET framework with three main layers:
+## Architecture Overview
 
-### 1. Framework Layer (`Library/Environments/Framework/`)
-Core frameworks providing foundational services:
-- `DRX.Framework` - Main framework with WPF, ASP.NET Core, and Microsoft Graph integration
-- `DRX.Framework.Media` - Media processing capabilities
-- `DRX.Framework.Chat` - Chat/communication features
-- `Drx.Framework.Memory` - Memory management utilities
+### Three-Layer Stack
 
-### 2. SDK Layer (`Library/Environments/SDK/`)
-Reusable components with specific functionality:
-- `Drx.Sdk.Network` - Networking with TCP/UDP support and custom serialization
-- `Drx.Sdk.Memory` - Memory management and pooling
-- `Drx.Sdk.Text` - Text processing utilities
-- `Drx.Sdk.Ui.Wpf` - WPF UI components
-- `Drx.Sdk.Input` - Input handling
-- `Drx.Sdk.Native` - Native interop functionality
-- `Drx.Sdk.Shared` - Common utilities and serialization
-- `Drx.Sdk.Style` - Styling components
-- `Drx.Sdk.Shared.JavaScript` - JavaScript execution engine
+1. **Framework Layer** (`Library/Environments/Framework/`)
+   - `DRX.Framework` - Core component system (IComponentSystem, DataModel patterns)
+   - `DRX.Framework.Chat` - Chat functionality
+   - `DRX.Framework.Media` - Media handling
+   - `Drx.Framework.Memory` - Memory utilities
 
-### 3. Applications Layer (`Library/Applications/`)
-End-user applications built on the SDK:
-- **Clients**: Console applications and GUI tools
-- **Servers**: Network servers like KaxSocket for TCP/UDP communication
+2. **SDK Layer** (`Library/Environments/SDK/`)
+   - **Core**: `Drx.Sdk.Shared` (serialization, DMixin injection, utilities)
+   - **Network**: `Drx.Sdk.Network` (HTTP server, SQLite V2 ORM, TCP, Sessions)
+   - **Native**: `Drx.Sdk.Native` - P/Invoke bindings
+   - **Memory**: `Drx.Sdk.Memory` - Process memory operations, hooking
+   - **Input/Text/Style/UI**: Utility SDKs
 
-## Development Conventions
+3. **Applications Layer** (`Library/Applications/`)
+   - **Servers**: KaxSocket (HTTP API server), KaxHub, Web.KaxServer2
+   - **Clients**: AI, DSTools, DLTools, KaxClientTest
 
-### Language & Documentation
-- **All comments and documentation in Chinese** - maintain this convention
-- **Naming**: `Drx.Sdk.*` for SDK components, `DRX.Framework.*` for frameworks
-- **Target Framework**: .NET 9.0-windows (with NativeAOT for release builds)
+### Key Entry Point: KaxSocket Server
 
-### Code Patterns
-- **Serialization**: Use `DrxSerializationData` for type-safe key-value serialization
-- **Networking**: Use `NetworkClient`/`NetworkServer` from `Drx.Sdk.Network.Tcp`
-- **JavaScript Integration**: Export .NET classes to JavaScript using the script execution engine
-- **Error Handling**: Comprehensive exception handling with detailed stack traces
+Located in `Library/Applications/Servers/KaxSocket/`, this HTTP REST API server demonstrates framework usage:
+- Runs on `http://+:8462/`
+- Uses `DrxHttpServer` for HTTP handling and routing
+- Partial class pattern separates concerns: Authentication, UserProfile, UserAssets, CdkManagement, AssetManagement, Shopping
+- Implements user management, CDK (redemption codes), and asset management
+- SQLite V2 ORM for persistence
+- JWT authentication via `JwtHelper`
 
-### Build Configuration
-- **Debug**: Standard .NET debugging
-- **Release**: NativeAOT compilation for performance (`PublishAot=true`)
-- **Dependencies**: Managed via project references and NuGet packages
+## Critical Development Patterns
 
-## Critical Workflows
+### 1. HTTP Handler Pattern (KaxHttp Model)
 
-### Build Commands
-```bash
-# Build entire solution
-dotnet build DRX.Environment.sln
-
-# Publish with NativeAOT
-dotnet publish DRX.Environment.sln
-
-# Development with hot reload
-dotnet watch run --project DRX.Environment.sln
-```
-
-### Testing
-- Unit tests located in `Examples/` directories
-- Example: `Examples/DrxSerializationExample/` demonstrates serialization features
-- Example: `Examples/JavaScript/` shows JavaScript execution and auto-completion
-
-### Development Flow
-1. Modify SDK components in `Library/Environments/SDK/`
-2. Test changes using example applications in `Examples/`
-3. Build and run server applications in `Library/Applications/Servers/`
-
-## Key Technical Features
-
-### JavaScript Execution Engine
-- **Location**: `Drx.Sdk.Shared.JavaScript` and `Drx.Sdk.Network`
-- **Features**: Execute JavaScript with .NET interop, auto-completion, parameter hints
-- **Usage**: Export .NET classes as `MathUtils`, `StringHelper`, `Person` etc.
-- **API**: `JavaScript.Execute()`, `ExecuteAsync()`, `ExecuteFile()`
-
-### Auto-Completion System
-- **VSCode-style completion** in JavaScript console
-- **Types**: Class names, member access, method parameters
-- **Example**: `MathUtils.Add(StringUtils.Format("Hello"), 2)`
-
-### Custom Serialization
-- **Class**: `DrxSerializationData` in `Drx.Sdk.Shared.Serialization`
-- **Features**: Type-safe key-value storage, binary serialization, nested objects
-- **Methods**: `SetString()`, `SetInt()`, `SetObject()`, `TryGetString()`, `Serialize()`
-
-### Networking (V2)
-- **Classes**: `NetworkClient`, `NetworkServer` in `Drx.Sdk.Network.Tcp`
-- **Protocols**: TCP and UDP support
-- **Events**: `OnConnected`, `OnDataReceived`, `OnError`
-- **Example**: Simple TCP/UDP server-client communication with serialization
-
-## Integration Points
-
-### External Dependencies
-- **Microsoft.Graph**: Graph API integration
-- **MailKit/MimeKit**: Email functionality
-- **Microsoft.Data.Sqlite**: SQLite database support
-- **Markdig**: Markdown processing
-- **Costura.Fody**: Assembly embedding
-
-### Cross-Component Communication
-- **Serialization**: `DrxSerializationData` used across network and storage layers
-- **Logging**: Unified logging through `ScriptLogger` and custom implementations
-- **Events**: Delegate-based event system for network communications
-
-## Common Patterns
-
-### Error Handling
+Use **partial classes** to organize APIs by feature domain:
 ```csharp
-try {
-    // Operation that might fail
-} catch (Exception ex) {
-    // Log with full context
-    logger.LogException(ex, context);
+// KaxHttp.Authentication.cs
+public partial class KaxHttp {
+    [HttpHandle("POST", "/api/login")]
+    public static async Task<HttpResponse> Login(HttpRequest request) { ... }
 }
 ```
 
-### Serialization Usage
+**Key attributes**:
+- `[HttpHandle("METHOD", "path")]` - Declares HTTP endpoint (auto-discovered by framework)
+- `[HttpMiddleware]` - Global request/response interceptor
+- `[RateLimitMaxRequests]` / `[RateLimitWindowSeconds]` - Rate limiting
+
+**Response types** (`Drx.Sdk.Network.Http.Results`):
+- `HttpResponse` - Plain text/JSON
+- `HtmlResultFromFile` - Static HTML files
+- `FileDownloadResult` - File streaming
+- `OkResult`, `BadRequestResult` - Status helpers
+
+### 2. Data Model Hierarchy
+
+Base class pattern for database entities:
+```csharp
+public abstract class DataModel : IDataBase {
+    public int Id { get; set; }  // Primary key
+}
+
+public class UserData : DataModel {
+    public string UserName { get; set; }
+    public string PasswordHash { get; set; }
+    public UserPermissionGroup PermissionGroup { get; set; }
+}
+```
+
+Models go in `Model/` directory; use `SqliteV2<T>` for CRUD operations.
+
+### 3. SQLite V2 ORM (Drx.Sdk.Network.DataBase)
+
+Query pattern:
+```csharp
+// Select all users named "Alice"
+var results = await KaxGlobal.UserDatabase.SelectWhereAsync("UserName", "Alice");
+
+// Insert/Update/Delete
+var user = new UserData { UserName = "Bob", ... };
+await database.InsertAsync(user);
+```
+
+Key types:
+- `SqliteV2<T>` - Main ORM for CRUD
+- `TableList<T>` - One-to-many relational support
+- `SqliteUnitOfWork<T>` - Transaction management
+
+See `Library/Environments/SDK/Drx.Sdk.Network/Database/Docs/` for full SQLite V2 documentation.
+
+### 4. Serialization: DrxSerializationData (DSD)
+
+Lightweight binary key-value container for cross-process communication:
 ```csharp
 var data = new DrxSerializationData();
-data.SetString("key", "value");
-data.SetInt("number", 42);
+data.SetString("name", "Alice");
+data.SetInt("age", 30);
+data.SetObject("nested", new DrxSerializationData());
+
 var bytes = data.Serialize();
 var restored = DrxSerializationData.Deserialize(bytes);
 ```
 
-### Network Communication
+Supports: Null, Int64, Double, Bool, String, Bytes, nested Objects.
+Thread-safe with `ReaderWriterLockSlim`. See `Library/Environments/SDK/Drx.Sdk.Shared/Serialization/README.md`.
+
+### 5. Runtime Method Injection: DMixin
+
+Minimal AOP framework using Harmony for static method injection:
 ```csharp
-var server = new NetworkServer(endpoint, enableTcp: true, enableUdp: true);
-server.OnDataReceived += (id, ep, data) => {
-    // Handle received data
-};
-await server.StartAsync();
+[DMixin(typeof(TargetClass))]
+public class MyMixin {
+    [DMixinInject(targetMethod: "SomeMethod", at: InjectAt.Prefix)]
+    public static void Prefix(CallbackInfo ci) {
+        // Control execution: ci.Continue() or ci.Cancel()
+    }
+}
 ```
 
-## File Organization Examples
+Single static methods only; parameter compatibility required. See `Drx.Sdk.Shared.DMixin`.
 
-### SDK Component Structure
-```
-Drx.Sdk.Network/
-├── V2/Socket/
-│   ├── NetworkClient.cs      # Client implementation
-│   └── NetworkServer.cs      # Server implementation
-├── DataBase/                 # Database utilities
-└── Email/                    # Email functionality
-```
+## Build & Development Workflow
 
-### Application Structure
-```
-KaxSocket/
-├── Program.cs               # Main entry point
-├── KaxSocket.csproj         # Project configuration
-└── bin/                     # Build output
+### Available Tasks (in `.vscode/tasks.json`)
+
+```powershell
+# Build entire solution
+dotnet build DRX.Environment.sln
+
+# Publish projects
+dotnet publish DRX.Environment.sln
+
+# Watch mode (rebuild on file changes)
+dotnet watch run --project DRX.Environment.sln
 ```
 
-Remember: This codebase emphasizes **modularity**, **type safety**, and **Chinese documentation**. When making changes, maintain these architectural boundaries and conventions.
+Run via: `Ctrl+Shift+B` (build), or use `run_task` tool.
+
+### Admin Rights Requirement
+
+KaxSocket enforces admin privileges at startup:
+```csharp
+if (!GlobalUtility.IsAdministrator()) {
+    await GlobalUtility.RestartAsAdministratorAsync();
+    Environment.Exit(0);
+}
+```
+
+When debugging/developing KaxSocket locally, run VS Code as Administrator.
+
+### Configuration Files
+
+Convention: `configs.ini` in app base directory managed by `ConfigUtility`:
+```csharp
+var uploadToken = ConfigUtility.Read("configs.ini", "upload_token", "general");
+ConfigUtility.Push("configs.ini", "uploadToken", value, "general");
+```
+
+## Project-Specific Conventions
+
+1. **File Structure**: Place 404.html, static assets in `Views/html/`; configs in app root
+2. **Error Handling**: Use `Logger.Warn()`, `Logger.Info()` (custom logging extension)
+3. **JWT Auth**: Static configuration in handler static constructor; validate with `JwtHelper.ValidateToken()`
+4. **Rate Limiting**: Auto-bans users exceeding constraints; check before sensitive operations
+5. **Async/Await**: Consistent throughout; use `Task<T>` return types
+6. **Partial Classes**: Split handler files by feature area (Authentication, Shopping, etc.)
+
+## Cross-Component Communication
+
+- **HTTP APIs** ↔ JavaScript frontends via JSON (structured responses from handlers)
+- **Services** ↔ **Databases** via SQLite V2 ORM (typesafe CRUD)
+- **Native Interop** via `Drx.Sdk.Native` P/Invoke bindings (memory ops, hooks)
+- **Binary Protocol** via `DrxSerializationData` (inter-process communication)
+
+## Testing & Debugging
+
+Examples reference `Library/Examples/`:
+- `JsonSerializationExample.cs` - HTTP + serialization patterns
+- `SessionExample/` - Cookie/session management
+- `StackedMapExample/` - Advanced ORM usage
+
+Navigate to relevant subdirectory, compile with `dotnet build`, and inspect code.
+
+## Key References
+
+- **Serialization**: [Drx.Sdk.Shared/Serialization/README.md](../Library/Environments/SDK/Drx.Sdk.Shared/Serialization/README.md)
+- **Database**: [Drx.Sdk.Network/Database/Docs/](../Library/Environments/SDK/Drx.Sdk.Network/Database/Docs/)
+- **HTTP Framework**: [KaxSocket Architecture](../KaxSocket_Architecture_Analysis.md)
+- **Network Socket Export**: [Drx.Sdk.Network/Legacy/Socket/README.md](../Library/Environments/SDK/Drx.Sdk.Network/Legacy/Socket/Exports/README.md)

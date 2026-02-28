@@ -41,20 +41,7 @@ public class Program
 
         try
         {
-            var uploadToken = ConfigUtility.Read($"{AppDomain.CurrentDomain.BaseDirectory}configs.ini", "upload_token", "general");
-            var version = ConfigUtility.Read($"{AppDomain.CurrentDomain.BaseDirectory}configs.ini", "version", "general");
-
-            if (string.IsNullOrEmpty(uploadToken))
-            {
-                uploadToken = CommonUtility.GenerateGeneralCode("UPL", 8, 4, true, true);
-                ConfigUtility.Push($"{AppDomain.CurrentDomain.BaseDirectory}configs.ini", "upload_token", uploadToken, "general");
-            }
-
-            if (string.IsNullOrEmpty(version))
-            {
-                version = "1.0.0";
-                ConfigUtility.Push($"{AppDomain.CurrentDomain.BaseDirectory}configs.ini", "version", version, "general");
-            }
+            await server.InitializeResourceIndexAsync();
 
             server.FileRootPath = $"{AppDomain.CurrentDomain.BaseDirectory}Views";
             server.NotFoundPagePath = $"{AppDomain.CurrentDomain.BaseDirectory}Views/html/404.html";
@@ -62,16 +49,20 @@ public class Program
             server.AddRoute(HttpMethod.Get, "/", req => new HtmlResultFromFile($"{AppDomain.CurrentDomain.BaseDirectory}Views/html/index.html"));
             server.AddRoute(HttpMethod.Get, "/login", req => new HtmlResultFromFile($"{AppDomain.CurrentDomain.BaseDirectory}Views/html/login.html"));
             server.AddRoute(HttpMethod.Get, "/register", req => new HtmlResultFromFile($"{AppDomain.CurrentDomain.BaseDirectory}Views/html/register.html"));
-            server.AddRoute(HttpMethod.Get, "/cdk/admin", req => new HtmlResultFromFile($"{AppDomain.CurrentDomain.BaseDirectory}Views/html/cdkadmin.html"));
-            server.AddRoute(HttpMethod.Get, "/asset/admin", req => new HtmlResultFromFile($"{AppDomain.CurrentDomain.BaseDirectory}Views/html/assetadmin.html"));
             server.AddRoute(HttpMethod.Get, "/profile", req => new HtmlResultFromFile($"{AppDomain.CurrentDomain.BaseDirectory}Views/html/profile.html"));
             server.AddRoute(HttpMethod.Get, "/profile/{uid}", req => new HtmlResultFromFile($"{AppDomain.CurrentDomain.BaseDirectory}Views/html/profile.html"));
             server.AddRoute(HttpMethod.Get, "/shop", req => new HtmlResultFromFile($"{AppDomain.CurrentDomain.BaseDirectory}Views/html/shop.html"));
             server.AddRoute(HttpMethod.Get, "/asset", req => new HtmlResultFromFile($"{AppDomain.CurrentDomain.BaseDirectory}Views/html/shop.html"));
             server.AddRoute(HttpMethod.Get, "/asset/detail/{id}", req => new HtmlResultFromFile($"{AppDomain.CurrentDomain.BaseDirectory}Views/html/shop_detail.html"));
             server.AddRoute(HttpMethod.Get, "/user/verify-email", req => new HtmlResultFromFile($"{AppDomain.CurrentDomain.BaseDirectory}Views/html/verify-email.html"));
+            server.AddRoute(HttpMethod.Get, "/console", req => new HtmlResultFromFile($"{AppDomain.CurrentDomain.BaseDirectory}Views/html/console.html"));
+
+            server.FileUploadRouter("/api/file/upload", "uploads");
+
             server.RegisterHandlersFromAssembly(typeof(KaxHttp));
-            server.RegisterCommandsFromType(typeof(KaxCommandHandler));
+            server.RegisterCommandsFromType(typeof(AssetCommandHandler));
+            server.RegisterCommandsFromType(typeof(UserCommandHandler));
+            server.RegisterCommandsFromType(typeof(SystemCommandHandler));
 
             server.DoTicker(1000 * 60, async (s) =>
             {

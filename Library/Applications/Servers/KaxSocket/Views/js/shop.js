@@ -93,18 +93,24 @@
                     if (!resp.ok) { console.warn('获取资产列表失败', resp.status); return; }
 
                     const body = await resp.json();
-                    const items = body?.data?.items ?? body.items ?? [];
+                    // 后端返回分页对象 { items: [...], total: ... }
+                    const items = body?.data?.items ?? body?.items ?? [];
 
                     state.products = items.map(a => ({
                         id: Number(a.id) || a.id,
                         name: a.name,
                         desc: a.description || '',
-                        price: a.prices?.length > 0 ? a.prices[0].price : (a.price ?? 0),
+                        price: a.price ?? (a.prices?.length > 0 ? a.prices[0].price : 0),
                         prices: a.prices || [],
-                        stock: a.stock ?? 0,
                         category: a.category || '',
                         icon: '📦',
-                        lastUpdatedAt: a.lastUpdatedAt
+                        // 规格字段既可能在平铺级别，也可能在 specs 对象中
+                        downloads: a.downloads ?? (a.specs?.downloads ?? 0),
+                        purchaseCount: a.purchaseCount ?? (a.specs?.purchaseCount ?? 0),
+                        lastUpdatedAt: a.lastUpdatedAt ?? (a.specs?.lastUpdatedAt ?? 0),
+                        primaryImage: a.primaryImage || '',
+                        rating: a.rating ?? (a.specs?.rating ?? 0),
+                        reviewCount: a.reviewCount ?? (a.specs?.reviewCount ?? 0)
                     }));
                     state.filteredProducts = [...state.products];
                 } catch (e) {
@@ -259,20 +265,20 @@
                 const cartClass = inCart ? ' active has-count' : '';
                 const cartIcon = inCart ? 'shopping_cart' : 'add_shopping_cart';
                 const cartTitle = inCart ? '已在购物车中，点击可移除' : '加入购物车';
-                const cartDisabled = product.stock === 0 ? ' disabled' : '';
-                const stockClass = product.stock < 10 ? ' low' : '';
-                const stockText = product.stock > 0 ? `库存: ${product.stock}` : '缺货';
+                const cartDisabled = '';
+                const downloadsText = product.downloads > 0 ? `${product.downloads}` : '0';
 
                 return `
                 <div class="product-card">
                     <div class="product-image">${product.icon}</div>
                     <div class="product-content">
+                        ${product.category ? `<span class="product-category-tag">${product.category}</span>` : ''}
                         <div class="product-name">${product.name}</div>
                         <div class="product-desc">${product.desc}</div>
                         <div class="product-meta">
                             <div class="product-price">💰${Number(product.price).toFixed(2)}</div>
                             <div class="product-meta-row">
-                                <span class="meta-item product-stock${stockClass}"><span class="meta-label">库存</span> ${product.stock > 0 ? product.stock : '缺货'}</span>
+                                <span class="meta-item"><span class="meta-label">下载</span> ${downloadsText}</span>
                                 <span class="meta-item"><span class="meta-label">更新</span> ${formatDate(product.lastUpdatedAt)}</span>
                             </div>
                         </div>
@@ -336,7 +342,7 @@
                 const sortStrategies = {
                     'price-low': (a, b) => a.price - b.price,
                     'price-high': (a, b) => b.price - a.price,
-                    'popular': (a, b) => b.stock - a.stock,
+                    'popular': (a, b) => (b.downloads + b.purchaseCount) - (a.downloads + a.purchaseCount),
                     'newest': (a, b) => b.id - a.id
                 };
                 state.filteredProducts.sort(sortStrategies[sort] || sortStrategies['newest']);

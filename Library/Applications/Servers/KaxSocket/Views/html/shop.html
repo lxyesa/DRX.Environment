@@ -9,13 +9,18 @@
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
     <link href="/css/global.css" rel="stylesheet">
     <script src="/js/global.js"></script>
-        <link href="/css/shop.css" rel="stylesheet">
+    <script src="/js/topbar.js" defer></script>
+    <link href="/css/shop.css" rel="stylesheet">
 </head>
 
 <body class="has-global-topbar">
     <section class="shop-header">
         <div class="shop-header-content">
-            <h1>KaxHub 商城</h1>
+            <div class="shop-header-eyebrow">
+                <span class="material-icons">storefront</span>
+                KaxHub Store
+            </div>
+            <h1>游戏模组商城</h1>
             <p>发现与购买优质游戏模组、资源包与扩展内容</p>
         </div>
     </section>
@@ -60,7 +65,7 @@
         </div>
     </div>
 
-    <div class="cart-button" id="cartButton">
+    <div class="cart-button" id="cartButton" role="button" tabindex="0" aria-label="购物车">
         <span class="material-icons">shopping_cart</span>
         <span id="cartCount">0</span>
     </div>

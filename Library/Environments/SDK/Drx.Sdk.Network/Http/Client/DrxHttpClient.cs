@@ -11,7 +11,9 @@ namespace Drx.Sdk.Network.Http
     /// - DrxHttpClient.Cookies.cs: 会话管理、Cookie 导入/导出、ASCII 编码
     /// - DrxHttpClient.Send.cs: SendAsync 重载、SendAsyncInternal、便捷方法（Get/Post/Put/Delete）、ParseMethod、BuildUrl
     /// - DrxHttpClient.Upload.cs: 文件上传及带元数据的上传
-    /// - DrxHttpClient.Download.cs: 文件下载与流式下载
+    /// - DrxHttpClient.ResourceUpload.cs: 资源上传（生命周期回调）
+    /// - DrxHttpClient.Download.cs: 文件下载、流式下载、哈希校验与元数据解析
+    /// - DrxHttpClient.ResourceDownload.cs: 资源下载（生命周期回调）
     /// - DrxHttpClient.Queue.cs: 后台请求队列处理
     /// - DrxHttpClient.Helpers.cs: 默认头设置、超时配置、资源释放
     ///

@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KaxHub - 服务器控制台</title>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <link href="/css/global.css" rel="stylesheet">
+    <link href="/css/console.css" rel="stylesheet">
+    <script src="/js/global.js" defer></script>
+    <script src="/js/topbar.js" defer></script>
+</head>
+
+<body class="has-global-topbar">
+    <!-- 页面内容默认隐藏，直到完成登录验证 -->
+    <div id="page" class="hidden">
+        <div class="console-container">
+            <!-- 控制台标题栏 -->
+            <header class="console-header">
+                <div class="console-header-left">
+                    <div class="console-logo">
+                        <span class="material-icons">terminal</span>
+                    </div>
+                    <div>
+                        <h1>服务器控制台</h1>
+                        <p class="console-lead">KaxHub 远程命令执行终端</p>
+                    </div>
+                </div>
+                <div class="console-header-right">
+                    <div class="console-status" id="connectionStatus">
+                        <span class="status-dot offline"></span>
+                        <span class="status-text">未连接</span>
+                    </div>
+                    <button id="clearBtn" class="btn ghost small" title="清空控制台">
+                        <span class="material-icons" style="font-size:18px;vertical-align:middle;">delete_sweep</span>
+                        清空
+                    </button>
+                    <button id="homeBtn" class="btn ghost small">返回首页</button>
+                </div>
+            </header>
+
+            <!-- 终端主体 -->
+            <div class="terminal-wrapper">
+                <!-- 终端工具栏 -->
+                <div class="terminal-toolbar">
+                    <div class="terminal-dots">
+                        <span class="dot red"></span>
+                        <span class="dot yellow"></span>
+                        <span class="dot green"></span>
+                    </div>
+                    <div class="terminal-title">KaxHub Console — 远程终端</div>
+                    <div class="terminal-actions">
+                        <button id="logToggleBtn" class="toolbar-btn" title="显示日志">
+                            <span class="material-icons">receipt_long</span>
+                        </button>
+                        <button id="helpBtn" class="toolbar-btn" title="命令帮助">
+                            <span class="material-icons">help_outline</span>
+                        </button>
+                        <button id="fullscreenBtn" class="toolbar-btn" title="全屏">
+                            <span class="material-icons">fullscreen</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 终端输出区域 -->
+                <div class="terminal-body" id="terminalBody">
+                    <div class="terminal-output" id="terminalOutput">
+                        <!-- 动态输出内容 -->
+                    </div>
+
+                    <!-- 输入行 -->
+                    <div class="terminal-input-line">
+                        <span class="terminal-prompt">
+                            <span class="prompt-user">admin</span><span class="prompt-at">@</span><span class="prompt-host">kaxhub</span><span class="prompt-colon">:</span><span class="prompt-path">~</span><span class="prompt-dollar">$</span>
+                        </span>
+                        <input type="text" id="terminalInput" class="terminal-input" autocomplete="off"
+                            spellcheck="false" autofocus placeholder="输入命令..." />
+                        <!-- 自动补全下拉 -->
+                        <div id="autocompleteDropdown" class="autocomplete-dropdown hidden"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 命令参考面板（可折叠） -->
+            <div class="command-reference" id="commandReference">
+                <div class="reference-header" id="referenceToggle">
+                    <span class="material-icons reference-icon">menu_book</span>
+                    <span>命令参考</span>
+                    <span class="material-icons reference-caret" id="referenceCaret">expand_more</span>
+                </div>
+                <div class="reference-body hidden" id="referenceBody">
+                    <div id="commandList" class="command-list">
+                        <p class="hint">加载中...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/js/console.js"></script>
+</body>
+
+</html>

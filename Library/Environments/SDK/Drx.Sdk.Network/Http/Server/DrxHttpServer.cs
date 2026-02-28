@@ -54,7 +54,8 @@ namespace Drx.Sdk.Network.Http
     /// - DrxHttpServer.Routing.cs: 路由添加与匹配
     /// - DrxHttpServer.Middleware.cs: 中间件管理
     /// - DrxHttpServer.RequestProcessing.cs: 请求处理生命周期
-    /// - DrxHttpServer.FileServing.cs: 文件服务与流式传输
+    /// - DrxHttpServer.StaticContent.cs: 静态资源服务与基于Hash的缓存（HTML/CSS/JS/图片等）
+    /// - DrxHttpServer.FileServing.cs: 二进制文件传输（上传/下载/Range断点续传）
     /// - DrxHttpServer.RateLimit.cs: 限流控制
     /// - DrxHttpServer.SerializationHelpers.cs: 序列化和辅助工具
     /// - DrxHttpServer.HandlerRegistration.cs: 处理程序反射注册

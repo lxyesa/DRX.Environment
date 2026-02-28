@@ -138,34 +138,6 @@ namespace KaxSocket
     }
 
     /// <summary>
-    /// 资产价格项（子表），描述一种购买选项（如时长、单位、价格、折扣等）
-    /// </summary>
-    public class AssetPrice : IDataTableV2
-    {
-        public string Id { get; set; } = Guid.NewGuid().ToString();
-        public int ParentId { get; set; }
-        public long CreatedAt { get; set; } = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-        public long UpdatedAt { get; set; } = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-
-        /// <summary>价格（以最小货币单位，例如分）</summary>
-        public int Price { get; set; }
-
-        /// <summary>单位（如 "year", "month", "day", "hour", "once"）</summary>
-        public string Unit { get; set; } = "once";
-
-        /// <summary>单位数量（如 Duration=1 且 Unit="year" 表示 1 年）</summary>
-        public int Duration { get; set; } = 1;
-
-        /// <summary>原始价格（未折扣前，最小货币单位）</summary>
-        public int OriginalPrice { get; set; }
-
-        /// <summary>折扣率（0.0-1.0，例如 0.15 表示 15% 折扣）</summary>
-        public double DiscountRate { get; set; } = 0.0;
-
-        public string TableName => nameof(AssetPrice);
-    }
-
-    /// <summary>
     /// 用户状态信息（如封禁、封禁时间等）
     /// </summary>
     public class UserStatus : IDataTable

@@ -9,6 +9,7 @@ using Drx.Sdk.Network.Http.Configs;
 using Drx.Sdk.Shared;
 using KaxSocket;
 using KaxSocket.Model;
+using static KaxSocket.Model.AssetModel;
 
 namespace KaxSocket.Handlers;
 
@@ -18,6 +19,16 @@ namespace KaxSocket.Handlers;
 public partial class KaxHttp
 {
     #region 资源管理 (Asset Administration)
+
+    /// <summary>
+    /// 确保 asset.Specs 已初始化（一对一子表），返回可直接读写的 Specs 实例
+    /// </summary>
+    private static AssetSpecs EnsureSpecs(Model.AssetModel asset)
+    {
+        if (asset.Specs == null)
+            asset.Specs = new AssetSpecs { ParentId = asset.Id };
+        return asset.Specs;
+    }
 
     /// <summary>
     /// 从JSON请求体中提取价格信息并创建/更新资产的价格方案
@@ -52,6 +63,7 @@ public partial class KaxHttp
                 string unit = "month";
                 int duration = 1;
                 string id = string.Empty;
+                int stock = -1;
 
                 if (priceObj["price"] != null && int.TryParse(priceObj["price"]?.ToString(), out var priceVal) && priceVal >= 0)
                     price = priceVal;
@@ -71,6 +83,9 @@ public partial class KaxHttp
                 if (priceObj["id"] != null)
                     id = priceObj["id"]?.ToString() ?? string.Empty;
 
+                if (priceObj["stock"] != null && int.TryParse(priceObj["stock"]?.ToString(), out var stockVal))
+                    stock = stockVal;
+
                 // 创建价格方案
                 var assetPrice = new AssetPrice
                 {
@@ -79,7 +94,8 @@ public partial class KaxHttp
                     OriginalPrice = originalPrice > 0 ? originalPrice : price,
                     DiscountRate = discountRate,
                     Unit = unit,
-                    Duration = duration
+                    Duration = duration,
+                    Stock = stock
                 };
 
                 // 如果ID不是临时ID（new_开头），则保留原ID
@@ -129,6 +145,34 @@ public partial class KaxHttp
         }
     }
 
+    /// <summary>
+    /// 从 JSON 请求体中提取规格信息（文件大小、评分、兼容性、许可证等）并写入 asset.Specs 子表
+    /// </summary>
+    private static void ApplySpecsInfoToAsset(Model.AssetModel asset, JsonNode body, bool isCreate = false)
+    {
+        if (body == null) return;
+        var specs = EnsureSpecs(asset);
+
+        if (body["fileSize"] != null && long.TryParse(body["fileSize"]?.ToString(), out var fs) && fs >= 0)
+            specs.FileSize = fs;
+        if (body["rating"] != null && double.TryParse(body["rating"]?.ToString(), out var rating))
+            specs.Rating = Math.Max(0.0, Math.Min(5.0, rating));
+        if (body["reviewCount"] != null && int.TryParse(body["reviewCount"]?.ToString(), out var rc) && rc >= 0)
+            specs.ReviewCount = rc;
+        if (body["compatibility"] != null)
+            specs.Compatibility = body["compatibility"]?.ToString() ?? string.Empty;
+        if (body["downloads"] != null && int.TryParse(body["downloads"]?.ToString(), out var dl) && dl >= 0)
+            specs.Downloads = dl;
+        if (body["uploadDate"] != null && long.TryParse(body["uploadDate"]?.ToString(), out var ud) && ud > 0)
+            specs.UploadDate = ud;
+        if (body["license"] != null)
+            specs.License = body["license"]?.ToString() ?? string.Empty;
+        if (body["downloadUrl"] != null)
+            specs.DownloadUrl = body["downloadUrl"]?.ToString() ?? string.Empty;
+
+        specs.LastUpdatedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+    }
+
     [HttpHandle("/api/asset/admin/create", "POST", RateLimitMaxRequests = 10, RateLimitWindowSeconds = 60, RateLimitCallbackMethodName = nameof(RateLimitCallback))]
     public static async Task<IActionResult> Post_CreateAsset(HttpRequest request)
     {
@@ -169,55 +213,20 @@ public partial class KaxHttp
                 Name = name,
                 Version = version,
                 Author = author,
-                Description = description,
-                LastUpdatedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds()
+                Description = description
             };
 
             // 应用价格信息（支持向后兼容的参数）
             ApplyPriceInfoToAsset(asset, body);
 
-            if (body["stock"] != null && int.TryParse(body["stock"]?.ToString(), out var s) && s >= 0)
-            {
-                asset.Stock = s;
-            }
             // 可选字段：分类
             if (body["category"] != null)
             {
                 asset.Category = body["category"]?.ToString() ?? string.Empty;
             }
-            if (body["fileSize"] != null && long.TryParse(body["fileSize"]?.ToString(), out var fs) && fs >= 0)
-            {
-                asset.FileSize = fs;
-            }
-            // 可选字段：评分、评论数、兼容性、下载次数、上传时间、许可证、下载地址
-            if (body["rating"] != null && double.TryParse(body["rating"]?.ToString(), out var rating))
-            {
-                asset.Rating = Math.Max(0.0, Math.Min(5.0, rating));
-            }
-            if (body["reviewCount"] != null && int.TryParse(body["reviewCount"]?.ToString(), out var rc) && rc >= 0)
-            {
-                asset.ReviewCount = rc;
-            }
-            if (body["compatibility"] != null)
-            {
-                asset.Compatibility = body["compatibility"]?.ToString() ?? string.Empty;
-            }
-            if (body["downloads"] != null && int.TryParse(body["downloads"]?.ToString(), out var dl) && dl >= 0)
-            {
-                asset.Downloads = dl;
-            }
-            if (body["uploadDate"] != null && long.TryParse(body["uploadDate"]?.ToString(), out var ud) && ud > 0)
-            {
-                asset.UploadDate = ud;
-            }
-            if (body["license"] != null)
-            {
-                asset.License = body["license"]?.ToString() ?? string.Empty;
-            }
-            if (body["downloadUrl"] != null)
-            {
-                asset.DownloadUrl = body["downloadUrl"]?.ToString() ?? string.Empty;
-            }
+
+            // 应用规格信息（文件大小、评分、兼容性、许可证等）
+            ApplySpecsInfoToAsset(asset, body, isCreate: true);
 
             KaxGlobal.AssetDataBase.Insert(asset);
 
@@ -273,53 +282,18 @@ public partial class KaxHttp
             if (!string.IsNullOrEmpty(version)) asset.Version = version;
             if (!string.IsNullOrEmpty(author)) asset.Author = author;
             asset.Description = description;
-            asset.LastUpdatedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
 
             // 应用价格信息（支持向后兼容的参数）
             ApplyPriceInfoToAsset(asset, body);
 
-            if (body["stock"] != null && int.TryParse(body["stock"]?.ToString(), out var newStock) && newStock >= 0)
-            {
-                asset.Stock = newStock;
-            }
-            // 可选更新：分类、文件大小
+            // 可选更新：分类
             if (body["category"] != null)
             {
                 asset.Category = body["category"]?.ToString() ?? string.Empty;
             }
-            if (body["fileSize"] != null && long.TryParse(body["fileSize"]?.ToString(), out var newFileSize) && newFileSize >= 0)
-            {
-                asset.FileSize = newFileSize;
-            }
-            // 可选更新：评分、评论数、兼容性、下载次数、上传时间、许可证、下载地址
-            if (body["rating"] != null && double.TryParse(body["rating"]?.ToString(), out var newRating))
-            {
-                asset.Rating = Math.Max(0.0, Math.Min(5.0, newRating));
-            }
-            if (body["reviewCount"] != null && int.TryParse(body["reviewCount"]?.ToString(), out var newReviewCount) && newReviewCount >= 0)
-            {
-                asset.ReviewCount = newReviewCount;
-            }
-            if (body["compatibility"] != null)
-            {
-                asset.Compatibility = body["compatibility"]?.ToString() ?? string.Empty;
-            }
-            if (body["downloads"] != null && int.TryParse(body["downloads"]?.ToString(), out var newDownloads) && newDownloads >= 0)
-            {
-                asset.Downloads = newDownloads;
-            }
-            if (body["uploadDate"] != null && long.TryParse(body["uploadDate"]?.ToString(), out var newUploadDate) && newUploadDate > 0)
-            {
-                asset.UploadDate = newUploadDate;
-            }
-            if (body["license"] != null)
-            {
-                asset.License = body["license"]?.ToString() ?? string.Empty;
-            }
-            if (body["downloadUrl"] != null)
-            {
-                asset.DownloadUrl = body["downloadUrl"]?.ToString() ?? string.Empty;
-            }
+
+            // 应用规格信息
+            ApplySpecsInfoToAsset(asset, body);
 
             await KaxGlobal.AssetDataBase.UpdateAsync(asset);
 
@@ -364,6 +338,7 @@ public partial class KaxHttp
             // 将价格方案列表转换为可序列化的格式，并从第一个方案派生兼容字段
             var pricesList = asset.Prices?.ToList();
             var primaryPrice = (pricesList != null && pricesList.Any()) ? pricesList.First() : null;
+            var specs = asset.Specs;
 
             return new JsonResult(new
             {
@@ -378,20 +353,36 @@ public partial class KaxHttp
                     originalPrice = primaryPrice != null ? primaryPrice.OriginalPrice : 0,
                     salePrice = primaryPrice != null ? (int)Math.Round(primaryPrice.Price * (1.0 - primaryPrice.DiscountRate)) : 0,
                     category = asset.Category,
-                    fileSize = asset.FileSize,
                     discountRate = primaryPrice != null ? primaryPrice.DiscountRate : 0.0,
-                    rating = asset.Rating,
-                    reviewCount = asset.ReviewCount,
-                    compatibility = asset.Compatibility,
-                    downloads = asset.Downloads,
-                    uploadDate = asset.UploadDate,
-                    license = asset.License,
-                    downloadUrl = asset.DownloadUrl,
-                    stock = asset.Stock,
-                    purchaseCount = asset.PurchaseCount,
-                    favoriteCount = asset.FavoriteCount,
-                    viewCount = asset.ViewCount,
-                    lastUpdatedAt = asset.LastUpdatedAt,
+                    // 规格信息（来自 Specs 子表）
+                    specs = specs != null ? new
+                    {
+                        fileSize = specs.FileSize,
+                        rating = specs.Rating,
+                        reviewCount = specs.ReviewCount,
+                        compatibility = specs.Compatibility,
+                        downloads = specs.Downloads,
+                        uploadDate = specs.UploadDate,
+                        license = specs.License,
+                        downloadUrl = specs.DownloadUrl,
+                        purchaseCount = specs.PurchaseCount,
+                        favoriteCount = specs.FavoriteCount,
+                        viewCount = specs.ViewCount,
+                        lastUpdatedAt = specs.LastUpdatedAt
+                    } : null,
+                    // 向后兼容：平铺规格字段
+                    fileSize = specs?.FileSize ?? 0,
+                    rating = specs?.Rating ?? 0.0,
+                    reviewCount = specs?.ReviewCount ?? 0,
+                    compatibility = specs?.Compatibility ?? string.Empty,
+                    downloads = specs?.Downloads ?? 0,
+                    uploadDate = specs?.UploadDate ?? 0,
+                    license = specs?.License ?? string.Empty,
+                    downloadUrl = specs?.DownloadUrl ?? string.Empty,
+                    purchaseCount = specs?.PurchaseCount ?? 0,
+                    favoriteCount = specs?.FavoriteCount ?? 0,
+                    viewCount = specs?.ViewCount ?? 0,
+                    lastUpdatedAt = specs?.LastUpdatedAt ?? 0,
                     isDeleted = asset.IsDeleted,
                     deletedAt = asset.DeletedAt,
                     prices = pricesList
@@ -436,7 +427,8 @@ public partial class KaxHttp
             // 软删除：标记为已删除并记录时间
             asset.IsDeleted = true;
             asset.DeletedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-            asset.LastUpdatedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+            var specs = EnsureSpecs(asset);
+            specs.LastUpdatedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
             await KaxGlobal.AssetDataBase.UpdateAsync(asset);
 
             Logger.Info($"用户 {userName} 软删除了资源: {asset.Name} (id={id})");
@@ -479,7 +471,8 @@ public partial class KaxHttp
 
             asset.IsDeleted = false;
             asset.DeletedAt = 0;
-            asset.LastUpdatedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+            var specs = EnsureSpecs(asset);
+            specs.LastUpdatedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
             await KaxGlobal.AssetDataBase.UpdateAsync(asset);
 
             Logger.Info($"用户 {userName} 恢复了资源: {asset.Name} (id={id})");
@@ -541,7 +534,7 @@ public partial class KaxHttp
             }
 
             var total = filtered.Count();
-            var items = filtered.OrderByDescending(a => a.LastUpdatedAt)
+            var items = filtered.OrderByDescending(a => a.Specs != null ? a.Specs.LastUpdatedAt : 0)
                 .Skip((page - 1) * pageSize).Take(pageSize)
                 .Select(a => new
                 {
@@ -550,7 +543,7 @@ public partial class KaxHttp
                     version = a.Version,
                     author = a.Author,
                     description = a.Description,
-                    lastUpdatedAt = a.LastUpdatedAt,
+                    lastUpdatedAt = a.Specs != null ? a.Specs.LastUpdatedAt : 0,
                     isDeleted = a.IsDeleted
                 })
                 .ToList<object>();

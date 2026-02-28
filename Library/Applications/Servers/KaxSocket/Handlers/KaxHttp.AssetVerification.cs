@@ -184,7 +184,6 @@ public partial class KaxHttp
                     {
                         code = resultCode,
                         message = resultMessage,
-                        assetId = cdk.AssetId,
                         goldValue = cdk.GoldValue,
                         description = cdk.Description
                     }, httpStatus);

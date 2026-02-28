@@ -2,296 +2,539 @@
 <html lang="zh-CN">
 
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>KaxHub - 个人资料</title>
-  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
-  <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
-  <link href="/css/global.css" rel="stylesheet">
-  <script src="/js/avatarCache.js" defer></script>
-  <script src="/js/global.js" defer></script>
-  <script src="/components/inputbox.js" defer></script>
-  <script src="/components/badge/userbadge.js" defer></script>
-  <script src="/components/collapsible-card.js" defer></script>
-  <link href="/css/profile.css" rel="stylesheet">
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>KaxHub - 个人资料</title>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap"
+        rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <link href="/css/global.css?v=2" rel="stylesheet">
+    <script src="/js/avatarCache.js?v=2" defer></script>
+    <script src="/js/global.js?v=2" defer></script>
+    <script src="/js/topbar.js?v=2" defer></script>
+    <script src="/components/inputbox.js?v=2" defer></script>
+    <script src="/components/section-card.js?v=2" defer></script>
+    <script src="/components/badge/userbadge.js?v=2" defer></script>
+    <script src="/components/collapsible-card.js?v=2" defer></script>
+    <link href="/css/profile.css?v=2" rel="stylesheet">
 </head>
 
 <body class="has-global-topbar">
-  <div class="container">
+
     <!-- 错误页面 -->
     <div class="error-container" id="errorContainer">
-      <div class="error-icon">⚠️</div>
-      <div class="error-title">资料不存在</div>
-      <div class="error-message">抱歉，你访问的用户资料不存在或已被删除。请检查 UID 是否正确。</div>
-      <div class="error-actions">
-        <button class="btn ghost" onclick="location.href='/'">返回首页</button>
-        <button class="btn" onclick="location.href='/profile'">查看我的资料</button>
-      </div>
+        <div class="error-icon">⚠️</div>
+        <div class="error-title">资料不存在</div>
+        <div class="error-message">抱歉，你访问的用户资料不存在或已被删除。请检查 UID 是否正确。</div>
+        <div class="error-actions">
+            <button class="btn ghost" onclick="location.href='/'">返回首页</button>
+            <button class="btn" onclick="location.href='/profile'">查看我的资料</button>
+        </div>
     </div>
 
     <!-- 主要内容 -->
-    <div id="mainContent">
-      <div class="page-header" role="banner">
-        <div class="brand">
-          <div class="logo">◆</div>
-          <div>
-            <h1>个人资料</h1>
-            <div class="lead">管理你的账户信息、偏好与安全设置</div>
-          </div>
-        </div>
-        <div class="controls">
-          <button class="btn ghost" id="backBtn">返回首页</button>
-          <button class="btn" id="logoutBtn">登出</button>
-        </div>
-      </div>
+    <div class="profile-layout" id="mainContent">
 
-      <main class="grid">
-        <!-- 左侧：个人卡片 -->
-        <aside class="card profile-card" aria-label="个人信息卡片">
+        <!-- ===== 左侧边栏 ===== -->
+        <aside class="profile-sidebar" aria-label="个人信息">
 
-          <!-- 头像区 -->
-          <div class="profile-avatar-section">
-            <div class="avatar" id="avatarContainer" title="上传头像（仅预览）" role="button" tabindex="0" aria-label="上传头像（仅预览）">
-              <img id="avatarImg" src="/static/default-avatar.jpg" alt="头像" onerror="this.style.display='none'">
-              <span id="avatarInitials">YY</span>
-              <div class="avatar-overlay" aria-hidden="true">
-                <span class="material-icons avatar-plus" aria-hidden="true">add</span>
-              </div>
-              <input id="avatarFile" type="file" accept="image/*" style="display:none" aria-hidden="true">
+            <!-- 头像 -->
+            <div class="sidebar-avatar" id="avatarContainer" role="button" tabindex="0" aria-label="上传头像">
+                <img id="avatarImg" src="/static/default-avatar.jpg" alt="头像"
+                    onerror="this.style.display='none'">
+                <span id="avatarInitials" class="avatar-initials">?</span>
+                <div class="avatar-overlay" aria-hidden="true">
+                    <span class="material-icons" aria-hidden="true">photo_camera</span>
+                </div>
+                <input id="avatarFile" type="file" accept="image/*" style="display:none" aria-hidden="true">
             </div>
-            <div class="profile-identity">
-              <div class="name" id="displayName">杨 瑶</div>
-              <div class="meta" id="displayHandle">@yangyao • 管理员</div>
-              <div class="badge-container" aria-hidden="false">
-                <user-badge text="无徽章" variant="gray" aria-label="徽章：无"></user-badge>
-              </div>
-            </div>
-          </div>
 
-          <!-- 统计区 -->
-          <div class="stats" aria-hidden="true">
-            <div class="stat">
-              <span class="num" id="statResourceCount">0</span>
-              <span class="label">资源</span>
+            <!-- 身份信息 -->
+            <div class="sidebar-identity">
+                <h1 class="sidebar-name" id="displayName">加载中…</h1>
+                <div class="sidebar-handle" id="displayHandle">@...</div>
             </div>
-            <div class="stat">
-              <span class="num" id="statGold">0</span>
-              <span class="label">金币</span>
-            </div>
-            <div class="stat">
-              <span class="num" id="statRecentActivity">0</span>
-              <span class="label">最近活动</span>
-            </div>
-          </div>
 
-          <!-- 账户信息区 -->
-          <div class="profile-info-section">
-            <div class="info-section-label">账户信息</div>
-            <div class="info-row">
-              <div class="k">邮箱</div>
-              <div class="v" id="email" title="yangyao@example.com">yangyao@example.com</div>
+            <!-- 徽章 -->
+            <div class="sidebar-badges" id="badgeContainer">
+                <user-badge text="无徽章" variant="gray"></user-badge>
             </div>
-            <div class="info-row">
-              <div class="k">角色</div>
-              <div class="v" id="role">管理员</div>
+
+            <!-- 简介 -->
+            <p class="sidebar-bio" id="displayBio"></p>
+
+            <!-- 操作按钮 -->
+            <div class="sidebar-actions" id="sidebarActions">
+                <button class="btn ghost block" id="editProfileBtn">编辑个人资料</button>
             </div>
-            <div class="info-row">
-              <div class="k">UID</div>
-              <div class="v" id="uid">-</div>
+
+            <!-- 统计数据 -->
+            <div class="sidebar-stats">
+                <a class="sidebar-stat" href="javascript:void(0)">
+                    <span class="material-icons">inventory_2</span>
+                    <strong id="statResourceCount">0</strong>
+                    <span>资产</span>
+                </a>
+                <a class="sidebar-stat" href="javascript:void(0)">
+                    <span class="material-icons">monetization_on</span>
+                    <strong id="statGold">0</strong>
+                    <span>金币</span>
+                </a>
             </div>
-            <div class="info-row">
-              <div class="k">封禁</div>
-              <div class="v" id="banStatus">否</div>
-            </div>
-            <div class="info-row">
-              <div class="k">注册时间</div>
-              <div class="v" id="joined">2021-05-12</div>
-            </div>
-            <div class="info-row">
-              <div class="k">上次登录</div>
-              <div class="v" id="lastLogin">2026-02-17 09:12</div>
-            </div>
-            <div class="info-row">
-              <div class="k">金币</div>
-              <div class="v" id="gold">0</div>
-            </div>
-          </div>
+
+            <div class="sidebar-divider"></div>
+
+            <!-- 元信息列表 -->
+            <ul class="sidebar-meta">
+                <li>
+                    <span class="material-icons">shield</span>
+                    <span id="role">普通用户</span>
+                </li>
+                <li>
+                    <span class="material-icons">fingerprint</span>
+                    <span>UID: <span id="uid">-</span></span>
+                </li>
+                <li id="metaBan" style="display:none;">
+                    <span class="material-icons">block</span>
+                    <span id="banStatus">未封禁</span>
+                </li>
+                <li>
+                    <span class="material-icons">calendar_today</span>
+                    <span>注册于 <span id="joined">-</span></span>
+                </li>
+                <li>
+                    <span class="material-icons">schedule</span>
+                    <span>最近登录 <span id="lastLogin">-</span></span>
+                </li>
+            </ul>
 
         </aside>
 
-        <!-- 右侧：表单和设置 -->
-        <section class="profile-sections">
+        <!-- ===== 右侧主内容 ===== -->
+        <main class="profile-main">
 
-          <!-- 基本信息 -->
-          <collapsible-card title="基本信息" subtitle="保存将调用 /api/user/profile" open aria-labelledby="basicTitle">
-            <span slot="icon" class="material-icons">person</span>
+            <!-- 标签栏 -->
+            <nav class="profile-tabs" role="tablist">
+                <button class="profile-tab active" role="tab" data-tab="overview" aria-selected="true">
+                    <span class="material-icons">person</span>
+                    <span class="tab-label">概览</span>
+                </button>
+                <button class="profile-tab" role="tab" data-tab="edit" id="tabEdit">
+                    <span class="material-icons">edit</span>
+                    <span class="tab-label">编辑资料</span>
+                </button>
+                <button class="profile-tab" role="tab" data-tab="security" id="tabSecurity">
+                    <span class="material-icons">lock</span>
+                    <span class="tab-label">安全</span>
+                </button>
+                <button class="profile-tab" role="tab" data-tab="assets" id="tabAssets">
+                    <span class="material-icons">inventory_2</span>
+                    <span class="tab-label">资产</span>
+                </button>
+                <button class="profile-tab admin-only-tab" role="tab" data-tab="admin-assets" id="tabAdminAssets" style="display:none;">
+                    <span class="material-icons">store</span>
+                    <span class="tab-label">资产管理</span>
+                </button>
+                <button class="profile-tab admin-only-tab" role="tab" data-tab="admin-cdk" id="tabAdminCdk" style="display:none;">
+                    <span class="material-icons">vpn_key</span>
+                    <span class="tab-label">CDK 管理</span>
+                </button>
+            </nav>
 
-            <form id="profileForm">
-              <!-- 账户字段组 -->
-              <div class="form-group">
-                <div class="form-group-label">账户</div>
-                <div class="form-grid">
-                  <input-box id="inputName" label="显示名称" placeholder="显示名称" value="杨 瑶" size="small"></input-box>
-                  <input-box id="inputHandle" label="用户名" placeholder="用户名" value="yangyao" readonly title="用户名不可修改" size="small"></input-box>
-                  <input-box id="inputEmail" label="邮箱" placeholder="邮箱" type="email" value="yangyao@example.com" size="small"></input-box>
-                  <input-box id="inputRole" label="角色" placeholder="角色" value="管理员" readonly title="由系统控制，无法修改" size="small"></input-box>
+            <!-- Tab: 概览 -->
+            <section class="tab-panel active" id="panel-overview" role="tabpanel">
+                <div class="overview-grid">
+
+                    <section-card icon="info" title="个人简介">
+                        <p class="overview-text" id="overviewBio">这个人很懒，什么都没有留下。</p>
+                    </section-card>
+
+                    <section-card icon="format_quote" title="个性签名">
+                        <p class="overview-text overview-signature" id="overviewSignature">—</p>
+                    </section-card>
+
+                    <section-card icon="bar_chart" title="详细信息" class="overview-card-wide">
+                        <div class="overview-info-grid">
+                            <div class="overview-info-item">
+                                <span class="oi-label">角色</span>
+                                <span class="oi-value" id="overviewRole">—</span>
+                            </div>
+                            <div class="overview-info-item">
+                                <span class="oi-label">UID</span>
+                                <span class="oi-value" id="overviewUid">—</span>
+                            </div>
+                            <div class="overview-info-item">
+                                <span class="oi-label">金币</span>
+                                <span class="oi-value" id="overviewGold">0</span>
+                            </div>
+                            <div class="overview-info-item">
+                                <span class="oi-label">资产数</span>
+                                <span class="oi-value" id="overviewResources">0</span>
+                            </div>
+                            <div class="overview-info-item">
+                                <span class="oi-label">注册时间</span>
+                                <span class="oi-value" id="overviewJoined">—</span>
+                            </div>
+                            <div class="overview-info-item">
+                                <span class="oi-label">上次登录</span>
+                                <span class="oi-value" id="overviewLastLogin">—</span>
+                            </div>
+                        </div>
+                    </section-card>
+
                 </div>
-              </div>
+            </section>
 
-              <!-- 个性化字段组 -->
-              <div class="form-group">
-                <div class="form-group-label">个性化</div>
-                <div class="form-field">
-                  <input-box id="inputBio" label="个人简介" placeholder="介绍一下你自己" textarea rows="3" size="small"></input-box>
+            <!-- Tab: 编辑资料 -->
+            <section class="tab-panel" id="panel-edit" role="tabpanel">
+                <form id="profileForm">
+                    <section-card icon="edit" title="编辑个人资料" desc="修改你的账户信息与个人页展示内容">
+
+                        <!-- 账户信息区 -->
+                        <div class="edit-zone">
+                            <div class="edit-zone-label">账户信息</div>
+                            <div class="edit-grid">
+                                <input-box id="inputName" label="显示名称" placeholder="显示名称" value=""
+                                    size="small"></input-box>
+                                <input-box id="inputHandle" label="用户名" placeholder="用户名" value="" readonly
+                                    title="用户名不可修改" size="small"></input-box>
+                                <input-box id="inputRole" label="角色" placeholder="角色" value="" readonly
+                                    title="由系统控制，无法修改" size="small"></input-box>
+                            </div>
+                        </div>
+
+                        <div class="edit-zone-divider"></div>
+
+                        <!-- 个性化区 -->
+                        <div class="edit-zone">
+                            <div class="edit-zone-label">个性化</div>
+                            <div class="edit-stack">
+                                <input-box id="inputBio" label="个人简介" placeholder="介绍一下你自己" textarea rows="3"
+                                    size="small"></input-box>
+                                <input-box id="inputSignature" label="个性签名" placeholder="输入个性签名" textarea rows="3"
+                                    size="small"></input-box>
+                            </div>
+                        </div>
+
+                        <div slot="footer">
+                            <button type="button" class="btn ghost" id="cancelBtn">取消</button>
+                            <button type="submit" class="btn" id="saveBtn">保存更改</button>
+                        </div>
+                    </section-card>
+                </form>
+            </section>
+
+            <!-- Tab: 安全 -->
+            <section class="tab-panel" id="panel-security" role="tabpanel">
+                <div class="security-layout">
+
+                    <!-- 邮箱管理卡片 -->
+                    <section-card icon="email" title="邮箱地址" desc="登录账号绑定的邮箱地址">
+                        <div class="security-info-bar">
+                            <span class="material-icons security-info-icon">mail_outline</span>
+                            <span>当前邮箱：<strong id="currentEmailDisplay">—</strong></span>
+                        </div>
+                        <div class="security-email-locked">
+                            <span class="material-icons">lock</span>
+                            <span>邮箱修改功能暂未开放，请联系管理员处理</span>
+                        </div>
+                    </section-card>
+
+                    <!-- 修改密码卡片 -->
+                    <section-card icon="lock" title="修改密码" desc="定期更换密码以保护账户安全">
+                        <div class="security-field-group">
+                            <input-box id="pwOld" label="当前密码" placeholder="输入当前密码以继续" type="password"
+                                name="currentPassword" autocomplete="current-password" size="small"></input-box>
+                        </div>
+                        <div class="security-field-divider"></div>
+                        <div class="security-field-group security-field-group--grid">
+                            <input-box id="pw1" label="新密码" placeholder="至少 8 位" type="password"
+                                name="newPassword" minlength="8" autocomplete="new-password"
+                                size="small"></input-box>
+                            <input-box id="pw2" label="确认新密码" placeholder="再次输入" type="password"
+                                name="confirmPassword" minlength="8" autocomplete="new-password"
+                                size="small"></input-box>
+                        </div>
+                        <div slot="footer">
+                            <span class="edit-hint">密码长度至少 8 位，区分大小写</span>
+                            <button class="btn" id="changePwBtn">更新密码</button>
+                        </div>
+                    </section-card>
+
                 </div>
-                <div class="form-field">
-                  <input-box id="inputSignature" label="个性签名" placeholder="输入个性签名" textarea rows="3" size="small"></input-box>
+            </section>
+
+            <!-- Tab: 资产 -->
+            <section class="tab-panel" id="panel-assets" role="tabpanel">
+                <div class="security-layout">
+
+                    <section-card icon="inventory_2" title="已激活的资产" desc="下方列出了当前账号激活的所有资产">
+                        <div id="assetsLoading" class="assets-state">
+                            <span class="material-icons assets-state-icon spin">sync</span>
+                            <span>正在加载资产列表…</span>
+                        </div>
+                        <div id="assetsEmpty" class="assets-state" style="display:none;">
+                            <span class="material-icons assets-state-icon">inventory_2</span>
+                            <span>暂无激活的资产</span>
+                        </div>
+                        <div id="assetsList" class="assets-grid"></div>
+                        <span slot="footer" id="assetsCount" class="count-badge"></span>
+                    </section-card>
+
+                    <section-card icon="card_giftcard" title="激活新 CDK" desc="输入 CDK 兑换码以激活资产">
+                        <div class="cdk-section">
+                            <input-box id="cdkInput" label="CDK 代码" placeholder="XXXX-XXXX-XXXX-XXXX"
+                                autocomplete="off" show-action size="small">
+                                <button id="activateCdkBtn" slot="action">激活</button>
+                            </input-box>
+                            <div id="cdkMessage" class="cdk-message" style="display:none;"></div>
+                            <div id="cdkResult" class="cdk-result" style="display:none;">
+                                <span class="material-icons cdk-result-icon">check_circle</span>
+                                <div>
+                                    <div class="cdk-result-title">激活成功</div>
+                                    <div id="cdkResultDetails" class="cdk-result-details"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </section-card>
+
                 </div>
-              </div>
+            </section>
 
-              <div class="form-actions">
-                <button type="button" class="btn ghost" id="cancelBtn">取消</button>
-                <button type="submit" class="btn" id="saveBtn">保存更改</button>
-              </div>
-            </form>
-          </collapsible-card>
+            <!-- Tab: 资产管理（仅管理员） -->
+            <section class="tab-panel" id="panel-admin-assets" role="tabpanel">
+                <div class="security-layout">
 
-          <!-- 安全与偏好 -->
-          <collapsible-card title="安全与偏好" subtitle="密码与安全设置">
-            <span slot="icon" class="material-icons">security</span>
+                    <!-- 搜索/列表区 -->
+                    <section-card icon="store" title="资产列表" desc="管理所有已创建的资产，支持搜索、编辑与删除">
+                        <div class="admin-toolbar">
+                            <input-box id="adminAssetSearch" label="搜索资产" placeholder="输入名称、作者、版本…" show-action size="small">
+                                <button id="adminAssetSearchBtn" slot="action">搜索</button>
+                            </input-box>
+                            <div class="admin-toolbar-right">
+                                <label style="font-size:0.85rem;color:var(--muted-strong);display:flex;align-items:center;gap:6px;">
+                                    <input type="checkbox" id="adminAssetIncludeDeleted"> 包含已删除
+                                </label>
+                            </div>
+                        </div>
+                        <div id="adminAssetLoading" class="assets-state">
+                            <span class="material-icons assets-state-icon spin">sync</span>
+                            <span>加载中…</span>
+                        </div>
+                        <div id="adminAssetEmpty" class="assets-state" style="display:none;">
+                            <span class="material-icons assets-state-icon">store</span>
+                            <span>暂无资产</span>
+                        </div>
+                        <div id="adminAssetList" class="admin-list"></div>
+                        <div id="adminAssetPager" class="admin-pager" style="display:none;">
+                            <button class="btn ghost" id="adminAssetPrevBtn">上一页</button>
+                            <span id="adminAssetPageInfo" class="admin-pager-info"></span>
+                            <button class="btn ghost" id="adminAssetNextBtn">下一页</button>
+                        </div>
+                        <div slot="footer">
+                            <button class="btn" id="adminCreateAssetBtn">
+                                <span class="material-icons" style="font-size:1rem;margin-right:4px;">add</span>新建资产
+                            </button>
+                        </div>
+                    </section-card>
 
-            <div class="password-section">
-              <!-- 验证行 -->
-              <div class="pw-block">
-                <div class="pw-block-label">验证身份</div>
-                <input-box id="pwOld" label="当前密码" placeholder="输入当前密码以继续" type="password" name="currentPassword" autocomplete="current-password" size="small"></input-box>
-              </div>
-              <!-- 新密码行 -->
-              <div class="pw-block">
-                <div class="pw-block-label">设置新密码</div>
-                <div class="pw-row">
-                  <input-box id="pw1" label="新密码" placeholder="至少 8 位" type="password" name="newPassword" minlength="8" autocomplete="new-password" size="small"></input-box>
-                  <input-box id="pw2" label="确认新密码" placeholder="再次输入" type="password" name="confirmPassword" minlength="8" autocomplete="new-password" size="small"></input-box>
                 </div>
-              </div>
-              <div class="pw-footer">
-                <span class="small-hint">密码长度至少 8 位，区分大小写</span>
-                <button class="btn" id="changePwBtn">更新密码</button>
-              </div>
-            </div>
-          </collapsible-card>
+            </section>
 
-          <!-- 资产管理 -->
-          <collapsible-card title="资产管理" subtitle="查看激活资产或激活新 CDK">
-            <span slot="icon" class="material-icons">inventory_2</span>
+            <!-- Tab: CDK 管理（仅管理员） -->
+            <section class="tab-panel" id="panel-admin-cdk" role="tabpanel">
+                <div class="security-layout">
 
-            <!-- 激活的资产部分 -->
-            <div class="assets-management-section">
-              <div class="assets-section-header">
-                <h3 class="assets-section-title">已激活的资产</h3>
-                <span id="assetsCount" class="assets-count-badge">加载中…</span>
-              </div>
-              <div id="assetsContainer" class="assets-container">
-                <div id="assetsLoading" class="assets-state">
-                  <span class="material-icons assets-state-icon spin">sync</span>
-                  <span>正在加载资产列表…</span>
+                    <!-- CDK 生成区 -->
+                    <section-card icon="vpn_key" title="生成 CDK" desc="批量生成金币类型 CDK 并保存至数据库">
+                        <div class="edit-grid">
+                            <input-box id="cdkAdminCount" label="数量" placeholder="1-1000" value="1" size="small"></input-box>
+                            <input-box id="cdkAdminLength" label="长度" placeholder="4-256" value="16" size="small"></input-box>
+                            <input-box id="cdkAdminGold" label="金币值" placeholder="0" value="0" size="small"></input-box>
+                            <input-box id="cdkAdminExpires" label="有效期（秒，0=永久）" placeholder="0" value="0" size="small"></input-box>
+                            <input-box id="cdkAdminPrefix" label="前缀（可选）" placeholder="如 VIP-" size="small"></input-box>
+                            <input-box id="cdkAdminDesc" label="备注描述（可选）" placeholder="用途说明" size="small"></input-box>
+                        </div>
+                        <div id="cdkAdminPreview" class="cdk-preview-box" style="display:none;"></div>
+                        <div id="cdkAdminGenMsg" class="admin-msg" style="display:none;"></div>
+                        <div slot="footer">
+                            <button class="btn ghost" id="cdkAdminPreviewBtn">预览</button>
+                            <button class="btn" id="cdkAdminSaveBtn">生成并保存</button>
+                        </div>
+                    </section-card>
+
+                    <!-- CDK 列表区 -->
+                    <section-card icon="list" title="CDK 列表" desc="查看、搜索、删除已生成的 CDK">
+                        <div class="admin-toolbar">
+                            <input-box id="cdkAdminSearch" label="搜索 CDK" placeholder="输入代码、创建者、使用者…" show-action size="small">
+                                <button id="cdkAdminSearchBtn" slot="action">搜索</button>
+                            </input-box>
+                            <div class="admin-toolbar-right">
+                                <select id="cdkAdminSearchIn" class="admin-select" title="搜索范围">
+                                    <option value="all">全部字段</option>
+                                    <option value="code">代码</option>
+                                    <option value="creator">创建者</option>
+                                    <option value="user">使用者</option>
+                                    <option value="description">描述</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div id="cdkAdminLoading" class="assets-state">
+                            <span class="material-icons assets-state-icon spin">sync</span>
+                            <span>加载中…</span>
+                        </div>
+                        <div id="cdkAdminEmpty" class="assets-state" style="display:none;">
+                            <span class="material-icons assets-state-icon">vpn_key</span>
+                            <span>暂无 CDK</span>
+                        </div>
+                        <div id="cdkAdminList" class="admin-list"></div>
+                        <div id="cdkAdminPager" class="admin-pager" style="display:none;">
+                            <button class="btn ghost" id="cdkAdminPrevBtn">上一页</button>
+                            <span id="cdkAdminPageInfo" class="admin-pager-info"></span>
+                            <button class="btn ghost" id="cdkAdminNextBtn">下一页</button>
+                        </div>
+                    </section-card>
+
                 </div>
-                <div id="assetsEmpty" class="assets-state" style="display:none;">
-                  <span class="material-icons assets-state-icon">inventory_2</span>
-                  <span>暂无激活的资产</span>
-                </div>
-                <div id="assetsList" class="assets-list"></div>
-              </div>
-            </div>
+            </section>
 
-            <!-- CDK 激活部分分隔 -->
-            <div class="management-divider"></div>
-
-            <!-- CDK 激活部分 -->
-            <div class="cdk-management-section">
-              <h3 class="cdk-section-title">激活新 CDK</h3>
-              <div class="cdk-section">
-                <div class="cdk-input-row">
-                  <input-box id="cdkInput" label="CDK 代码" placeholder="XXXX-XXXX-XXXX-XXXX" autocomplete="off" show-action size="small">
-                    <button id="activateCdkBtn" slot="action">激活</button>
-                  </input-box>
-                </div>
-
-                <div id="cdkMessage" class="cdk-message" style="display:none;"></div>
-
-                <div id="cdkResult" class="cdk-result" style="display:none;">
-                  <span class="material-icons cdk-result-icon">check_circle</span>
-                  <div>
-                    <div class="cdk-result-title">激活成功</div>
-                    <div id="cdkResultDetails" class="cdk-result-details"></div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </collapsible-card>
-
-        </section>
-      </main>
+        </main>
     </div>
-  </div>
 
-  <!-- 弹出卡片：更变计划 -->
-  <div class="modal-overlay" id="changePlanModal">
-    <div class="modal-card">
-      <div class="modal-header">
-        <span class="material-icons icon">card_giftcard</span>
-        <span>选择新套餐</span>
-      </div>
-      <div class="modal-body">
-        <div id="planModalMessage"
-          style="display:none;padding:8px 10px;border-radius:4px;background:rgba(239,68,68,0.1);color:var(--danger);font-size:0.9rem;margin-bottom:12px;">
+    <!-- 弹出卡片：更变计划 -->
+    <div class="modal-overlay" id="changePlanModal">
+        <div class="modal-card">
+            <div class="modal-header">
+                <span class="material-icons icon">card_giftcard</span>
+                <span>选择新套餐</span>
+            </div>
+            <div class="modal-body">
+                <div id="planModalMessage"
+                    style="display:none;padding:8px 10px;border-radius:4px;background:rgba(239,68,68,0.1);color:var(--danger);font-size:0.9rem;margin-bottom:12px;">
+                </div>
+                <div id="planModalConfirm"
+                    style="display:none;padding:8px 10px;border-radius:4px;background:rgba(20,20,20,0.92);color:var(--muted-strong);font-size:0.9rem;margin-bottom:12px;">
+                    确认更变套餐将花费 <span id="planModalConfirmCost">💰0.00</span>，是否继续？
+                    <div style="margin-top:8px;display:flex;gap:8px;justify-content:flex-end;">
+                        <button class="btn ghost" id="planModalConfirmNo">取消</button>
+                        <button class="btn" id="planModalConfirmYes">确认</button>
+                    </div>
+                </div>
+                当前资源 <strong id="planModalAssetName">-</strong>
+                将更变为其他套餐。更变套餐不会继承上个套餐的剩余时常。
+            </div>
+            <div class="plan-list" id="planList"></div>
+            <div class="modal-footer">
+                <button class="btn ghost" onclick="closePlanModal()">取消</button>
+                <button class="btn" id="confirmChangePlanBtn">确认更变</button>
+            </div>
         </div>
-        <div id="planModalConfirm"
-          style="display:none;padding:8px 10px;border-radius:4px;background:rgba(20,20,20,0.92);color:var(--muted-strong);font-size:0.9rem;margin-bottom:12px;">
-          确认更变套餐将花费 <span id="planModalConfirmCost">💰0.00</span>，是否继续？
-          <div style="margin-top:8px;display:flex;gap:8px;justify-content:flex-end;">
-            <button class="btn ghost" id="planModalConfirmNo">取消</button>
-            <button class="btn" id="planModalConfirmYes">确认</button>
-          </div>
+    </div>
+
+    <!-- 弹出卡片：取消订阅 -->
+    <div class="modal-overlay" id="unsubscribeModal">
+        <div class="modal-card">
+            <div class="modal-header">
+                <span class="material-icons icon" style="color: var(--danger);">warning</span>
+                <span>取消订阅</span>
+            </div>
+            <div class="modal-warning">
+                <span class="material-icons icon">error_outline</span>
+                <span>此操作不可撤销</span>
+            </div>
+            <div class="modal-body">
+                你即将取消订阅资源 <strong id="unsubscribeModalAssetName">-</strong>。
+                <br><br>
+                取消订阅后，该资产将直接从你的已激活资产中移除。你将失去对该资源的访问权限。
+            </div>
+            <div class="modal-footer">
+                <button class="btn ghost" onclick="closeUnsubscribeModal()">我想再想想</button>
+                <button class="btn" style="background: var(--danger); border-color: var(--danger); color: #fff;"
+                    id="confirmUnsubscribeBtn">确认取消订阅</button>
+            </div>
         </div>
-        当前资源 <strong id="planModalAssetName">-</strong>
-        将更变为其他套餐。更变套餐不会继承上个套餐的剩余时常。
-      </div>
-      <div class="plan-list" id="planList">
-        <!-- 套餐列表由JavaScript动态生成 -->
-      </div>
-      <div class="modal-footer">
-        <button class="btn ghost" onclick="closePlanModal()">取消</button>
-        <button class="btn" id="confirmChangePlanBtn">确认更变</button>
-      </div>
     </div>
-  </div>
 
-  <!-- 弹出卡片：取消订阅 -->
-  <div class="modal-overlay" id="unsubscribeModal">
-    <div class="modal-card">
-      <div class="modal-header">
-        <span class="material-icons icon" style="color: var(--danger);">warning</span>
-        <span>取消订阅</span>
-      </div>
-      <div class="modal-warning">
-        <span class="material-icons icon">error_outline</span>
-        <span>此操作不可撤销</span>
-      </div>
-      <div class="modal-body">
-        你即将取消订阅资源 <strong id="unsubscribeModalAssetName">-</strong>。
-        <br><br>
-        取消订阅后，该资产将直接从你的已激活资产中移除。你将失去对该资源的访问权限。
-      </div>
-      <div class="modal-footer">
-        <button class="btn ghost" onclick="closeUnsubscribeModal()">我想再想想</button>
-        <button class="btn" style="background: var(--danger); border-color: var(--danger); color: #fff;"
-          id="confirmUnsubscribeBtn">确认取消订阅</button>
-      </div>
+    <!-- 弹出卡片：资产编辑/新建 -->
+    <div class="modal-overlay" id="assetEditModal">
+        <div class="modal-card" style="max-width:640px;width:95%;">
+            <div class="modal-header">
+                <span class="material-icons icon">store</span>
+                <span id="assetEditModalTitle">新建资产</span>
+            </div>
+            <div class="modal-body" style="max-height:65vh;overflow-y:auto;padding-right:8px;">
+                <div id="assetEditMsg" class="admin-msg" style="display:none;margin-bottom:12px;"></div>
+                <input type="hidden" id="assetEditId">
+                <div class="edit-grid" style="margin-bottom:12px;">
+                    <input-box id="assetEditName" label="资产名称 *" placeholder="名称" size="small"></input-box>
+                    <input-box id="assetEditVersion" label="版本 *" placeholder="如 1.0.0" size="small"></input-box>
+                    <input-box id="assetEditAuthor" label="作者 *" placeholder="作者名" size="small"></input-box>
+                    <input-box id="assetEditCategory" label="分类" placeholder="如 工具、素材" size="small"></input-box>
+                </div>
+                <div style="margin-bottom:12px;">
+                    <input-box id="assetEditDesc" label="描述（最多500字）" placeholder="资产描述…" textarea rows="3" size="small"></input-box>
+                </div>
+                <div style="font-size:0.85rem;font-weight:600;color:var(--muted-strong);margin-bottom:8px;">
+                    价格方案
+                    <button type="button" class="btn ghost" id="assetAddPriceBtn" style="font-size:0.78rem;padding:2px 10px;margin-left:8px;">
+                        <span class="material-icons" style="font-size:0.9rem;vertical-align:middle;">add</span> 添加
+                    </button>
+                </div>
+                <div id="assetPriceList" style="display:flex;flex-direction:column;gap:8px;margin-bottom:12px;"></div>
+                <div style="font-size:0.85rem;font-weight:600;color:var(--muted-strong);margin-bottom:8px;">规格信息（可选）</div>
+                <div class="edit-grid">
+                    <input-box id="assetEditDownloadUrl" label="下载地址" placeholder="https://…" size="small"></input-box>
+                    <input-box id="assetEditLicense" label="许可证" placeholder="如 MIT" size="small"></input-box>
+                    <input-box id="assetEditCompatibility" label="兼容性描述" placeholder="支持版本/平台" size="small"></input-box>
+                    <input-box id="assetEditFileSize" label="文件大小（字节）" placeholder="0" size="small"></input-box>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn ghost" id="assetEditCancelBtn">取消</button>
+                <button class="btn" id="assetEditSaveBtn">保存</button>
+            </div>
+        </div>
     </div>
-  </div>
 
-  <script src="/js/profile.js"></script>
+    <!-- 弹出卡片：确认删除资产 -->
+    <div class="modal-overlay" id="assetDeleteModal">
+        <div class="modal-card">
+            <div class="modal-header">
+                <span class="material-icons icon" style="color:var(--danger);">warning</span>
+                <span>删除资产</span>
+            </div>
+            <div class="modal-warning">
+                <span class="material-icons icon">error_outline</span>
+                <span>软删除，可恢复</span>
+            </div>
+            <div class="modal-body">
+                确认将资产 <strong id="assetDeleteName">-</strong> 标记为已删除？
+            </div>
+            <div class="modal-footer">
+                <button class="btn ghost" id="assetDeleteCancelBtn">取消</button>
+                <button class="btn" style="background:var(--danger);border-color:var(--danger);color:#fff;" id="assetDeleteConfirmBtn">确认删除</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 弹出卡片：确认删除 CDK -->
+    <div class="modal-overlay" id="cdkDeleteModal">
+        <div class="modal-card">
+            <div class="modal-header">
+                <span class="material-icons icon" style="color:var(--danger);">warning</span>
+                <span>删除 CDK</span>
+            </div>
+            <div class="modal-body">
+                确认删除 CDK <strong id="cdkDeleteCode">-</strong>？此操作不可撤销。
+            </div>
+            <div class="modal-footer">
+                <button class="btn ghost" id="cdkDeleteCancelBtn">取消</button>
+                <button class="btn" style="background:var(--danger);border-color:var(--danger);color:#fff;" id="cdkDeleteConfirmBtn">确认删除</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/js/profile.js"></script>
 </body>
 
 </html>

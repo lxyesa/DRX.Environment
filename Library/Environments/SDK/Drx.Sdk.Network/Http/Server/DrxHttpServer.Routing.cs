@@ -193,7 +193,7 @@ namespace Drx.Sdk.Network.Http
                 {
                     Template = path,
                     Method = method,
-                    Handler = async (request) => await Task.FromResult(handler(request)),
+                    Handler = (request) => Task.FromResult(handler(request)),
                     ExtractParameters = CreateParameterExtractor(path)
                 };
                 lock (_routesLock)
@@ -220,7 +220,7 @@ namespace Drx.Sdk.Network.Http
                 {
                     Template = path,
                     Method = method,
-                    Handler = async (request) => await Task.FromResult(handler(request, this)),
+                    Handler = (request) => Task.FromResult(handler(request, this)),
                     ExtractParameters = CreateParameterExtractor(path)
                 };
                 lock (_routesLock)
@@ -247,7 +247,7 @@ namespace Drx.Sdk.Network.Http
                 {
                     Template = path,
                     Method = method,
-                    Handler = async (request) => await Task.FromResult(handler(request)),
+                    Handler = (request) => Task.FromResult(handler(request)),
                     ExtractParameters = CreateParameterExtractor(path),
                     RateLimitMaxRequests = rateLimitMaxRequests,
                     RateLimitWindowSeconds = rateLimitWindowSeconds
@@ -276,7 +276,7 @@ namespace Drx.Sdk.Network.Http
                 {
                     Template = path,
                     Method = method,
-                    Handler = async (request) => await Task.FromResult(handler(request, this)),
+                    Handler = (request) => Task.FromResult(handler(request, this)),
                     ExtractParameters = CreateParameterExtractor(path),
                     RateLimitMaxRequests = rateLimitMaxRequests,
                     RateLimitWindowSeconds = rateLimitWindowSeconds

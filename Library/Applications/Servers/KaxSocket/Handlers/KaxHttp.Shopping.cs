@@ -9,6 +9,7 @@ using Drx.Sdk.Network.Http.Configs;
 using Drx.Sdk.Shared;
 using KaxSocket;
 using KaxSocket.Model;
+using static KaxSocket.Model.AssetModel;
 
 namespace KaxSocket.Handlers;
 
@@ -146,13 +147,14 @@ public partial class KaxHttp
             user.Gold = Math.Max(0, user.Gold - minimumGold);
             Logger.Info($"用户 {userName} 扣减金币 {minimumGold}，剩余金币 {user.Gold}");
 
-            asset.PurchaseCount++;
+            EnsureSpecs(asset).PurchaseCount++;
             await KaxGlobal.AssetDataBase.UpdateAsync(asset);
 
             await KaxGlobal.UserDatabase.UpdateAsync(user);
 
             var finalAsset = user.ActiveAssets!.First(a => a.AssetId == assetId);
             var finalExpires = finalAsset.ExpiresAt;
+            var updatedSpecs = asset.Specs ?? EnsureSpecs(asset);
 
             Logger.Info($"用户 {userName} {purchaseType}资产 {asset.Name} (ID:{assetId})，过期时间：{(finalExpires == 0 ? "永久" : DateTimeOffset.FromUnixTimeMilliseconds(finalExpires).ToString("yyyy-MM-dd HH:mm:ss"))}");
 
@@ -166,7 +168,12 @@ public partial class KaxHttp
                     activatedAt = finalAsset.ActivatedAt,
                     expiresAt = finalExpires,
                     permanent = finalExpires == 0,
-                    purchaseType = purchaseType
+                    purchaseType = purchaseType,
+                    purchaseCount = updatedSpecs.PurchaseCount,
+                    favoriteCount = updatedSpecs.FavoriteCount,
+                    viewCount = updatedSpecs.ViewCount,
+                    rating = updatedSpecs.Rating,
+                    downloads = updatedSpecs.Downloads
                 }
             }, 200);
         }

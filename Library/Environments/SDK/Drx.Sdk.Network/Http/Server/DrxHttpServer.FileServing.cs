@@ -11,7 +11,9 @@ using Drx.Sdk.Network.Http.Protocol;
 namespace Drx.Sdk.Network.Http
 {
     /// <summary>
-    /// DrxHttpServer 文件服务部分：文件流传输、静态文件服务、文件上传与下载
+    /// DrxHttpServer 文件传输部分：二进制文件的流式下载（支持 Range/断点续传）与文件上传
+    /// 职责边界：仅负责"文件传输"场景，不涉及 HTML/CSS/JS 等页面静态资源的缓存服务。
+    /// 静态资源服务参见 DrxHttpServer.StaticContent.cs。
     /// </summary>
     public partial class DrxHttpServer
     {
@@ -68,7 +70,7 @@ namespace Drx.Sdk.Network.Http
 
                     var resp = context.Response;
                     resp.AddHeader("Accept-Ranges", "bytes");
-                    resp.ContentType = GetMimeType(Path.GetExtension(filePath));
+                    resp.ContentType = GetContentMimeType(Path.GetExtension(filePath));
                     resp.SendChunked = false;
 
                     if (isPartial)
@@ -131,7 +133,7 @@ namespace Drx.Sdk.Network.Http
                 var fi = new FileInfo(filePath);
                 if (string.IsNullOrEmpty(resp.ContentType))
                 {
-                    try { resp.ContentType = GetMimeType(Path.GetExtension(filePath)); } catch { }
+                    try { resp.ContentType = GetContentMimeType(Path.GetExtension(filePath)); } catch { }
                 }
 
                 try { if (resp.Headers["Accept-Ranges"] == null) resp.AddHeader("Accept-Ranges", "bytes"); } catch { }
@@ -174,27 +176,34 @@ namespace Drx.Sdk.Network.Http
                 {
                     fs.Seek(start, SeekOrigin.Begin);
                     var remaining = (isPartial ? (end - start + 1) : totalLength);
-                    var buffer = new byte[BufferSize];
-                    while (remaining > 0)
+                    var buffer = System.Buffers.ArrayPool<byte>.Shared.Rent(BufferSize);
+                    try
                     {
-                        int toRead = (int)Math.Min(buffer.Length, remaining);
-                        var read = await fs.ReadAsync(buffer.AsMemory(0, toRead)).ConfigureAwait(false);
-                        if (read <= 0) break;
-                        try
+                        while (remaining > 0)
                         {
-                            await resp.OutputStream.WriteAsync(buffer.AsMemory(0, read)).ConfigureAwait(false);
-                        }
-                        catch (Exception ex)
-                        {
-                            if (IsClientDisconnect(ex))
+                            int toRead = (int)Math.Min(buffer.Length, remaining);
+                            var read = await fs.ReadAsync(buffer.AsMemory(0, toRead)).ConfigureAwait(false);
+                            if (read <= 0) break;
+                            try
                             {
-                                Logger.Warn($"客户端在流式传输期间断开连接: {ex.Message}");
+                                await resp.OutputStream.WriteAsync(buffer.AsMemory(0, read)).ConfigureAwait(false);
+                            }
+                            catch (Exception ex)
+                            {
+                                if (IsClientDisconnect(ex))
+                                {
+                                    Logger.Warn($"客户端在流式传输期间断开连接: {ex.Message}");
+                                    break;
+                                }
+                                Logger.Warn($"写入响应输出流时发生错误（文件流）: {ex}");
                                 break;
                             }
-                            Logger.Warn($"写入响应输出流时发生错误（文件流）: {ex}");
-                            break;
+                            remaining -= read;
                         }
-                        remaining -= read;
+                    }
+                    finally
+                    {
+                        System.Buffers.ArrayPool<byte>.Shared.Return(buffer);
                     }
                 }
             }
@@ -211,31 +220,6 @@ namespace Drx.Sdk.Network.Http
             }
 
             try { resp.OutputStream.Close(); } catch { }
-        }
-
-        private bool TryServeStaticFile(string path, out HttpResponse? response)
-        {
-            response = null;
-            if (string.IsNullOrEmpty(_staticFileRoot) || !path.StartsWith("/static/"))
-                return false;
-
-            var filePath = Path.Combine(_staticFileRoot, path.Substring("/static/".Length));
-            if (!File.Exists(filePath))
-                return false;
-
-            try
-            {
-                var content = File.ReadAllText(filePath);
-                var mimeType = GetMimeType(Path.GetExtension(filePath));
-                response = new HttpResponse(200, content);
-                response.Headers.Add("Content-Type", mimeType);
-                return true;
-            }
-            catch (Exception ex)
-            {
-                Logger.Error($"服务静态文件 {filePath} 时发生错误: {ex}");
-                return false;
-            }
         }
 
         /// <summary>
@@ -341,20 +325,5 @@ namespace Drx.Sdk.Network.Http
             }
         }
 
-        private string GetMimeType(string extension)
-        {
-            return extension.ToLower() switch
-            {
-                ".html" => "text/html",
-                ".css" => "text/css",
-                ".js" => "application/javascript",
-                ".json" => "application/json",
-                ".png" => "image/png",
-                ".jpg" => "image/jpeg",
-                ".jpeg" => "image/jpeg",
-                ".gif" => "image/gif",
-                _ => "text/plain"
-            };
-        }
     }
 }

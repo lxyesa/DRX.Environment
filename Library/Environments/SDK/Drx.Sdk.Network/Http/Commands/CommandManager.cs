@@ -134,6 +134,10 @@ namespace Drx.Sdk.Network.Http.Commands
                 var commandName = tokens[0].ToLower();
                 var args = tokens.Skip(1).ToList();
 
+                // 内置命令：help
+                if (string.Equals(commandName, "help", StringComparison.OrdinalIgnoreCase))
+                    return GetHelpText();
+
                 // 查找匹配的命令
                 CommandEntry entry;
                 lock (_commandLock)
@@ -242,6 +246,11 @@ namespace Drx.Sdk.Network.Http.Commands
         {
             var sb = new StringBuilder();
             sb.AppendLine("可用命令：");
+            sb.AppendLine();
+
+            // 内置命令
+            sb.AppendLine("【builtin:内置命令】");
+            sb.AppendLine($"  {"help",-40} 显示所有可用命令的帮助信息");
             sb.AppendLine();
 
             lock (_commandLock)

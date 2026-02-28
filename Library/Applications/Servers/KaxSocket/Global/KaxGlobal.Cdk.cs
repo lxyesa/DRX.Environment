@@ -53,9 +53,6 @@ public static partial class KaxGlobal
             cdk.UsedBy = userName;
             await CdkDatabase.UpdateAsync(cdk);
 
-            if (cdk.AssetId > 0)
-                await AddActiveAssetToUser(userName, cdk.AssetId, cdk.ExpiresInSeconds);
-
             if (cdk.GoldValue > 0)
             {
                 user.Gold += cdk.GoldValue;
@@ -63,7 +60,7 @@ public static partial class KaxGlobal
                 Logger.Info($"用户 {userName} 激活CDK后增加金币 {cdk.GoldValue}");
             }
 
-            Logger.Info($"用户 {userName} 成功激活 CDK {cdk.Code}（关联资源: {cdk.AssetId}, 金币: {cdk.GoldValue}）");
+            Logger.Info($"用户 {userName} 成功激活 CDK {cdk.Code}（金币: {cdk.GoldValue}）");
             return (0, "成功激活 CDK");
         }
         catch (Exception ex)

@@ -116,6 +116,17 @@ namespace Drx.Sdk.Network.Http
             Stop();
             _sessionManager?.Dispose();
             _authorizationManager?.Dispose();
+
+            try { _cts?.Dispose(); } catch { }
+            try { _tickerWake?.Dispose(); } catch { }
+            try { ((IDisposable)_listener)?.Dispose(); } catch { }
+            try { if (_dataPersistentManager is IDisposable dpDisposable) dpDisposable.Dispose(); } catch { }
+
+            _ipRequestHistory.Clear();
+            _ipRouteRequestHistory.Clear();
+            _staticContentCache.Clear();
+            lock (_rateLimitKeyCacheLock) { _rateLimitKeyCache.Clear(); }
+
             return ValueTask.CompletedTask;
         }
     }

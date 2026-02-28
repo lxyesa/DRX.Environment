@@ -12,6 +12,7 @@ using Drx.Sdk.Shared;
 using Drx.Sdk.Network.Http.Protocol;
 using Drx.Sdk.Network.Http.Configs;
 using Drx.Sdk.Network.Http.Entry;
+using Drx.Sdk.Network.Http.Sse;
 
 namespace Drx.Sdk.Network.Http
 {
@@ -35,6 +36,7 @@ namespace Drx.Sdk.Network.Http
 
                 int registeredHandlers = 0;
                 int registeredMiddlewares = 0;
+                int registeredSseEndpoints = 0;
 
                 foreach (var method in methods)
                 {
@@ -216,9 +218,23 @@ namespace Drx.Sdk.Network.Http
                         AddRoute(httpMethod, ha.Path, handlerDelegate, ha.RateLimitMaxRequests, ha.RateLimitWindowSeconds, rateLimitCallback);
                         registeredHandlers++;
                     }
+
+                    var sseAttrs = method.GetCustomAttributes(typeof(HttpSseAttribute), false).Cast<HttpSseAttribute>();
+                    foreach (var sa in sseAttrs)
+                    {
+                        var sseDelegate = CreateSseHandlerDelegate(method, targetType);
+                        if (sseDelegate == null)
+                        {
+                            Logger.Warn($"无法为方法 {method.Name} 创建 SSE 处理委托，跳过注册");
+                            continue;
+                        }
+
+                        RegisterSseRoute(sa.Path, sseDelegate, sa.HeartbeatSeconds, sa.RateLimitMaxRequests, sa.RateLimitWindowSeconds);
+                        registeredSseEndpoints++;
+                    }
                 }
 
-                Logger.Info($"从类型 {targetType.FullName} 注册了 {registeredHandlers} 个 HTTP 处理方法和 {registeredMiddlewares} 个中间件 (仅该类型)");
+                Logger.Info($"从类型 {targetType.FullName} 注册了 {registeredHandlers} 个 HTTP 处理方法、{registeredMiddlewares} 个中间件和 {registeredSseEndpoints} 个 SSE 端点 (仅该类型)");
 
                 if (emitLinkerDescriptor)
                 {
@@ -614,6 +630,84 @@ namespace Drx.Sdk.Network.Http
             catch (Exception ex)
             {
                 Logger.Error($"绑定速率限制回调时发生错误: {ex}");
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// 为标注了 [HttpSse] 的方法创建 SSE 处理委托。
+        /// 支持的参数类型: ISseWriter, HttpRequest, CancellationToken, DrxHttpServer（任意顺序）。
+        /// 返回类型必须为 Task。
+        /// </summary>
+        private Func<ISseWriter, Protocol.HttpRequest, CancellationToken, DrxHttpServer, Task>? CreateSseHandlerDelegate(MethodInfo method, Type targetType)
+        {
+            try
+            {
+                var parameters = method.GetParameters();
+                bool hasISseWriter = false;
+
+                foreach (var p in parameters)
+                {
+                    if (p.ParameterType == typeof(ISseWriter))
+                    {
+                        hasISseWriter = true;
+                    }
+                    else if (p.ParameterType != typeof(Protocol.HttpRequest)
+                          && p.ParameterType != typeof(CancellationToken)
+                          && p.ParameterType != typeof(DrxHttpServer))
+                    {
+                        Logger.Warn($"[HttpSse] 方法 {method.Name} 含不支持的参数类型: {p.ParameterType}。支持: ISseWriter, HttpRequest, CancellationToken, DrxHttpServer");
+                        return null;
+                    }
+                }
+
+                if (!hasISseWriter)
+                {
+                    Logger.Warn($"[HttpSse] 方法 {method.Name} 必须包含 ISseWriter 参数");
+                    return null;
+                }
+
+                if (!typeof(Task).IsAssignableFrom(method.ReturnType))
+                {
+                    Logger.Warn($"[HttpSse] 方法 {method.Name} 返回类型必须为 Task，当前: {method.ReturnType}");
+                    return null;
+                }
+
+                return async (ISseWriter sse, Protocol.HttpRequest request, CancellationToken ct, DrxHttpServer server) =>
+                {
+                    try
+                    {
+                        var args = new object?[parameters.Length];
+                        for (int i = 0; i < parameters.Length; i++)
+                        {
+                            if (parameters[i].ParameterType == typeof(ISseWriter)) args[i] = sse;
+                            else if (parameters[i].ParameterType == typeof(Protocol.HttpRequest)) args[i] = request;
+                            else if (parameters[i].ParameterType == typeof(CancellationToken)) args[i] = ct;
+                            else if (parameters[i].ParameterType == typeof(DrxHttpServer)) args[i] = server;
+                        }
+
+                        object? instance = null;
+                        if (!method.IsStatic)
+                        {
+                            instance = Activator.CreateInstance(targetType);
+                        }
+
+                        var result = method.Invoke(instance, args);
+                        if (result is Task task)
+                        {
+                            await task.ConfigureAwait(false);
+                        }
+                    }
+                    catch (TargetInvocationException tie)
+                    {
+                        Logger.Error($"[HttpSse] 执行 {method.Name} 时发生错误: {tie.InnerException?.Message ?? tie.Message}\n{tie.InnerException?.StackTrace ?? tie.StackTrace}");
+                        throw tie.InnerException ?? tie;
+                    }
+                };
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"[HttpSse] 为方法 {method.Name} 创建处理委托时出错: {ex}");
                 return null;
             }
         }

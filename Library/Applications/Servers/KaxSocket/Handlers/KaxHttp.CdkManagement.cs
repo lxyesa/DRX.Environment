@@ -14,11 +14,15 @@ namespace KaxSocket.Handlers;
 
 /// <summary>
 /// CDK 管理模块 - 处理 CDK 的生成、保存、查询、删除等功能
+/// CDK 仅支持金币类型，不再绑定资产
 /// </summary>
 public partial class KaxHttp
 {
     #region CDK 管理 (CDK Administration)
 
+    /// <summary>
+    /// 查询单个 CDK 的详细信息（包含创建者、使用者等溯源信息）
+    /// </summary>
     [HttpHandle("/api/cdk/admin/inspect", "POST", RateLimitMaxRequests = 60, RateLimitWindowSeconds = 60, RateLimitCallbackMethodName = nameof(RateLimitCallback))]
     public static async Task<IActionResult> Post_InspectCdk(HttpRequest request)
     {
@@ -46,15 +50,19 @@ public partial class KaxHttp
             return new JsonResult(new
             {
                 contains = true,
-                mapped = new
+                data = new
                 {
-                    assetId = model.AssetId,
+                    id = model.Id,
+                    code = model.Code,
                     description = model.Description,
-                    iat = model.CreatedAt,
                     isUsed = model.IsUsed,
+                    goldValue = model.GoldValue,
+                    expiresInSeconds = model.ExpiresInSeconds,
+                    createdAt = model.CreatedAt,
+                    createdBy = model.CreatedBy,
+                    usedAt = model.UsedAt,
                     usedBy = model.UsedBy
-                },
-                claims = new { }
+                }
             });
         }
         catch (Exception ex)
@@ -64,6 +72,9 @@ public partial class KaxHttp
         }
     }
 
+    /// <summary>
+    /// 仅生成 CDK 代码（不保存），用于预览
+    /// </summary>
     [HttpHandle("/api/cdk/admin/generate", "POST", RateLimitMaxRequests = 10, RateLimitWindowSeconds = 60, RateLimitCallbackMethodName = nameof(RateLimitCallback))]
     public static async Task<IActionResult> Post_GenerateCdk(HttpRequest request)
     {
@@ -94,6 +105,9 @@ public partial class KaxHttp
         return new JsonResult(new { codes = codes });
     }
 
+    /// <summary>
+    /// 生成并保存 CDK（金币类型），记录创建者
+    /// </summary>
     [HttpHandle("/api/cdk/admin/save", "POST", RateLimitMaxRequests = 5, RateLimitWindowSeconds = 60, RateLimitCallbackMethodName = nameof(RateLimitCallback))]
     public static async Task<IActionResult> Post_SaveCdk(HttpRequest request)
     {
@@ -132,16 +146,13 @@ public partial class KaxHttp
 
         if (codes.Count == 0) return new JsonResult(new { message = "没有要保存的 CDK" }, 400);
 
-        // 解析 assetId、contributionValue、expiresInSeconds 与 description
-        int assetId = 0;
-        if (body["assetId"] != null) int.TryParse(body["assetId"]?.ToString() ?? "0", out assetId);
-        
+        // 解析金币值、时效和描述
         int goldValue = 0;
         if (body["goldValue"] != null) int.TryParse(body["goldValue"]?.ToString() ?? "0", out goldValue);
-        
+
         long expiresInSeconds = 0;
         if (body["expiresInSeconds"] != null) long.TryParse(body["expiresInSeconds"]?.ToString() ?? "0", out expiresInSeconds);
-        
+
         var description = body["description"]?.ToString() ?? string.Empty;
 
         try
@@ -168,12 +179,12 @@ public partial class KaxHttp
                 var model = new Model.CdkModel
                 {
                     Code = normalizedUpper,
-                    Description = description ?? string.Empty,
+                    Description = description,
                     IsUsed = false,
                     CreatedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
                     UsedAt = 0,
                     UsedBy = string.Empty,
-                    AssetId = assetId,
+                    CreatedBy = userName,
                     GoldValue = goldValue,
                     ExpiresInSeconds = expiresInSeconds
                 };
@@ -182,6 +193,7 @@ public partial class KaxHttp
                 saved++;
             }
 
+            Logger.Info($"用户 {userName} 保存了 {saved} 个 CDK");
             return new JsonResult(new { message = "已保存到数据库", count = saved }, saved > 0 ? 201 : 200);
         }
         catch (Exception ex)
@@ -191,6 +203,9 @@ public partial class KaxHttp
         }
     }
 
+    /// <summary>
+    /// 删除 CDK（支持单个或批量）
+    /// </summary>
     [HttpHandle("/api/cdk/admin/delete", "POST", RateLimitMaxRequests = 180, RateLimitWindowSeconds = 60, RateLimitCallbackMethodName = nameof(RateLimitCallback))]
     public static async Task<IActionResult> Post_DeleteCdk(HttpRequest request)
     {
@@ -274,6 +289,9 @@ public partial class KaxHttp
         }
     }
 
+    /// <summary>
+    /// 获取 CDK 列表（支持分页）
+    /// </summary>
     [HttpHandle("/api/cdk/admin/list", "GET", RateLimitMaxRequests = 60, RateLimitWindowSeconds = 60, RateLimitCallbackMethodName = nameof(RateLimitCallback))]
     public static async Task<IActionResult> Get_CdkList(HttpRequest request)
     {
@@ -285,16 +303,109 @@ public partial class KaxHttp
 
         try
         {
+            int page = 1;
+            int pageSize = 50;
+            if (!int.TryParse(request.Query["page"], out page) || page <= 0) page = 1;
+            if (!int.TryParse(request.Query["pageSize"], out pageSize) || pageSize <= 0) pageSize = 50;
+            pageSize = Math.Clamp(pageSize, 1, 200);
+
             var all = await KaxGlobal.CdkDatabase.SelectAllAsync();
-            var items = all.OrderByDescending(c => c.CreatedAt).Take(200)
-                .Select(c => new { code = c.Code, isUsed = c.IsUsed, createdAt = c.CreatedAt, assetId = c.AssetId, description = c.Description })
+            var ordered = all.OrderByDescending(c => c.CreatedAt).ToList();
+            var total = ordered.Count;
+
+            var items = ordered.Skip((page - 1) * pageSize).Take(pageSize)
+                .Select(c => new
+                {
+                    id = c.Id,
+                    code = c.Code,
+                    description = c.Description,
+                    isUsed = c.IsUsed,
+                    goldValue = c.GoldValue,
+                    expiresInSeconds = c.ExpiresInSeconds,
+                    createdAt = c.CreatedAt,
+                    createdBy = c.CreatedBy,
+                    usedAt = c.UsedAt,
+                    usedBy = c.UsedBy
+                })
                 .ToList<object>();
-            return new JsonResult(items);
+
+            return new JsonResult(new { data = items, page, pageSize, total });
         }
         catch (Exception ex)
         {
             Logger.Error("读取 CDK 列表时出错: " + ex.Message);
             return new JsonResult(new { message = "无法读取 CDK 列表" }, 500);
+        }
+    }
+
+    /// <summary>
+    /// 搜索 CDK（支持按代码、创建者、使用者、描述多字段搜索）
+    /// </summary>
+    [HttpHandle("/api/cdk/admin/search", "GET", RateLimitMaxRequests = 60, RateLimitWindowSeconds = 60, RateLimitCallbackMethodName = nameof(RateLimitCallback))]
+    public static async Task<IActionResult> Get_SearchCdk(HttpRequest request)
+    {
+        var token = request.Headers[HttpHeaders.Authorization]?.Replace("Bearer ", "");
+        var principal = KaxGlobal.ValidateToken(token!);
+        if (principal == null) return new JsonResult(new { message = "未授权" }, 401);
+        var userName = principal.Identity?.Name;
+        if (!await IsCdkAdminUser(userName)) return new JsonResult(new { message = "权限不足" }, 403);
+
+        try
+        {
+            var keyword = (request.Query["keyword"] ?? string.Empty).Trim().ToLowerInvariant();
+            // searchIn: code | creator | user | description | all (默认 all)
+            var searchIn = (request.Query["searchIn"] ?? "all").Trim().ToLowerInvariant();
+
+            int page = 1;
+            int pageSize = 50;
+            if (!int.TryParse(request.Query["page"], out page) || page <= 0) page = 1;
+            if (!int.TryParse(request.Query["pageSize"], out pageSize) || pageSize <= 0) pageSize = 50;
+            pageSize = Math.Clamp(pageSize, 1, 200);
+
+            var all = await KaxGlobal.CdkDatabase.SelectAllAsync();
+            IEnumerable<Model.CdkModel> filtered = all;
+
+            if (!string.IsNullOrEmpty(keyword))
+            {
+                filtered = searchIn switch
+                {
+                    "code" => filtered.Where(c => (c.Code ?? string.Empty).ToLowerInvariant().Contains(keyword)),
+                    "creator" => filtered.Where(c => (c.CreatedBy ?? string.Empty).ToLowerInvariant().Contains(keyword)),
+                    "user" => filtered.Where(c => (c.UsedBy ?? string.Empty).ToLowerInvariant().Contains(keyword)),
+                    "description" => filtered.Where(c => (c.Description ?? string.Empty).ToLowerInvariant().Contains(keyword)),
+                    _ => filtered.Where(c =>
+                        (c.Code ?? string.Empty).ToLowerInvariant().Contains(keyword) ||
+                        (c.CreatedBy ?? string.Empty).ToLowerInvariant().Contains(keyword) ||
+                        (c.UsedBy ?? string.Empty).ToLowerInvariant().Contains(keyword) ||
+                        (c.Description ?? string.Empty).ToLowerInvariant().Contains(keyword))
+                };
+            }
+
+            var ordered = filtered.OrderByDescending(c => c.CreatedAt).ToList();
+            var total = ordered.Count;
+
+            var items = ordered.Skip((page - 1) * pageSize).Take(pageSize)
+                .Select(c => new
+                {
+                    id = c.Id,
+                    code = c.Code,
+                    description = c.Description,
+                    isUsed = c.IsUsed,
+                    goldValue = c.GoldValue,
+                    expiresInSeconds = c.ExpiresInSeconds,
+                    createdAt = c.CreatedAt,
+                    createdBy = c.CreatedBy,
+                    usedAt = c.UsedAt,
+                    usedBy = c.UsedBy
+                })
+                .ToList<object>();
+
+            return new JsonResult(new { data = items, page, pageSize, total, keyword, searchIn });
+        }
+        catch (Exception ex)
+        {
+            Logger.Error("搜索 CDK 时出错: " + ex.Message);
+            return new JsonResult(new { message = "搜索失败" }, 500);
         }
     }
 

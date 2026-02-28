@@ -1,7 +1,6 @@
-// 时间戳转日期格式化
+/** 时间戳或日期字符串 → zh-CN 日期显示 */
         function formatDate(ts) {
             if (!ts || ts === '--') return '--';
-            // 支持秒/毫秒
             const ms = ts > 9999999999 ? ts : ts * 1000;
             const date = new Date(ms);
             if (isNaN(date.getTime())) return '--';
@@ -47,7 +46,6 @@
                 uploadDate: '2026-02-20',
                 author: '开发者团队',
                 license: 'MIT',
-                stock: 150,
             },
             2: {
                 id: 2,
@@ -65,79 +63,64 @@
                 uploadDate: '2026-02-18',
                 author: '优化团队',
                 license: 'MIT',
-                stock: 200,
             }
         };
 
-        // 渲染详情页骨架屏占位
-        // 缓存真实 DOM 结构的引用，供骨架屏恢复使用
+        // 渲染骨架屏 — 对应新版 HTML 结构（.detail-main-col / .detail-side-col）
         const _skeletonCache = {};
 
         function renderDetailSkeleton() {
-            const left = document.querySelector('.detail-left');
-            const right = document.querySelector('.detail-right');
+            const mainCol    = document.querySelector('.detail-main-col');
+            const sideCol    = document.querySelector('.detail-side-col');
             const relatedGrid = document.getElementById('relatedProductsGrid');
 
-            // 保存原始 HTML
-            if (left)  _skeletonCache.left  = left.innerHTML;
-            if (right) _skeletonCache.right  = right.innerHTML;
+            if (mainCol)    _skeletonCache.mainCol  = mainCol.innerHTML;
+            if (sideCol)    _skeletonCache.sideCol  = sideCol.innerHTML;
             if (relatedGrid) _skeletonCache.related = relatedGrid.innerHTML;
 
-            // 左侧骨架
-            if (left) left.innerHTML = `
-                <div class="sk sk-main-image"></div>
-                <div class="sk-info-card">
-                    <div class="sk sk-h28 sk-w60"></div>
-                    <div class="sk sk-h12 sk-w80"></div>
-                    <div class="sk sk-h12 sk-w70"></div>
-                    <div class="sk sk-h12 sk-w50"></div>
-                    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;padding-top:12px;">
-                        <div class="sk sk-h36"></div>
-                        <div class="sk sk-h36"></div>
-                        <div class="sk sk-h36"></div>
-                    </div>
+            if (mainCol) mainCol.innerHTML = `
+                <div class="sk sk-w100" style="aspect-ratio:16/9;border-radius:12px;"></div>
+                <div style="display:flex;gap:8px;margin-top:10px;">
+                    ${Array.from({length:4}, () => '<div class="sk sk-w100" style="height:48px;border-radius:6px;flex:1;"></div>').join('')}
                 </div>
-                <div class="sk-specs-card">
-                    <div class="sk sk-h16 sk-w30"></div>
+                <div style="background:rgba(255,255,255,0.025);border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:24px;margin-top:24px;display:flex;flex-direction:column;gap:14px;">
+                    <div class="sk sk-h28 sk-w50"></div>
                     <div class="sk sk-h12 sk-w100"></div>
-                    <div class="sk sk-h12 sk-w100"></div>
+                    <div class="sk sk-h12 sk-w70"></div>
                     <div class="sk sk-h12 sk-w80"></div>
-                    <div class="sk sk-h12" style="width:90%"></div>
                 </div>`;
 
-            // 右侧骨架
-            if (right) right.innerHTML = `
-                <div class="sk-purchase-panel">
-                    <div class="sk sk-h20 sk-w40" style="margin:0 auto;"></div>
-                    <div class="sk sk-h44 sk-w60" style="margin:0 auto;"></div>
-                    <div class="sk sk-h12 sk-w50" style="margin:0 auto;"></div>
-                    <div class="sk sk-h80 sk-w100" style="margin-top:8px;border-radius:4px;"></div>
-                    <div class="sk sk-h44 sk-w100" style="margin-top:4px;border-radius:4px;"></div>
-                    <div style="display:flex;gap:12px;margin-top:4px;">
-                        <div class="sk sk-h36" style="flex:1;border-radius:4px;"></div>
-                        <div class="sk sk-h36" style="flex:1;border-radius:4px;"></div>
+            if (sideCol) sideCol.innerHTML = `
+                <div style="background:rgba(255,255,255,0.025);border:1px solid rgba(255,255,255,0.07);border-radius:14px;padding:24px;display:flex;flex-direction:column;gap:16px;">
+                    <div class="sk sk-h44 sk-w50"></div>
+                    <div class="sk sk-h16 sk-w30"></div>
+                    <div class="sk sk-h36 sk-w100" style="border-radius:8px;"></div>
+                    <div class="sk sk-h36 sk-w100" style="border-radius:8px;"></div>
+                    <div class="sk sk-h44 sk-w100" style="border-radius:10px;margin-top:4px;"></div>
+                    <div style="display:flex;gap:10px;">
+                        <div class="sk sk-h36" style="flex:1;border-radius:8px;"></div>
+                        <div class="sk sk-h36" style="flex:1;border-radius:8px;"></div>
                     </div>
                 </div>`;
 
-            // 相关产品骨架
             if (relatedGrid) relatedGrid.innerHTML = Array.from({ length: 4 }, () => `
-                <div class="sk-related-card">
-                    <div class="sk sk-related-image"></div>
-                    <div class="sk-related-content">
+                <div style="width:190px;background:rgba(255,255,255,0.025);border:1px solid rgba(255,255,255,0.06);border-radius:10px;overflow:hidden;flex-shrink:0;">
+                    <div class="sk sk-w100" style="aspect-ratio:16/9;"></div>
+                    <div style="padding:12px;display:flex;flex-direction:column;gap:8px;">
                         <div class="sk sk-h16" style="width:70%;"></div>
                         <div class="sk sk-h16" style="width:40%;"></div>
                     </div>
                 </div>`).join('');
         }
 
-        // 移除骨架屏，恢复真实 DOM 结构
+        /** 移除骨架屏，恢复真实 DOM */
         function removeSkeleton() {
-            const left = document.querySelector('.detail-left');
-            const right = document.querySelector('.detail-right');
+            const mainCol    = document.querySelector('.detail-main-col');
+            const sideCol    = document.querySelector('.detail-side-col');
             const relatedGrid = document.getElementById('relatedProductsGrid');
 
-            if (left  && _skeletonCache.left)    left.innerHTML  = _skeletonCache.left;
-            if (right && _skeletonCache.right)   right.innerHTML = _skeletonCache.right;
+            if (mainCol    && _skeletonCache.mainCol)  mainCol.innerHTML  = _skeletonCache.mainCol;
+            if (sideCol    && _skeletonCache.sideCol)  sideCol.innerHTML  = _skeletonCache.sideCol;
             if (relatedGrid && _skeletonCache.related) relatedGrid.innerHTML = _skeletonCache.related;
         }
 
@@ -186,22 +169,37 @@
                             name: asset.name ?? asset.title ?? '--',
                             description: asset.description ?? '--',
                             price: price,
-                            originalPrice: price,
+                            originalPrice: originalPrice ?? price,
                             salePrice: salePrice,
                             category: asset.category ?? asset.type ?? '--',
-                            rating: (asset.rating !== undefined && asset.rating !== null) ? Number(asset.rating) : null,
-                            reviews: asset.reviews ?? asset.reviewCount ?? '--',
+                            // 规格字段：优先从平铺级别获取，回退到 specs 对象
+                            rating: (asset.rating !== undefined && asset.rating !== null) ? Number(asset.rating) : ((asset.specs?.rating !== undefined && asset.specs.rating !== null) ? Number(asset.specs.rating) : 0),
+                            reviews: asset.reviewCount ?? asset.reviews ?? (asset.specs?.reviewCount ?? 0),
+                            reviewCount: asset.reviewCount ?? asset.reviews ?? (asset.specs?.reviewCount ?? 0),
                             version: asset.version ?? '--',
-                            compatibility: asset.compatibility ?? '--',
-                            downloads: asset.downloads ?? '--',
-                            purchaseCount: asset.purchaseCount ?? '--',
+                            compatibility: asset.compatibility ?? (asset.specs?.compatibility ?? '--'),
+                            downloads: asset.downloads ?? (asset.specs?.downloads ?? 0),
+                            downloadCount: asset.downloads ?? (asset.specs?.downloads ?? 0),
+                            purchaseCount: asset.purchaseCount ?? (asset.specs?.purchaseCount ?? 0),
                             fileSize: fileSizeStr,
-                            uploadDate: asset.uploadDate ?? asset.createdAt ?? '--',
-                            author: asset.author ?? asset.uploader ?? '--',
-                            license: asset.license ?? '--',
-                            stock: (asset.stock !== undefined && asset.stock !== null) ? asset.stock : '--',
-                            discountRate: (asset.discountRate !== undefined && asset.discountRate !== null) ? Number(asset.discountRate) : null,
-                            prices: Array.isArray(asset.prices) ? asset.prices : (Array.isArray(asset.Prices) ? asset.Prices : [])
+                            uploadDate: asset.uploadDate ?? (asset.specs?.uploadDate ?? asset.createdAt ?? '--'),
+                            author: asset.author ?? (asset.specs?.author ?? '--'),
+                            license: asset.license ?? (asset.specs?.license ?? '--'),
+                            discountRate: (asset.discountRate !== undefined && asset.discountRate !== null) ? Number(asset.discountRate) : 0,
+                            favoriteCount: asset.favoriteCount ?? (asset.specs?.favoriteCount ?? 0),
+                            viewCount: asset.viewCount ?? (asset.specs?.viewCount ?? 0),
+                            downloadUrl: asset.downloadUrl ?? (asset.specs?.downloadUrl ?? ''),
+                            // 价格方案数组
+                            prices: Array.isArray(asset.prices) ? asset.prices : (Array.isArray(asset.Prices) ? asset.Prices : []),
+                            // 媒体资源
+                            primaryImage: asset.primaryImage || '',
+                            thumbnailImage: asset.thumbnailImage || '',
+                            screenshots: Array.isArray(asset.screenshots) ? asset.screenshots : [],
+                            // 标签
+                            tags: Array.isArray(asset.tags) ? asset.tags : [],
+                            // 规格子表（保持原始数据）
+                            specs: asset.specs || null,
+                            isDeleted: asset.isDeleted ?? false
                         };
                     }
                 }
@@ -211,21 +209,21 @@
 
             removeSkeleton();
             loadProductData(product);
+            renderGallery(product);
             setupEventListeners();
+            loadRelatedProducts(productId);
             // 全局初始化（如果存在这些函数）
             try { initGlobalTopbar && initGlobalTopbar(); } catch (e) {}
             try { initGlobalFooter && initGlobalFooter(); } catch (e) {}
             try { initButtonEffects && initButtonEffects(); } catch (e) {}
         }
 
-        // 加载产品数据
+        /** 将后端/本地产品数据渲染到页面所有元素 */
         function loadProductData(product) {
             const orDash = (v) => (v === null || v === undefined) ? '--' : v;
-            // 日期字段格式化
             const showDate = (v) => {
                 if (!v || v === '--') return '--';
-                // 支持字符串/数字
-                if (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}/.test(v)) return v;
+                if (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}/.test(v)) return v.slice(0, 10);
                 const n = Number(v);
                 if (!isNaN(n)) return formatDate(n);
                 return v;
@@ -237,122 +235,173 @@
                 if (isNaN(n)) return '--';
                 return n >= 1000 ? (n / 1000).toFixed(1) + 'K' : String(n);
             };
+            const setText = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = orDash(val); };
 
-            document.getElementById('breadcrumbCategory').textContent = orDash(product.category);
-            document.getElementById('productName').textContent = orDash(product.name);
-            document.getElementById('productDescription').textContent = orDash(product.description);
-            document.getElementById('productVersion').textContent = orDash(product.version);
-            document.getElementById('productCompatibility').textContent = orDash(product.compatibility);
-            document.getElementById('productDownloads').textContent = showDownloads(product.downloads);
-            // 显示购买次数
-            const purchasesEl = document.getElementById('productPurchases');
-            if (purchasesEl) purchasesEl.textContent = showDownloads(product.purchaseCount);
-            // 显示价格：优先使用价格表第一个方案（若存在），否则使用后端兼容字段
+            // ── 面包屑 + 页面标题 ──
+            setText('breadcrumbCategory', product.category);
+            const pageTitleEl = document.getElementById('pageTitle');
+            if (pageTitleEl) pageTitleEl.textContent = (product.name || '商品详情') + ' - KaxHub';
+
+            // ── 英雄区图标 ──
+            const heroIconEl = document.getElementById('heroIcon');
+            if (heroIconEl && product.primaryImage) {
+                heroIconEl.innerHTML = `<img src="${product.primaryImage}" alt="${product.name || ''}" style="width:100%;height:100%;object-fit:cover;border-radius:inherit;">`;
+            }
+
+            // ── 英雄区背景 ──
+            const heroBgEl = document.getElementById('productHeroBg');
+            if (heroBgEl && product.primaryImage) {
+                heroBgEl.style.backgroundImage = `url(${product.primaryImage})`;
+            }
+
+            // ── 英雄区 ──
+            setText('productName',    product.name);
+            setText('heroDesc',       product.description);
+            setText('heroCategory',   product.category);
+            setText('heroAuthor',     product.author);
+            setText('heroDownloads',  showDownloads(product.downloads));
+            setText('heroVersion',    product.version);
+
+            // 评分（英雄区 + 评价 Tab 同步）
+            const ratingNum = (product.rating != null && !isNaN(Number(product.rating))) ? Number(product.rating) : null;
+            const starsStr  = ratingNum != null
+                ? '★'.repeat(Math.round(ratingNum)) + '☆'.repeat(5 - Math.round(ratingNum))
+                : '☆☆☆☆☆';
+            const ratingStr = ratingNum != null ? ratingNum.toFixed(1) : '--';
+            // reviewCount 和 reviews 都可能存在，优先使用 reviewCount
+            const reviewsNum = product.reviewCount ?? product.reviews;
+            const reviewsStr = reviewsNum != null ? String(reviewsNum) : '--';
+
+            // 英雄区评分 IDs：heroStars / heroRatingVal / heroRatingCount
+            setText('heroStars',       starsStr);
+            setText('heroRatingVal',   ratingStr);
+            setText('heroRatingCount', '(' + reviewsStr + ')');
+
+            // 评价 Tab IDs：reviewScoreBig / reviewStarsBig / reviewsTotal
+            setText('reviewScoreBig',  ratingStr);
+            setText('reviewStarsBig',  starsStr);
+            setText('reviewsTotal',    reviewsStr + ' 条评价');
+
+            // ── 价格计算 ──
             let displayOriginal = null;
-            let displayCurrent = null;
+            let displayCurrent  = null;
             if (product.prices && Array.isArray(product.prices) && product.prices.length > 0) {
                 const p0 = product.prices[0];
-                const origCents = (p0.originalPrice != null ? Number(p0.originalPrice) : Number(p0.price || 0));
-                const saleCents = Math.round(Number(p0.price || 0) * (1 - (Number(p0.discountRate) || 0)));
+                const origCents = Number(p0.originalPrice ?? p0.price ?? 0);
+                const disc      = Number(p0.discountRate) || 0;
+                const saleCents = Math.round(origCents * (1 - disc));
                 displayOriginal = origCents;
-                displayCurrent = saleCents;
-                // expose discountRate for badge
-                product.discountRate = (p0.discountRate != null) ? Number(p0.discountRate) : product.discountRate;
+                displayCurrent  = saleCents;
+                product.discountRate = disc;
             } else {
-                displayOriginal = product.originalPrice != null ? product.originalPrice : null;
-                displayCurrent = (product.salePrice != null) ? product.salePrice : product.price;
+                displayOriginal = product.originalPrice ?? null;
+                displayCurrent  = product.salePrice ?? product.price ?? null;
             }
 
-            const priceOriginalEl = document.getElementById('priceOriginal');
+            // 当前价
             const priceCurrentEl = document.getElementById('priceCurrent');
+            if (priceCurrentEl) priceCurrentEl.textContent = displayCurrent != null ? showCurrency(displayCurrent) : '--';
+
+            // 原价（用 hidden 属性控制）
+            const priceOriginalEl = document.getElementById('priceOriginal');
+            if (priceOriginalEl) {
+                if (displayOriginal != null && displayCurrent != null && Number(displayOriginal) > Number(displayCurrent)) {
+                    priceOriginalEl.textContent = showCurrency(displayOriginal);
+                    priceOriginalEl.removeAttribute('hidden');
+                } else {
+                    priceOriginalEl.textContent = '';
+                    priceOriginalEl.setAttribute('hidden', '');
+                }
+            }
+
+            // 折扣徽标（用 hidden 属性控制）
             const priceBadgeEl = document.getElementById('priceBadge');
-
-            priceCurrentEl.textContent = displayCurrent != null ? showCurrency(displayCurrent) : '--';
-
-            // 是否显示原始价格：只有在原价存在且大于当前价时才显示
-            if (displayOriginal != null && displayCurrent != null && Number(displayOriginal) > Number(displayCurrent)) {
-                priceOriginalEl.textContent = showCurrency(displayOriginal);
-                priceOriginalEl.style.display = '';
-            } else {
-                priceOriginalEl.textContent = '';
-                priceOriginalEl.style.display = 'none';
+            if (priceBadgeEl) {
+                let discountPercent = null;
+                if (product.discountRate != null) {
+                    discountPercent = Math.round(Number(product.discountRate) * 100);
+                } else if (displayOriginal != null && displayCurrent != null && Number(displayOriginal) > 0) {
+                    const d = Math.round(((Number(displayOriginal) - Number(displayCurrent)) / Number(displayOriginal)) * 100);
+                    if (d > 0) discountPercent = d;
+                }
+                if (discountPercent != null && discountPercent > 0) {
+                    priceBadgeEl.textContent = discountPercent + '% OFF';
+                    priceBadgeEl.removeAttribute('hidden');
+                } else {
+                    priceBadgeEl.textContent = '';
+                    priceBadgeEl.setAttribute('hidden', '');
+                }
             }
 
-            // 计算并显示折扣徽标：只有存在有效折扣 (>0) 时显示，否则隐藏
-            let discountPercent = null;
-            if (product.discountRate != null) {
-                discountPercent = Math.round(Number(product.discountRate) * 100);
-            } else if (displayOriginal != null && displayCurrent != null && Number(displayOriginal) > 0) {
-                const disc = Math.round(((Number(displayOriginal) - Number(displayCurrent)) / Number(displayOriginal)) * 100);
-                if (disc > 0) discountPercent = disc;
+            // ── 库存状态（根据价格方案的库存汇总） ──
+            const stockInfoEl = document.getElementById('stockInfo');
+            if (stockInfoEl) {
+                let stockText  = '库存：--';
+                let isLow      = false;
+
+                // 从价格方案中计算汇总库存（-1 表示无限）
+                const prices = product.prices || [];
+                if (prices.length > 0) {
+                    const hasUnlimited = prices.some(p => (p.stock ?? -1) < 0);
+                    if (hasUnlimited) {
+                        stockText = '库存：充足';
+                    } else {
+                        const totalStock = prices.reduce((sum, p) => sum + Math.max(0, p.stock ?? 0), 0);
+                        if (totalStock > 50) {
+                            stockText = `库存：${totalStock}（充足）`;
+                        } else if (totalStock > 0) {
+                            stockText = `库存：${totalStock}（有限）`; isLow = true;
+                        } else {
+                            stockText = '库存：0（暂无）'; isLow = true;
+                        }
+                    }
+                }
+
+                const stockTextEl = stockInfoEl.querySelector('.stock-text');
+                if (stockTextEl) {
+                    stockTextEl.textContent = stockText;
+                } else {
+                    stockInfoEl.textContent = stockText;
+                }
+                stockInfoEl.classList.toggle('low', isLow);
             }
 
-            if (discountPercent != null && discountPercent > 0) {
-                priceBadgeEl.textContent = discountPercent + '% OFF';
-                priceBadgeEl.style.display = '';
-            } else {
-                priceBadgeEl.textContent = '';
-                priceBadgeEl.style.display = 'none';
-            }
+            // ── 规格 Tab —— 使用新 HTML 中预置的独立 ID ──
+            setText('specSize',           product.fileSize);
+            setText('productVersion',     product.version);
+            setText('specDate',           showDate(product.uploadDate));
+            setText('specAuthor',         product.author);
+            setText('productCompatibility', product.compatibility);
+            setText('specLicense',        product.license);
+            setText('productDownloads',   showDownloads(product.downloads));
+            const purchasesEl = document.getElementById('productPurchases');
+            if (purchasesEl) purchasesEl.textContent = showDownloads(product.purchaseCount);
 
-            // 更新评分
-            const ratingEl = document.getElementById('ratingStars');
-            const ratingScoreEl = document.getElementById('ratingScore');
-            const ratingCountEl = document.getElementById('ratingCount');
-            if (product.rating == null || isNaN(Number(product.rating))) {
-                ratingEl.textContent = '--';
-                ratingScoreEl.textContent = '--';
-            } else {
-                const ratingStars = Math.round(Number(product.rating));
-                ratingEl.textContent = '⭐'.repeat(ratingStars) + '☆'.repeat(5 - ratingStars);
-                ratingScoreEl.textContent = Number(product.rating).toFixed(1);
-            }
-            ratingCountEl.textContent = '(' + (product.reviews != null ? product.reviews : '--') + ' 条评价)';
-
-            // 库存状态
-            const stockInfo = document.getElementById('stockInfo');
-            if (product.stock === '--' || product.stock === null || product.stock === undefined) {
-                stockInfo.textContent = '库存：--';
-                stockInfo.classList.add('low');
-            } else if (Number(product.stock) > 50) {
-                stockInfo.textContent = `库存：${product.stock}（充足）`;
-                stockInfo.classList.remove('low');
-            } else if (Number(product.stock) > 0) {
-                stockInfo.textContent = `库存：${product.stock}（有限）`;
-                stockInfo.classList.add('low');
-            } else {
-                stockInfo.textContent = '库存：0（暂无）';
-                stockInfo.classList.add('low');
-            }
-
-            // 更规格
-            const specsList = document.getElementById('specsList');
-            specsList.innerHTML = `
-                <div class="spec-item">
-                    <span class="spec-label">文件大小</span>
-                    <span class="spec-value">${orDash(product.fileSize)}</span>
-                </div>
-                <div class="spec-item">
-                    <span class="spec-label">上传时间</span>
-                    <span class="spec-value">${showDate(product.uploadDate)}</span>
-                </div>
-                <div class="spec-item">
-                    <span class="spec-label">作者</span>
-                    <span class="spec-value">${orDash(product.author)}</span>
-                </div>
-                <div class="spec-item">
-                    <span class="spec-label">许可证</span>
-                    <span class="spec-value">${orDash(product.license)}</span>
-                </div>
-            `;
-
-            // 存储当前产品数据到 window
+            // 将当前产品数据挂到 window，供事件监听器使用
             window.currentProduct = product;
         }
 
-        // 设置事件监听器
+        /** 绑定页面所有交互事件 */
         function setupEventListeners() {
-            // 获取购买按钮
+            // ── Tab 页签切换 ──
+            const tabs   = document.querySelectorAll('.detail-tab[data-tab]');
+            const panels = document.querySelectorAll('.detail-tab-panel');
+            tabs.forEach(tab => {
+                tab.addEventListener('click', () => {
+                    const target = tab.dataset.tab;
+                    tabs.forEach(t => {
+                        t.classList.toggle('active', t === tab);
+                        t.setAttribute('aria-selected', t === tab ? 'true' : 'false');
+                    });
+                    panels.forEach(p => {
+                        const isTarget = p.id === 'panel-' + target;
+                        p.classList.toggle('active', isTarget);
+                        if (isTarget) p.removeAttribute('hidden'); else p.setAttribute('hidden', '');
+                    });
+                });
+            });
+
+            // ── 购买面板元素 ──
             const purchaseBtn = document.getElementById('purchaseBtn');
             const plansGrid = document.getElementById('plansGrid');
             const favBtn = document.getElementById('favBtn');
@@ -361,55 +410,84 @@
             // 存储当前选中的价格方案ID
             let selectedPriceId = null;
 
-            // 动态生成和显示价格套餐
+            /** 同步设置购买按钮启用/禁用状态（disabled + aria-disabled） */
+            function setPurchaseBtnEnabled(enabled) {
+                purchaseBtn.disabled = !enabled;
+                if (enabled) {
+                    purchaseBtn.removeAttribute('aria-disabled');
+                } else {
+                    purchaseBtn.setAttribute('aria-disabled', 'true');
+                }
+            }
+
+            /** 动态生成和显示价格套餐 */
             function loadPricePlans() {
                 const product = window.currentProduct;
-                if (!product || !product.prices || product.prices.length === 0) {
+                let prices = (product && Array.isArray(product.prices) && product.prices.length > 0) ? product.prices : null;
+
+                // 如果后端没有返回 prices 数组但有基础价格，自动构建默认方案
+                if (!prices && product && product.price != null) {
+                    prices = [{
+                        id: '__default__',
+                        price: product.price,
+                        originalPrice: product.originalPrice ?? product.price,
+                        discountRate: product.discountRate ?? 0,
+                        unit: null,
+                        duration: null
+                    }];
+                }
+
+                if (!prices || prices.length === 0) {
                     plansGrid.innerHTML = '<div style="color: var(--text-muted); padding: 12px;">暂无价格方案</div>';
-                    purchaseBtn.disabled = true;
+                    setPurchaseBtnEnabled(false);
                     return;
                 }
 
                 plansGrid.innerHTML = '';
-                product.prices.forEach((price, index) => {
-                    // 根据unit和duration生成显示文本
+                prices.forEach((price, index) => {
                     let durationText = '';
                     switch (price.unit?.toLowerCase()) {
-                        case 'year': durationText = `${price.duration}年`; break;
+                        case 'year':  durationText = `${price.duration}年`; break;
                         case 'month': durationText = `${price.duration}个月`; break;
-                        case 'day': durationText = `${price.duration}天`; break;
-                        case 'hour': durationText = `${price.duration}小时`; break;
-                        default: durationText = '一次性';
+                        case 'day':   durationText = `${price.duration}天`; break;
+                        case 'hour':  durationText = `${price.duration}小时`; break;
+                        default:      durationText = '一次性';
                     }
 
                     const salePrice = price.price * (1 - (price.discountRate || 0));
                     const hasDiscount = price.discountRate && price.discountRate > 0;
+
+                    // 每个方案的独立库存（-1 表示无限）
+                    const planStock = price.stock ?? -1;
+                    const stockHtml = planStock < 0 ? '' : (planStock > 0 ? `<span style="color: var(--text-muted); font-size: 12px;">库存: ${planStock}</span>` : `<span style="color: var(--danger, #e74c3c); font-size: 12px;">已售罄</span>`);
+                    const isOutOfStock = planStock === 0;
                     
                     const planItem = document.createElement('button');
-                    planItem.className = 'plan-item' + (index === 0 ? ' selected' : '');
+                    planItem.className = 'plan-item' + (index === 0 && !isOutOfStock ? ' selected' : '');
                     planItem.type = 'button';
+                    if (isOutOfStock) planItem.disabled = true;
                     planItem.innerHTML = `
                         <div class="plan-name">${durationText}</div>
                         <div class="plan-details">
                             ${hasDiscount ? `<span style="text-decoration: line-through; color: var(--text-muted); margin-right: 4px;">💰${Number(price.originalPrice).toFixed(2)}</span>` : ''}
                             <span style="color: var(--accent); font-weight: 600;">💰${Number(salePrice).toFixed(2)}</span>
                         </div>
+                        ${stockHtml ? `<div class="plan-stock">${stockHtml}</div>` : ''}
                     `;
                     
                     planItem.addEventListener('click', () => {
-                        // 移除其他选中状态
+                        if (isOutOfStock) return;
                         document.querySelectorAll('.plan-item').forEach(item => item.classList.remove('selected'));
                         planItem.classList.add('selected');
                         selectedPriceId = price.id;
-                        purchaseBtn.disabled = false;
+                        setPurchaseBtnEnabled(true);
                     });
 
                     plansGrid.appendChild(planItem);
                     
-                    // 默认选中第一个
-                    if (index === 0) {
+                    if (index === 0 && !isOutOfStock) {
                         selectedPriceId = price.id;
-                        purchaseBtn.disabled = false;
+                        setPurchaseBtnEnabled(true);
                     }
                 });
             }
@@ -434,7 +512,7 @@
                 }
 
                 purchaseBtn.disabled = true;
-                purchaseBtn.textContent = '处理中...';
+                purchaseBtn.innerHTML = '<span class="material-icons" style="font-size:18px;vertical-align:middle;">hourglass_top</span> 处理中…';
 
                 try {
                     const resp = await fetch('/api/shop/purchase', {
@@ -452,20 +530,31 @@
                     const data = await resp.json();
 
                     if (resp.ok && data.code === 0) {
-                        purchaseBtn.textContent = '✓ 购买成功';
+                        // 更新本地 product 对象的统计数据
+                        if (data.data) {
+                            if (data.data.purchaseCount != null) product.purchaseCount = data.data.purchaseCount;
+                            if (data.data.favoriteCount != null) product.favoriteCount = data.data.favoriteCount;
+                            if (data.data.viewCount != null) product.viewCount = data.data.viewCount;
+                            if (data.data.rating != null) product.rating = data.data.rating;
+                            if (data.data.downloads != null) product.downloads = data.data.downloads;
+                        }
+                        
+                        // 立即刷新页面显示新的统计数据
+                        purchaseBtn.innerHTML = '<span class="material-icons" style="font-size:18px;vertical-align:middle;">check_circle</span> 购买成功';
                         setTimeout(() => {
                             alert('购买成功！');
+                            // 重新加载商品详情页面以显示最新数据
                             location.reload();
                         }, 1500);
                     } else {
                         alert('购买失败: ' + (data.message || '未知错误'));
-                        purchaseBtn.textContent = '立即购买';
+                        purchaseBtn.innerHTML = '<span class="material-icons">shopping_bag</span> 立即购买';
                         purchaseBtn.disabled = false;
                     }
                 } catch (e) {
                     console.error('购买失败', e);
                     alert('网络错误，请稍后重试');
-                    purchaseBtn.textContent = '立即购买';
+                    purchaseBtn.innerHTML = '<span class="material-icons">shopping_bag</span> 立即购买';
                     purchaseBtn.disabled = false;
                 }
             });
@@ -527,9 +616,9 @@
                 } else {
                     // 复制到剪贴板
                     navigator.clipboard.writeText(shareUrl).then(() => {
-                        shareBtn.textContent = '✓ 链接已复制';
+                        shareBtn.innerHTML = '<span class="material-icons">check</span><span>已复制</span>';
                         setTimeout(() => {
-                            shareBtn.innerHTML = '<span class="material-icons">share</span><span>分享</span>';
+                            shareBtn.innerHTML = '<span class="material-icons">share</span>';
                         }, 2000);
                     });
                 }
@@ -642,6 +731,93 @@
         // 导航到其他商品详情
         function goToShopDetail(id) {
             window.location.href = `/shop/detail?id=${id}`;
+        }
+
+        /** 渲染截图画廊（主图 + 截图列表），无图片则保留占位 */
+        function renderGallery(product) {
+            const track = document.getElementById('galleryTrack');
+            const thumbContainer = document.getElementById('thumbnailContainer');
+            const prevBtn = document.getElementById('galleryPrev');
+            const nextBtn = document.getElementById('galleryNext');
+            if (!track) return;
+
+            const images = [];
+            if (product.primaryImage) images.push(product.primaryImage);
+            if (Array.isArray(product.screenshots)) {
+                product.screenshots.forEach(url => { if (url) images.push(url); });
+            }
+            if (images.length === 0) return;
+
+            track.innerHTML = images.map((url, i) =>
+                `<div class="gallery-slide${i === 0 ? ' active' : ''}">
+                    <img src="${url}" alt="截图 ${i + 1}" style="width:100%;height:100%;object-fit:cover;border-radius:12px;">
+                </div>`
+            ).join('');
+
+            if (thumbContainer) {
+                thumbContainer.innerHTML = images.map((url, i) =>
+                    `<div class="gallery-thumb${i === 0 ? ' active' : ''}" role="listitem" data-index="${i}">
+                        <img src="${url}" alt="缩略图 ${i + 1}" style="width:100%;height:100%;object-fit:cover;border-radius:inherit;">
+                    </div>`
+                ).join('');
+            }
+
+            let currentSlide = 0;
+            const slides = track.querySelectorAll('.gallery-slide');
+            const thumbs = thumbContainer ? thumbContainer.querySelectorAll('.gallery-thumb') : [];
+
+            function showSlide(idx) {
+                if (idx < 0 || idx >= slides.length) return;
+                slides[currentSlide].classList.remove('active');
+                if (thumbs[currentSlide]) thumbs[currentSlide].classList.remove('active');
+                currentSlide = idx;
+                slides[currentSlide].classList.add('active');
+                if (thumbs[currentSlide]) thumbs[currentSlide].classList.add('active');
+                if (prevBtn) prevBtn.disabled = currentSlide === 0;
+                if (nextBtn) nextBtn.disabled = currentSlide === slides.length - 1;
+            }
+
+            if (prevBtn) prevBtn.addEventListener('click', () => showSlide(currentSlide - 1));
+            if (nextBtn) nextBtn.addEventListener('click', () => showSlide(currentSlide + 1));
+            thumbs.forEach(t => t.addEventListener('click', () => showSlide(Number(t.dataset.index))));
+
+            if (prevBtn) prevBtn.disabled = true;
+            if (nextBtn) nextBtn.disabled = slides.length <= 1;
+        }
+
+        /** 从后端 API 加载相关推荐商品并渲染到推荐区域 */
+        async function loadRelatedProducts(currentId) {
+            const grid = document.getElementById('relatedProductsGrid');
+            if (!grid) return;
+
+            try {
+                const resp = await fetch(`/api/asset/related/${currentId}?top=4`, { credentials: 'same-origin' });
+                if (!resp.ok) return;
+
+                const json = await resp.json();
+                const items = (json && json.data) ? json.data : [];
+                if (!Array.isArray(items) || items.length === 0) return;
+
+                const showCurrency = (v) => (v === null || v === undefined) ? '--' : ('💰' + Number(v).toFixed(2));
+
+                grid.innerHTML = items.map(item => {
+                    const thumbSrc = item.thumbnailImage || item.primaryImage || '';
+                    const thumbHtml = thumbSrc
+                        ? `<img src="${thumbSrc}" alt="${item.name || ''}" style="width:100%;height:100%;object-fit:cover;">`
+                        : '🎮';
+                    const displayPrice = item.salePrice != null ? item.salePrice : item.price;
+                    return `<div class="related-card" onclick="goToShopDetail(${item.id})">
+                        <div class="related-thumb">${thumbHtml}</div>
+                        <div class="related-info">
+                            <div class="related-name">${item.name || '--'}</div>
+                            <div class="related-meta">${item.category || '--'}</div>
+                            <div class="related-price">${showCurrency(displayPrice)}</div>
+                        </div>
+                    </div>`;
+                }).join('');
+            } catch (e) {
+                console.warn('加载相关推荐失败', e);
+            }
         }
 
         // 页面加载时初始化

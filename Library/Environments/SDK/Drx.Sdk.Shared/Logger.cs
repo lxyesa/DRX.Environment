@@ -37,6 +37,12 @@ namespace Drx.Sdk.Shared
             [LogLevel.Fatal] = ConsoleColor.DarkRed
         };
 
+        /// <summary>
+        /// 日志输出回调钩子，每条日志格式化后会调用此委托（若不为 null）。
+        /// 参数：(格式化后的日志字符串, 日志级别, 时间戳)
+        /// </summary>
+        public static Action<string, LogLevel, DateTime>? OnLogEntry { get; set; }
+
 
         private const string DateTimeFormat = "yyyy/MM/dd HH:mm:ss";
 
@@ -563,25 +569,23 @@ namespace Drx.Sdk.Shared
         {
             if (batch == null || batch.Count == 0) return;
 
-            // 重用一个 StringBuilder 减少分配，按批次逐条格式化并输出
             var sb = new StringBuilder(256);
             var originalColor = Console.ForegroundColor;
+            var hook = OnLogEntry;
 
             for (int i = 0; i < batch.Count; i++)
             {
                 var log = batch[i];
 
-                // 如果是Text对象，直接输出（已包含ANSI转义码和重置）
                 if (log.Text != null)
                 {
-                    // 在输出Text对象前，先重置到默认颜色，确保Text的颜色设置从干净的状态开始
                     Console.ForegroundColor = originalColor;
-                    Console.WriteLine(FormatLog(log, sb));
-                    // Text对象已经包含了重置序列(\e[0m)，这里不再需要额外重置
+                    var formatted = FormatLog(log, sb);
+                    Console.WriteLine(formatted);
+                    try { hook?.Invoke(formatted, log.Level, log.Time); } catch { }
                     continue;
                 }
 
-                // 普通字符串消息，使用原有颜色逻辑
                 var line = FormatLog(log, sb);
                 var lvl = log.Level;
                 var color = ConsoleColors.TryGetValue(lvl, out var cc) ? cc : ConsoleColor.White;
@@ -589,6 +593,7 @@ namespace Drx.Sdk.Shared
                 Console.ForegroundColor = color;
                 Console.WriteLine(line);
                 Console.ForegroundColor = originalColor;
+                try { hook?.Invoke(line, lvl, log.Time); } catch { }
             }
         }
 

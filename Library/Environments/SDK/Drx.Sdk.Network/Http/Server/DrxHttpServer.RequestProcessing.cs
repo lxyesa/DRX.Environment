@@ -110,7 +110,6 @@ namespace Drx.Sdk.Network.Http
                 {
                     var context = await _listener.GetContextAsync();
                     await _requestChannel.Writer.WriteAsync(context);
-                    try { _ = _message_queue_write(context); } catch { }
                 }
                 catch (HttpListenerException) when (token.IsCancellationRequested)
                 {
@@ -122,7 +121,6 @@ namespace Drx.Sdk.Network.Http
                 }
             }
             _requestChannel.Writer.Complete();
-            _messageQueue.Complete();
         }
 
         private ValueTask _message_queue_write(HttpListenerContext context) => _messageQueue.WriteAsync(context);
@@ -310,94 +308,14 @@ namespace Drx.Sdk.Network.Http
                         }
                     }
 
-                    if (!string.IsNullOrEmpty(FileRootPath) || !string.IsNullOrEmpty(ViewRoot))
+                    // 静态资源服务（HTML/CSS/JS/图片等），支持 ETag 缓存与 304 响应
+                    if (!string.IsNullOrEmpty(FileRootPath) || !string.IsNullOrEmpty(ViewRoot) || _staticFileRoot != null)
                     {
-                        try
+                        var staticResponse = TryServeStaticContent(req);
+                        if (staticResponse != null)
                         {
-                            var relPath = req.Path ?? "/";
-                            if (relPath.StartsWith("/")) relPath = relPath.Substring(1);
-
-                            if (!string.IsNullOrEmpty(relPath) && relPath.Contains('.'))
-                            {
-                                var safeRel = relPath.Replace('/', Path.DirectorySeparatorChar);
-                                if (safeRel.Contains(".."))
-                                {
-                                    return new HttpResponse(403, "Forbidden");
-                                }
-
-                                var ext = Path.GetExtension(safeRel).ToLowerInvariant();
-                                bool isTextLike = ext == ".html" || ext == ".htm" || ext == ".css" || ext == ".js" || ext == ".json" || ext == ".txt";
-
-                                string? filePath = null;
-
-                                if (isTextLike)
-                                {
-                                    if (!string.IsNullOrEmpty(ViewRoot))
-                                    {
-                                        var candidateView = Path.Combine(ViewRoot, safeRel);
-                                        if (File.Exists(candidateView)) filePath = candidateView;
-                                    }
-
-                                    if (filePath == null && !string.IsNullOrEmpty(FileRootPath))
-                                    {
-                                        var candidateFileRoot = Path.Combine(FileRootPath, safeRel);
-                                        if (File.Exists(candidateFileRoot)) filePath = candidateFileRoot;
-                                    }
-                                }
-                                else
-                                {
-                                    if (!string.IsNullOrEmpty(FileRootPath))
-                                    {
-                                        var candidateFileRoot = Path.Combine(FileRootPath, safeRel);
-                                        if (File.Exists(candidateFileRoot)) filePath = candidateFileRoot;
-                                    }
-
-                                    if (filePath == null && !string.IsNullOrEmpty(ViewRoot))
-                                    {
-                                        var candidateView = Path.Combine(ViewRoot, safeRel);
-                                        if (File.Exists(candidateView)) filePath = candidateView;
-                                    }
-                                }
-
-                                if (filePath != null)
-                                {
-                                    var clientIp = req.ClientAddress.Ip ?? context.Request.RemoteEndPoint?.Address.ToString();
-                                    Logger.Info($"通过根目录提供静态文件: {relPath} (客户端: {clientIp})");
-
-                                    var mime = GetMimeType(ext);
-
-                                    if (isTextLike)
-                                    {
-                                        try
-                                        {
-                                            var content = File.ReadAllText(filePath);
-                                            var resp = new HttpResponse(200, content);
-                                            try { resp.Headers.Add("Content-Type", mime); } catch { }
-                                            return resp;
-                                        }
-                                        catch (Exception ex)
-                                        {
-                                            Logger.Error($"从根目录读取文件时出错: {ex}");
-                                            return new HttpResponse(500, "Internal Server Error");
-                                        }
-                                    }
-
-                                    var streamResp = CreateFileResponse(filePath, null, mime);
-                                    try { streamResp.Headers.Remove("Content-Disposition"); } catch { }
-                                    return streamResp;
-                                }
-                            }
+                            return staticResponse;
                         }
-                        catch (Exception ex)
-                        {
-                            Logger.Error($"尝试从根目录提供静态文件时发生错误: {ex}");
-                            return new HttpResponse(500, "Internal Server Error");
-                        }
-                    }
-
-                    if (_staticFileRoot != null && TryServeStaticFile(req.Path ?? "/", out var fileResponse))
-                    {
-                        return fileResponse ?? new HttpResponse(500, "Internal Server Error");
                     }
 
                     if (!string.IsNullOrEmpty(NotFoundPagePath) && File.Exists(NotFoundPagePath))
@@ -587,10 +505,10 @@ namespace Drx.Sdk.Network.Http
 
                     _ = Task.Run(async () =>
                     {
+                        const int BufferSize = 256 * 1024;
+                        var buffer = System.Buffers.ArrayPool<byte>.Shared.Rent(BufferSize);
                         try
                         {
-                            const int BufferSize = 256 * 1024;
-                            var buffer = new byte[BufferSize];
 
                             long localRemaining = -1;
                             try { localRemaining = response.ContentLength64; } catch { localRemaining = -1; }
@@ -665,6 +583,7 @@ namespace Drx.Sdk.Network.Http
                         }
                         finally
                         {
+                            System.Buffers.ArrayPool<byte>.Shared.Return(buffer);
                             try { httpResponse.FileStream?.Dispose(); } catch { }
                             try { response.OutputStream.Close(); } catch { }
                         }

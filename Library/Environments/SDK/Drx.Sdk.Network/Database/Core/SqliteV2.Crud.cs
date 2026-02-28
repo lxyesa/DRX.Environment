@@ -251,6 +251,9 @@ public partial class SqliteV2<T> where T : class, IDataBase, new()
                 }
             }
 
+            // 3. 更新所有 IDataTable 一对一子表
+            UpdateOneToOneChildren(connection, transaction, entity);
+
             transaction.Commit();
         }
         catch
