@@ -194,6 +194,7 @@ public partial class KaxHttp
                             AssetName = string.Empty,
                             CdkCode = cdk.Code,
                             GoldChange = cdk.GoldValue,
+                            GoldChangeReason = "cdk_redeem",
                             Description = string.IsNullOrEmpty(cdk.Description)
                                 ? $"兑换 CDK: {cdk.Code}"
                                 : $"兑换 CDK: {cdk.Code} ({cdk.Description})"

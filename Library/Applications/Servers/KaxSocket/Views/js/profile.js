@@ -526,8 +526,9 @@ async function loadActiveAssets() {
                 }
 
                 assetsList.innerHTML = '';
+                let countActive = 0, countExpired = 0, countForever = 0;
                 for (const asset of assets) {
-                    const activatedTime = new Date(asset.activatedAt).toLocaleString();
+                    const activatedTime = new Date(asset.activatedAt).toLocaleDateString();
                     let expiresText = '';
                     let remainingText = '';
 
@@ -536,7 +537,7 @@ async function loadActiveAssets() {
                         remainingText = '无限期';
                     } else {
                         const expiresTime = new Date(asset.expiresAt);
-                        expiresText = expiresTime.toLocaleString();
+                        expiresText = expiresTime.toLocaleDateString();
                         if (asset.remainingSeconds < 0) {
                             remainingText = '已过期';
                         } else if (asset.remainingSeconds === 0) {
@@ -554,6 +555,10 @@ async function loadActiveAssets() {
                     const statusClass = isExpired ? 'expired' : isForever ? 'forever' : 'active';
                     const statusLabel = isExpired ? '已过期' : isForever ? '永久' : '有效';
 
+                    if (isExpired) countExpired++;
+                    else if (isForever) countForever++;
+                    else countActive++;
+
                     assetsList.insertAdjacentHTML('beforeend', `
                         <div class="asset-card">
                             <div class="asset-card-top">
@@ -562,29 +567,39 @@ async function loadActiveAssets() {
                             </div>
                             <div class="asset-meta">
                                 <div class="asset-meta-item">
-                                    <span class="asset-meta-label">剩余时间</span>
+                                    <span class="asset-meta-label">剩余：</span>
                                     <span class="asset-meta-value ${isExpired ? 'text-danger' : ''}">${remainingText}</span>
                                 </div>
                                 <div class="asset-meta-item">
-                                    <span class="asset-meta-label">激活时间</span>
+                                    <span class="asset-meta-label">激活于：</span>
                                     <span class="asset-meta-value">${activatedTime}</span>
                                 </div>
                                 <div class="asset-meta-item">
-                                    <span class="asset-meta-label">过期时间</span>
+                                    <span class="asset-meta-label">到期：</span>
                                     <span class="asset-meta-value">${expiresText}</span>
                                 </div>
                             </div>
                             <div class="asset-actions" data-asset-id="${asset.assetId}" data-asset-name="${name}">
                                 <button class="asset-action-btn" data-action="changePlan">
-                                    <span class="material-icons">swap_horiz</span>更变计划
+                                    <span class="material-icons">swap_horiz</span>更变
                                 </button>
                                 <button class="asset-action-btn danger" data-action="unsubscribe">
-                                    <span class="material-icons">cancel</span>取消订阅
+                                    <span class="material-icons">cancel</span>退订
                                 </button>
                             </div>
                         </div>
                     `);
                 }
+
+                // 更新概览统计
+                const elTotal   = document.getElementById('assetsSummaryTotal');
+                const elActive  = document.getElementById('assetsSummaryActive');
+                const elExpired = document.getElementById('assetsSummaryExpired');
+                const elForever = document.getElementById('assetsSummaryForever');
+                if (elTotal)   elTotal.textContent   = assets.length;
+                if (elActive)  elActive.textContent  = countActive;
+                if (elExpired) elExpired.textContent = countExpired;
+                if (elForever) elForever.textContent = countForever;
             }
         } else if (resp.status === 401) {
             localStorage.removeItem('kax_login_token');
@@ -1474,6 +1489,367 @@ document.getElementById('cdkDeleteConfirmBtn')?.addEventListener('click', async 
         }
     });
 });
+// #endregion
+
+// #region 订单 Tab 处理逻辑
+let ordersPage = 1;
+const ordersPageSize = 20;
+
+(function initOrdersTab() {
+    const tabOrders = document.querySelector('[data-tab="orders"]');
+    if (tabOrders) {
+        tabOrders.addEventListener('click', () => {
+            // 首次切换到订单标签页时加载数据
+            if (!window.ordersTabLoaded) {
+                window.ordersTabLoaded = true;
+                loadUserOrders(1);
+            }
+        });
+    }
+
+    // 搜索按钮
+    document.getElementById('orderSearchBtn')?.addEventListener('click', searchOrders);
+    document.getElementById('orderSearch')?.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') searchOrders();
+    });
+
+    // 状态筛选
+    document.getElementById('orderStatusFilter')?.addEventListener('change', () => {
+        ordersPage = 1;
+        loadUserOrders(1);
+    });
+
+    // 分页按钮
+    document.getElementById('ordersPrevBtn')?.addEventListener('click', () => {
+        if (ordersPage > 1) loadUserOrders(ordersPage - 1);
+    });
+    document.getElementById('ordersNextBtn')?.addEventListener('click', () => {
+        loadUserOrders(ordersPage + 1);
+    });
+})();
+
+/**
+ * 加载用户订单列表
+ */
+async function loadUserOrders(page = 1) {
+    const token = checkToken();
+    if (!token) return;
+
+    const ordersLoading = document.getElementById('ordersLoading');
+    const ordersEmpty = document.getElementById('ordersEmpty');
+    const ordersList = document.getElementById('ordersList');
+
+    setElementDisplay(ordersLoading, true);
+    setElementDisplay(ordersEmpty, false);
+    ordersList.innerHTML = '';
+
+    try {
+        const resp = await fetch(`/api/user/orders?page=${page}&pageSize=${ordersPageSize}`, {
+            headers: { 'Authorization': 'Bearer ' + token }
+        });
+
+        if (!resp.ok) {
+            if (resp.status === 401) {
+                localStorage.removeItem('kax_login_token');
+                location.href = '/login';
+            }
+            throw new Error(`HTTP ${resp.status}`);
+        }
+
+        const result = await resp.json();
+        setElementDisplay(ordersLoading, false);
+
+        if (result.code !== 0 || !result.data) {
+            setElementDisplay(ordersEmpty, true);
+            return;
+        }
+
+        const orders = result.data;
+        const total = result.total;
+        const totalPages = Math.ceil(total / ordersPageSize);
+
+        if (orders.length === 0) {
+            setElementDisplay(ordersEmpty, true);
+            return;
+        }
+
+        // 应用状态筛选
+        const statusFilter = document.getElementById('orderStatusFilter')?.value || 'all';
+        let filteredOrders = orders;
+        if (statusFilter !== 'all') {
+            filteredOrders = orders.filter(order => {
+                // 基于订单类型和金币变化判断状态
+                if (statusFilter === 'pending') {
+                    return order.orderType === 'purchase'; // 假设金币购买为待支付
+                } else if (statusFilter === 'paid') {
+                    return order.orderType === 'cdk'; // CDK 兑换视为已支付
+                }
+                return true;
+            });
+        }
+
+        if (filteredOrders.length === 0) {
+            setElementDisplay(ordersEmpty, true);
+            return;
+        }
+
+        // 渲染订单列表
+        filteredOrders.forEach(order => {
+            const orderCard = createOrderCard(order);
+            ordersList.appendChild(orderCard);
+        });
+
+        // 更新计数
+        document.getElementById('ordersCount').textContent = `共 ${total} 条订单`;
+
+        // 更新分页
+        ordersPage = page;
+        const pagerEl = document.getElementById('ordersPager');
+        if (totalPages > 1) {
+            setElementDisplay(pagerEl, true);
+            document.getElementById('ordersPageInfo').textContent = `第 ${page} / ${totalPages} 页`;
+            document.getElementById('ordersPrevBtn').disabled = page === 1;
+            document.getElementById('ordersNextBtn').disabled = page === totalPages;
+        } else {
+            setElementDisplay(pagerEl, false);
+        }
+
+    } catch (err) {
+        console.error('加载订单失败:', err);
+        setElementDisplay(ordersLoading, false);
+        setElementDisplay(ordersEmpty, true);
+        document.getElementById('ordersEmpty').querySelector('span:last-child').textContent = '加载失败，请重试';
+    }
+}
+
+/**
+ * 搜索订单
+ */
+function searchOrders() {
+    const keyword = document.getElementById('orderSearch')?.value?.trim() || '';
+    if (!keyword) {
+        loadUserOrders(1);
+        return;
+    }
+
+    const token = checkToken();
+    if (!token) return;
+
+    const ordersLoading = document.getElementById('ordersLoading');
+    const ordersEmpty = document.getElementById('ordersEmpty');
+    const ordersList = document.getElementById('ordersList');
+
+    setElementDisplay(ordersLoading, true);
+    setElementDisplay(ordersEmpty, false);
+    ordersList.innerHTML = '';
+
+    (async () => {
+        try {
+            const resp = await fetch(`/api/user/orders?page=1&pageSize=999`, {
+                headers: { 'Authorization': 'Bearer ' + token }
+            });
+
+            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+            const result = await resp.json();
+            setElementDisplay(ordersLoading, false);
+
+            if (result.code !== 0 || !result.data) {
+                setElementDisplay(ordersEmpty, true);
+                return;
+            }
+
+            // 客户端搜索
+            const filtered = result.data.filter(order =>
+                order.assetName?.toLowerCase().includes(keyword.toLowerCase()) ||
+                order.cdkCode?.toLowerCase().includes(keyword.toLowerCase()) ||
+                order.description?.toLowerCase().includes(keyword.toLowerCase()) ||
+                order.id?.toLowerCase().includes(keyword.toLowerCase())
+            );
+
+            if (filtered.length === 0) {
+                setElementDisplay(ordersEmpty, true);
+                return;
+            }
+
+            filtered.slice(0, ordersPageSize).forEach(order => {
+                const orderCard = createOrderCard(order);
+                ordersList.appendChild(orderCard);
+            });
+
+            document.getElementById('ordersCount').textContent = `搜索结果: ${filtered.length} 条`;
+            setElementDisplay(document.getElementById('ordersPager'), false);
+
+        } catch (err) {
+            console.error('搜索失败:', err);
+            setElementDisplay(ordersLoading, false);
+            setElementDisplay(ordersEmpty, true);
+        }
+    })();
+}
+
+/**
+ * 创建订单卡片元素
+ */
+function createOrderCard(order) {
+    const card = document.createElement('div');
+    card.className = 'admin-list-item';
+    card.style.cssText = 'display:grid;grid-template-columns:1fr 2fr 1fr 1fr 100px;gap:12px;align-items:center;padding:12px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:6px;border-left:4px solid var(--profile-accent);color:rgba(255,255,255,0.92);;';
+
+    // 获取订单类型标签和颜色
+    const orderTypeMap = {
+        'purchase': { label: '购买资产', color: '#3b82f6' },
+        'cdk': { label: 'CDK兑换', color: '#10b981' },
+        'cancel_subscription': { label: '取消订阅', color: '#f59e0b' },
+        'change_plan': { label: '更变计划', color: '#8b5cf6' },
+        'gold_adjust': { label: '金币调整', color: '#ec4899' }
+    };
+    const orderTypeInfo = orderTypeMap[order.orderType] || { label: order.orderType, color: '#6b7280' };
+    const orderTypeColor = orderTypeInfo.color;
+    const orderTypeLabel = orderTypeInfo.label;
+
+    const createdAtDate = new Date(order.createdAt);
+    const createdAtStr = createdAtDate.toLocaleDateString() + ' ' + createdAtDate.toLocaleTimeString();
+
+    const goldChangeColor = order.goldChange > 0 ? '#10b981' : (order.goldChange < 0 ? '#ef4444' : 'rgba(255,255,255,0.5)');
+    const goldChangeLabel = order.goldChange > 0 ? '+' + order.goldChange : (order.goldChange === 0 ? '—' : order.goldChange);
+
+    // 订单 ID 列
+    const idCol = document.createElement('div');
+    idCol.style.cssText = 'overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:0.85rem;color:rgba(255,255,255,0.5);';
+    idCol.title = order.id;
+    idCol.textContent = order.id?.substring(0, 12) || '-';
+
+    // 订单详情列
+    const detailCol = document.createElement('div');
+    detailCol.style.cssText = 'display:flex;flex-direction:column;gap:4px;';
+    const assetNameEl = document.createElement('strong');
+    assetNameEl.textContent = order.assetName || (order.orderType === 'cdk' ? 'CDK 兑换' : '资产购买');
+    const orderTypeEl = document.createElement('span');
+    orderTypeEl.style.cssText = `display:inline-block;width:fit-content;background:${orderTypeColor};color:#fff;padding:2px 6px;border-radius:3px;font-size:0.75rem;font-weight:600;`;
+    orderTypeEl.textContent = orderTypeLabel;
+    detailCol.appendChild(assetNameEl);
+    detailCol.appendChild(orderTypeEl);
+
+    // 金币变化列
+    const goldCol = document.createElement('div');
+    goldCol.style.cssText = `font-weight:600;color:${goldChangeColor};`;
+    goldCol.textContent = goldChangeLabel + ' 💰';
+
+    // 日期列
+    const dateCol = document.createElement('div');
+    dateCol.style.cssText = 'font-size:0.85rem;color:rgba(255,255,255,0.5);';
+    dateCol.textContent = createdAtStr;
+
+    // 操作列
+    const actionCol = document.createElement('div');
+    actionCol.style.cssText = 'text-align:center;';
+    const detailBtn = document.createElement('button');
+    detailBtn.className = 'btn ghost';
+    detailBtn.style.cssText = 'padding:4px 8px;font-size:0.8rem;';
+    detailBtn.textContent = '查看详情';
+    detailBtn.addEventListener('click', () => showOrderDetail(order));
+    actionCol.appendChild(detailBtn);
+
+    card.appendChild(idCol);
+    card.appendChild(detailCol);
+    card.appendChild(goldCol);
+    card.appendChild(dateCol);
+    card.appendChild(actionCol);
+
+    return card;
+}
+
+/**
+ * 显示订单详情弹窗
+ */
+function showOrderDetail(order) {
+    const html = `
+        <div class="modal-overlay show" id="orderDetailModal" style="">
+            <div class="modal-card">
+                <div class="modal-header">
+                    <span class="material-icons icon">receipt</span>
+                    <span>订单详情</span>
+                </div>
+                <div class="modal-body">
+                    <div class="order-detail-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                        <div>
+                            <label style="font-weight:600;color:rgba(255,255,255,0.7);font-size:0.85rem;">订单 ID</label>
+                            <div style="padding:8px;background:rgba(0,0,0,0.3);border-radius:4px;font-family:monospace;word-break:break-all;color:rgba(255,255,255,0.92);">${escapeHtml(order.id || '-')}</div>
+                        </div>
+                        <div>
+                            <label style="font-weight:600;color:rgba(255,255,255,0.7);font-size:0.85rem;">订单类型</label>
+                            <div style="padding:8px;color:rgba(255,255,255,0.92);">
+                                ${(() => {
+                                    const typeMap = {
+                                        'purchase': '购买资产',
+                                        'cdk': 'CDK兑换',
+                                        'cancel_subscription': '取消订阅',
+                                        'change_plan': '更变计划',
+                                        'gold_adjust': '金币调整'
+                                    };
+                                    return typeMap[order.orderType] || order.orderType;
+                                })()}
+                            </div>
+                        </div>
+                        <div>
+                            <label style="font-weight:600;color:rgba(255,255,255,0.7);font-size:0.85rem;">资产名称</label>
+                            <div style="padding:8px;color:rgba(255,255,255,0.92);">${escapeHtml(order.assetName || '-')}</div>
+                        </div>
+                        <div>
+                            <label style="font-weight:600;color:rgba(255,255,255,0.7);font-size:0.85rem;">金币变化</label>
+                            <div style="padding:8px;color:${order.goldChange > 0 ? '#10b981' : (order.goldChange < 0 ? '#ef4444' : 'rgba(255,255,255,0.5)')};font-weight:600;">${order.goldChange > 0 ? '+' : ''}${order.goldChange}</div>
+                        </div>
+                        <div>
+                            <label style="font-weight:600;color:rgba(255,255,255,0.7);font-size:0.85rem;">金币加减方式</label>
+                            <div style="padding:8px;color:rgba(255,255,255,0.92);">${escapeHtml(order.goldChangeReason || '-')}</div>
+                        </div>
+                        <div>
+                            <label style="font-weight:600;color:rgba(255,255,255,0.7);font-size:0.85rem;">CDK 代码</label>
+                            <div style="padding:8px;font-family:monospace;color:rgba(255,255,255,0.92);">${escapeHtml(order.cdkCode || '-')}</div>
+                        </div>
+                        <div>
+                            <label style="font-weight:600;color:rgba(255,255,255,0.7);font-size:0.85rem;">计划变更</label>
+                            <div style="padding:8px;color:rgba(255,255,255,0.92);">${escapeHtml(order.planTransition || '-')}</div>
+                        </div>
+                        <div>
+                            <label style="font-weight:600;color:rgba(255,255,255,0.7);font-size:0.85rem;">创建时间</label>
+                            <div style="padding:8px;color:rgba(255,255,255,0.92);">${new Date(order.createdAt).toLocaleString()}</div>
+                        </div>
+                        <div style="grid-column:1/-1;">
+                            <label style="font-weight:600;color:rgba(255,255,255,0.7);font-size:0.85rem;">备注</label>
+                            <div style="padding:8px;background:rgba(0,0,0,0.3);border-radius:4px;color:rgba(255,255,255,0.92);">${escapeHtml(order.description || '-')}</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn" onclick="document.getElementById('orderDetailModal')?.remove()">关闭</button>
+                </div>
+            </div>
+        </div>
+    `;
+
+    const modal = document.createElement('div');
+    modal.innerHTML = html;
+    const modalEl = modal.firstElementChild;
+    document.body.appendChild(modalEl);
+    
+    // 添加背景点击关闭功能
+    modalEl.addEventListener('click', (e) => {
+        if (e.target === modalEl) {
+            modalEl.remove();
+        }
+    });
+}
+
+/**
+ * HTML 转义函数
+ */
+function escapeHtml(text) {
+    if (!text) return '';
+    const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' };
+    return text.replace(/[&<>"']/g, m => map[m]);
+}
+
 // #endregion
 
 // #region 工具函数——HTML 转义已移到工具函数区域

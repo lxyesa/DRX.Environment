@@ -19,14 +19,21 @@ namespace KaxSocket.Handlers;
 /// <summary>
 /// KaxHttp - HTTP 请求处理器
 /// 通过 Partial Classes 分离不同功能模块：
-/// - Authentication: 用户认证
-/// - UserProfile: 用户资料管理
-/// - UserAssets: 用户资产管理
-/// - CdkManagement: CDK 管理
-/// - AssetManagement: 资源管理
-/// - AssetQueries: 公开资源查询
-/// - Shopping: 购物与套餐管理
-/// - AssetVerification: 资源验证
+///
+///   认证与用户
+///   - Authentication:    用户认证（登录、注册、令牌刷新）
+///   - UserProfile:       用户资料与头像管理
+///   - UserAssets:        用户已激活资产查询
+///
+///   资产与商品
+///   - AssetManagement:   后台资产 CRUD（管理员）
+///   - AssetQueries:      公开资产查询 + 套餐列表
+///   - CdkManagement:     CDK 生成与批量查询（管理员）
+///   - AssetVerification: CDK 兑换与资产验证
+///
+///   购物与订阅
+///   - Shopping:          金币驱动的购买 / 更变套餐 / 取消订阅
+///   - OrderManagement:   订单记录查询（用户视图 + 管理员视图）
 /// </summary>
 public partial class KaxHttp
 {

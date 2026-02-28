@@ -58,6 +58,8 @@ public partial class KaxHttp
                     assetName = o.AssetName,
                     cdkCode = o.CdkCode,
                     goldChange = o.GoldChange,
+                    goldChangeReason = o.GoldChangeReason,
+                    planTransition = o.PlanTransition,
                     description = o.Description,
                     createdAt = o.CreatedAt
                 })
@@ -115,6 +117,8 @@ public partial class KaxHttp
                     assetName = o.AssetName,
                     cdkCode = o.CdkCode,
                     goldChange = o.GoldChange,
+                    goldChangeReason = o.GoldChangeReason,
+                    planTransition = o.PlanTransition,
                     description = o.Description,
                     createdAt = o.CreatedAt
                 })

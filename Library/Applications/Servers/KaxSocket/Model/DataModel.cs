@@ -141,7 +141,7 @@ namespace KaxSocket
     }
 
     /// <summary>
-    /// 用户订单详细记录（子表项），记录每次购买或兑换 CDK 的单笔详情
+    /// 用户订单详细记录（子表项），记录每次购买、兑换 CDK 、取消订阅、更变计划、金币加减的单笔详情
     /// </summary>
     public class UserOrderRecord : IDataTableV2
     {
@@ -157,20 +157,26 @@ namespace KaxSocket
         /// <summary>更新时间（Unix 毫秒）</summary>
         public long UpdatedAt { get; set; } = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
 
-        /// <summary>订单类型："purchase"（金币购买）或 "cdk"（兑换 CDK）</summary>
+        /// <summary>订单类型："purchase"（金币购买）、"cdk"（兑换 CDK）、"cancel_subscription"（取消订阅）、"change_plan"（更变计划）、"gold_adjust"（金币调整）</summary>
         public string OrderType { get; set; } = string.Empty;
 
-        /// <summary>关联资产 ID（购买时填充；CDK 兑换时为 0）</summary>
+        /// <summary>关联资产 ID（购买/取消/更变时填充；其他类型为 0）</summary>
         public int AssetId { get; set; } = 0;
 
         /// <summary>资产名称快照（便于展示，不再查资产表）</summary>
         public string AssetName { get; set; } = string.Empty;
 
-        /// <summary>使用的 CDK 码（CDK 兑换时填充；购买时为空）</summary>
+        /// <summary>使用的 CDK 码（CDK 兑换时填充；其他类型为空）</summary>
         public string CdkCode { get; set; } = string.Empty;
 
-        /// <summary>消耗金币数量（负数表示扣减，正数表示充值）</summary>
+        /// <summary>消耗金币数量（负数表示扣减，正数表示充值；金币调整时记录实际变化）</summary>
         public int GoldChange { get; set; } = 0;
+
+        /// <summary>金币加减方式：可选值为 "cdk_redeem"（CDK兑换）、"purchase"（购买）、"admin"（管理员）、"refund"（退款）、"bonus"（奖励）等</summary>
+        public string GoldChangeReason { get; set; } = string.Empty;
+
+        /// <summary>从旧计划/到新计划（仅在 change_plan 时使用，格式："priceId1->priceId2"）</summary>
+        public string PlanTransition { get; set; } = string.Empty;
 
         /// <summary>订单备注/描述</summary>
         public string Description { get; set; } = string.Empty;

@@ -14,11 +14,16 @@ using static KaxSocket.Model.AssetModel;
 namespace KaxSocket.Handlers;
 
 /// <summary>
-/// 购物与套餐管理模块 - 处理购买、套餐更改、取消订阅等功能
+/// 购物模块 - 仅包含金币驱动的购买流程
+///   POST /api/shop/purchase       — 购买 / 续期 / 升级资产
+///   POST /api/asset/{id}/changePlan   — 更变套餐（重新计算有效期并扣金币）
+///   POST /api/asset/{id}/unsubscribe  — 取消订阅（移除激活资产并写订单记录）
+///
+/// 套餐查询 (GET /api/asset/{id}/plans) 已迁移到 AssetQueries.cs
 /// </summary>
 public partial class KaxHttp
 {
-    #region 购物与套餐管理 (Shopping & Plan Management)
+    #region 购物 (Shopping)
 
     /// <summary>
     /// 购买资产API - 验证token和金币，将资产添加到用户的激活资产中
@@ -158,6 +163,7 @@ public partial class KaxHttp
                 AssetName = asset.Name ?? string.Empty,
                 CdkCode = string.Empty,
                 GoldChange = -minimumGold,
+                GoldChangeReason = "purchase",
                 Description = $"{purchaseType}: {asset.Name} (priceId={priceId})"
             });
 
@@ -199,79 +205,10 @@ public partial class KaxHttp
     }
 
     /// <summary>
-    /// 获取指定资产的可用套餐列表
-    /// 用户可根据当前激活的资产ID获取其他可用套餐选项
-    /// </summary>
-    [HttpHandle("/api/asset/{assetId}/plans", "GET", RateLimitMaxRequests = 60, RateLimitWindowSeconds = 60, RateLimitCallbackMethodName = nameof(RateLimitCallback))]
-    public static async Task<IActionResult> Get_AssetPlans(HttpRequest request)
-    {
-        var token = request.Headers[HttpHeaders.Authorization]?.Replace("Bearer ", "");
-        var principal = KaxGlobal.ValidateToken(token ?? string.Empty);
-        if (principal == null) return new JsonResult(new { code = 401, message = "未授权" }, 401);
-
-        var userName = principal.Identity?.Name;
-        if (string.IsNullOrWhiteSpace(userName)) return new JsonResult(new { code = 400, message = "用户名无效" }, 400);
-
-        if (await KaxGlobal.IsUserBanned(userName)) return new JsonResult(new { code = 403, message = "用户已被封禁" }, 403);
-
-        // 提取路径参数中的 assetId
-        if (!request.PathParameters.TryGetValue("assetId", out var assetIdStr) || !int.TryParse(assetIdStr, out var assetId) || assetId <= 0)
-            return new JsonResult(new { code = 400, message = "assetId 参数无效" }, 400);
-
-        try
-        {
-            var user = (await KaxGlobal.UserDatabase.SelectWhereAsync("UserName", userName)).FirstOrDefault();
-            if (user == null) return new JsonResult(new { code = 404, message = "用户不存在" }, 404);
-
-            // 验证用户是否已激活该资产
-            var activeAsset = user.ActiveAssets?.FirstOrDefault(a => a.AssetId == assetId);
-            if (activeAsset == null)
-                return new JsonResult(new { code = 404, message = "您未激活此资产" }, 404);
-
-            var asset = await KaxGlobal.AssetDataBase.SelectByIdAsync(assetId);
-            if (asset == null)
-                return new JsonResult(new { code = 404, message = "资产不存在" }, 404);
-
-            var pricesList = asset.Prices?.ToList();
-            if (pricesList == null || pricesList.Count == 0)
-                return new JsonResult(new { code = 400, message = "该资产暂无可用套餐" }, 400);
-
-            string LocalizeDuration(string unit, int dur)
-            {
-                if (dur <= 0) return string.Empty;
-                return unit switch
-                {
-                    "day" => dur + "天",
-                    "month" => dur + "月",
-                    "year" => dur + "年",
-                    "hour" => dur + "小时",
-                    "minute" => dur + "分钟",
-                    _ => dur + unit
-                };
-            }
-            var plans = pricesList.Select((p, idx) => new
-            {
-                id = idx + 1,
-                name = $"套餐 {idx + 1}",
-                duration = LocalizeDuration(p.Unit, p.Duration),
-                price = p.Price,
-                originalPrice = p.OriginalPrice,
-                discountRate = p.DiscountRate
-            }).ToList();
-
-            return new JsonResult(new { code = 0, message = "成功", plans = plans }, 200);
-        }
-        catch (Exception ex)
-        {
-            Logger.Error($"获取资产套餐列表失败: {ex.Message}");
-            return new JsonResult(new { code = 500, message = "服务器错误" }, 500);
-        }
-    }
-
-    /// <summary>
-    /// 更变到新的套餐（费用需另行处理，此处仅更新本地状态）
-    /// 请求体格式: { "planId": <套餐ID> }
-    /// 注意：更变套餐不会继承上个套餐的剩余时常，将重新计算有效期
+    /// 更变到新的套餐（重新计算有效期，扣取所选套餐金币）
+    /// POST /api/asset/{assetId}/changePlan
+    /// 请求体: { "planId": "price-id-string" }
+    /// 注意：更变套餐不会继承上个套餐剩余时长，将从当前时间重新计算有效期
     /// </summary>
     [HttpHandle("/api/asset/{assetId}/changePlan", "POST", RateLimitMaxRequests = 10, RateLimitWindowSeconds = 60, RateLimitCallbackMethodName = nameof(RateLimitCallback))]
     public static async Task<IActionResult> Post_ChangeAssetPlan(HttpRequest request)
@@ -295,8 +232,10 @@ public partial class KaxHttp
             var body = JsonNode.Parse(request.Body);
             if (body == null) return new JsonResult(new { code = 400, message = "无效的 JSON" }, 400);
 
-            if (!int.TryParse(body["planId"]?.ToString(), out var planId) || planId <= 0)
-                return new JsonResult(new { code = 400, message = "planId 参数无效" }, 400);
+            // planId 为 price.Id（字符串 GUID）
+            var planId = body["planId"]?.ToString();
+            if (string.IsNullOrWhiteSpace(planId))
+                return new JsonResult(new { code = 400, message = "planId 参数缺失" }, 400);
 
             var user = (await KaxGlobal.UserDatabase.SelectWhereAsync("UserName", userName)).FirstOrDefault();
             if (user == null) return new JsonResult(new { code = 404, message = "用户不存在" }, 404);
@@ -306,68 +245,65 @@ public partial class KaxHttp
                 return new JsonResult(new { code = 404, message = "您未激活此资产" }, 404);
 
             var asset = await KaxGlobal.AssetDataBase.SelectByIdAsync(assetId);
-            if (asset == null)
+            if (asset == null || asset.IsDeleted)
                 return new JsonResult(new { code = 404, message = "资产不存在" }, 404);
 
-            var pricesList = asset.Prices?.ToList();
-            if (pricesList == null || pricesList.Count == 0)
-                return new JsonResult(new { code = 400, message = "该资产暂无可用套餐" }, 400);
+            var selectedPlan = asset.Prices?.FirstOrDefault(p => p.Id == planId);
+            if (selectedPlan == null)
+                return new JsonResult(new { code = 404, message = "套餐不存在" }, 404);
 
-            if (planId > pricesList.Count)
-                return new JsonResult(new { code = 400, message = "套餐ID无效" }, 400);
-
-            var selectedPlan = pricesList[planId - 1];
-            var planPrice = selectedPlan.Price;
+            int planPrice = (int)Math.Round(selectedPlan.Price * (1.0 - selectedPlan.DiscountRate));
+            planPrice = Math.Max(0, planPrice);
 
             if (user.Gold < planPrice)
-                return new JsonResult(new { code = 403, message = $"金币不足，需 {planPrice} 金币" }, 403);
+                return new JsonResult(new { code = 402, message = $"金币不足，需 {planPrice} 金币" }, 402);
 
             user.Gold -= planPrice;
-            Logger.Info($"用户 {userName} 为更变套餐支付金币 {planPrice}，剩余 {user.Gold}");
 
             var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-            long newExpiresAt;
-            if (selectedPlan.Unit != null && selectedPlan.Duration > 0)
+            long newExpiresAt = (selectedPlan.Unit == "once" || selectedPlan.Duration <= 0)
+                ? 0
+                : now + CalculateDurationInMilliseconds(selectedPlan.Unit, selectedPlan.Duration);
+
+            // 移除旧条目，写入新条目（重新激活以替换有效期）
+            user.ActiveAssets!.Remove(activeAsset);
+            user.ActiveAssets.Add(new ActiveAssets
             {
-                long delta = CalculateDurationInMilliseconds(selectedPlan.Unit, selectedPlan.Duration);
-                newExpiresAt = (delta > 0) ? (now + delta) : now;
-            }
-            else
+                ParentId  = user.Id,
+                AssetId   = assetId,
+                ActivatedAt = now,
+                ExpiresAt = newExpiresAt
+            });
+
+            // 写入订单记录
+            if (user.OrderRecords == null)
+                user.OrderRecords = new Drx.Sdk.Network.DataBase.TableList<UserOrderRecord>();
+            user.OrderRecords.Add(new UserOrderRecord
             {
-                newExpiresAt = 0;
-            }
+                ParentId         = user.Id,
+                OrderType        = "change_plan",
+                AssetId          = assetId,
+                AssetName        = asset.Name ?? string.Empty,
+                GoldChange       = -planPrice,
+                GoldChangeReason = "plan_change",
+                PlanTransition   = planId,
+                Description      = $"更变套餐: {asset.Name} → priceId={planId}"
+            });
 
-            if (user.ActiveAssets != null)
+            await KaxGlobal.UserDatabase.UpdateAsync(user);
+            Logger.Info($"用户 {userName} 更变资产 {asset.Name}(ID:{assetId}) 套餐，扣金币 {planPrice}，新过期时间: {(newExpiresAt == 0 ? "永久" : DateTimeOffset.FromUnixTimeMilliseconds(newExpiresAt).ToString("yyyy-MM-dd HH:mm:ss"))}");
+
+            return new JsonResult(new
             {
-                var assetToRemove = user.ActiveAssets.FirstOrDefault(a => a.AssetId == assetId);
-                if (assetToRemove != null)
-                    user.ActiveAssets.Remove(assetToRemove);
-
-                var newActiveAsset = new ActiveAssets
-                {
-                    ParentId = user.Id,
-                    AssetId = assetId,
-                    ActivatedAt = now,
-                    ExpiresAt = newExpiresAt
-                };
-                user.ActiveAssets.Add(newActiveAsset);
-            }
-
-            if (user.ActiveAssets != null)
-            {
-                await KaxGlobal.UserDatabase.UpdateAsync(user);
-
-                Logger.Info($"用户 {userName} 成功更变了资产 {assetId} 的套餐，需支付 ¥{planPrice}");
-
-                return new JsonResult(new
-                {
-                    code = 0,
-                    message = "套餐已更变",
-                    cost = planPrice
-                });
-            }
-
-            return new JsonResult(new { code = 500, message = "更新失败，请重试" }, 500);
+                code       = 0,
+                message    = "套餐已更变",
+                assetId    = assetId,
+                assetName  = asset.Name,
+                planId     = selectedPlan.Id,
+                goldDeducted = planPrice,
+                userGold   = user.Gold,
+                expiresAt  = newExpiresAt
+            }, 200);
         }
         catch (Exception ex)
         {
@@ -377,8 +313,8 @@ public partial class KaxHttp
     }
 
     /// <summary>
-    /// 取消订阅并从已激活资产中移除该资产
-    /// 取消订阅后，用户将失去对该资源的访问权限
+    /// 取消订阅并从已激活资产中移除该资产，写入订单记录
+    /// POST /api/asset/{assetId}/unsubscribe
     /// </summary>
     [HttpHandle("/api/asset/{assetId}/unsubscribe", "POST", RateLimitMaxRequests = 10, RateLimitWindowSeconds = 60, RateLimitCallbackMethodName = nameof(RateLimitCallback))]
     public static async Task<IActionResult> Post_UnsubscribeAsset(HttpRequest request)
@@ -404,22 +340,35 @@ public partial class KaxHttp
             if (activeAsset == null)
                 return new JsonResult(new { code = 404, message = "您未激活此资产，无法取消订阅" }, 404);
 
-            if (user.ActiveAssets != null)
+            var asset = await KaxGlobal.AssetDataBase.SelectByIdAsync(assetId);
+            string assetName = asset?.Name ?? $"Asset#{assetId}";
+
+            user.ActiveAssets!.Remove(activeAsset);
+
+            // 写入订单记录
+            if (user.OrderRecords == null)
+                user.OrderRecords = new Drx.Sdk.Network.DataBase.TableList<UserOrderRecord>();
+            user.OrderRecords.Add(new UserOrderRecord
             {
-                var assetToRemove = user.ActiveAssets.FirstOrDefault(a => a.AssetId == assetId);
-                if (assetToRemove != null)
-                    user.ActiveAssets.Remove(assetToRemove);
-            }
+                ParentId    = user.Id,
+                OrderType   = "cancel_subscription",
+                AssetId     = assetId,
+                AssetName   = assetName,
+                GoldChange  = 0,
+                Description = $"取消订阅: {assetName} (到期={activeAsset.ExpiresAt})"
+            });
 
             await KaxGlobal.UserDatabase.UpdateAsync(user);
-
-            Logger.Info($"用户 {userName} 成功取消订阅了资产 {assetId}");
+            Logger.Info($"用户 {userName} 取消订阅资产 {assetName}(ID:{assetId})");
 
             return new JsonResult(new
             {
-                code = 0,
-                message = "订阅已取消，资产已从您的库中移除"
-            });
+                code      = 0,
+                message   = "订阅已取消，资产已从您的库中移除",
+                assetId   = assetId,
+                assetName = assetName,
+                cancelledAt = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
+            }, 200);
         }
         catch (Exception ex)
         {

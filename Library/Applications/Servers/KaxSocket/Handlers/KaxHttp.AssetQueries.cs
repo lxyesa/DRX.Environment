@@ -350,5 +350,71 @@ public partial class KaxHttp
         }
     }
 
+    /// <summary>
+    /// 获取指定资产的全部可用价格方案（需已激活）
+    /// GET /api/asset/{assetId}/plans
+    /// </summary>
+    [HttpHandle("/api/asset/{assetId}/plans", "GET", RateLimitMaxRequests = 60, RateLimitWindowSeconds = 60, RateLimitCallbackMethodName = nameof(RateLimitCallback))]
+    public static async Task<IActionResult> Get_AssetPlans(HttpRequest request)
+    {
+        var token = request.Headers[HttpHeaders.Authorization]?.Replace("Bearer ", "");
+        var principal = KaxGlobal.ValidateToken(token ?? string.Empty);
+        if (principal == null) return new JsonResult(new { code = 401, message = "未授权" }, 401);
+
+        var userName = principal.Identity?.Name;
+        if (string.IsNullOrWhiteSpace(userName)) return new JsonResult(new { code = 400, message = "用户名无效" }, 400);
+
+        if (await KaxGlobal.IsUserBanned(userName)) return new JsonResult(new { code = 403, message = "用户已被封禁" }, 403);
+
+        if (!request.PathParameters.TryGetValue("assetId", out var assetIdStr) || !int.TryParse(assetIdStr, out var assetId) || assetId <= 0)
+            return new JsonResult(new { code = 400, message = "assetId 参数无效" }, 400);
+
+        try
+        {
+            var asset = await KaxGlobal.AssetDataBase.SelectByIdAsync(assetId);
+            if (asset == null || asset.IsDeleted)
+                return new JsonResult(new { code = 404, message = "资产不存在" }, 404);
+
+            var pricesList = asset.Prices?.ToList();
+            if (pricesList == null || pricesList.Count == 0)
+                return new JsonResult(new { code = 200, message = "该资产暂无可用套餐", data = new object[0] }, 200);
+
+            string LocalizeDuration(string unit, int dur)
+            {
+                if (dur <= 0) return string.Empty;
+                return unit switch
+                {
+                    "day"    => dur + "天",
+                    "month"  => dur + "月",
+                    "year"   => dur + "年",
+                    "hour"   => dur + "小时",
+                    "minute" => dur + "分钟",
+                    "once"   => "永久",
+                    _        => dur + unit
+                };
+            }
+
+            var plans = pricesList.Select(p => new
+            {
+                id            = p.Id,
+                unit          = p.Unit,
+                duration      = p.Duration,
+                durationLabel = LocalizeDuration(p.Unit, p.Duration),
+                price         = p.Price,
+                originalPrice = p.OriginalPrice,
+                discountRate  = p.DiscountRate,
+                salePrice     = (int)Math.Round(p.Price * (1.0 - p.DiscountRate)),
+                stock         = p.Stock
+            }).ToList();
+
+            return new JsonResult(new { code = 0, message = "成功", data = plans }, 200);
+        }
+        catch (Exception ex)
+        {
+            Logger.Error($"获取资产套餐列表失败: {ex.Message}");
+            return new JsonResult(new { code = 500, message = "服务器错误" }, 500);
+        }
+    }
+
     #endregion
 }

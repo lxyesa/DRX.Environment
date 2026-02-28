@@ -142,6 +142,10 @@
                     <span class="material-icons">vpn_key</span>
                     <span class="tab-label">CDK 管理</span>
                 </button>
+                <button class="profile-tab" role="tab" data-tab="orders" id="tabOrders">
+                    <span class="material-icons">shopping_cart</span>
+                    <span class="tab-label">订单</span>
+                </button>
             </nav>
 
             <!-- Tab: 概览 -->
@@ -269,37 +273,68 @@
 
             <!-- Tab: 资产 -->
             <section class="tab-panel" id="panel-assets" role="tabpanel">
-                <div class="security-layout">
+                <div class="assets-tab-layout">
 
-                    <section-card icon="inventory_2" title="已激活的资产" desc="下方列出了当前账号激活的所有资产">
-                        <div id="assetsLoading" class="assets-state">
-                            <span class="material-icons assets-state-icon spin">sync</span>
-                            <span>正在加载资产列表…</span>
-                        </div>
-                        <div id="assetsEmpty" class="assets-state" style="display:none;">
-                            <span class="material-icons assets-state-icon">inventory_2</span>
-                            <span>暂无激活的资产</span>
-                        </div>
-                        <div id="assetsList" class="assets-grid"></div>
-                        <span slot="footer" id="assetsCount" class="count-badge"></span>
-                    </section-card>
+                    <!-- 左侧主区域：资产列表 -->
+                    <div class="assets-main-col">
+                        <section-card icon="inventory_2" title="已激活的资产" desc="当前账号的所有已激活资产">
+                            <div id="assetsLoading" class="assets-state">
+                                <span class="material-icons assets-state-icon spin">sync</span>
+                                <span>正在加载资产列表…</span>
+                            </div>
+                            <div id="assetsEmpty" class="assets-state" style="display:none;">
+                                <span class="material-icons assets-state-icon">inventory_2</span>
+                                <span>暂无激活的资产</span>
+                            </div>
+                            <div id="assetsList" class="assets-list"></div>
+                            <span slot="footer" id="assetsCount" class="count-badge"></span>
+                        </section-card>
+                    </div>
 
-                    <section-card icon="card_giftcard" title="激活新 CDK" desc="输入 CDK 兑换码以激活资产">
-                        <div class="cdk-section">
-                            <input-box id="cdkInput" label="CDK 代码" placeholder="XXXX-XXXX-XXXX-XXXX"
-                                autocomplete="off" show-action size="small">
-                                <button id="activateCdkBtn" slot="action">激活</button>
-                            </input-box>
-                            <div id="cdkMessage" class="cdk-message" style="display:none;"></div>
-                            <div id="cdkResult" class="cdk-result" style="display:none;">
-                                <span class="material-icons cdk-result-icon">check_circle</span>
-                                <div>
-                                    <div class="cdk-result-title">激活成功</div>
-                                    <div id="cdkResultDetails" class="cdk-result-details"></div>
+                    <!-- 右侧操作区 -->
+                    <div class="assets-side-col">
+
+                        <!-- CDK 激活卡片 -->
+                        <section-card icon="card_giftcard" title="激活 CDK" desc="输入兑换码激活资产">
+                            <div class="cdk-section">
+                                <input-box id="cdkInput" label="CDK 代码" placeholder="XXXX-XXXX-XXXX-XXXX"
+                                    autocomplete="off" show-action size="small">
+                                    <button id="activateCdkBtn" slot="action">激活</button>
+                                </input-box>
+                                <div id="cdkMessage" class="cdk-message" style="display:none;"></div>
+                                <div id="cdkResult" class="cdk-result" style="display:none;">
+                                    <span class="material-icons cdk-result-icon">check_circle</span>
+                                    <div>
+                                        <div class="cdk-result-title">激活成功</div>
+                                        <div id="cdkResultDetails" class="cdk-result-details"></div>
+                                    </div>
                                 </div>
                             </div>
-                        </div>
-                    </section-card>
+                        </section-card>
+
+                        <!-- 资产统计卡片 -->
+                        <section-card icon="bar_chart" title="资产概览">
+                            <div class="assets-summary-grid">
+                                <div class="assets-summary-item">
+                                    <span class="assets-summary-label">总资产数</span>
+                                    <span class="assets-summary-value" id="assetsSummaryTotal">—</span>
+                                </div>
+                                <div class="assets-summary-item">
+                                    <span class="assets-summary-label">有效中</span>
+                                    <span class="assets-summary-value success" id="assetsSummaryActive">—</span>
+                                </div>
+                                <div class="assets-summary-item">
+                                    <span class="assets-summary-label">已过期</span>
+                                    <span class="assets-summary-value danger" id="assetsSummaryExpired">—</span>
+                                </div>
+                                <div class="assets-summary-item">
+                                    <span class="assets-summary-label">永久授权</span>
+                                    <span class="assets-summary-value accent" id="assetsSummaryForever">—</span>
+                                </div>
+                            </div>
+                        </section-card>
+
+                    </div>
 
                 </div>
             </section>
@@ -390,6 +425,41 @@
                             <span id="cdkAdminPageInfo" class="admin-pager-info"></span>
                             <button class="btn ghost" id="cdkAdminNextBtn">下一页</button>
                         </div>
+                    </section-card>
+
+                </div>
+            </section>
+
+            <!-- Tab: 订单 -->
+            <section class="tab-panel" id="panel-orders" role="tabpanel">
+                <div class="security-layout">
+
+                    <section-card icon="shopping_cart" title="我的订单" desc="查看所有订单记录和交易历史">
+                        <div class="admin-toolbar">
+                            <input-box id="orderSearch" label="搜索订单" placeholder="输入订单号、商品名称…" show-action size="small">
+                                <button id="orderSearchBtn" slot="action">搜索</button>
+                            </input-box>
+                            <div class="admin-toolbar-right">
+                                <select-box id="orderStatusFilter" size="headerless"
+                                    options='[{"value":"all","label":"全部状态"},{"value":"pending","label":"待支付"},{"value":"paid","label":"已支付"},{"value":"shipped","label":"已发货"},{"value":"delivered","label":"已收货"},{"value":"cancelled","label":"已取消"}]'>
+                                </select-box>
+                            </div>
+                        </div>
+                        <div id="ordersLoading" class="assets-state">
+                            <span class="material-icons assets-state-icon spin">sync</span>
+                            <span>加载订单列表…</span>
+                        </div>
+                        <div id="ordersEmpty" class="assets-state" style="display:none;">
+                            <span class="material-icons assets-state-icon">shopping_cart</span>
+                            <span>暂无订单</span>
+                        </div>
+                        <div id="ordersList" class="admin-list"></div>
+                        <div id="ordersPager" class="admin-pager" style="display:none;">
+                            <button class="btn ghost" id="ordersPrevBtn">上一页</button>
+                            <span id="ordersPageInfo" class="admin-pager-info"></span>
+                            <button class="btn ghost" id="ordersNextBtn">下一页</button>
+                        </div>
+                        <span slot="footer" id="ordersCount" class="count-badge"></span>
                     </section-card>
 
                 </div>

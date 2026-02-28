@@ -510,6 +510,72 @@
     white-space: nowrap;
 }
 
+/* 资产 tab 两列布局 */
+.assets-tab-layout {
+    display: grid;
+    grid-template-columns: 1fr 280px;
+    gap: 16px;
+    align-items: start;
+}
+
+.assets-main-col {
+    min-width: 0;
+}
+
+.assets-side-col {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    position: sticky;
+    top: calc(var(--topbar-height, 64px) + 24px);
+}
+
+@media (max-width: 860px) {
+    .assets-tab-layout {
+        grid-template-columns: 1fr;
+    }
+    .assets-side-col {
+        position: static;
+    }
+}
+
+/* 资产概览统计 */
+.assets-summary-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1px;
+    background: var(--profile-border);
+    border-radius: var(--profile-radius);
+    overflow: hidden;
+}
+
+.assets-summary-item {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 12px 14px;
+    background: rgba(255, 255, 255, 0.015);
+}
+
+.assets-summary-label {
+    font-size: 0.70rem;
+    color: var(--profile-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-weight: 600;
+}
+
+.assets-summary-value {
+    font-size: 1.35rem;
+    font-weight: 700;
+    color: var(--profile-text);
+    line-height: 1;
+}
+
+.assets-summary-value.success { color: var(--profile-success); }
+.assets-summary-value.danger  { color: var(--profile-danger);  }
+.assets-summary-value.accent  { color: var(--profile-accent);  }
+
 /* 空/加载状态 */
 .assets-state {
     display: flex;
@@ -534,37 +600,50 @@
     animation: spin 1.2s linear infinite;
 }
 
-/* 资产卡片网格容器 */
-.assets-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-    gap: 12px;
-}
-
-/* 单张资产卡片 */
-.asset-card {
+/* 资产列表容器 */
+.assets-list {
     display: flex;
     flex-direction: column;
     gap: 0;
     border: 1px solid var(--profile-border);
     border-radius: var(--profile-radius);
-    background: rgba(255, 255, 255, 0.015);
     overflow: hidden;
-    transition: border-color var(--profile-transition), box-shadow var(--profile-transition);
+}
+
+/* 单条资产行 */
+.asset-card {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    grid-template-rows: auto auto;
+    align-items: center;
+    gap: 0;
+    border: none;
+    border-bottom: 1px solid var(--profile-border);
+    border-radius: 0;
+    background: transparent;
+    overflow: visible;
+    transition: background var(--profile-transition);
+}
+
+.assets-list .asset-card:last-child {
+    border-bottom: none;
 }
 
 .asset-card:hover {
-    border-color: var(--profile-border-strong);
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.18);
+    background: rgba(255, 255, 255, 0.025);
+    border-color: var(--profile-border);
+    box-shadow: none;
 }
 
 /* 卡片顶部：名称 + 状态徽章 */
 .asset-card-top {
     display: flex;
-    align-items: flex-start;
+    align-items: center;
     justify-content: space-between;
     gap: 10px;
-    padding: 14px 16px 10px;
+    padding: 14px 16px 8px;
+    grid-column: 1;
+    grid-row: 1;
 }
 
 .asset-name {
@@ -610,39 +689,45 @@
 
 /* 元信息网格 */
 .asset-meta {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 1px;
-    background: var(--profile-border);
-    border-top: 1px solid var(--profile-border);
-    border-bottom: 1px solid var(--profile-border);
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 4px 0;
+    background: transparent;
+    border-top: none;
+    border-bottom: none;
+    grid-column: 1;
+    grid-row: 2;
+    padding: 2px 16px 14px;
 }
 
 .asset-meta-item {
     display: flex;
-    flex-direction: column;
-    gap: 3px;
-    padding: 10px 16px;
-    background: rgba(255, 255, 255, 0.01);
+    flex-direction: row;
+    align-items: center;
+    gap: 5px;
+    padding: 0;
+    background: transparent;
+    margin-right: 18px;
+    white-space: nowrap;
 }
 
 /* 剩余时间单独占满一行 */
 .asset-meta-item:first-child {
-    grid-column: 1 / -1;
-    background: rgba(255, 255, 255, 0.015);
+    width: 100%;
+    background: transparent;
+    margin-bottom: 2px;
 }
 
 .asset-meta-label {
-    font-size: 0.70rem;
+    font-size: 0.72rem;
     color: var(--profile-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    font-weight: 600;
+    font-weight: 500;
 }
 
 .asset-meta-value {
-    font-size: 0.85rem;
-    color: var(--profile-text);
+    font-size: 0.82rem;
+    color: var(--profile-muted-mid);
     font-weight: 500;
 }
 
@@ -653,7 +738,13 @@
 /* 操作按钮区 */
 .asset-actions {
     display: flex;
+    flex-direction: column;
     gap: 0;
+    grid-column: 2;
+    grid-row: 1 / span 2;
+    align-self: stretch;
+    border-left: 1px solid var(--profile-border);
+    min-width: 80px;
 }
 
 .asset-action-btn {
@@ -661,25 +752,27 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 5px;
-    padding: 9px 8px;
+    gap: 4px;
+    padding: 0 12px;
     border: none;
-    border-right: 1px solid var(--profile-border);
+    border-bottom: 1px solid var(--profile-border);
     background: transparent;
     color: var(--profile-muted);
-    font-size: 0.80rem;
+    font-size: 0.75rem;
     font-weight: 500;
     cursor: pointer;
     transition: background var(--profile-transition), color var(--profile-transition);
     font-family: inherit;
+    white-space: nowrap;
 }
 
 .asset-action-btn:last-child {
+    border-bottom: none;
     border-right: none;
 }
 
 .asset-action-btn .material-icons {
-    font-size: 15px;
+    font-size: 14px;
     opacity: 0.7;
 }
 
