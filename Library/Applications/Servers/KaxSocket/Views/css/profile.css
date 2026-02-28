@@ -1227,60 +1227,127 @@
 }
 
 /* 资产价格方案行 */
+/* 价格方案卡片 - 卡片式设计 */
 .admin-price-row {
+    position: relative;
     display: flex;
-    align-items: flex-start;
-    gap: 10px;
-    padding: 10px 12px;
-    background: rgba(255, 255, 255, 0.03);
+    flex-direction: column;
+    gap: 12px;
+    padding: 16px;
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.04) 0%, rgba(255, 255, 255, 0.02) 100%);
     border: 1px solid var(--profile-border);
-    border-radius: 8px;
+    border-radius: 12px;
+    transition: border-color 0.2s, box-shadow 0.2s;
 }
 
+.admin-price-row:hover {
+    border-color: rgba(255, 255, 255, 0.12);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+/* 价格方案序号标识 */
+.admin-price-row::before {
+    content: '#' attr(data-idx);
+    position: absolute;
+    top: -8px;
+    left: 12px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: var(--profile-accent);
+    background: var(--profile-card-bg, #1e1e2e);
+    padding: 2px 8px;
+    border-radius: 4px;
+    border: 1px solid var(--profile-border);
+}
+
+/* 使用 CSS Grid 双行布局 */
 .admin-price-cols {
-    flex: 1;
     display: grid;
-    grid-template-columns: auto 1fr auto 1fr auto 1fr auto 1fr auto 1fr auto 1fr;
-    align-items: center;
-    gap: 4px 8px;
-    min-width: 0;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    width: 100%;
+}
+
+/* 字段组容器 */
+.admin-price-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
 }
 
 .admin-price-label {
-    font-size: 0.75rem;
+    font-size: 0.72rem;
+    font-weight: 500;
     color: var(--profile-muted);
-    white-space: nowrap;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
 }
 
 .admin-price-input,
 .admin-price-select {
-    background: rgba(255, 255, 255, 0.06);
-    border: 1px solid var(--profile-border);
-    border-radius: 5px;
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 6px;
     color: var(--profile-text);
-    font-size: 0.82rem;
-    padding: 4px 8px;
+    font-size: 0.85rem;
+    padding: 8px 10px;
     outline: none;
     width: 100%;
     min-width: 0;
-    transition: border-color 0.15s;
+    transition: border-color 0.15s, background 0.15s;
+}
+
+.admin-price-input:hover,
+.admin-price-select:hover {
+    background: rgba(0, 0, 0, 0.25);
+    border-color: rgba(255, 255, 255, 0.12);
 }
 
 .admin-price-input:focus,
 .admin-price-select:focus {
     border-color: var(--profile-accent);
+    background: rgba(0, 0, 0, 0.3);
 }
 
+.admin-price-input::placeholder {
+    color: var(--profile-muted);
+    opacity: 0.6;
+}
+
+/* 移除按钮 - 放置在卡片右上角 */
 .admin-price-remove {
-    flex-shrink: 0;
-    margin-top: 2px;
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    padding: 4px 8px !important;
+    font-size: 0.75rem !important;
+    opacity: 0.6;
+    transition: opacity 0.15s;
+}
+
+.admin-price-row:hover .admin-price-remove {
+    opacity: 1;
+}
+
+/* 移动端响应式 */
+@media (max-width: 768px) {
+    .admin-price-cols {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+@media (max-width: 480px) {
+    .admin-price-cols {
+        grid-template-columns: 1fr;
+    }
+    
+    .admin-price-row {
+        padding: 14px 12px;
+        padding-top: 18px;
+    }
 }
 
 @media (max-width: 640px) {
-    .admin-price-cols {
-        grid-template-columns: auto 1fr auto 1fr;
-    }
-
     .admin-toolbar {
         flex-direction: column;
         align-items: stretch;

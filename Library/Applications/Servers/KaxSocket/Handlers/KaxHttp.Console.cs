@@ -136,7 +136,7 @@ public partial class KaxHttp
         }
 
         var group = user.PermissionGroup;
-        if (group != UserPermissionGroup.Console && group != UserPermissionGroup.Root && group != UserPermissionGroup.Admin)
+        if (group != UserPermissionGroup.System && group != UserPermissionGroup.Console && group != UserPermissionGroup.Admin)
         {
             await sse.RejectAsync(403, "权限不足，仅管理员可使用控制台");
             return;
@@ -212,7 +212,7 @@ public partial class KaxHttp
             return (false, userName, "用户不存在", 401);
 
         var group = user.PermissionGroup;
-        if (group != UserPermissionGroup.Console && group != UserPermissionGroup.Root && group != UserPermissionGroup.Admin)
+        if (group != UserPermissionGroup.System && group != UserPermissionGroup.Console && group != UserPermissionGroup.Admin)
             return (false, userName, "权限不足，仅管理员可使用控制台", 403);
 
         return (true, userName, null, 200);

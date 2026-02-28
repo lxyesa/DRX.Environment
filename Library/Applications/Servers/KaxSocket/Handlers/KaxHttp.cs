@@ -78,7 +78,7 @@ public partial class KaxHttp
         var user = (await KaxGlobal.UserDatabase.SelectWhereAsync("UserName", userName)).FirstOrDefault();
         if (user == null) return false;
         var g = user.PermissionGroup;
-        return g == UserPermissionGroup.Console || g == UserPermissionGroup.Root || g == UserPermissionGroup.Admin;
+        return g == UserPermissionGroup.System || g == UserPermissionGroup.Console || g == UserPermissionGroup.Admin;
     }
 
     // 检查当前用户是否属于允许使用 Asset 管理 API 的权限组（Console/Root/Admin）
@@ -88,7 +88,7 @@ public partial class KaxHttp
         var user = (await KaxGlobal.UserDatabase.SelectWhereAsync("UserName", userName)).FirstOrDefault();
         if (user == null) return false;
         var g = user.PermissionGroup;
-        return g == UserPermissionGroup.Console || g == UserPermissionGroup.Root || g == UserPermissionGroup.Admin;
+        return g == UserPermissionGroup.System || g == UserPermissionGroup.Console || g == UserPermissionGroup.Admin;
     }
 
     [HttpMiddleware]

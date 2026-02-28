@@ -58,6 +58,9 @@ namespace KaxSocket
 
         /// <summary>购物车条目（子表，仅保存 AssetId，后续可扩展数量等字段）</summary>
         public TableList<UserCartItem> CartItems { get; set; }
+
+        /// <summary>订单详细（子表，记录每次购买/兑换 CDK 的详细信息）</summary>
+        public TableList<UserOrderRecord> OrderRecords { get; set; }
         
         /// <summary>邮箱是否已验证</summary>
         public bool EmailVerified { get; set; } = false;
@@ -138,6 +141,45 @@ namespace KaxSocket
     }
 
     /// <summary>
+    /// 用户订单详细记录（子表项），记录每次购买或兑换 CDK 的单笔详情
+    /// </summary>
+    public class UserOrderRecord : IDataTableV2
+    {
+        /// <summary>子表项唯一 Id（字符串）</summary>
+        public string Id { get; set; } = Guid.NewGuid().ToString();
+
+        /// <summary>父表主键（所属 UserData.Id）</summary>
+        public int ParentId { get; set; }
+
+        /// <summary>创建时间（Unix 毫秒）</summary>
+        public long CreatedAt { get; set; } = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+
+        /// <summary>更新时间（Unix 毫秒）</summary>
+        public long UpdatedAt { get; set; } = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+
+        /// <summary>订单类型："purchase"（金币购买）或 "cdk"（兑换 CDK）</summary>
+        public string OrderType { get; set; } = string.Empty;
+
+        /// <summary>关联资产 ID（购买时填充；CDK 兑换时为 0）</summary>
+        public int AssetId { get; set; } = 0;
+
+        /// <summary>资产名称快照（便于展示，不再查资产表）</summary>
+        public string AssetName { get; set; } = string.Empty;
+
+        /// <summary>使用的 CDK 码（CDK 兑换时填充；购买时为空）</summary>
+        public string CdkCode { get; set; } = string.Empty;
+
+        /// <summary>消耗金币数量（负数表示扣减，正数表示充值）</summary>
+        public int GoldChange { get; set; } = 0;
+
+        /// <summary>订单备注/描述</summary>
+        public string Description { get; set; } = string.Empty;
+
+        /// <summary>表名</summary>
+        public string TableName => nameof(UserOrderRecord);
+    }
+
+    /// <summary>
     /// 用户状态信息（如封禁、封禁时间等）
     /// </summary>
     public class UserStatus : IDataTable
@@ -165,16 +207,16 @@ namespace KaxSocket
     /// </summary>
     public enum UserPermissionGroup
     {
-        /// <summary>控制台（系统控制台）</summary>
-        Console = 0,
+        /// <summary>系统最高权限</summary>
+        System = 0,
 
-        /// <summary>最高权限</summary>
-        Root = 1,
+        /// <summary>控制台权限</summary>
+        Console = 2,
 
         /// <summary>管理员</summary>
-        Admin = 2,
+        Admin = 3,
 
         /// <summary>普通用户（默认）</summary>
-        User = 100
+        User = 999
     }
 }

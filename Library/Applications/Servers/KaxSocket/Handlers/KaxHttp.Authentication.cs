@@ -217,7 +217,7 @@ public partial class KaxHttp
 
         // 返回额外的权限信息，前端可据此决定是否显示管理员入口
         var permissionGroup = userModel.PermissionGroup;
-        var isAdmin = permissionGroup == UserPermissionGroup.Console || permissionGroup == UserPermissionGroup.Root || permissionGroup == UserPermissionGroup.Admin;
+        var isAdmin = permissionGroup == UserPermissionGroup.System || permissionGroup == UserPermissionGroup.Console || permissionGroup == UserPermissionGroup.Admin;
 
         // 如果服务器上存在已上传的头像文件，返回可访问的 avatarUrl（供前端直接使用）
         string avatarUrl = string.Empty;

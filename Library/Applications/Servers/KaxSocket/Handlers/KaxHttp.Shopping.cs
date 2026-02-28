@@ -147,6 +147,20 @@ public partial class KaxHttp
             user.Gold = Math.Max(0, user.Gold - minimumGold);
             Logger.Info($"用户 {userName} 扣减金币 {minimumGold}，剩余金币 {user.Gold}");
 
+            // 写入订单记录
+            if (user.OrderRecords == null)
+                user.OrderRecords = new Drx.Sdk.Network.DataBase.TableList<UserOrderRecord>();
+            user.OrderRecords.Add(new UserOrderRecord
+            {
+                ParentId = user.Id,
+                OrderType = "purchase",
+                AssetId = assetId,
+                AssetName = asset.Name ?? string.Empty,
+                CdkCode = string.Empty,
+                GoldChange = -minimumGold,
+                Description = $"{purchaseType}: {asset.Name} (priceId={priceId})"
+            });
+
             EnsureSpecs(asset).PurchaseCount++;
             await KaxGlobal.AssetDataBase.UpdateAsync(asset);
 

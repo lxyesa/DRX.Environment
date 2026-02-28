@@ -84,6 +84,54 @@ function maskEmail(email) {
     const visible = Math.min(3, local.length);
     return local.slice(0, visible) + '****@' + domain;
 }
+
+/** 检查 Token 和重定向 */
+function checkToken() {
+    const token = localStorage.getItem('kax_login_token');
+    if (!token) { location.href = '/login'; return null; }
+    return token;
+}
+
+/** 设置错误消息样式 */
+function showErrorMsg(el, text, isDanger = true) {
+    if (!el) return;
+    el.style.display = 'block';
+    el.style.background = isDanger ? 'rgba(239,68,68,0.1)' : 'rgba(34,197,94,0.1)';
+    el.style.borderColor = isDanger ? 'rgba(239,68,68,0.3)' : 'rgba(34,197,94,0.3)';
+    el.style.color = isDanger ? 'var(--profile-danger)' : 'var(--profile-success)';
+    el.textContent = text;
+}
+
+/** 设置元素显示状态 */
+function setElementDisplay(el, show) {
+    if (el) el.style.display = show ? 'block' : 'none';
+}
+
+/** 批量设置元素显示状态 */
+function setElementsDisplay(displayMap) {
+    Object.entries(displayMap).forEach(([id, show]) => {
+        setElementDisplay(document.getElementById(id), show);
+    });
+}
+
+/** 设置按钮状态 */
+async function withButtonLoading(btn, loadingText, fn) {
+    const originalText = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = loadingText;
+    try {
+        return await fn();
+    } finally {
+        btn.disabled = false;
+        btn.textContent = originalText;
+    }
+}
+
+/** HTML 转义 */
+function escapeHtml(str) {
+    if (!str) return '';
+    return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
 // #endregion
 
 // #region 错误页面显示
@@ -407,39 +455,40 @@ document.getElementById('changePwBtn').addEventListener('click', async () => {
     if (newPw.length < 8) { alert('新密码长度至少 8 位'); return; }
     if (newPw !== confirmPw) { alert('两次新密码不匹配'); return; }
 
-    const token = localStorage.getItem('kax_login_token');
-    if (!token) { location.href = '/login'; return; }
+    const token = checkToken();
+    if (!token) return;
 
     const btn = document.getElementById('changePwBtn');
-    btn.disabled = true;
-    try {
-        const resp = await fetch('/api/user/password', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
-            body: JSON.stringify({ oldPassword: oldPw, newPassword: newPw, confirmPassword: confirmPw })
-        });
-        const result = await resp.json().catch(() => ({}));
-        if (resp.status === 200) {
-            alert(result.message || '密码已更新');
-            pwOldEl.value = '';
-            pw1El.value = '';
-            pw2El.value = '';
-        } else if (resp.status === 401) {
-            localStorage.removeItem('kax_login_token');
-            location.href = '/login';
-        } else {
-            alert(result.message || ('修改失败：' + resp.status));
+    await withButtonLoading(btn, '更新中...', async () => {
+        try {
+            const resp = await fetch('/api/user/password', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+                body: JSON.stringify({ oldPassword: oldPw, newPassword: newPw, confirmPassword: confirmPw })
+            });
+            const result = await resp.json().catch(() => ({}));
+            if (resp.status === 200) {
+                alert(result.message || '密码已更新');
+                pwOldEl.value = '';
+                pw1El.value = '';
+                pw2El.value = '';
+            } else if (resp.status === 401) {
+                localStorage.removeItem('kax_login_token');
+                location.href = '/login';
+            } else {
+                alert(result.message || ('修改失败：' + resp.status));
+            }
+        } catch (err) {
+            console.error(err);
+            alert('无法连接到服务器');
         }
-    } catch (err) {
-        console.error(err);
-        alert('无法连接到服务器');
-    } finally { btn.disabled = false; }
+    });
 });
 // #endregion
 
 // #region 加载激活资产
 async function loadActiveAssets() {
-    const token = localStorage.getItem('kax_login_token');
+    const token = checkToken();
     if (!token) return;
 
     const assetsLoading = document.getElementById('assetsLoading');
@@ -452,13 +501,13 @@ async function loadActiveAssets() {
         if (resp.status === 200) {
             const result = await resp.json().catch(() => ({}));
             const assets = result.data || [];
-            assetsLoading.style.display = 'none';
+            setElementDisplay(assetsLoading, false);
 
             if (assets.length === 0) {
-                assetsEmpty.style.display = 'block';
+                setElementsDisplay({ 'assetsEmpty': true });
                 assetsCount.textContent = '0 个';
             } else {
-                assetsEmpty.style.display = 'none';
+                setElementsDisplay({ 'assetsEmpty': false });
                 assetsCount.textContent = `${assets.length} 个`;
 
                 const assetNameCache = {};
@@ -541,14 +590,14 @@ async function loadActiveAssets() {
             localStorage.removeItem('kax_login_token');
             location.href = '/login';
         } else {
-            assetsLoading.style.display = 'none';
-            assetsEmpty.style.display = 'block';
+            setElementDisplay(assetsLoading, false);
+            setElementDisplay(assetsEmpty, true);
             assetsEmpty.textContent = '无法加载资产列表';
         }
     } catch (err) {
         console.error('加载激活资产时发生错误：', err);
-        assetsLoading.style.display = 'none';
-        assetsEmpty.style.display = 'block';
+        setElementDisplay(assetsLoading, false);
+        setElementDisplay(assetsEmpty, true);
         assetsEmpty.textContent = '加载失败，请重试';
     }
 }
@@ -564,71 +613,59 @@ const cdkResultDetails = document.getElementById('cdkResultDetails');
 activateCdkBtn.addEventListener('click', async () => {
     const cdkCode = cdkInput.value || cdkInput.textContent.trim();
     if (!cdkCode) {
-        cdkMessage.style.display = 'block';
-        cdkMessage.style.background = 'rgba(239,68,68,0.1)';
-        cdkMessage.style.borderColor = 'rgba(239,68,68,0.3)';
-        cdkMessage.style.color = 'var(--profile-danger)';
-        cdkMessage.textContent = '错误：CDK为空，请输入有效的 CDK 代码';
+        showErrorMsg(cdkMessage, '错误：CDK为空，请输入有效的 CDK 代码', true);
         activateCdkBtn.textContent = '激活失败';
         setTimeout(() => { activateCdkBtn.textContent = '激活'; }, 2000);
         return;
     }
 
-    const token = localStorage.getItem('kax_login_token');
-    if (!token) { location.href = '/login'; return; }
+    const token = checkToken();
+    if (!token) return;
 
-    activateCdkBtn.disabled = true;
-    activateCdkBtn.textContent = '激活中...';
-    cdkMessage.style.display = 'none';
-    cdkResult.style.display = 'none';
+    await withButtonLoading(activateCdkBtn, '激活中...', async () => {
+        setElementDisplay(cdkMessage, false);
+        setElementDisplay(cdkResult, false);
 
-    try {
-        const resp = await fetch('/api/cdk/activate', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
-            body: JSON.stringify({ code: cdkCode })
-        });
-        const result = await resp.json().catch(() => ({}));
+        try {
+            const resp = await fetch('/api/cdk/activate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+                body: JSON.stringify({ code: cdkCode })
+            });
+            const result = await resp.json().catch(() => ({}));
 
-        if (resp.status === 200) {
-            cdkResult.style.display = 'block';
-            const details = [];
-            if (result.assetId > 0) details.push(`获得资源 #${result.assetId}`);
-            if (result.goldValue > 0) details.push(`+${result.goldValue} 金币`);
-            if (result.description) details.push(result.description);
-            cdkResultDetails.textContent = details.length > 0 ? details.join(' • ') : '资源已添加至您的库中';
-            cdkInput.value = '';
-            activateCdkBtn.textContent = '激活成功';
-            setTimeout(() => { activateCdkBtn.textContent = '激活'; }, 2000);
-            try { await loadProfileFromServer(); await loadActiveAssets(); } catch (e) { /* 忽略 */ }
-        } else if (resp.status === 401) {
-            localStorage.removeItem('kax_login_token');
-            location.href = '/login';
-        } else {
-            cdkMessage.style.display = 'block';
-            cdkMessage.style.background = 'rgba(239,68,68,0.1)';
-            cdkMessage.style.borderColor = 'rgba(239,68,68,0.3)';
-            cdkMessage.style.color = 'var(--profile-danger)';
-            const code = result.code;
-            if (code === 1) cdkMessage.textContent = '错误：CDK为空';
-            else if (code === 2) cdkMessage.textContent = '错误：CDK错误或不存在';
-            else if (code === 3) cdkMessage.textContent = '错误：CDK已被使用';
-            else cdkMessage.textContent = result.message || ('激活失败：' + resp.status);
+            if (resp.status === 200) {
+                setElementDisplay(cdkResult, true);
+                const details = [];
+                if (result.assetId > 0) details.push(`获得资源 #${result.assetId}`);
+                if (result.goldValue > 0) details.push(`+${result.goldValue} 金币`);
+                if (result.description) details.push(result.description);
+                cdkResultDetails.textContent = details.length > 0 ? details.join(' • ') : '资源已添加至您的库中';
+                cdkInput.value = '';
+                activateCdkBtn.textContent = '激活成功';
+                setTimeout(() => { activateCdkBtn.textContent = '激活'; }, 2000);
+                try { await loadProfileFromServer(); await loadActiveAssets(); } catch (e) { /* 忽略 */ }
+            } else if (resp.status === 401) {
+                localStorage.removeItem('kax_login_token');
+                location.href = '/login';
+            } else {
+                const code = result.code;
+                let errorMsg = result.message || ('激活失败：' + resp.status);
+                if (code === 1) errorMsg = '错误：CDK为空';
+                else if (code === 2) errorMsg = '错误：CDK错误或不存在';
+                else if (code === 3) errorMsg = '错误：CDK已被使用';
+                
+                showErrorMsg(cdkMessage, errorMsg, true);
+                activateCdkBtn.textContent = '激活失败';
+                setTimeout(() => { activateCdkBtn.textContent = '激活'; }, 2000);
+            }
+        } catch (err) {
+            console.error('CDK激活请求失败：', err);
+            showErrorMsg(cdkMessage, '错误：无法连接到服务器', true);
             activateCdkBtn.textContent = '激活失败';
             setTimeout(() => { activateCdkBtn.textContent = '激活'; }, 2000);
         }
-    } catch (err) {
-        console.error('CDK激活请求失败：', err);
-        cdkMessage.style.display = 'block';
-        cdkMessage.style.background = 'rgba(239,68,68,0.1)';
-        cdkMessage.style.borderColor = 'rgba(239,68,68,0.3)';
-        cdkMessage.style.color = 'var(--profile-danger)';
-        cdkMessage.textContent = '错误：无法连接到服务器';
-        activateCdkBtn.textContent = '激活失败';
-        setTimeout(() => { activateCdkBtn.textContent = '激活'; }, 2000);
-    } finally {
-        activateCdkBtn.disabled = false;
-    }
+    });
 });
 
 cdkInput.addEventListener('keypress', (e) => {
@@ -761,85 +798,71 @@ document.getElementById('confirmChangePlanBtn').addEventListener('click', () => 
     const plan = availablePlans.find(p => p.id === selectedPlanId);
     const cost = plan ? (plan.price || 0) : 0;
     document.getElementById('planModalConfirmCost').textContent = `💰 ${cost.toFixed(2)}`;
-    document.getElementById('planModalConfirm').style.display = 'block';
+    setElementDisplay(document.getElementById('planModalConfirm'), true);
 });
 
 document.getElementById('planModalConfirmNo').addEventListener('click', () => {
-    document.getElementById('planModalConfirm').style.display = 'none';
+    setElementDisplay(document.getElementById('planModalConfirm'), false);
 });
 
 document.getElementById('planModalConfirmYes').addEventListener('click', async () => {
-    document.getElementById('planModalConfirm').style.display = 'none';
-    const token = localStorage.getItem('kax_login_token');
-    if (!token) { location.href = '/login'; return; }
+    setElementDisplay(document.getElementById('planModalConfirm'), false);
+    const token = checkToken();
+    if (!token) return;
 
     const btn = document.getElementById('confirmChangePlanBtn');
-    btn.disabled = true;
-    btn.textContent = '处理中...';
-
-    try {
-        const resp = await fetch(`/api/asset/${currentAssetId}/changePlan`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
-            body: JSON.stringify({ planId: selectedPlanId })
-        });
-        const result = await resp.json().catch(() => ({}));
-        const msgEl = document.getElementById('planModalMessage');
-        if (resp.status === 200) {
-            msgEl.style.display = 'block';
-            msgEl.style.background = 'rgba(34,197,94,0.1)';
-            msgEl.style.color = 'var(--profile-success)';
-            msgEl.textContent = `成功更变套餐！需支付 💰 ${(result.cost || 0).toFixed(2)}`;
-            setTimeout(() => { closePlanModal(); loadActiveAssets(); }, 1500);
-        } else if (resp.status === 401) {
-            localStorage.removeItem('kax_login_token');
-            location.href = '/login';
-        } else {
-            msgEl.style.display = 'block';
-            msgEl.style.background = 'rgba(239,68,68,0.1)';
-            msgEl.style.color = 'var(--profile-danger)';
-            msgEl.textContent = result.message || ('更变失败：' + resp.status);
+    await withButtonLoading(btn, '处理中...', async () => {
+        try {
+            const resp = await fetch(`/api/asset/${currentAssetId}/changePlan`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+                body: JSON.stringify({ planId: selectedPlanId })
+            });
+            const result = await resp.json().catch(() => ({}));
+            const msgEl = document.getElementById('planModalMessage');
+            if (resp.status === 200) {
+                showErrorMsg(msgEl, `成功更变套餐！需支付 💰 ${(result.cost || 0).toFixed(2)}`, false);
+                setTimeout(() => { closePlanModal(); loadActiveAssets(); }, 1500);
+            } else if (resp.status === 401) {
+                localStorage.removeItem('kax_login_token');
+                location.href = '/login';
+            } else {
+                showErrorMsg(msgEl, result.message || ('更变失败：' + resp.status), true);
+            }
+        } catch (err) {
+            console.error('更变套餐请求失败：', err);
+            alert('无法连接到服务器');
         }
-    } catch (err) {
-        console.error('更变套餐请求失败：', err);
-        alert('无法连接到服务器');
-    } finally {
-        btn.disabled = false;
-        btn.textContent = '确认更变';
-    }
+    });
 });
 
 document.getElementById('confirmUnsubscribeBtn').addEventListener('click', async () => {
-    const token = localStorage.getItem('kax_login_token');
-    if (!token) { location.href = '/login'; return; }
+    const token = checkToken();
+    if (!token) return;
 
     const btn = document.getElementById('confirmUnsubscribeBtn');
-    btn.disabled = true;
-    btn.textContent = '取消中...';
-
-    try {
-        const resp = await fetch(`/api/asset/${currentAssetId}/unsubscribe`, {
-            method: 'POST',
-            headers: { 'Authorization': 'Bearer ' + token }
-        });
-        const result = await resp.json().catch(() => ({}));
-        if (resp.status === 200) {
-            alert(result.message || '订阅已取消');
-            closeUnsubscribeModal();
-            await loadActiveAssets();
-        } else if (resp.status === 401) {
-            localStorage.removeItem('kax_login_token');
-            location.href = '/login';
-        } else {
-            alert(result.message || ('取消失败：' + resp.status));
+    await withButtonLoading(btn, '取消中...', async () => {
+        try {
+            const resp = await fetch(`/api/asset/${currentAssetId}/unsubscribe`, {
+                method: 'POST',
+                headers: { 'Authorization': 'Bearer ' + token }
+            });
+            const result = await resp.json().catch(() => ({}));
+            if (resp.status === 200) {
+                alert(result.message || '订阅已取消');
+                closeUnsubscribeModal();
+                await loadActiveAssets();
+            } else if (resp.status === 401) {
+                localStorage.removeItem('kax_login_token');
+                location.href = '/login';
+            } else {
+                alert(result.message || ('取消失败：' + resp.status));
+            }
+        } catch (err) {
+            console.error('取消订阅请求失败：', err);
+            alert('无法连接到服务器');
         }
-    } catch (err) {
-        console.error('取消订阅请求失败：', err);
-        alert('无法连接到服务器');
-    } finally {
-        btn.disabled = false;
-        btn.textContent = '确认取消订阅';
-    }
+    });
 });
 
 /* 事件委托：资产操作按钮 */
@@ -889,8 +912,16 @@ let adminAssetPage = 1;
 let adminAssetTotalPages = 1;
 const adminAssetPageSize = 20;
 
+/** 更新分页按钮状态 */
+function updatePaginationButtons(page, totalPages, prevBtnId, nextBtnId) {
+    const prevBtn = document.getElementById(prevBtnId);
+    const nextBtn = document.getElementById(nextBtnId);
+    if (prevBtn) prevBtn.disabled = page <= 1;
+    if (nextBtn) nextBtn.disabled = page >= totalPages;
+}
+
 async function loadAdminAssets(page = 1) {
-    const token = localStorage.getItem('kax_login_token');
+    const token = checkToken();
     if (!token) return;
 
     const q = (document.getElementById('adminAssetSearch')?.value || '').trim();
@@ -901,17 +932,20 @@ async function loadAdminAssets(page = 1) {
     const pagerEl = document.getElementById('adminAssetPager');
     const pageInfoEl = document.getElementById('adminAssetPageInfo');
 
-    loadingEl.style.display = 'flex';
-    emptyEl.style.display = 'none';
+    setElementsDisplay({ 'adminAssetLoading': true, 'adminAssetEmpty': false });
     listEl.innerHTML = '';
-    pagerEl.style.display = 'none';
+    setElementDisplay(pagerEl, false);
 
     try {
         const params = new URLSearchParams({ page, pageSize: adminAssetPageSize, includeDeleted });
         if (q) params.append('q', q);
         const resp = await fetch('/api/asset/admin/list?' + params, { headers: { 'Authorization': 'Bearer ' + token } });
         if (resp.status === 401) { localStorage.removeItem('kax_login_token'); location.href = '/login'; return; }
-        if (!resp.ok) { loadingEl.style.display = 'none'; emptyEl.style.display = 'flex'; emptyEl.querySelector('span:last-child').textContent = '加载失败'; return; }
+        if (!resp.ok) { 
+            setElementsDisplay({ 'adminAssetLoading': false, 'adminAssetEmpty': true });
+            emptyEl.querySelector('span:last-child').textContent = '加载失败'; 
+            return; 
+        }
 
         const result = await resp.json().catch(() => ({}));
         const items = result.data || [];
@@ -919,14 +953,14 @@ async function loadAdminAssets(page = 1) {
         adminAssetPage = page;
         adminAssetTotalPages = Math.max(1, Math.ceil(total / adminAssetPageSize));
 
-        loadingEl.style.display = 'none';
+        setElementDisplay(loadingEl, false);
         if (items.length === 0) {
-            emptyEl.style.display = 'flex';
+            setElementDisplay(emptyEl, true);
             emptyEl.querySelector('span:last-child').textContent = '暂无资产';
             return;
         }
 
-        emptyEl.style.display = 'none';
+        setElementDisplay(emptyEl, false);
         listEl.innerHTML = items.map(a => `
             <div class="admin-list-item ${a.isDeleted ? 'admin-list-item--deleted' : ''}">
                 <div class="admin-list-item-info">
@@ -938,23 +972,21 @@ async function loadAdminAssets(page = 1) {
                         <span class="material-icons">edit</span>编辑
                     </button>
                     ${a.isDeleted
-                        ? `<button class="asset-action-btn" onclick="restoreAdminAsset(${a.id})"><span class="material-icons">restore</span>恢复</button>`
-                        : `<button class="asset-action-btn danger" onclick="openAssetDeleteModal(${a.id}, '${escapeHtml(a.name)}')"><span class="material-icons">delete</span>删除</button>`
-                    }
+                ? `<button class="asset-action-btn" onclick="restoreAdminAsset(${a.id})"><span class="material-icons">restore</span>恢复</button>`
+                : `<button class="asset-action-btn danger" onclick="openAssetDeleteModal(${a.id}, '${escapeHtml(a.name)}')"><span class="material-icons">delete</span>删除</button>`
+            }
                 </div>
             </div>
         `).join('');
 
         if (adminAssetTotalPages > 1) {
-            pagerEl.style.display = 'flex';
+            setElementDisplay(pagerEl, true);
             pageInfoEl.textContent = `第 ${adminAssetPage} / ${adminAssetTotalPages} 页，共 ${total} 条`;
-            document.getElementById('adminAssetPrevBtn').disabled = adminAssetPage <= 1;
-            document.getElementById('adminAssetNextBtn').disabled = adminAssetPage >= adminAssetTotalPages;
+            updatePaginationButtons(adminAssetPage, adminAssetTotalPages, 'adminAssetPrevBtn', 'adminAssetNextBtn');
         }
     } catch (err) {
         console.error('加载资产列表失败:', err);
-        loadingEl.style.display = 'none';
-        emptyEl.style.display = 'flex';
+        setElementsDisplay({ 'adminAssetLoading': false, 'adminAssetEmpty': true });
         emptyEl.querySelector('span:last-child').textContent = '网络错误';
     }
 }
@@ -971,6 +1003,14 @@ document.getElementById('adminCreateAssetBtn')?.addEventListener('click', () => 
 /* 暂存当前编辑的价格方案列表（用于新建/编辑资产） */
 let assetPricePlans = [];
 
+/**
+ * 自动计算最终价格 = 原价 × (1 - 折扣率)
+ */
+function calculateFinalPrice(originalPrice, discountRate) {
+    const price = Math.max(0, (originalPrice || 0) * (1 - (discountRate || 0)));
+    return Math.round(price * 100) / 100; // 保留两位小数
+}
+
 function renderAssetPricePlans() {
     const container = document.getElementById('assetPriceList');
     if (!container) return;
@@ -978,38 +1018,63 @@ function renderAssetPricePlans() {
         container.innerHTML = '<div style="color:var(--muted-strong);font-size:0.85rem;padding:8px 0;">暂无价格方案，点击「添加」创建</div>';
         return;
     }
-    container.innerHTML = assetPricePlans.map((p, i) => `
+    const unitMap = { once: '一次性', hour: '小时', day: '天', month: '月', year: '年' };
+    container.innerHTML = assetPricePlans.map((p, i) => {
+        const calculatedPrice = calculateFinalPrice(p.originalPrice, p.discountRate);
+        return `
         <div class="admin-price-row" data-idx="${i}">
             <div class="admin-price-cols">
-                <label class="admin-price-label">最终价格</label>
-                <input class="admin-price-input" type="number" min="0" placeholder="0" value="${p.price ?? 0}" data-field="price" data-idx="${i}">
-                <label class="admin-price-label">原价</label>
-                <input class="admin-price-input" type="number" min="0" placeholder="0" value="${p.originalPrice ?? 0}" data-field="originalPrice" data-idx="${i}">
-                <label class="admin-price-label">折扣 (0-1)</label>
-                <input class="admin-price-input" type="number" min="0" max="1" step="0.01" placeholder="0" value="${p.discountRate ?? 0}" data-field="discountRate" data-idx="${i}">
-                <label class="admin-price-label">时长</label>
-                <input class="admin-price-input" type="number" min="1" placeholder="1" value="${p.duration ?? 1}" data-field="duration" data-idx="${i}">
-                <label class="admin-price-label">单位</label>
-                <select class="admin-select admin-price-select" data-field="unit" data-idx="${i}" title="时间单位">
-                    ${['once','hour','day','month','year'].map(u => `<option value="${u}"${p.unit === u ? ' selected' : ''}>${{once:'一次性',hour:'小时',day:'天',month:'月',year:'年'}[u]}</option>`).join('')}
-                </select>
-                <label class="admin-price-label">库存 (-1=无限)</label>
-                <input class="admin-price-input" type="number" min="-1" placeholder="-1" value="${p.stock ?? -1}" data-field="stock" data-idx="${i}">
+                <div class="admin-price-field">
+                    <label class="admin-price-label">最终价格 <span style="color:var(--muted);font-weight:400;">(自动)</span></label>
+                    <input class="admin-price-input" type="number" min="0" placeholder="0" value="${calculatedPrice}" readonly data-field="price" data-idx="${i}" title="最终价格根据原价和折扣自动计算" style="cursor:not-allowed;opacity:0.7;">
+                </div>
+                <div class="admin-price-field">
+                    <label class="admin-price-label">原价</label>
+                    <input class="admin-price-input" type="number" min="0" placeholder="0" value="${p.originalPrice ?? 0}" data-field="originalPrice" data-idx="${i}">
+                </div>
+                <div class="admin-price-field">
+                    <label class="admin-price-label">折扣率 (0-1)</label>
+                    <input class="admin-price-input" type="number" min="0" max="1" step="0.01" placeholder="0" value="${p.discountRate ?? 0}" data-field="discountRate" data-idx="${i}">
+                </div>
+                <div class="admin-price-field">
+                    <label class="admin-price-label">时长</label>
+                    <input class="admin-price-input" type="number" min="1" placeholder="1" value="${p.duration ?? 1}" data-field="duration" data-idx="${i}">
+                </div>
+                <div class="admin-price-field">
+                    <label class="admin-price-label">单位</label>
+                    <select class="admin-select admin-price-select" data-field="unit" data-idx="${i}" title="时间单位">
+                        ${Object.entries(unitMap).map(([k, v]) => `<option value="${k}"${p.unit === k ? ' selected' : ''}>${v}</option>`).join('')}
+                    </select>
+                </div>
+                <div class="admin-price-field">
+                    <label class="admin-price-label">库存 (-1=无限)</label>
+                    <input class="admin-price-input" type="number" min="-1" placeholder="-1" value="${p.stock ?? -1}" data-field="stock" data-idx="${i}">
+                </div>
             </div>
             <button class="asset-action-btn danger admin-price-remove" data-idx="${i}" title="移除此方案" type="button">
-                <span class="material-icons">remove_circle_outline</span>
+                <span class="material-icons">close</span>
             </button>
         </div>
-    `).join('');
+    `;
+    }).join('');
 
     container.querySelectorAll('.admin-price-input, .admin-price-select').forEach(el => {
         el.addEventListener('change', () => {
             const idx = parseInt(el.dataset.idx);
             const field = el.dataset.field;
+
+            // 跳过只读的最终价格字段
+            if (field === 'price') return;
+
             let val = el.value;
-            if (['price','originalPrice','duration','stock'].includes(field)) val = parseInt(val) || 0;
+            if (['originalPrice', 'duration', 'stock'].includes(field)) val = parseInt(val) || 0;
             if (field === 'discountRate') val = parseFloat(val) || 0;
             assetPricePlans[idx][field] = val;
+
+            // 如果修改了原价或折扣率，重新渲染以更新最终价格
+            if (['originalPrice', 'discountRate'].includes(field)) {
+                renderAssetPricePlans();
+            }
         });
     });
     container.querySelectorAll('.admin-price-remove').forEach(btn => {
@@ -1032,13 +1097,13 @@ async function openAssetEditModal(assetId) {
     const msgEl = document.getElementById('assetEditMsg');
     const idInput = document.getElementById('assetEditId');
 
-    msgEl.style.display = 'none';
+    setElementDisplay(msgEl, false);
     assetPricePlans = [];
 
     if (!assetId) {
         titleEl.textContent = '新建资产';
         idInput.value = '';
-        ['assetEditName','assetEditVersion','assetEditAuthor','assetEditCategory','assetEditDesc','assetEditDownloadUrl','assetEditLicense','assetEditCompatibility','assetEditFileSize'].forEach(id => {
+        ['assetEditName', 'assetEditVersion', 'assetEditAuthor', 'assetEditCategory', 'assetEditDesc', 'assetEditDownloadUrl', 'assetEditLicense', 'assetEditCompatibility', 'assetEditFileSize'].forEach(id => {
             const el = document.getElementById(id);
             if (el) el.value = '';
         });
@@ -1050,7 +1115,9 @@ async function openAssetEditModal(assetId) {
     titleEl.textContent = '编辑资产';
     idInput.value = String(assetId);
 
-    const token = localStorage.getItem('kax_login_token');
+    const token = checkToken();
+    if (!token) return;
+
     try {
         const resp = await fetch('/api/asset/admin/inspect', {
             method: 'POST',
@@ -1094,8 +1161,8 @@ document.getElementById('assetEditCancelBtn')?.addEventListener('click', () => {
 });
 
 document.getElementById('assetEditSaveBtn')?.addEventListener('click', async () => {
-    const token = localStorage.getItem('kax_login_token');
-    if (!token) { location.href = '/login'; return; }
+    const token = checkToken();
+    if (!token) return;
 
     const id = document.getElementById('assetEditId').value;
     const name = document.getElementById('assetEditName')?.value?.trim() || '';
@@ -1110,9 +1177,7 @@ document.getElementById('assetEditSaveBtn')?.addEventListener('click', async () 
     const msgEl = document.getElementById('assetEditMsg');
 
     const showMsg = (text, ok) => {
-        msgEl.style.display = 'block';
-        msgEl.className = 'admin-msg ' + (ok ? 'admin-msg--ok' : 'admin-msg--err');
-        msgEl.textContent = text;
+        showErrorMsg(msgEl, text, !ok);
     };
 
     if (!name) { showMsg('请填写资产名称', false); return; }
@@ -1120,33 +1185,29 @@ document.getElementById('assetEditSaveBtn')?.addEventListener('click', async () 
     if (!author) { showMsg('请填写作者', false); return; }
 
     const saveBtn = document.getElementById('assetEditSaveBtn');
-    saveBtn.disabled = true;
-    saveBtn.textContent = '保存中…';
+    await withButtonLoading(saveBtn, '保存中…', async () => {
+        try {
+            const isEdit = !!id;
+            const url = isEdit ? '/api/asset/admin/update' : '/api/asset/admin/create';
+            const payload = { name, version, author, category, description, downloadUrl, license, compatibility, fileSize, prices: assetPricePlans };
+            if (isEdit) payload.id = parseInt(id);
 
-    try {
-        const isEdit = !!id;
-        const url = isEdit ? '/api/asset/admin/update' : '/api/asset/admin/create';
-        const payload = { name, version, author, category, description, downloadUrl, license, compatibility, fileSize, prices: assetPricePlans };
-        if (isEdit) payload.id = parseInt(id);
-
-        const resp = await fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
-            body: JSON.stringify(payload)
-        });
-        const result = await resp.json().catch(() => ({}));
-        if (resp.ok) {
-            showMsg(result.message || (isEdit ? '已更新' : '已创建'), true);
-            setTimeout(() => { document.getElementById('assetEditModal').classList.remove('show'); loadAdminAssets(adminAssetPage); }, 1000);
-        } else {
-            showMsg(result.message || ('保存失败: ' + resp.status), false);
+            const resp = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+                body: JSON.stringify(payload)
+            });
+            const result = await resp.json().catch(() => ({}));
+            if (resp.ok) {
+                showMsg(result.message || (isEdit ? '已更新' : '已创建'), true);
+                setTimeout(() => { document.getElementById('assetEditModal').classList.remove('show'); loadAdminAssets(adminAssetPage); }, 1000);
+            } else {
+                showMsg(result.message || ('保存失败: ' + resp.status), false);
+            }
+        } catch (err) {
+            showMsg('网络错误', false);
         }
-    } catch (err) {
-        showMsg('网络错误', false);
-    } finally {
-        saveBtn.disabled = false;
-        saveBtn.textContent = '保存';
-    }
+    });
 });
 
 let assetDeleteTargetId = null;
@@ -1164,28 +1225,29 @@ document.getElementById('assetDeleteCancelBtn')?.addEventListener('click', () =>
 
 document.getElementById('assetDeleteConfirmBtn')?.addEventListener('click', async () => {
     if (!assetDeleteTargetId) return;
-    const token = localStorage.getItem('kax_login_token');
+    const token = checkToken();
+    if (!token) return;
     const btn = document.getElementById('assetDeleteConfirmBtn');
-    btn.disabled = true;
-    try {
-        const resp = await fetch('/api/asset/admin/delete', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
-            body: JSON.stringify({ id: assetDeleteTargetId })
-        });
-        const result = await resp.json().catch(() => ({}));
-        if (resp.ok) {
-            document.getElementById('assetDeleteModal').classList.remove('show');
-            assetDeleteTargetId = null;
-            loadAdminAssets(adminAssetPage);
-        } else {
-            alert(result.message || '删除失败');
+    
+    await withButtonLoading(btn, '删除中...', async () => {
+        try {
+            const resp = await fetch('/api/asset/admin/delete', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+                body: JSON.stringify({ id: assetDeleteTargetId })
+            });
+            const result = await resp.json().catch(() => ({}));
+            if (resp.ok) {
+                document.getElementById('assetDeleteModal').classList.remove('show');
+                assetDeleteTargetId = null;
+                loadAdminAssets(adminAssetPage);
+            } else {
+                alert(result.message || '删除失败');
+            }
+        } catch (err) {
+            alert('网络错误');
         }
-    } catch (err) {
-        alert('网络错误');
-    } finally {
-        btn.disabled = false;
-    }
+    });
 });
 
 async function restoreAdminAsset(id) {
@@ -1212,7 +1274,7 @@ const cdkAdminPageSize = 50;
 let cdkAdminLastKeyword = '';
 
 async function loadAdminCdks(page = 1) {
-    const token = localStorage.getItem('kax_login_token');
+    const token = checkToken();
     if (!token) return;
 
     const keyword = (document.getElementById('cdkAdminSearch')?.value || '').trim();
@@ -1223,10 +1285,9 @@ async function loadAdminCdks(page = 1) {
     const pagerEl = document.getElementById('cdkAdminPager');
     const pageInfoEl = document.getElementById('cdkAdminPageInfo');
 
-    loadingEl.style.display = 'flex';
-    emptyEl.style.display = 'none';
+    setElementsDisplay({ 'cdkAdminLoading': true, 'cdkAdminEmpty': false });
     listEl.innerHTML = '';
-    pagerEl.style.display = 'none';
+    setElementDisplay(pagerEl, false);
     cdkAdminLastKeyword = keyword;
 
     try {
@@ -1236,7 +1297,11 @@ async function loadAdminCdks(page = 1) {
         const url = isSearch ? '/api/cdk/admin/search?' + params : '/api/cdk/admin/list?' + params;
         const resp = await fetch(url, { headers: { 'Authorization': 'Bearer ' + token } });
         if (resp.status === 401) { localStorage.removeItem('kax_login_token'); location.href = '/login'; return; }
-        if (!resp.ok) { loadingEl.style.display = 'none'; emptyEl.style.display = 'flex'; emptyEl.querySelector('span:last-child').textContent = '加载失败'; return; }
+        if (!resp.ok) { 
+            setElementsDisplay({ 'cdkAdminLoading': false, 'cdkAdminEmpty': true });
+            emptyEl.querySelector('span:last-child').textContent = '加载失败'; 
+            return; 
+        }
 
         const result = await resp.json().catch(() => ({}));
         const items = result.data || [];
@@ -1244,16 +1309,14 @@ async function loadAdminCdks(page = 1) {
         cdkAdminPage = page;
         cdkAdminTotalPages = Math.max(1, Math.ceil(total / cdkAdminPageSize));
 
-        loadingEl.style.display = 'none';
+        setElementDisplay(loadingEl, false);
         if (items.length === 0) {
-            emptyEl.style.display = 'flex';
+            setElementDisplay(emptyEl, true);
             emptyEl.querySelector('span:last-child').textContent = '暂无 CDK';
             return;
         }
 
-        emptyEl.style.display = 'none';
-        const fmtTs = ts => ts > 0 ? new Date(ts * 1000).toLocaleString() : '—';
-        const fmtExpire = s => !s || s === 0 ? '永久' : (s < 3600 ? `${s}秒` : s < 86400 ? `${(s/3600).toFixed(1)}小时` : `${Math.floor(s/86400)}天`);
+        setElementDisplay(emptyEl, false);
         listEl.innerHTML = items.map(c => `
             <div class="admin-list-item">
                 <div class="admin-list-item-info">
@@ -1262,11 +1325,11 @@ async function loadAdminCdks(page = 1) {
                         ${c.goldValue > 0 ? `<span class="admin-list-item-badge gold">💰 ${c.goldValue}</span>` : ''}
                     </div>
                     <div class="admin-list-item-meta">
-                        有效期: ${fmtExpire(c.expiresInSeconds)}
+                        有效期: ${formatCdkExpire(c.expiresInSeconds)}
                         ${c.description ? ` · ${escapeHtml(c.description)}` : ''}
-                        · 创建于 ${fmtTs(c.createdAt)}
+                        · 创建于 ${formatUnix(c.createdAt)}
                         ${c.createdBy ? ` by ${escapeHtml(c.createdBy)}` : ''}
-                        ${c.isUsed ? ` · 使用者: ${escapeHtml(c.usedBy || '—')} @ ${fmtTs(c.usedAt)}` : ''}
+                        ${c.isUsed ? ` · 使用者: ${escapeHtml(c.usedBy || '—')} @ ${formatUnix(c.usedAt)}` : ''}
                     </div>
                 </div>
                 <div class="admin-list-item-actions">
@@ -1278,17 +1341,23 @@ async function loadAdminCdks(page = 1) {
         `).join('');
 
         if (cdkAdminTotalPages > 1) {
-            pagerEl.style.display = 'flex';
+            setElementDisplay(pagerEl, true);
             pageInfoEl.textContent = `第 ${cdkAdminPage} / ${cdkAdminTotalPages} 页，共 ${total} 条`;
-            document.getElementById('cdkAdminPrevBtn').disabled = cdkAdminPage <= 1;
-            document.getElementById('cdkAdminNextBtn').disabled = cdkAdminPage >= cdkAdminTotalPages;
+            updatePaginationButtons(cdkAdminPage, cdkAdminTotalPages, 'cdkAdminPrevBtn', 'cdkAdminNextBtn');
         }
     } catch (err) {
         console.error('加载 CDK 列表失败:', err);
-        loadingEl.style.display = 'none';
-        emptyEl.style.display = 'flex';
+        setElementsDisplay({ 'cdkAdminLoading': false, 'cdkAdminEmpty': true });
         emptyEl.querySelector('span:last-child').textContent = '网络错误';
     }
+}
+
+/** 格式化 CDK 过期时间 */
+function formatCdkExpire(s) {
+    if (!s || s === 0) return '永久';
+    if (s < 3600) return `${s}秒`;
+    if (s < 86400) return `${(s / 3600).toFixed(1)}小时`;
+    return `${Math.floor(s / 86400)}天`;
 }
 
 document.getElementById('cdkAdminSearchBtn')?.addEventListener('click', () => loadAdminCdks(1));
@@ -1298,8 +1367,8 @@ document.getElementById('cdkAdminNextBtn')?.addEventListener('click', () => { if
 
 // CDK 预览
 document.getElementById('cdkAdminPreviewBtn')?.addEventListener('click', async () => {
-    const token = localStorage.getItem('kax_login_token');
-    if (!token) { location.href = '/login'; return; }
+    const token = checkToken();
+    if (!token) return;
     const count = Math.min(1000, Math.max(1, parseInt(document.getElementById('cdkAdminCount')?.value || '1') || 1));
     const length = Math.min(256, Math.max(4, parseInt(document.getElementById('cdkAdminLength')?.value || '16') || 16));
     const prefix = document.getElementById('cdkAdminPrefix')?.value?.trim() || '';
@@ -1315,11 +1384,11 @@ document.getElementById('cdkAdminPreviewBtn')?.addEventListener('click', async (
         const result = await resp.json().catch(() => ({}));
         if (resp.ok && result.codes) {
             const preview = result.codes.slice(0, 20).join('\n') + (count > 20 ? `\n…（共 ${count} 个）` : '');
-            previewEl.style.display = 'block';
+            setElementDisplay(previewEl, true);
             previewEl.textContent = preview;
-            msgEl.style.display = 'none';
+            setElementDisplay(msgEl, false);
         } else {
-            msgEl.style.display = 'block';
+            setElementDisplay(msgEl, true);
             msgEl.className = 'admin-msg admin-msg--err';
             msgEl.textContent = result.message || '预览失败';
         }
@@ -1328,8 +1397,8 @@ document.getElementById('cdkAdminPreviewBtn')?.addEventListener('click', async (
 
 // CDK 生成并保存
 document.getElementById('cdkAdminSaveBtn')?.addEventListener('click', async () => {
-    const token = localStorage.getItem('kax_login_token');
-    if (!token) { location.href = '/login'; return; }
+    const token = checkToken();
+    if (!token) return;
     const count = Math.min(1000, Math.max(1, parseInt(document.getElementById('cdkAdminCount')?.value || '1') || 1));
     const length = Math.min(256, Math.max(4, parseInt(document.getElementById('cdkAdminLength')?.value || '16') || 16));
     const goldValue = Math.max(0, parseInt(document.getElementById('cdkAdminGold')?.value || '0') || 0);
@@ -1339,35 +1408,31 @@ document.getElementById('cdkAdminSaveBtn')?.addEventListener('click', async () =
     const msgEl = document.getElementById('cdkAdminGenMsg');
     const saveBtn = document.getElementById('cdkAdminSaveBtn');
 
-    saveBtn.disabled = true;
-    saveBtn.textContent = '生成中…';
-    msgEl.style.display = 'none';
-
-    try {
-        const resp = await fetch('/api/cdk/admin/save', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
-            body: JSON.stringify({ count, length, prefix, goldValue, expiresInSeconds, description })
-        });
-        const result = await resp.json().catch(() => ({}));
-        msgEl.style.display = 'block';
-        if (resp.ok) {
-            msgEl.className = 'admin-msg admin-msg--ok';
-            msgEl.textContent = result.message || `已成功生成 ${result.count || count} 个 CDK`;
-            document.getElementById('cdkAdminPreview').style.display = 'none';
-            loadAdminCdks(1);
-        } else {
+    await withButtonLoading(saveBtn, '生成中…', async () => {
+        setElementDisplay(msgEl, false);
+        try {
+            const resp = await fetch('/api/cdk/admin/save', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+                body: JSON.stringify({ count, length, prefix, goldValue, expiresInSeconds, description })
+            });
+            const result = await resp.json().catch(() => ({}));
+            setElementDisplay(msgEl, true);
+            if (resp.ok) {
+                msgEl.className = 'admin-msg admin-msg--ok';
+                msgEl.textContent = result.message || `已成功生成 ${result.count || count} 个 CDK`;
+                setElementDisplay(document.getElementById('cdkAdminPreview'), false);
+                loadAdminCdks(1);
+            } else {
+                msgEl.className = 'admin-msg admin-msg--err';
+                msgEl.textContent = result.message || ('生成失败: ' + resp.status);
+            }
+        } catch (err) {
+            setElementDisplay(msgEl, true);
             msgEl.className = 'admin-msg admin-msg--err';
-            msgEl.textContent = result.message || ('生成失败: ' + resp.status);
+            msgEl.textContent = '网络错误';
         }
-    } catch (err) {
-        msgEl.style.display = 'block';
-        msgEl.className = 'admin-msg admin-msg--err';
-        msgEl.textContent = '网络错误';
-    } finally {
-        saveBtn.disabled = false;
-        saveBtn.textContent = '生成并保存';
-    }
+    });
 });
 
 let cdkDeleteTargetCode = null;
@@ -1385,34 +1450,31 @@ document.getElementById('cdkDeleteCancelBtn')?.addEventListener('click', () => {
 
 document.getElementById('cdkDeleteConfirmBtn')?.addEventListener('click', async () => {
     if (!cdkDeleteTargetCode) return;
-    const token = localStorage.getItem('kax_login_token');
+    const token = checkToken();
+    if (!token) return;
     const btn = document.getElementById('cdkDeleteConfirmBtn');
-    btn.disabled = true;
-    try {
-        const resp = await fetch('/api/cdk/admin/delete', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
-            body: JSON.stringify({ code: cdkDeleteTargetCode })
-        });
-        const result = await resp.json().catch(() => ({}));
-        if (resp.ok) {
-            document.getElementById('cdkDeleteModal').classList.remove('show');
-            cdkDeleteTargetCode = null;
-            loadAdminCdks(cdkAdminPage);
-        } else {
-            alert(result.message || '删除失败');
+    
+    await withButtonLoading(btn, '删除中...', async () => {
+        try {
+            const resp = await fetch('/api/cdk/admin/delete', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+                body: JSON.stringify({ code: cdkDeleteTargetCode })
+            });
+            const result = await resp.json().catch(() => ({}));
+            if (resp.ok) {
+                document.getElementById('cdkDeleteModal').classList.remove('show');
+                cdkDeleteTargetCode = null;
+                loadAdminCdks(cdkAdminPage);
+            } else {
+                alert(result.message || '删除失败');
+            }
+        } catch (err) {
+            alert('网络错误');
         }
-    } catch (err) {
-        alert('网络错误');
-    } finally {
-        btn.disabled = false;
-    }
+    });
 });
 // #endregion
 
-// #region 工具函数——HTML 转义
-function escapeHtml(str) {
-    if (!str) return '';
-    return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-}
+// #region 工具函数——HTML 转义已移到工具函数区域
 // #endregion

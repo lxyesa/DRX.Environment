@@ -180,6 +180,27 @@ public partial class KaxHttp
 
                 if (cdk != null)
                 {
+                    // 写入订单记录
+                    var user = (await KaxGlobal.UserDatabase.SelectWhereAsync("UserName", userName)).FirstOrDefault();
+                    if (user != null)
+                    {
+                        if (user.OrderRecords == null)
+                            user.OrderRecords = new Drx.Sdk.Network.DataBase.TableList<UserOrderRecord>();
+                        user.OrderRecords.Add(new UserOrderRecord
+                        {
+                            ParentId = user.Id,
+                            OrderType = "cdk",
+                            AssetId = 0,
+                            AssetName = string.Empty,
+                            CdkCode = cdk.Code,
+                            GoldChange = cdk.GoldValue,
+                            Description = string.IsNullOrEmpty(cdk.Description)
+                                ? $"兑换 CDK: {cdk.Code}"
+                                : $"兑换 CDK: {cdk.Code} ({cdk.Description})"
+                        });
+                        await KaxGlobal.UserDatabase.UpdateAsync(user);
+                    }
+
                     return new JsonResult(new
                     {
                         code = resultCode,

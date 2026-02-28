@@ -16,6 +16,9 @@
     <script src="/components/section-card.js?v=2" defer></script>
     <script src="/components/badge/userbadge.js?v=2" defer></script>
     <script src="/components/collapsible-card.js?v=2" defer></script>
+    <script src="/components/select-box.js?v=2" defer></script>
+    <script src="/components/check-box.js?v=2" defer></script>
+    <script src="/components/radio-box.js?v=2" defer></script>
     <link href="/css/profile.css?v=2" rel="stylesheet">
 </head>
 
@@ -312,9 +315,7 @@
                                 <button id="adminAssetSearchBtn" slot="action">搜索</button>
                             </input-box>
                             <div class="admin-toolbar-right">
-                                <label style="font-size:0.85rem;color:var(--muted-strong);display:flex;align-items:center;gap:6px;">
-                                    <input type="checkbox" id="adminAssetIncludeDeleted"> 包含已删除
-                                </label>
+                                <check-box id="adminAssetIncludeDeleted" label="包含已删除" size="small"></check-box>
                             </div>
                         </div>
                         <div id="adminAssetLoading" class="assets-state">
@@ -370,13 +371,9 @@
                                 <button id="cdkAdminSearchBtn" slot="action">搜索</button>
                             </input-box>
                             <div class="admin-toolbar-right">
-                                <select id="cdkAdminSearchIn" class="admin-select" title="搜索范围">
-                                    <option value="all">全部字段</option>
-                                    <option value="code">代码</option>
-                                    <option value="creator">创建者</option>
-                                    <option value="user">使用者</option>
-                                    <option value="description">描述</option>
-                                </select>
+                                <select-box id="cdkAdminSearchIn" size="headerless"
+                                    options='[{"value":"all","label":"全部字段"},{"value":"code","label":"代码"},{"value":"creator","label":"创建者"},{"value":"user","label":"使用者"},{"value":"description","label":"描述"}]'>
+                                </select-box>
                             </div>
                         </div>
                         <div id="cdkAdminLoading" class="assets-state">
