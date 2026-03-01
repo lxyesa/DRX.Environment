@@ -8,7 +8,7 @@
       .field{ border-radius:4px; border:1px solid rgba(255,255,255,0.06); padding:10px 12px; background: rgba(255,255,255,0.01); box-sizing:border-box; }
       .label{ display:block; font-size:0.82rem; color:rgba(255,255,255,0.72); margin-bottom:6px; }
       .label-divider{ height:1px; background:rgba(255,255,255,0.03); margin:6px 0 8px; border-radius:1px; }
-      .input-row{ display:flex; align-items:flex-end; gap:8px; }
+      .input-row{ display:flex; align-items:center; gap:8px; }
       input, textarea{ flex:1; min-width:0; border:none; background:transparent; color:var(--muted-strong, rgba(255,255,255,0.92)); font-size:0.95rem; padding:6px 0; outline:none; font-family:inherit; }
       input:disabled, textarea:disabled{ opacity:0.6; }
       /* 抵消浏览器自动填充注入的白色背景：使用超长过渡延迟让系统样式不可见 */
@@ -45,7 +45,27 @@
       :host([size="headerless"]) .field{ padding:6px 10px; }
 
       /* 图标：默认隐藏，有 icon 属性时显示 */
-      .field-icon{ display:none; flex-shrink:0; align-items:center; justify-content:center; margin-right:8px; color:rgba(255,255,255,0.45); font-size:18px; line-height:1; }
+            .field-icon{
+                display:none;
+                flex-shrink:0;
+                align-items:center;
+                justify-content:center;
+                margin-right:8px;
+                color:rgba(255,255,255,0.45);
+                font-size:18px;
+                line-height:1;
+                font-family: 'Material Icons';
+                font-weight: normal;
+                font-style: normal;
+                letter-spacing: normal;
+                text-transform: none;
+                white-space: nowrap;
+                word-wrap: normal;
+                direction: ltr;
+                font-feature-settings: 'liga';
+                -webkit-font-feature-settings: 'liga';
+                -webkit-font-smoothing: antialiased;
+            }
       :host([icon]) .field-icon{ display:flex; }
       :host([size="large"]) .field-icon{ font-size:22px; }
       :host([size="small"]) .field-icon{ font-size:15px; margin-right:6px; }
@@ -93,7 +113,7 @@
     `;
 
     class InputBox extends HTMLElement {
-        static get observedAttributes(){ return ['label','placeholder','type','value','readonly','disabled','minlength','name','autocomplete','textarea','rows','show-action','size','icon']; }
+        static get observedAttributes(){ return ['label','placeholder','type','value','readonly','disabled','minlength','maxlength','name','autocomplete','textarea','rows','show-action','size','icon']; }
         constructor(){
             super();
             this._shadow = this.attachShadow({mode:'open'});
@@ -195,6 +215,15 @@
                     } else {
                         this._inputEl.setAttribute('minlength', val);
                         this._textareaEl.setAttribute('minlength', val);
+                    }
+                    break;
+                case 'maxlength':
+                    if (val==null) {
+                        this._inputEl.removeAttribute('maxlength');
+                        this._textareaEl.removeAttribute('maxlength');
+                    } else {
+                        this._inputEl.setAttribute('maxlength', val);
+                        this._textareaEl.setAttribute('maxlength', val);
                     }
                     break;
                 case 'name':

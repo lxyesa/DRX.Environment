@@ -160,6 +160,12 @@ public partial class SqliteV2<T> where T : class, IDataBase, new()
                     var childList = childListProp.GetValue(entity);
                     if (childList != null)
                     {
+                        // 确保 TableList 已初始化（可能被业务代码用 new 替换过）
+                        var fullTableName = $"{_tableName}_{childListProp.Name}";
+                        var initMethod = childList.GetType().GetMethod("InitializeWithTableName",
+                            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                        initMethod?.Invoke(childList, new object[] { _connectionString, entity.Id, fullTableName });
+
                         // 调用 TableList<T> 的 SyncChanges 方法
                         var syncMethod = childList.GetType().GetMethod("SyncChanges", 
                             System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance,
@@ -388,6 +394,10 @@ public partial class SqliteV2<T> where T : class, IDataBase, new()
             entity.Id = (int)newId;
 
             InsertChildTablesSync(connection, transaction, entity);
+            
+            // 在同步 TableList 之前，确保所有 TableList 子属性已初始化
+            InitializeTableListProperties(entity);
+            
             SyncTableListChanges(connection, transaction, entity);
 
             await transaction.CommitAsync(cancellationToken);
@@ -457,6 +467,7 @@ public partial class SqliteV2<T> where T : class, IDataBase, new()
         // 同步所有 TableList 子表数据
         foreach (var entity in batch)
         {
+            InitializeTableListProperties(entity);
             SyncTableListChanges(connection, transaction, entity);
         }
     }

@@ -775,20 +775,25 @@ async function loadAvailablePlans() {
         const resp = await fetch(`/api/asset/${currentAssetId}/plans`, { headers: { 'Authorization': 'Bearer ' + token } });
         if (resp.status === 200) {
             const result = await resp.json().catch(() => ({}));
-            const plans = result.plans || [];
+            const plans = result.data || [];
             availablePlans = plans;
             if (plans.length === 0) {
                 planList.innerHTML = '<div style="color: var(--profile-muted); text-align: center; padding: 20px;">暂无可用套餐</div>';
             } else {
-                planList.innerHTML = plans.map(plan => `
-                    <div class="plan-item" data-plan-id="${plan.id}" onclick="selectPlan(${plan.id}, this)">
+                planList.innerHTML = plans.map(plan => {
+                    const hasDiscount = plan.discountRate > 0;
+                    const subtitle = hasDiscount
+                        ? `原价 ${(plan.originalPrice || plan.price || 0).toFixed(2)} · 折扣 ${Math.round((1 - plan.discountRate) * 10)}折`
+                        : '无折扣';
+                    return `
+                    <div class="plan-item" data-plan-id="${plan.id}" onclick="selectPlan('${plan.id}', this)">
                         <div class="plan-name">
-                            <div style="font-weight: 600; color: var(--profile-text);">${plan.name}</div>
-                            <div style="font-size: 0.85rem; color: var(--profile-muted); margin-top: 2px;">${plan.duration}</div>
+                            <div style="font-weight: 600; color: var(--profile-text);">${plan.durationLabel}</div>
+                            ${subtitle ? `<div style="font-size: 0.85rem; color: var(--profile-muted); margin-top: 2px;">${subtitle}</div>` : ''}
                         </div>
                         <div class="plan-price">💰 ${(plan.price || 0).toFixed(2)}</div>
                     </div>
-                `).join('');
+                `}).join('');
             }
         } else if (resp.status === 401) {
             localStorage.removeItem('kax_login_token');
@@ -1086,8 +1091,10 @@ function renderAssetPricePlans() {
             if (field === 'discountRate') val = parseFloat(val) || 0;
             assetPricePlans[idx][field] = val;
 
-            // 如果修改了原价或折扣率，重新渲染以更新最终价格
+            // 如果修改了原价或折扣率，重新计算最终价格并保存到数组
             if (['originalPrice', 'discountRate'].includes(field)) {
+                const plan = assetPricePlans[idx];
+                plan.price = calculateFinalPrice(plan.originalPrice, plan.discountRate);
                 renderAssetPricePlans();
             }
         });
@@ -1154,15 +1161,19 @@ async function openAssetEditModal(assetId) {
         setVal('assetEditCompatibility', d.compatibility || d.specs?.compatibility);
         setVal('assetEditFileSize', d.fileSize || d.specs?.fileSize || 0);
 
-        assetPricePlans = (d.prices || []).map(p => ({
-            id: p.id,
-            price: p.price ?? 0,
-            originalPrice: p.originalPrice ?? 0,
-            discountRate: p.discountRate ?? 0,
-            duration: p.duration ?? 1,
-            unit: p.unit ?? 'month',
-            stock: p.stock ?? -1
-        }));
+        assetPricePlans = (d.prices || []).map(p => {
+            const originalPrice = p.originalPrice ?? 0;
+            const discountRate = p.discountRate ?? 0;
+            return {
+                id: p.id,
+                price: calculateFinalPrice(originalPrice, discountRate),
+                originalPrice: originalPrice,
+                discountRate: discountRate,
+                duration: p.duration ?? 1,
+                unit: p.unit ?? 'month',
+                stock: p.stock ?? -1
+            };
+        });
         renderAssetPricePlans();
         modal.classList.add('show');
     } catch (err) {
@@ -1215,6 +1226,20 @@ document.getElementById('assetEditSaveBtn')?.addEventListener('click', async () 
             const result = await resp.json().catch(() => ({}));
             if (resp.ok) {
                 showMsg(result.message || (isEdit ? '已更新' : '已创建'), true);
+                
+                // 在保存按钮旁显示成功提示
+                const successLabel = document.createElement('span');
+                successLabel.textContent = isEdit ? '✓ 资源已更新' : '✓ 资源已创建';
+                successLabel.style.cssText = 'color:var(--profile-success);font-size:0.9rem;margin-left:8px;display:inline-flex;align-items:center;gap:4px;';
+                const footer = saveBtn.closest('.modal-footer');
+                if (footer) {
+                    const existing = footer.querySelector('[data-success-label]');
+                    if (existing) existing.remove();
+                    successLabel.setAttribute('data-success-label', '1');
+                    footer.appendChild(successLabel);
+                    setTimeout(() => successLabel.remove(), 2000);
+                }
+                
                 setTimeout(() => { document.getElementById('assetEditModal').classList.remove('show'); loadAdminAssets(adminAssetPage); }, 1000);
             } else {
                 showMsg(result.message || ('保存失败: ' + resp.status), false);
@@ -1493,7 +1518,7 @@ document.getElementById('cdkDeleteConfirmBtn')?.addEventListener('click', async 
 
 // #region 订单 Tab 处理逻辑
 let ordersPage = 1;
-const ordersPageSize = 20;
+const ordersPageSize = 10;
 
 (function initOrdersTab() {
     const tabOrders = document.querySelector('[data-tab="orders"]');
@@ -1691,71 +1716,51 @@ function searchOrders() {
  * 创建订单卡片元素
  */
 function createOrderCard(order) {
-    const card = document.createElement('div');
-    card.className = 'admin-list-item';
-    card.style.cssText = 'display:grid;grid-template-columns:1fr 2fr 1fr 1fr 100px;gap:12px;align-items:center;padding:12px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:6px;border-left:4px solid var(--profile-accent);color:rgba(255,255,255,0.92);;';
-
-    // 获取订单类型标签和颜色
-    const orderTypeMap = {
-        'purchase': { label: '购买资产', color: '#3b82f6' },
-        'cdk': { label: 'CDK兑换', color: '#10b981' },
-        'cancel_subscription': { label: '取消订阅', color: '#f59e0b' },
-        'change_plan': { label: '更变计划', color: '#8b5cf6' },
-        'gold_adjust': { label: '金币调整', color: '#ec4899' }
+    // ── 订单类型元数据 ──────────────────────────────────────────────
+    const ORDER_TYPES = {
+        'purchase':            { label: '购买资产', color: '#3b82f6', bg: 'rgba(59,130,246,0.15)'  },
+        'cdk':                 { label: 'CDK兑换',  color: '#10b981', bg: 'rgba(16,185,129,0.15)'  },
+        'cancel_subscription': { label: '取消订阅', color: '#f59e0b', bg: 'rgba(245,158,11,0.15)'  },
+        'change_plan':         { label: '更变计划', color: '#8b5cf6', bg: 'rgba(139,92,246,0.15)'  },
+        'gold_adjust':         { label: '金币调整', color: '#ec4899', bg: 'rgba(236,72,153,0.15)'  },
     };
-    const orderTypeInfo = orderTypeMap[order.orderType] || { label: order.orderType, color: '#6b7280' };
-    const orderTypeColor = orderTypeInfo.color;
-    const orderTypeLabel = orderTypeInfo.label;
+    const typeInfo = ORDER_TYPES[order.orderType] ?? { label: order.orderType ?? '未知', color: '#6b7280', bg: 'rgba(107,114,128,0.15)' };
 
-    const createdAtDate = new Date(order.createdAt);
-    const createdAtStr = createdAtDate.toLocaleDateString() + ' ' + createdAtDate.toLocaleTimeString();
+    // ── 金币变化 ────────────────────────────────────────────────────
+    let goldClass = 'neutral', goldText = '—';
+    if (order.goldChange > 0)      { goldClass = 'positive'; goldText = '+' + order.goldChange + ' 💰'; }
+    else if (order.goldChange < 0) { goldClass = 'negative'; goldText =       order.goldChange + ' 💰'; }
 
-    const goldChangeColor = order.goldChange > 0 ? '#10b981' : (order.goldChange < 0 ? '#ef4444' : 'rgba(255,255,255,0.5)');
-    const goldChangeLabel = order.goldChange > 0 ? '+' + order.goldChange : (order.goldChange === 0 ? '—' : order.goldChange);
+    // ── 时间格式化 ───────────────────────────────────────────────────
+    const d = new Date(order.createdAt);
+    const dateStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    const timeStr = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-    // 订单 ID 列
-    const idCol = document.createElement('div');
-    idCol.style.cssText = 'overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:0.85rem;color:rgba(255,255,255,0.5);';
-    idCol.title = order.id;
-    idCol.textContent = order.id?.substring(0, 12) || '-';
+    // ── 资产名称 ────────────────────────────────────────────────────
+    const assetName = order.assetName || (order.orderType === 'cdk' ? 'CDK 兑换' : order.orderType === 'gold_adjust' ? '金币调整' : '资产操作');
 
-    // 订单详情列
-    const detailCol = document.createElement('div');
-    detailCol.style.cssText = 'display:flex;flex-direction:column;gap:4px;';
-    const assetNameEl = document.createElement('strong');
-    assetNameEl.textContent = order.assetName || (order.orderType === 'cdk' ? 'CDK 兑换' : '资产购买');
-    const orderTypeEl = document.createElement('span');
-    orderTypeEl.style.cssText = `display:inline-block;width:fit-content;background:${orderTypeColor};color:#fff;padding:2px 6px;border-radius:3px;font-size:0.75rem;font-weight:600;`;
-    orderTypeEl.textContent = orderTypeLabel;
-    detailCol.appendChild(assetNameEl);
-    detailCol.appendChild(orderTypeEl);
+    // ── DOM 构建 ────────────────────────────────────────────────────
+    const card = document.createElement('div');
+    card.className = 'order-card';
+    card.innerHTML = `
+        <div class="order-card-stripe" style="background:${typeInfo.color};"></div>
+        <div class="order-card-inner">
+            <span class="order-type-badge"
+                  style="color:${typeInfo.color};background:${typeInfo.bg};">${typeInfo.label}</span>
+            <div class="order-card-body">
+                <div class="order-asset-name">${escapeHtml(assetName)}</div>
+                <div class="order-meta-row">
+                    <span class="order-id-chip">${(order.id ?? '').substring(0, 10)}…</span>
+                    <span class="order-date">${dateStr} ${timeStr}</span>
+                </div>
+            </div>
+            <div class="order-card-right">
+                <span class="order-gold-change ${goldClass}">${goldText}</span>
+                <span class="order-chevron material-icons">chevron_right</span>
+            </div>
+        </div>`;
 
-    // 金币变化列
-    const goldCol = document.createElement('div');
-    goldCol.style.cssText = `font-weight:600;color:${goldChangeColor};`;
-    goldCol.textContent = goldChangeLabel + ' 💰';
-
-    // 日期列
-    const dateCol = document.createElement('div');
-    dateCol.style.cssText = 'font-size:0.85rem;color:rgba(255,255,255,0.5);';
-    dateCol.textContent = createdAtStr;
-
-    // 操作列
-    const actionCol = document.createElement('div');
-    actionCol.style.cssText = 'text-align:center;';
-    const detailBtn = document.createElement('button');
-    detailBtn.className = 'btn ghost';
-    detailBtn.style.cssText = 'padding:4px 8px;font-size:0.8rem;';
-    detailBtn.textContent = '查看详情';
-    detailBtn.addEventListener('click', () => showOrderDetail(order));
-    actionCol.appendChild(detailBtn);
-
-    card.appendChild(idCol);
-    card.appendChild(detailCol);
-    card.appendChild(goldCol);
-    card.appendChild(dateCol);
-    card.appendChild(actionCol);
-
+    card.addEventListener('click', () => showOrderDetail(order));
     return card;
 }
 
@@ -1763,82 +1768,62 @@ function createOrderCard(order) {
  * 显示订单详情弹窗
  */
 function showOrderDetail(order) {
-    const html = `
-        <div class="modal-overlay show" id="orderDetailModal" style="">
-            <div class="modal-card">
-                <div class="modal-header">
-                    <span class="material-icons icon">receipt</span>
-                    <span>订单详情</span>
-                </div>
-                <div class="modal-body">
-                    <div class="order-detail-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-                        <div>
-                            <label style="font-weight:600;color:rgba(255,255,255,0.7);font-size:0.85rem;">订单 ID</label>
-                            <div style="padding:8px;background:rgba(0,0,0,0.3);border-radius:4px;font-family:monospace;word-break:break-all;color:rgba(255,255,255,0.92);">${escapeHtml(order.id || '-')}</div>
-                        </div>
-                        <div>
-                            <label style="font-weight:600;color:rgba(255,255,255,0.7);font-size:0.85rem;">订单类型</label>
-                            <div style="padding:8px;color:rgba(255,255,255,0.92);">
-                                ${(() => {
-                                    const typeMap = {
-                                        'purchase': '购买资产',
-                                        'cdk': 'CDK兑换',
-                                        'cancel_subscription': '取消订阅',
-                                        'change_plan': '更变计划',
-                                        'gold_adjust': '金币调整'
-                                    };
-                                    return typeMap[order.orderType] || order.orderType;
-                                })()}
-                            </div>
-                        </div>
-                        <div>
-                            <label style="font-weight:600;color:rgba(255,255,255,0.7);font-size:0.85rem;">资产名称</label>
-                            <div style="padding:8px;color:rgba(255,255,255,0.92);">${escapeHtml(order.assetName || '-')}</div>
-                        </div>
-                        <div>
-                            <label style="font-weight:600;color:rgba(255,255,255,0.7);font-size:0.85rem;">金币变化</label>
-                            <div style="padding:8px;color:${order.goldChange > 0 ? '#10b981' : (order.goldChange < 0 ? '#ef4444' : 'rgba(255,255,255,0.5)')};font-weight:600;">${order.goldChange > 0 ? '+' : ''}${order.goldChange}</div>
-                        </div>
-                        <div>
-                            <label style="font-weight:600;color:rgba(255,255,255,0.7);font-size:0.85rem;">金币加减方式</label>
-                            <div style="padding:8px;color:rgba(255,255,255,0.92);">${escapeHtml(order.goldChangeReason || '-')}</div>
-                        </div>
-                        <div>
-                            <label style="font-weight:600;color:rgba(255,255,255,0.7);font-size:0.85rem;">CDK 代码</label>
-                            <div style="padding:8px;font-family:monospace;color:rgba(255,255,255,0.92);">${escapeHtml(order.cdkCode || '-')}</div>
-                        </div>
-                        <div>
-                            <label style="font-weight:600;color:rgba(255,255,255,0.7);font-size:0.85rem;">计划变更</label>
-                            <div style="padding:8px;color:rgba(255,255,255,0.92);">${escapeHtml(order.planTransition || '-')}</div>
-                        </div>
-                        <div>
-                            <label style="font-weight:600;color:rgba(255,255,255,0.7);font-size:0.85rem;">创建时间</label>
-                            <div style="padding:8px;color:rgba(255,255,255,0.92);">${new Date(order.createdAt).toLocaleString()}</div>
-                        </div>
-                        <div style="grid-column:1/-1;">
-                            <label style="font-weight:600;color:rgba(255,255,255,0.7);font-size:0.85rem;">备注</label>
-                            <div style="padding:8px;background:rgba(0,0,0,0.3);border-radius:4px;color:rgba(255,255,255,0.92);">${escapeHtml(order.description || '-')}</div>
-                        </div>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button class="btn" onclick="document.getElementById('orderDetailModal')?.remove()">关闭</button>
-                </div>
-            </div>
-        </div>
-    `;
+    const ORDER_TYPES = {
+        'purchase':            { label: '购买资产', color: '#3b82f6' },
+        'cdk':                 { label: 'CDK兑换',  color: '#10b981' },
+        'cancel_subscription': { label: '取消订阅', color: '#f59e0b' },
+        'change_plan':         { label: '更变计划', color: '#8b5cf6' },
+        'gold_adjust':         { label: '金币调整', color: '#ec4899' },
+    };
+    const typeInfo = ORDER_TYPES[order.orderType] ?? { label: order.orderType ?? '未知', color: '#6b7280' };
+
+    let goldClass = '', goldText = '—';
+    if (order.goldChange > 0)      { goldClass = 'gold-pos'; goldText = '+' + order.goldChange + ' 金币'; }
+    else if (order.goldChange < 0) { goldClass = 'gold-neg'; goldText =       order.goldChange + ' 金币'; }
+    else                            { goldClass = 'muted';   goldText = '无变化'; }
+
+    const REASON_MAP = {
+        'purchase': '购买资产', 'cdk_redeem': 'CDK 兑换', 'plan_change': '更变套餐',
+        'plan_extension': '续期套餐', 'admin': '管理员操作', 'refund': '退款',
+        'bonus': '奖励发放',
+    };
+    const reasonLabel = REASON_MAP[order.goldChangeReason] ?? order.goldChangeReason ?? '—';
+
+    const renderField = (label, value, extra = '') =>
+        `<div class="order-detail-field${extra}">
+            <div class="order-detail-label">${label}</div>
+            <div class="order-detail-value ${value.cls ?? ''}">${value.html ?? escapeHtml(value.text ?? value)}</div>
+        </div>`;
 
     const modal = document.createElement('div');
-    modal.innerHTML = html;
-    const modalEl = modal.firstElementChild;
-    document.body.appendChild(modalEl);
-    
-    // 添加背景点击关闭功能
-    modalEl.addEventListener('click', (e) => {
-        if (e.target === modalEl) {
-            modalEl.remove();
-        }
-    });
+    modal.className = 'modal-overlay show order-detail-modal';
+    modal.id = 'orderDetailModal';
+    modal.innerHTML = `
+        <div class="modal-card">
+            <div class="order-detail-header-strip">
+                <div class="order-detail-type-dot" style="background:${typeInfo.color};"></div>
+                <div class="order-detail-title">${typeInfo.label}</div>
+                <span class="order-detail-gold-badge ${goldClass}">${goldText}</span>
+            </div>
+            <div class="order-detail-grid">
+                ${renderField('订单 ID',    { text: order.id ?? '-',       cls: 'mono' }, ' span-full')}
+                ${renderField('资产名称',   { text: order.assetName ?? '-'               })}
+                ${renderField('创建时间',   { text: new Date(order.createdAt).toLocaleString() })}
+                ${renderField('金币加减方式', { text: reasonLabel                         })}
+                ${renderField('计划变更',   { text: order.planTransition || '—'          })}
+                ${order.cdkCode ? renderField('CDK 代码', { text: order.cdkCode, cls: 'mono' }) : ''}
+                ${renderField('备注',       { text: order.description || '—'            }, ' span-full')}
+            </div>
+            <div class="modal-footer" style="margin-top:20px;">
+                <button class="btn" id="orderDetailClose">关闭</button>
+            </div>
+        </div>`;
+
+    document.body.appendChild(modal);
+
+    const close = () => modal.remove();
+    modal.querySelector('#orderDetailClose').addEventListener('click', close);
+    modal.addEventListener('click', e => { if (e.target === modal) close(); });
 }
 
 /**

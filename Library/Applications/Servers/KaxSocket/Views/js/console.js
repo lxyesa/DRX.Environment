@@ -51,7 +51,42 @@
         location.href = '/login';
     }
 
-    /** 验证用户令牌，确保有管理员权限 */
+    /** 渲染权限不足的错误页面（403 Forbidden），不跳转、不泄露重定向目标 */
+    function showForbiddenPage(permissionGroup) {
+        document.body.innerHTML = [
+            '<div style="',
+            '  display:flex;flex-direction:column;align-items:center;justify-content:center;',
+            '  min-height:100vh;background:#0d0d0d;font-family:monospace;color:#e0e0e0;',
+            '  user-select:none;',
+            '">',
+            '  <div style="',
+            '    border:1px solid #ff4444;border-radius:8px;padding:48px 56px;max-width:480px;',
+            '    text-align:center;background:#1a0000;box-shadow:0 0 40px rgba(255,68,68,.2);',
+            '  ">',
+            '    <div style="font-size:64px;line-height:1;color:#ff4444;margin-bottom:16px;">⛔</div>',
+            '    <h1 style="font-size:22px;color:#ff4444;margin:0 0 8px;letter-spacing:.05em;">403 — ACCESS DENIED</h1>',
+            '    <p style="font-size:13px;color:#888;margin:0 0 24px;line-height:1.7;">',
+            '      您的账号权限等级（' + Number(permissionGroup) + '）不满足访问控制台的最低要求。<br>',
+            '      此页面仅对具有特权的系统账号开放，普通用户无权进入。',
+            '    </p>',
+            '    <div style="border-top:1px solid #330000;padding-top:20px;font-size:11px;color:#555;">',
+            '      PERMISSION GROUP &gt; 3 &nbsp;·&nbsp; CONSOLE ACCESS RESTRICTED',
+            '    </div>',
+            '    <a href="/" style="',
+            '      display:inline-block;margin-top:24px;padding:8px 28px;',
+            '      border:1px solid #444;border-radius:4px;color:#999;',
+            '      text-decoration:none;font-size:12px;letter-spacing:.05em;',
+            '      transition:border-color .2s,color .2s;',
+            '    " onmouseover="this.style.borderColor=\'#888\';this.style.color=\'#ddd\'"',
+            '       onmouseout="this.style.borderColor=\'#444\';this.style.color=\'#999\'">',
+            '      返回首页',
+            '    </a>',
+            '  </div>',
+            '</div>',
+        ].join('');
+    }
+
+    /** 验证用户令牌，并严格检查权限等级（permissionGroup > 3 的用户一律拒绝） */
     async function verifyToken() {
         try {
             var token = localStorage.getItem('kax_login_token');
@@ -63,6 +98,16 @@
             });
 
             if (resp.status === 200) {
+                var data;
+                try { data = await resp.json(); } catch (_) { data = {}; }
+
+                // 风控：权限大于 3（如 User=100）的账号禁止进入控制台
+                var pg = typeof data.permissionGroup !== 'undefined' ? Number(data.permissionGroup) : 999;
+                if (pg > 3) {
+                    showForbiddenPage(pg);
+                    return;
+                }
+
                 page.classList.remove('hidden');
                 initConsole();
             } else {

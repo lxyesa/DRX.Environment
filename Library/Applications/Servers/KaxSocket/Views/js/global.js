@@ -276,6 +276,7 @@
             if (path.indexOf('/profile') === 0) return 'profile';
             if (path.indexOf('/cdk/admin') === 0) return 'cdkadmin';
             if (path.indexOf('/asset/admin') === 0) return 'assetadmin';
+            if (path.indexOf('/developer') === 0) return 'developer';
             if (path.indexOf('/404') === 0) return '404';
             return 'default';
         }

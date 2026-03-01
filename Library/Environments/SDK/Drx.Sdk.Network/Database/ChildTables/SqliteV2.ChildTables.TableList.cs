@@ -15,6 +15,30 @@ public partial class SqliteV2<T> where T : class, IDataBase, new()
     #region TableList<IDataTableV2> 子表操作
 
     /// <summary>
+    /// 确保实体上所有 TableList 子属性已正确初始化（有 connectionString、parentId、tableName）。
+    /// Insert / Update 时如果业务代码用 new TableList&lt;X&gt;() 替换了属性值，
+    /// 新实例尚未初始化，SyncChanges 会直接 return，导致子表数据丢失。
+    /// </summary>
+    private void InitializeTableListProperties(T entity)
+    {
+        foreach (var childListProp in _dataTableListProperties)
+        {
+            if (!IsTableList(childListProp.PropertyType))
+                continue;
+
+            var childList = childListProp.GetValue(entity);
+            if (childList == null)
+                continue;
+
+            var fullTableName = $"{_tableName}_{childListProp.Name}";
+            var initMethod = childList.GetType().GetMethod("InitializeWithTableName",
+                BindingFlags.NonPublic | BindingFlags.Instance);
+
+            initMethod?.Invoke(childList, new object[] { _connectionString, entity.Id, fullTableName });
+        }
+    }
+
+    /// <summary>
     /// 同步 TableList 子表变更到数据库
     /// 在 Insert 时也需要调用此方法来确保新插入的主表能同步其 TableList 子表数据
     /// </summary>

@@ -28,6 +28,9 @@ public partial class SqliteV2<T> where T : class, IDataBase, new()
         {
             InsertInternal(connection, transaction, entity);
             
+            // 在同步 TableList 之前，确保所有 TableList 子属性已初始化
+            InitializeTableListProperties(entity);
+            
             // 同步 TableList 子表数据
             SyncTableListChanges(connection, transaction, entity);
             

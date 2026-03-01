@@ -1,9 +1,10 @@
 using System;
+using System.Buffers;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
+using System.IO.Hashing;
 using System.Linq;
-using System.Security.Cryptography;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -28,6 +29,8 @@ namespace Drx.Sdk.Network.Http.ResourceManagement
         private const string SubIndexPrefix = ".drx_resource_index_";
         private const string SubIndexSuffix = ".json";
         private const int FileHashBufferSize = 1024 * 1024;
+        private const long LargeFileSamplingThreshold = 50 * 1024 * 1024; // 50MB 以上使用采样哈希
+        private const int SampleSize = 64 * 1024; // 64KB per sample
 
         private readonly string _resourceRoot;
         private readonly string _mainIndexPath;
@@ -37,6 +40,7 @@ namespace Drx.Sdk.Network.Http.ResourceManagement
         private ResourceIndexDocument _mainIndex;
         private readonly ConcurrentDictionary<string, ResourceIndexDocument> _subIndexes = new();
         private readonly ConcurrentDictionary<string, ResourceIndexEntry> _memoryIndex = new();
+        private readonly ConcurrentDictionary<string, string> _pathToIdIndex = new(StringComparer.OrdinalIgnoreCase); // 路径反向索引
         private readonly SemaphoreSlim _indexLock = new(1, 1);
         private readonly SemaphoreSlim _saveLock = new(1, 1);
 
@@ -197,7 +201,7 @@ namespace Drx.Sdk.Network.Http.ResourceManagement
                     if (entry != null)
                     {
                         targetIndex.Entries[entry.Id] = entry;
-                        _memoryIndex[entry.Id] = entry;
+                        AddToMemoryIndex(entry);
                     }
                 }));
             }
@@ -271,7 +275,7 @@ namespace Drx.Sdk.Network.Http.ResourceManagement
 
                 foreach (var entry in subIndex.Entries.Values)
                 {
-                    _memoryIndex[entry.Id] = entry;
+                    AddToMemoryIndex(entry);
                 }
 
                 Logger.Info("ResourceIndex", $"加载子索引: {subIndexName}，包含 {subIndex.Entries.Count} 个条目");
@@ -337,12 +341,12 @@ namespace Drx.Sdk.Network.Http.ResourceManagement
                             {
                                 updatedEntry.Id = entry.Id;
                                 _mainIndex.Entries[kvp.Key] = updatedEntry;
-                                _memoryIndex[entry.Id] = updatedEntry;
+                                AddToMemoryIndex(updatedEntry);
                             }
                         }
                         else
                         {
-                            _memoryIndex[entry.Id] = entry;
+                            AddToMemoryIndex(entry);
                         }
                     }
                     catch
@@ -355,7 +359,7 @@ namespace Drx.Sdk.Network.Http.ResourceManagement
                 foreach (var id in invalidIds)
                 {
                     _mainIndex.Entries.Remove(id);
-                    _memoryIndex.TryRemove(id, out _);
+                    RemoveFromMemoryIndex(id);
                     removedCount++;
                 }
 
@@ -406,7 +410,7 @@ namespace Drx.Sdk.Network.Http.ResourceManagement
                     foreach (var entry in newEntries)
                     {
                         _mainIndex.Entries[entry.Id] = entry;
-                        _memoryIndex[entry.Id] = entry;
+                        AddToMemoryIndex(entry);
                     }
                     _mainIndex.UpdatedAt = DateTime.UtcNow;
                     await SaveIndexToDiskAsync().ConfigureAwait(false);
@@ -420,7 +424,7 @@ namespace Drx.Sdk.Network.Http.ResourceManagement
         }
 
         /// <summary>
-        /// 递归扫描目录中的新文件
+        /// 递归扫描目录中的新文件（并行处理文件，提升大目录扫描性能）
         /// </summary>
         private async Task ScanForNewFilesInDirectoryAsync(string directory, HashSet<string> existingPaths, ConcurrentBag<ResourceIndexEntry> newEntries)
         {
@@ -431,19 +435,30 @@ namespace Drx.Sdk.Network.Http.ResourceManagement
 
             try
             {
-                foreach (var filePath in Directory.GetFiles(directory))
-                {
-                    var fileName = Path.GetFileName(filePath);
-                    if (IsIndexFile(fileName) || ShouldExclude(fileName)) continue;
-
-                    var relativePath = GetRelativePath(filePath);
-                    if (!existingPaths.Contains(relativePath))
+                // 收集需要处理的新文件
+                var filesToProcess = Directory.GetFiles(directory)
+                    .Where(filePath =>
                     {
-                        var entry = await CreateEntryFromFileAsync(filePath).ConfigureAwait(false);
-                        if (entry != null) newEntries.Add(entry);
-                    }
+                        var fileName = Path.GetFileName(filePath);
+                        if (IsIndexFile(fileName) || ShouldExclude(fileName)) return false;
+                        var relativePath = GetRelativePath(filePath);
+                        return !existingPaths.Contains(relativePath);
+                    })
+                    .ToList();
+
+                // 并行处理文件，限制并发度避免磁盘 IO 过载
+                if (filesToProcess.Count > 0)
+                {
+                    await Parallel.ForEachAsync(filesToProcess,
+                        new ParallelOptions { MaxDegreeOfParallelism = Math.Min(Environment.ProcessorCount, 8) },
+                        async (filePath, ct) =>
+                        {
+                            var entry = await CreateEntryFromFileAsync(filePath).ConfigureAwait(false);
+                            if (entry != null) newEntries.Add(entry);
+                        }).ConfigureAwait(false);
                 }
 
+                // 递归处理子目录
                 foreach (var subdir in Directory.GetDirectories(directory))
                 {
                     var dirName = Path.GetFileName(subdir);
@@ -476,7 +491,7 @@ namespace Drx.Sdk.Network.Http.ResourceManagement
             try
             {
                 _mainIndex.Entries[entry.Id] = entry;
-                _memoryIndex[entry.Id] = entry;
+                AddToMemoryIndex(entry);
                 _mainIndex.UpdatedAt = DateTime.UtcNow;
             }
             finally
@@ -516,7 +531,7 @@ namespace Drx.Sdk.Network.Http.ResourceManagement
                 {
                     subIndex.Entries[entry.Id] = entry;
                     subIndex.UpdatedAt = DateTime.UtcNow;
-                    _memoryIndex[entry.Id] = entry;
+                    AddToMemoryIndex(entry);
                 }
                 else
                 {
@@ -530,7 +545,7 @@ namespace Drx.Sdk.Network.Http.ResourceManagement
                     };
                     subIndex.Entries[entry.Id] = entry;
                     _subIndexes[subIndexName] = subIndex;
-                    _memoryIndex[entry.Id] = entry;
+                    AddToMemoryIndex(entry);
 
                     var relativePath = GetRelativePath(directory);
                     _mainIndex.SubIndexes[subIndexName] = relativePath;
@@ -576,12 +591,16 @@ namespace Drx.Sdk.Network.Http.ResourceManagement
         }
 
         /// <summary>
-        /// 根据相对路径查询索引条目
+        /// 根据相对路径查询索引条目（O(1) 时间复杂度，使用反向索引）
         /// </summary>
         public ResourceIndexEntry? GetByPath(string relativePath)
         {
-            return _memoryIndex.Values.FirstOrDefault(e =>
-                string.Equals(e.RelativePath, relativePath, StringComparison.OrdinalIgnoreCase));
+            if (_pathToIdIndex.TryGetValue(relativePath, out var id))
+            {
+                _memoryIndex.TryGetValue(id, out var entry);
+                return entry;
+            }
+            return null;
         }
 
         /// <summary>
@@ -784,7 +803,7 @@ namespace Drx.Sdk.Network.Http.ResourceManagement
                             if (updatedEntry != null)
                             {
                                 updatedEntry.Id = existing.Id;
-                                _memoryIndex[existing.Id] = updatedEntry;
+                                AddToMemoryIndex(updatedEntry);
                                 await _indexLock.WaitAsync().ConfigureAwait(false);
                                 try
                                 {
@@ -864,7 +883,7 @@ namespace Drx.Sdk.Network.Http.ResourceManagement
 
                 foreach (var entry in document.Entries.Values)
                 {
-                    _memoryIndex[entry.Id] = entry;
+                    AddToMemoryIndex(entry);
                 }
 
                 foreach (var kvp in document.SubIndexes)
@@ -881,7 +900,7 @@ namespace Drx.Sdk.Network.Http.ResourceManagement
                             {
                                 _subIndexes[kvp.Key] = subIndex;
                                 foreach (var entry in subIndex.Entries.Values)
-                                    _memoryIndex[entry.Id] = entry;
+                                    AddToMemoryIndex(entry);
                             }
                         }
                         catch (Exception ex)
@@ -967,6 +986,29 @@ namespace Drx.Sdk.Network.Http.ResourceManagement
         #region 工具方法
 
         /// <summary>
+        /// 将索引条目添加到内存索引并维护路径反向索引
+        /// </summary>
+        private void AddToMemoryIndex(ResourceIndexEntry entry)
+        {
+            _memoryIndex[entry.Id] = entry;
+            if (!string.IsNullOrEmpty(entry.RelativePath))
+            {
+                _pathToIdIndex[entry.RelativePath] = entry.Id;
+            }
+        }
+
+        /// <summary>
+        /// 从内存索引中移除条目并清理路径反向索引
+        /// </summary>
+        private void RemoveFromMemoryIndex(string id)
+        {
+            if (_memoryIndex.TryRemove(id, out var entry) && !string.IsNullOrEmpty(entry.RelativePath))
+            {
+                _pathToIdIndex.TryRemove(entry.RelativePath, out _);
+            }
+        }
+
+        /// <summary>
         /// 从文件创建索引条目（计算哈希、获取元数据）
         /// </summary>
         private async Task<ResourceIndexEntry?> CreateEntryFromFileAsync(string filePath)
@@ -995,22 +1037,99 @@ namespace Drx.Sdk.Network.Http.ResourceManagement
         }
 
         /// <summary>
-        /// 计算文件哈希（SHA256 前 16 字节的十六进制表示，兼顾安全性和性能）
+        /// 计算文件哈希（xxHash64，高性能非加密哈希，适用于文件完整性校验）
+        /// 对于大文件（超过 50MB）使用采样哈希策略以提升性能
         /// </summary>
         private static async Task<string> ComputeFileHashAsync(string filePath)
         {
             try
             {
-                using var sha256 = SHA256.Create();
-                using var stream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read,
-                    FileHashBufferSize, FileOptions.Asynchronous | FileOptions.SequentialScan);
+                var fileInfo = new FileInfo(filePath);
+                if (!fileInfo.Exists) return string.Empty;
 
-                var hashBytes = await sha256.ComputeHashAsync(stream).ConfigureAwait(false);
-                return Convert.ToHexString(hashBytes, 0, 16).ToLowerInvariant();
+                // 大文件使用采样哈希
+                if (fileInfo.Length > LargeFileSamplingThreshold)
+                {
+                    return await ComputeSampledHashAsync(filePath, fileInfo.Length).ConfigureAwait(false);
+                }
+
+                // 标准文件使用完整哈希
+                return await ComputeFullHashAsync(filePath).ConfigureAwait(false);
             }
             catch
             {
                 return string.Empty;
+            }
+        }
+
+        /// <summary>
+        /// 计算完整文件的 xxHash64
+        /// </summary>
+        private static async Task<string> ComputeFullHashAsync(string filePath)
+        {
+            var xxHash = new XxHash64();
+            var buffer = ArrayPool<byte>.Shared.Rent(FileHashBufferSize);
+            try
+            {
+                await using var stream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read,
+                    FileHashBufferSize, FileOptions.Asynchronous | FileOptions.SequentialScan);
+
+                int bytesRead;
+                while ((bytesRead = await stream.ReadAsync(buffer.AsMemory(0, FileHashBufferSize)).ConfigureAwait(false)) > 0)
+                {
+                    xxHash.Append(buffer.AsSpan(0, bytesRead));
+                }
+
+                return Convert.ToHexString(xxHash.GetCurrentHash()).ToLowerInvariant();
+            }
+            finally
+            {
+                ArrayPool<byte>.Shared.Return(buffer);
+            }
+        }
+
+        /// <summary>
+        /// 大文件采样哈希：头部 + 中间 + 尾部 + 文件大小
+        /// 在保证合理准确性的同时大幅提升大文件处理速度
+        /// </summary>
+        private static async Task<string> ComputeSampledHashAsync(string filePath, long fileSize)
+        {
+            var xxHash = new XxHash64();
+            var buffer = ArrayPool<byte>.Shared.Rent(SampleSize);
+            try
+            {
+                await using var stream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read,
+                    SampleSize, FileOptions.Asynchronous);
+
+                // 读取头部
+                var headRead = await stream.ReadAsync(buffer.AsMemory(0, SampleSize)).ConfigureAwait(false);
+                xxHash.Append(buffer.AsSpan(0, headRead));
+
+                // 读取中间
+                var midPosition = fileSize / 2 - SampleSize / 2;
+                if (midPosition > SampleSize)
+                {
+                    stream.Seek(midPosition, SeekOrigin.Begin);
+                    var midRead = await stream.ReadAsync(buffer.AsMemory(0, SampleSize)).ConfigureAwait(false);
+                    xxHash.Append(buffer.AsSpan(0, midRead));
+                }
+
+                // 读取尾部
+                if (fileSize > SampleSize * 2)
+                {
+                    stream.Seek(-SampleSize, SeekOrigin.End);
+                    var tailRead = await stream.ReadAsync(buffer.AsMemory(0, SampleSize)).ConfigureAwait(false);
+                    xxHash.Append(buffer.AsSpan(0, tailRead));
+                }
+
+                // 包含文件大小以防止碰撞
+                xxHash.Append(BitConverter.GetBytes(fileSize));
+
+                return Convert.ToHexString(xxHash.GetCurrentHash()).ToLowerInvariant();
+            }
+            finally
+            {
+                ArrayPool<byte>.Shared.Return(buffer);
             }
         }
 

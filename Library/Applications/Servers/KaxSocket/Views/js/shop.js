@@ -1,4 +1,4 @@
-/* ================================================================
+﻿/* ================================================================
          *  ShopApp — 商城页面核心控制器
          *  职责划分：
          *    • Auth     — 登录令牌与请求头
@@ -72,6 +72,32 @@
                 return date.toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' });
             }
 
+            /** HTML 转义 */
+            function escapeHtml(value) {
+                const div = document.createElement('div');
+                div.textContent = String(value ?? '');
+                return div.innerHTML;
+            }
+
+            /** 兼容后端 camelCase/PascalCase 字段读取 */
+            function getAssetField(asset, camelKey, pascalKey) {
+                return asset?.[camelKey] ?? asset?.[pascalKey];
+            }
+
+            /** 兼容截图字段：数组 或 分号/逗号分隔字符串 */
+            function normalizeMediaArray(raw) {
+                if (Array.isArray(raw)) {
+                    return raw.map(v => String(v || '').trim()).filter(Boolean);
+                }
+                if (typeof raw === 'string') {
+                    return raw
+                        .split(/[;,，\n\r]+/)
+                        .map(v => v.trim())
+                        .filter(Boolean);
+                }
+                return [];
+            }
+
             /** 从产品列表中提取唯一的分类并排序 */
             function extractCategories() {
                 const categories = new Set();
@@ -97,10 +123,14 @@
                     const items = body?.data?.items ?? body?.items ?? [];
 
                     state.products = items.map(a => ({
+                        // 媒体资源字段兼容：AssetModel 可能为 camelCase 或 PascalCase
+                        coverImage: getAssetField(a, 'coverImage', 'CoverImage') || '',
+                        iconImage: getAssetField(a, 'iconImage', 'IconImage') || '',
+                        screenshots: normalizeMediaArray(getAssetField(a, 'screenshots', 'Screenshots')),
                         id: Number(a.id) || a.id,
                         name: a.name,
                         desc: a.description || '',
-                        price: a.price ?? (a.prices?.length > 0 ? a.prices[0].price : 0),
+                        price: a.priceYuan ?? a.price ?? (a.prices?.length > 0 ? (a.prices[0].priceYuan ?? a.prices[0].price) : 0),
                         prices: a.prices || [],
                         category: a.category || '',
                         icon: '📦',
@@ -108,7 +138,6 @@
                         downloads: a.downloads ?? (a.specs?.downloads ?? 0),
                         purchaseCount: a.purchaseCount ?? (a.specs?.purchaseCount ?? 0),
                         lastUpdatedAt: a.lastUpdatedAt ?? (a.specs?.lastUpdatedAt ?? 0),
-                        primaryImage: a.primaryImage || '',
                         rating: a.rating ?? (a.specs?.rating ?? 0),
                         reviewCount: a.reviewCount ?? (a.specs?.reviewCount ?? 0)
                     }));
@@ -267,10 +296,14 @@
                 const cartTitle = inCart ? '已在购物车中，点击可移除' : '加入购物车';
                 const cartDisabled = '';
                 const downloadsText = product.downloads > 0 ? `${product.downloads}` : '0';
+                const imageUrl = product.iconImage || product.coverImage || product.screenshots?.[0] || '';
+                const imageHtml = imageUrl
+                    ? `<img src="${escapeHtml(imageUrl)}" alt="${escapeHtml(product.name || '')}" loading="lazy" style="width:100%;height:100%;object-fit:cover;">`
+                    : product.icon;
 
                 return `
                 <div class="product-card">
-                    <div class="product-image">${product.icon}</div>
+                    <div class="product-image">${imageHtml}</div>
                     <div class="product-content">
                         ${product.category ? `<span class="product-category-tag">${product.category}</span>` : ''}
                         <div class="product-name">${product.name}</div>

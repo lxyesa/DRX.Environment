@@ -1,669 +1,1437 @@
-## KaxSocket — HTTP API 使用说明书（摘自 `KaxHttp.cs`） ✅
+# KaxSocket HTTP API 文档
 
-简短说明：下面列出当前服务器实现的所有公开 HTTP 接口、认证/权限要求、请求/响应示例、速率限制与常见错误。按需拷贝示例 curl 请求即可测试。💡
-警告：该条目使用AI生成。
+## 目录
 
----
-
-## 快速一览（端点索引）
-| 路径 | 方法 | 认证 | 速率限制 | 用途 |
-|---|---:|---|---:|---|
-| `/api/user/register` | POST | 无 | 3 / 60s | 注册用户 |
-| `/api/user/login` | POST | 无 | 5 / 60s | 登录，返回 `login_token` |
-| `/api/user/verify/account` | POST | Bearer token | 60 / 60s | 验证令牌并返回权限信息 |
-| `/api/user/profile` | GET | Bearer token | 60 / 60s | 获取当前登录用户的资料 |
-| `/api/user/profile/{uid}` | GET | Bearer token | 60 / 60s | 获取指定用户的资料（公开信息） |
-| `/api/user/profile` | POST | Bearer token | 10 / 60s | 更新当前用户的资料（需 targetUid 参数） |
-| `/api/user/password` | POST | Bearer token | 6 / 60s | 修改用户密码 |
-| `/api/user/avatar/{userId}` | GET | 无（公开） | 120 / 60s | 获取用户头像 |
-| `/api/user/avatar` | POST | Bearer token | 10 / 60s | 上传用户头像 |
-| `/api/user/stats` | GET | Bearer token | 60 / 60s | 获取用户统计信息 |
-| `/api/user/unban?{userName}?{dev_code}` | POST | 无（需 dev_code） | — | 解除封禁（开发者码） |
-| `/api/user/verify/asset/{assetId}` | GET | Bearer token | 60 / 60s | 校验用户是否拥有指定 asset |
-| `/api/user/verify/asset/{assetId}/raw` | GET | Bearer token | 60 / 60s | 返回用户对 asset 的原始激活记录（activatedAt / expiresAt） |
-| `/api/user/verify/asset/{assetId}/remaining` | GET | Bearer token | 60 / 60s | 返回 asset 的剩余时间（秒），永久返回 -1 |
-| `/api/user/assets/active` | GET | Bearer token | 60 / 60s | 获取当前用户的激活资源列表 |
-| `/api/user/favorites` | GET | Bearer token | 60 / 60s | 获取用户收藏列表 |
-| `/api/user/favorites` | POST | Bearer token | 60 / 60s | 添加资源到收藏 |
-| `/api/user/favorites/{assetId}` | DELETE | Bearer token | 60 / 60s | 从收藏中移除资源 |
-| `/api/user/cart` | GET | Bearer token | 60 / 60s | 获取购物车 |
-| `/api/user/cart` | POST | Bearer token | 60 / 60s | 添加资源到购物车 |
-| `/api/user/cart/{assetId}` | DELETE | Bearer token | 60 / 60s | 从购物车移除资源 |
-| `/api/shop/purchase` | POST | Bearer token | 20 / 60s | 购买资源 |
-| `/api/cdk/activate` | POST | Bearer token | 20 / 60s | 激活 CDK 代码 |
-| `/api/cdk/admin/inspect` | POST | Bearer token (Admin) | 60 / 60s | 检查 CDK 信息 |
-| `/api/cdk/admin/generate` | POST | Bearer token (Admin) | 10 / 60s | 生成 CDK 代码 |
-| `/api/cdk/admin/save` | POST | Bearer token (Admin) | 5 / 60s | 保存 CDK 代码 |
-| `/api/cdk/admin/delete` | POST | Bearer token (Admin) | 180 / 60s | 删除 CDK 代码 |
-| `/api/cdk/admin/list` | GET | Bearer token (Admin) | 60 / 60s | 列出 CDK 代码 |
-| `/api/asset/admin/create` | POST | Bearer token (Admin) | 10 / 60s | 创建资源 |
-| `/api/asset/admin/update` | POST | Bearer token (Admin) | 10 / 60s | 更新资源 |
-| `/api/asset/admin/inspect` | POST | Bearer token (Admin) | 60 / 60s | 查询资源详情 |
-| `/api/asset/admin/delete` | POST | Bearer token (Admin) | 10 / 60s | 删除资源（软删除） |
-| `/api/asset/admin/restore` | POST | Bearer token (Admin) | 10 / 60s | 恢复资源 |
-| `/api/asset/admin/list` | GET | Bearer token (Admin) | 无限制 | 列出资源（分页） |
-| `/api/asset/list` | GET | 无（公开） | 60 / 60s | 获取资源列表 |
-| `/api/asset/category/{category}` | GET | 无（公开） | 60 / 60s | 按分类获取资源 |
-| `/api/asset/name/{assetId}` | GET | 无（公开） | 120 / 60s | 通过 assetId 获取资源名 |
-| `/api/asset/detail/{id}` | GET | 无（公开） | 120 / 60s | 获取资源详情 |
-| `/api/asset/{assetId}/plans` | GET | Bearer token | 60 / 60s | 获取资源的套餐列表 |
-| `/api/asset/{assetId}/changePlan` | POST | Bearer token | 10 / 60s | 更变资源套餐 |
-| `/api/asset/{assetId}/unsubscribe` | POST | Bearer token | 10 / 60s | 取消资源订阅 |
+1. [概述](#概述)
+2. [全局配置](#全局配置)
+3. [认证](#认证)
+4. [API 端点](#api-端点)
+   - [用户认证](#用户认证)
+   - [用户资料](#用户资料)
+   - [用户资产](#用户资产)
+   - [资源管理](#资源管理)
+   - [资源查询](#资源查询)
+   - [资源验证](#资源验证)
+   - [购物与订阅](#购物与订阅)
+   - [订单管理](#订单管理)
+   - [CDK 管理](#cdk-管理)
+   - [系统控制台](#系统控制台)
+5. [错误响应](#错误响应)
+6. [命令系统](#命令系统)
 
 ---
 
-## 认证 & 权限
-- 认证：在受保护接口中使用 `Authorization: Bearer <login_token>`。token 来自 `/api/user/login` 返回的 `login_token`。
-- 管理权限（CDK / Asset 管理）：用户需属于权限组 `Console`、`Root` 或 `Admin`（由后端 `IsCdkAdminUser` / `IsAssetAdminUser` 校验）。
-- 被封禁用户：若账号被封禁会收到 HTTP 403（Forbidden）。
+## 概述
 
-> 重要：触发速率限制时框架会调用 `RateLimitCallback` —— 若短时间内过多（count > 20），会**自动封禁用户 60 秒**。
+KaxSocket 是一个功能完整的资产/商品销售平台 HTTP 服务器，采用 **Partial Classes** 分离不同功能模块。
 
----
+### 核心特性
 
-## 详细接口说明（带示例）
+- **认证方式**：JWT Bearer Token（有效期 1 小时）
+- **速率限制**：支持端点级别的请求限制，超限自动封禁用户
+- **权限管理**：基于权限组的访问控制（System > Console > Admin > User）
+- **数据库**：SQLite V2 ORM + TableList 一对多关系
+- **即时通信**：SSE 日志推送（控制台模块）
 
-### 1) 用户注册 — POST /api/user/register
-- 请求体（JSON）:
-  ```json
-  { "username":"alice", "password":"P@ssword1", "email":"a@ex.com" }
-  ```
-- 验证：
-  - username 长度 5–12
-  - password 最少 8
-  - email 合法
-- 成功：201 "注册成功。"
-- 常见错误：400（格式/字段）、409（用户名或邮箱已注册）、500（服务器错误）
-- 速率：3 次 / 60 秒
+### 权限组说明
+
+| 权限组 | 值 | 权限 |
+|-------|---|------|
+| System | 0 | 最高权限，系统内部使用 |
+| Console | 1 | 控制台权限，可执行命令 |
+| Admin | 2 | 管理员权限，可管理资源和 CDK |
+| User | 3 | 普通用户权限 |
+| Banned | 4 | 已封禁用户 |
 
 ---
 
-### 2) 用户登录 — POST /api/user/login
-- 请求体（JSON）:
-  ```json
-  { "username":"alice", "password":"P@ssword1" }
-  ```
-- 成功响应（200）:
-  ```json
-  { "message":"登录成功。", "login_token":"<JWT>" }
-  ```
-- 错误：401（用户名或密码错误）、400（请求体为空）
-- 速率：5 次 / 60 秒
+## 全局配置
 
-示例（获取 token 后调用受保护接口）：
-- curl 登录：
-  curl -X POST -H "Content-Type: application/json" -d '{"username":"alice","password":"..."}' http://host/api/user/login
+### JWT 配置
 
----
-
-### 3) 验证登录与权限 — POST /api/user/verify/account
-- 认证：必须带 `Authorization: Bearer <token>`
-- 返回示例：
-  ```json
-  {
-    "message":"令牌有效，欢迎您！",
-    "user":"alice",
-    "permissionGroup":2,
-    "isAdmin": true
-  }
-  ```
-- 错误：401（无效令牌）、403（账号被封禁）、404（用户不存在）
-- 速率：60 次 / 60 秒（触发回调）
-
----
-
-### 3.5) 获取用户资料 — GET /api/user/profile 与 GET /api/user/profile/{uid}
-- 认证：必须带 `Authorization: Bearer <token>`
-- 说明：
-  - `GET /api/user/profile` — 返回当前登录用户的资料（完整信息）
-  - `GET /api/user/profile/{uid}` — 返回指定 UID 用户的资料（公开信息）
-- 返回示例：
-  ```json
-  {
-    "id": 123,
-    "user": "alice",
-    "displayName": "Alice Smith",
-    "email": "alice@example.com",
-    "bio": "Software Engineer",
-    "signature": "Best regards",
-    "registeredAt": 1670000000,
-    "lastLoginAt": 1670100000,
-    "permissionGroup": 3,
-    "isBanned": false,
-    "bannedAt": 0,
-    "banExpiresAt": 0,
-    "banReason": "",
-    "avatarUrl": "/api/user/avatar/123?v=1670100000",
-    "resourceCount": 5,
-    "gold": 100,
-    "recentActivity": 10,
-    "cdkCount": 3
-  }
-  ```
-- 错误：401（未授权）、403（账号被封禁）、404（用户不存在）
-- 速率：60 次 / 60 秒（触发回调）
-
----
-
-### 3.6) 更新用户资料 — POST /api/user/profile
-- 认证：必须带 `Authorization: Bearer <token>`
-- 请求体（JSON）：
-  ```json
-  {
-    "displayName": "Alice Smith",
-    "email": "alice@example.com",
-    "bio": "Software Engineer",
-    "signature": "Best regards",
-    "targetUid": 123
-  }
-  ```
-- 参数说明：
-  - `displayName`（可选）：显示名称，1–100 字符
-  - `email`（可选）：电子邮箱，必须合法且唯一
-  - `bio`（可选）：个人简介，最多 500 字符
-  - `signature`（可选）：签名，最多 200 字符
-  - `targetUid`（必填）：目标用户 ID，**必须与当前登录用户 ID 一致**，否则返回 403
-- 成功响应（200）：
-  ```json
-  { "message": "资料已更新" }
-  ```
-- 权限验证：
-  - 若 `targetUid` 与当前用户 ID 不一致，返回 **403 Forbidden**（无权修改他人资料）
-  - 若 `targetUid` 参数缺失或无效，返回 **400 Bad Request**
-- 错误：400（参数无效）、401（未授权）、403（无权修改他人资料）、404（用户不存在）、409（邮箱已被占用）
-- 速率：10 次 / 60 秒（触发回调）
-
----
-
-### 4) 开发者解除封禁 — POST /api/user/unban?{userName}?{dev_code}
-- 路径参数：`userName`, `dev_code`（必须为 `yuerzuikeai001`）
-- 注意：无登录即可调用（仅靠 dev_code）——仅限开发/运维工具使用
-- 成功：200，403（dev_code 不正确）
-
----
-
-### 5) 校验用户是否拥有资源 — GET /api/user/verify/asset/{assetId}
-- 认证：Bearer token
-- 返回（HTTP 200）样例：
-  - 拥有： `{ "assetId": 123, "has": true, "code": 0 }`
-  - 不拥有： `{ "assetId": 123, "has": false, "code": 2004 }`
-- 参数：`assetId` 必须为 > 0 的整数
-- 错误：401（未授权）、403（被封禁）、400（assetId 无效）
-- 速率：60 次 / 60 秒（触发回调）
-
----
-
-### 6) 获取当前用户的激活资源列表 — GET /api/user/assets/active
-- 认证：Bearer token
-- 返回（HTTP 200）样例：
-   ```json
-   {
-      "code": 0,
-      "message": "成功",
-      "data": [
-         { "id": 1, "assetId": 123, "activatedAt": 1670000000000, "expiresAt": 0, "remainingSeconds": -1 },
-         { "id": 2, "assetId": 124, "activatedAt": 1670001000000, "expiresAt": 1672593000000, "remainingSeconds": 2592000 }
-      ]
-   }
-   ```
-- 字段说明：
-   - id: 激活记录 id（内部使用）
-   - assetId: 资源 id
-   - activatedAt / expiresAt: 以毫秒为单位的时间戳（UTC）
-   - remainingSeconds: 剩余秒数；若永久则为 -1
-- 错误：401（未授权）、403（被封禁）、404（用户不存在）
-- 速率：60 次 / 60 秒
-
----
-
-### 7) 返回资产原始激活记录（raw）— GET /api/user/verify/asset/{assetId}/raw
-- 认证：Bearer token
-- 返回（HTTP 200）样例：
-   - 拥有： `{ "assetId": 123, "activatedAt": 1670000000000, "expiresAt": 0, "has": true, "code": 0 }`
-   - 不拥有： `{ "assetId": 123, "activatedAt": 0, "expiresAt": 0, "has": false, "code": 2004 }`
-- 参数：`assetId` 必须为 > 0 的整数
-- 错误：401（未授权）、403（被封禁）、400（assetId 无效）
-- 速率：60 次 / 60 秒
-
----
-
-### 8) 返回资产剩余时间 — GET /api/user/verify/asset/{assetId}/remaining
-- 认证：Bearer token
-- 返回（HTTP 200）样例：
-   - 拥有且永久： `{ "assetId": 123, "has": true, "remainingSeconds": -1, "code": 0 }`
-   - 拥有但已过期： `{ "assetId": 123, "has": false, "remainingSeconds": 0, "code": 2004 }`
-   - 未拥有： `{ "assetId": 123, "has": false, "remainingSeconds": 0, "code": 2004 }`
-- 说明：当资源为永久时返回 remainingSeconds = -1
-- 错误：401（未授权）、403（被封禁）、400（assetId 无效）
-- 速率：60 次 / 60 秒
-
----
-
-### 9) 通过 assetId 获取资源名 — GET /api/asset/name/{assetId}
-- 认证：公开（无需 token），用于前端在无需鉴权场景下显示资源名
-- 返回（HTTP 200）样例： `{ "assetId": 123, "name": "My Resource", "code": 0 }`
-- 资源不存在时返回 HTTP 404 携带 `{ "assetId": 123, "name": "", "code": 2004 }`
-- 参数：`assetId` 必须为 > 0 的整数
-- 错误：400（assetId 无效）、500（服务器错误）
-- 速率：120 次 / 60 秒（较高的公开读取限流）
-
-示例（无需登录）：
+```csharp
+JwtHelper.Configure(new JwtHelper.JwtConfig
+{
+    SecretKey = "A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6",
+    Issuer = "KaxSocket",
+    Audience = "KaxUsers",
+    Expiration = TimeSpan.FromHours(1)
+});
 ```
-curl http://host/api/asset/name/123
+
+### 速率限制回调
+
+当请求超过限制时：
+- **≤ 20次超限** → 返回 429 状态码
+- **> 20次超限** → 自动封禁用户 60 秒
+
+---
+
+## 认证
+
+### 令牌获取
+
+所有需要认证的 API 都需要在请求头中提供 JWT 令牌：
+
+```
+Authorization: Bearer <token>
+```
+
+### 令牌生成
+
+通过 `/api/user/login` 获取令牌后，在后续请求中使用。
+
+---
+
+## API 端点
+
+### 用户认证
+
+#### 1. 用户注册
+
+```http
+POST /api/user/register
+Content-Type: application/json
+
+{
+  "username": "user123",
+  "password": "password123",
+  "email": "user@example.com"
+}
+```
+
+**限制**：3 req/60s
+
+**验证规则**：
+- 用户名：5~12 字符
+- 密码：≥ 8 字符
+- 邮箱：有效格式
+
+**响应**：
+```json
+{
+  "StatusCode": 201,
+  "Body": "注册成功。"
+}
 ```
 
 ---
 
-### CDK 管理（需管理员权限）
-- 公共说明：管理员组（Console/Root/Admin）可调用以下接口。
+#### 2. 用户登录
 
-1. POST /api/cdk/admin/inspect  
-   - Body: `{ "code": "ABC123" }`  
-   - 返回：是否包含、映射信息（assetId、description、isUsed、usedBy）
+```http
+POST /api/user/login
+Content-Type: application/json
 
-2. POST /api/cdk/admin/generate  
-   - Body 支持：`prefix`、`count`（1..1000）`length`（4..256）  
-   - 返回：`{ "codes": [ "PREFIXXXXX", ... ] }`
+{
+  "username": "user123",
+  "password": "password123"
+}
+```
 
-3. POST /api/cdk/admin/save  
-   - Body 可为 `codes` 数组，或使用 `prefix`/`count`/`length` 生成再保存  
-   - 必须包含 `assetId`（>0），可选 `description`  
-   - 返回：保存数量（若新增记录 >0 返回 201）
+**限制**：5 req/60s
 
-4. POST /api/cdk/admin/delete  
-   - Body: `{ "code": "ABC123" }`  
-   - 删除时做大小写不敏感匹配，返回删除数量
-
-5. GET /api/cdk/admin/list  
-   - 返回最近最多 200 条 CDK：`{ code, isUsed, createdAt, assetId, description }`
-
-- 速率：各接口以 attribute 标注（多数为 60 次/60s 或更严格）
-
----
-
-### Asset（资源）管理（需管理员权限）
-1. POST /api/asset/admin/create  
-   - Body: `{ name, version, author, description? }`  
-   - 验证：name 1–100、version ≤50、author ≤100、description ≤500  
-   - 返回：创建成功与 `id`
-
-2. POST /api/asset/admin/update  
-   - Body: `{ id, version?, author?, description? }`  
-   - 更新 `LastUpdatedAt`
-
-3. POST /api/asset/admin/inspect  
-   - Body: `{ id }` -> 返回 asset 详情（name/version/author/…）
-
-4. POST /api/asset/admin/delete  
-   - Body: `{ id }` -> 软删除（IsDeleted = true, DeletedAt = now）
-
-5. POST /api/asset/admin/restore  
-   - Body: `{ id }` -> 恢复软删除
-
-6. GET /api/asset/admin/list  
-   - Query: `q`, `author`, `version`, `page` (默认1), `pageSize` (默认20), `includeDeleted` (默认 false)  
-   - 返回分页 `{ data: [...], page, pageSize, total }`  
-   - 速率限制：无（RateLimitMaxRequests = 0）
-
----
-
-### 10) 修改用户密码 — POST /api/user/password
-- 认证：Bearer token
-- 请求体（JSON）：
-  ```json
-  {
-    "oldPassword": "OldPass123",
-    "newPassword": "NewPass456",
-    "targetUid": 123
+**响应成功**：
+```json
+{
+  "StatusCode": 200,
+  "Body": {
+    "message": "登录成功。",
+    "login_token": "eyJhbGciOiJIUzI1NiIs..."
   }
-  ```
-- 参数说明：
-  - `oldPassword`（必填）：当前密码
-  - `newPassword`（必填）：新密码，最少 8 字符
-  - `targetUid`（必填）：目标用户 ID，**必须与当前登录用户 ID 一致**
-- 成功响应（200）：`{ "message": "密码已更新" }`
-- 错误：400（参数无效）、401（未授权或旧密码错误）、403（无权修改他人密码）、404（用户不存在）
-- 速率：6 次 / 60 秒（严格限制）
+}
+```
+
+**响应失败**：
+```json
+{
+  "StatusCode": 401,
+  "Body": "用户名或密码错误。"
+}
+```
 
 ---
 
-### 11) 获取用户头像 — GET /api/user/avatar/{userId}
-- 认证：公开（无需 token）
-- 说明：返回用户头像图片文件（二进制）
-- 参数：`userId` 必须为有效的用户 ID
-- 成功：HTTP 200，Content-Type: image/*
-- 错误：404（用户不存在或无头像）、400（userId 无效）
-- 速率：120 次 / 60 秒（较高的公开读取限流）
+#### 3. 账户验证
+
+```http
+POST /api/user/verify/account
+Authorization: Bearer <token>
+```
+
+**限制**：60 req/60s
+
+**功能**：验证当前登录令牌的有效性
+
+**响应**：
+```json
+{
+  "code": 0,
+  "message": "验证成功"
+}
+```
 
 ---
 
-### 12) 上传用户头像 — POST /api/user/avatar
-- 认证：Bearer token
-- 说明：上传用户头像图片（multipart/form-data）
-- 请求格式：
-  ```
-  POST /api/user/avatar
-  Authorization: Bearer <token>
-  Content-Type: multipart/form-data
-  
-  file: <image file>
-  targetUid: 123
-  ```
-- 参数说明：
-  - `file`（必填）：图片文件，支持 jpg/png/gif，最大 5MB
-  - `targetUid`（必填）：目标用户 ID，**必须与当前登录用户 ID 一致**
-- 成功响应（200）：`{ "message": "头像已上传", "avatarUrl": "/api/user/avatar/123?v=1670100000" }`
-- 错误：400（文件无效或过大）、401（未授权）、403（无权修改他人头像）、404（用户不存在）
-- 速率：10 次 / 60 秒
+### 用户资料
+
+#### 1. 获取当前用户资料
+
+```http
+GET /api/user/profile
+Authorization: Bearer <token>
+```
+
+**限制**：60 req/60s
+
+**响应**：
+```json
+{
+  "id": 1,
+  "user": "user123",
+  "displayName": "User Display",
+  "email": "user@example.com",
+  "bio": "个人简介",
+  "signature": "个性签名",
+  "registeredAt": 1700000000,
+  "lastLoginAt": 1700000100,
+  "permissionGroup": 3,
+  "isBanned": false,
+  "avatarUrl": "/api/user/avatar/1?v=1700000100",
+  "resourceCount": 5,
+  "gold": 1000,
+  "recentActivity": 100,
+  "cdkCount": 2
+}
+```
 
 ---
 
-### 13) 获取用户统计信息 — GET /api/user/stats
-- 认证：Bearer token
-- 说明：返回当前用户的统计数据（资源数、金币、活跃度等）
-- 返回示例（HTTP 200）：
-  ```json
-  {
-    "userId": 123,
-    "username": "alice",
-    "resourceCount": 5,
-    "gold": 1000,
-    "recentActivity": 42,
-    "cdkCount": 3,
-    "favoriteCount": 10,
-    "cartCount": 2,
-    "totalPurchases": 15,
-    "registeredDaysAgo": 180
+#### 2. 获取指定用户资料
+
+```http
+GET /api/user/profile/{uid}
+Authorization: Bearer <token>
+```
+
+**限制**：60 req/60s
+
+**参数**：
+- `uid` (路径参数)：用户 ID
+
+**响应**：同上（仅返回公开信息）
+
+---
+
+#### 3. 更新用户资料
+
+```http
+POST /api/user/profile
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{
+  "displayName": "新名称",
+  "email": "newemail@example.com",
+  "bio": "新的个人简介"
+}
+```
+
+**限制**：10 req/60s
+
+**响应**：
+```json
+{
+  "code": 0,
+  "message": "资料更新成功"
+}
+```
+
+---
+
+#### 4. 修改密码
+
+```http
+POST /api/user/password
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{
+  "oldPassword": "oldpass123",
+  "newPassword": "newpass456"
+}
+```
+
+**限制**：6 req/60s
+
+**验证**：新密码长度 ≥ 8 字符
+
+---
+
+#### 5. 上传头像
+
+```http
+POST /api/user/avatar
+Authorization: Bearer <token>
+Content-Type: multipart/form-data
+
+[二进制图像数据]
+```
+
+**限制**：10 req/60s
+
+**支持格式**：JPEG, PNG, GIF
+
+**图像处理**：
+- 自动缩放成正方形
+- 保存为 JPG 缩略图（128x128）
+
+---
+
+#### 6. 获取用户头像
+
+```http
+GET /api/user/avatar/{userId}?v={timestamp}
+```
+
+**限制**：120 req/60s
+
+**缓存**：使用 LRU 缓存（100 项，1小时过期）
+
+---
+
+#### 7. 获取用户统计数据
+
+```http
+GET /api/user/stats
+Authorization: Bearer <token>
+```
+
+**限制**：60 req/60s
+
+**响应**：
+```json
+{
+  "code": 0,
+  "data": {
+    "totalOrders": 25,
+    "totalSpent": 50000,
+    "activeAssets": 3,
+    "favoriteCount": 12
   }
-  ```
-- 错误：401（未授权）、403（被封禁）、404（用户不存在）
-- 速率：60 次 / 60 秒
+}
+```
 
 ---
 
-### 14) 获取用户收藏列表 — GET /api/user/favorites
-- 认证：Bearer token
-- 返回示例（HTTP 200）：
-  ```json
-  {
-    "code": 0,
-    "message": "成功",
-    "data": [
-      { "assetId": 123, "name": "Resource A", "addedAt": 1670000000000 },
-      { "assetId": 124, "name": "Resource B", "addedAt": 1670001000000 }
-    ]
-  }
-  ```
-- 错误：401（未授权）、403（被封禁）、404（用户不存在）
-- 速率：60 次 / 60 秒
+### 用户资产
+
+#### 1. 获取激活资产列表
+
+```http
+GET /api/user/assets/active
+Authorization: Bearer <token>
+```
+
+**限制**：60 req/60s
+
+**响应**：
+```json
+{
+  "code": 0,
+  "message": "成功",
+  "data": [
+    {
+      "id": "asset-1",
+      "assetId": 101,
+      "activatedAt": 1700000000000,
+      "expiresAt": 1707000000000,
+      "remainingSeconds": 604800,
+      "isExpired": false
+    }
+  ]
+}
+```
 
 ---
 
-### 15) 添加资源到收藏 — POST /api/user/favorites
-- 认证：Bearer token
-- 请求体（JSON）：`{ "assetId": 123 }`
-- 成功响应（200）：`{ "message": "已添加到收藏" }`
-- 错误：400（assetId 无效）、401（未授权）、403（被封禁）、404（资源不存在）、409（已在收藏中）
-- 速率：60 次 / 60 秒
+#### 2. 获取用户收藏
+
+```http
+GET /api/user/favorites
+Authorization: Bearer <token>
+```
+
+**限制**：60 req/60s
+
+**响应**：
+```json
+{
+  "code": 0,
+  "message": "成功",
+  "data": [101, 102, 103]
+}
+```
 
 ---
 
-### 16) 从收藏中移除资源 — DELETE /api/user/favorites/{assetId}
-- 认证：Bearer token
-- 成功响应（200）：`{ "message": "已从收藏中移除" }`
-- 错误：400（assetId 无效）、401（未授权）、403（被封禁）、404（资源不在收藏中）
-- 速率：60 次 / 60 秒
+#### 3. 添加收藏
+
+```http
+POST /api/user/favorites
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{
+  "assetId": 101
+}
+```
+
+**限制**：60 req/60s
 
 ---
 
-### 17) 获取购物车 — GET /api/user/cart
-- 认证：Bearer token
-- 返回示例（HTTP 200）：
-  ```json
-  {
-    "code": 0,
-    "message": "成功",
-    "data": [
-      { "assetId": 123, "name": "Resource A", "price": 99, "addedAt": 1670000000000 },
-      { "assetId": 124, "name": "Resource B", "price": 199, "addedAt": 1670001000000 }
-    ],
-    "totalPrice": 298
-  }
-  ```
-- 错误：401（未授权）、403（被封禁）、404（用户不存在）
-- 速率：60 次 / 60 秒
+#### 4. 取消收藏
+
+```http
+DELETE /api/user/favorites/{assetId}
+Authorization: Bearer <token>
+```
+
+**限制**：60 req/60s
 
 ---
 
-### 18) 添加资源到购物车 — POST /api/user/cart
-- 认证：Bearer token
-- 请求体（JSON）：`{ "assetId": 123 }`
-- 成功响应（200）：`{ "message": "已添加到购物车" }`
-- 错误：400（assetId 无效）、401（未授权）、403（被封禁）、404（资源不存在）、409（已在购物车中）
-- 速率：60 次 / 60 秒
+#### 5. 获取购物车
+
+```http
+GET /api/user/cart
+Authorization: Bearer <token>
+```
+
+**限制**：60 req/60s
+
+**响应**：
+```json
+{
+  "code": 0,
+  "message": "成功",
+  "data": [
+    {
+      "assetId": 101,
+      "priceId": "price-1",
+      "quantity": 1
+    }
+  ]
+}
+```
 
 ---
 
-### 19) 从购物车移除资源 — DELETE /api/user/cart/{assetId}
-- 认证：Bearer token
-- 成功响应（200）：`{ "message": "已从购物车中移除" }`
-- 错误：400（assetId 无效）、401（未授权）、403（被封禁）、404（资源不在购物车中）
-- 速率：60 次 / 60 秒
+#### 6. 添加购物车
+
+```http
+POST /api/user/cart
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{
+  "assetId": 101,
+  "priceId": "price-1"
+}
+```
+
+**限制**：60 req/60s
 
 ---
 
-### 20) 购买资源 — POST /api/shop/purchase
-- 认证：Bearer token
-- 请求体（JSON）：
-  ```json
-  {
-    "assetIds": [123, 124],
-    "planIds": [1, 2]
-  }
-  ```
-- 参数说明：
-  - `assetIds`（必填）：资源 ID 数组
-  - `planIds`（可选）：对应的套餐 ID 数组，若不指定则使用默认套餐
-- 成功响应（200）：
-  ```json
-  {
-    "message": "购买成功",
-    "orderId": "ORD20231201001",
-    "totalPrice": 298,
-    "purchasedAssets": [123, 124]
-  }
-  ```
-- 错误：400（参数无效）、401（未授权）、403（被封禁或余额不足）、404（资源不存在）
-- 速率：20 次 / 60 秒
+#### 7. 删除购物车项
+
+```http
+DELETE /api/user/cart/{assetId}
+Authorization: Bearer <token>
+```
+
+**限制**：60 req/60s
 
 ---
 
-### 21) 激活 CDK 代码 — POST /api/cdk/activate
-- 认证：Bearer token
-- 请求体（JSON）：`{ "code": "ABC123XYZ" }`
-- 成功响应（200）：
-  ```json
-  {
-    "message": "CDK 已激活",
-    "assetId": 123,
-    "assetName": "Resource A",
-    "activatedAt": 1670000000000,
-    "expiresAt": 0
-  }
-  ```
-- 错误：400（code 无效）、401（未授权）、403（被封禁或 CDK 已被使用）、404（CDK 不存在）
-- 速率：20 次 / 60 秒
+### 资源管理
+
+#### 1. 创建资源
+
+```http
+POST /api/asset/admin/create
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{
+  "name": "资源名称",
+  "version": "1.0.0",
+  "author": "作者名",
+  "description": "资源描述",
+  "category": "工具",
+  "prices": [
+    {
+      "originalPrice": 1000,
+      "discountRate": 0.1,
+      "unit": "month",
+      "duration": 1,
+      "stock": -1
+    }
+  ],
+  "primaryImage": "https://...",
+  "thumbnailImage": "https://...",
+  "fileSize": 1024000,
+  "license": "MIT",
+  "downloadUrl": "https://...",
+  "compatibility": "Windows 10+"
+}
+```
+
+**限制**：10 req/60s
+
+**权限**：Admin 或以上
+
+**验证**：
+- 资源名称：1~100 字符
+- 版本号：1~50 字符
+- 作者：1~100 字符
+- 描述：≤ 500 字符
+
+**响应**：
+```json
+{
+  "message": "资源创建成功",
+  "id": 1
+}
+```
 
 ---
 
-### 22) 获取资源列表 — GET /api/asset/list
-- 认证：公开（无需 token）
-- Query 参数：
-  - `page`（可选，默认 1）：页码
-  - `pageSize`（可选，默认 20）：每页数量
-  - `category`（可选）：按分类筛选
-  - `search`（可选）：按名称搜索
-- 返回示例（HTTP 200）：
-  ```json
-  {
-    "code": 0,
-    "message": "成功",
-    "data": [
-      { "id": 123, "name": "Resource A", "category": "tools", "author": "admin", "version": "1.0", "price": 99 },
-      { "id": 124, "name": "Resource B", "category": "plugins", "author": "admin", "version": "2.0", "price": 199 }
-    ],
-    "page": 1,
-    "pageSize": 20,
-    "total": 100
-  }
-  ```
-- 错误：400（参数无效）、500（服务器错误）
-- 速率：60 次 / 60 秒
+#### 2. 更新资源
+
+```http
+POST /api/asset/admin/update
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{
+  "id": 1,
+  "name": "更新后的名称",
+  "prices": [...],
+  ...
+}
+```
+
+**限制**：10 req/60s
+
+**权限**：Admin 或以上
 
 ---
 
-### 23) 按分类获取资源 — GET /api/asset/category/{category}
-- 认证：公开（无需 token）
-- 参数：`category` 为资源分类名称
-- Query 参数：`page`、`pageSize` 同上
-- 返回格式同 `/api/asset/list`
-- 错误：400（分类无效）、404（分类不存在）
-- 速率：60 次 / 60 秒
+#### 3. 检查资源
+
+```http
+POST /api/asset/admin/inspect
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{
+  "id": 1
+}
+```
+
+**限制**：60 req/60s
+
+**权限**：Admin 或以上
+
+**功能**：获取资源完整信息（包括软删除状态）
 
 ---
 
-### 24) 获取资源详情 — GET /api/asset/detail/{id}
-- 认证：公开（无需 token）
-- 参数：`id` 为资源 ID
-- 返回示例（HTTP 200）：
-  ```json
-  {
-    "code": 0,
-    "message": "成功",
-    "data": {
-      "id": 123,
-      "name": "Resource A",
-      "category": "tools",
-      "author": "admin",
-      "version": "1.0",
-      "description": "A useful resource",
-      "price": 99,
-      "createdAt": 1670000000000,
-      "lastUpdatedAt": 1670100000000,
-      "downloadCount": 1000,
+#### 4. 删除资源
+
+```http
+POST /api/asset/admin/delete
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{
+  "id": 1
+}
+```
+
+**限制**：10 req/60s
+
+**权限**：Admin 或以上
+
+**功能**：软删除资源（标记 IsDeleted = true）
+
+---
+
+#### 5. 恢复资源
+
+```http
+POST /api/asset/admin/restore
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{
+  "id": 1
+}
+```
+
+**限制**：10 req/60s
+
+**权限**：Admin 或以上
+
+**功能**：恢复已删除的资源
+
+---
+
+#### 6. 管理员资源列表
+
+```http
+GET /api/asset/admin/list?page=1&pageSize=20&includeDeleted=false&q=搜索词
+Authorization: Bearer <token>
+```
+
+**限制**：无限制
+
+**权限**：Admin 或以上
+
+**查询参数**：
+- `page` (int)：页码，默认 1
+- `pageSize` (int)：每页数量，默认 20
+- `includeDeleted` (bool)：是否包含已删除资源
+- `q` (string)：搜索关键词
+
+**响应**：
+```json
+{
+  "total": 100,
+  "page": 1,
+  "pageSize": 20,
+  "data": [...]
+}
+```
+
+---
+
+### 资源查询
+
+#### 1. 获取资源列表
+
+```http
+GET /api/asset/list?q=搜索词&category=工具&minPrice=0&maxPrice=10000&sort=updated&page=1&pageSize=24
+```
+
+**限制**：60 req/60s
+
+**查询参数**：
+- `q` (string)：关键词搜索（名称/描述）
+- `category` (string)：分类筛选
+- `minPrice` (int)：最低价格
+- `maxPrice` (int)：最高价格
+- `sort` (string)：排序方式
+  - `updated`：最近更新（默认）
+  - `price_asc`：价格升序
+  - `price_desc`：价格降序
+- `page` (int)：页码
+- `pageSize` (int)：每页数量（默认 24）
+
+**响应**：
+```json
+{
+  "total": 50,
+  "page": 1,
+  "pageSize": 24,
+  "data": [
+    {
+      "id": 1,
+      "name": "资源名",
+      "version": "1.0.0",
+      "author": "作者",
+      "description": "描述",
+      "category": "工具",
+      "primaryImage": "...",
+      "thumbnailImage": "...",
+      "fileSize": 1024000,
       "rating": 4.5,
-      "plans": [
-        { "id": 1, "name": "Basic", "price": 99, "duration": 30, "unit": "days" },
-        { "id": 2, "name": "Premium", "price": 199, "duration": 365, "unit": "days" }
-      ]
+      "reviewCount": 120,
+      "downloads": 5000,
+      "license": "MIT",
+      "downloadUrl": "...",
+      "purchaseCount": 300,
+      "favoriteCount": 150,
+      "viewCount": 10000,
+      "lastUpdatedAt": 1700000000000
+    }
+  ]
+}
+```
+
+---
+
+#### 2. 按分类查询
+
+```http
+GET /api/asset/category/{category}
+```
+
+**限制**：60 req/60s
+
+**参数**：
+- `category` (路径参数)：分类名称
+
+---
+
+#### 3. 获取资源名称
+
+```http
+GET /api/asset/name/{assetId}
+Authorization: Bearer <token>
+```
+
+**限制**：120 req/60s
+
+**功能**：获取用户已激活资源的名称
+
+---
+
+#### 4. 获取资源详情
+
+```http
+GET /api/asset/detail/{id}
+Authorization: Bearer <token>
+```
+
+**限制**：120 req/60s
+
+**功能**：获取资源完整信息，自动增加浏览量
+
+**响应**：
+```json
+{
+  "code": 0,
+  "message": "成功",
+  "data": {
+    "id": 1,
+    "name": "资源名",
+    "version": "1.0.0",
+    "author": "作者",
+    "description": "描述",
+    "category": "工具",
+    "isDeleted": false,
+    "primaryImage": "...",
+    "thumbnailImage": "...",
+    "screenshots": ["...", "..."],
+    "tags": ["高性能", "安全"],
+    "prices": [
+      {
+        "id": "price-1",
+        "parentId": 1,
+        "createdAt": 1700000000000,
+        "updatedAt": 1700000000000,
+        "price": 900,
+        "unit": "month",
+        "duration": 1,
+        "originalPrice": 1000,
+        "discountRate": 0.1,
+        "stock": -1
+      }
+    ],
+    "specs": {
+      "fileSize": 1024000,
+      "rating": 4.5,
+      "reviewCount": 120,
+      "compatibility": "Windows 10+",
+      "downloads": 5000,
+      "uploadDate": 1700000000000,
+      "license": "MIT",
+      "downloadUrl": "...",
+      "purchaseCount": 300,
+      "favoriteCount": 150,
+      "viewCount": 10000,
+      "lastUpdatedAt": 1700000000000
     }
   }
-  ```
-- 错误：400（id 无效）、404（资源不存在）
-- 速率：120 次 / 60 秒
+}
+```
 
 ---
 
-### 25) 获取资源的套餐列表 — GET /api/asset/{assetId}/plans
-- 认证：Bearer token
-- 参数：`assetId` 为资源 ID
-- 返回示例（HTTP 200）：
-  ```json
-  {
-    "code": 0,
-    "message": "成功",
-    "data": [
-      { "id": 1, "name": "Basic", "price": 99, "duration": 30, "unit": "days", "description": "30 days access" },
-      { "id": 2, "name": "Premium", "price": 199, "duration": 365, "unit": "days", "description": "1 year access" },
-      { "id": 3, "name": "Lifetime", "price": 499, "duration": 0, "unit": "permanent", "description": "Permanent access" }
-    ]
+#### 5. 获取相关推荐
+
+```http
+GET /api/asset/related/{id}?top=4
+```
+
+**限制**：60 req/60s
+
+**查询参数**：
+- `top` (int)：返回数量（1~20，默认 4）
+
+**排序算法**：热度评分 = Downloads × 0.6 + Rating × 10 + PurchaseCount × 0.3
+
+---
+
+#### 6. 获取套餐列表
+
+```http
+GET /api/asset/{assetId}/plans
+Authorization: Bearer <token>
+```
+
+**限制**：60 req/60s
+
+**功能**：获取资源的所有价格方案
+
+**响应**：
+```json
+{
+  "code": 0,
+  "message": "成功",
+  "data": [
+    {
+      "id": "price-1",
+      "price": 900,
+      "unit": "month",
+      "duration": 1,
+      "originalPrice": 1000,
+      "discountRate": 0.1,
+      "stock": -1
+    }
+  ]
+}
+```
+
+---
+
+### 资源验证
+
+#### 1. 验证用户资源
+
+```http
+GET /api/user/verify/asset/{assetId}
+Authorization: Bearer <token>
+```
+
+**限制**：60 req/60s
+
+**响应**：
+```json
+{
+  "assetId": 1,
+  "has": true,
+  "code": 0
+}
+```
+
+**响应码**：
+- `0`：拥有该资源
+- `2004`：未拥有
+
+---
+
+#### 2. 获取资源激活记录
+
+```http
+GET /api/user/verify/asset/{assetId}/raw
+Authorization: Bearer <token>
+```
+
+**限制**：60 req/60s
+
+**响应**：
+```json
+{
+  "assetId": 1,
+  "activatedAt": 1700000000000,
+  "expiresAt": 1707000000000,
+  "has": true,
+  "code": 0
+}
+```
+
+---
+
+#### 3. 获取资源剩余时间
+
+```http
+GET /api/user/verify/asset/{assetId}/remaining
+Authorization: Bearer <token>
+```
+
+**限制**：60 req/60s
+
+**响应**：
+```json
+{
+  "assetId": 1,
+  "has": true,
+  "remainingSeconds": 604800,
+  "code": 0
+}
+```
+
+**说明**：
+- `remainingSeconds = -1`：永久激活
+- `remainingSeconds > 0`：剩余秒数
+- `remainingSeconds = 0`：已过期
+
+---
+
+### 购物与订阅
+
+#### 1. 购买资源
+
+```http
+POST /api/shop/purchase
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{
+  "assetId": 1,
+  "priceId": "price-1",
+  "durationOverride": 2592000000
+}
+```
+
+**限制**：20 req/60s
+
+**参数**：
+- `assetId` (int)：资源 ID
+- `priceId` (string)：价格方案 ID
+- `durationOverride` (long, 可选)：自定义购买期限（毫秒），0 表示永久
+
+**逻辑**：
+1. 验证用户令牌和账户状态
+2. 检查资源存在性和删除状态
+3. 验证金币余额
+4. 计算购买有效期
+5. 已拥有则延长，已过期则重新激活
+6. 扣除金币并记录订单
+
+**响应成功**：
+```json
+{
+  "code": 0,
+  "message": "购买成功",
+  "assetId": 1
+}
+```
+
+**响应失败**：
+```json
+{
+  "code": 403,
+  "message": "金币不足，需要至少 900 点金币才能购买此资产"
+}
+```
+
+---
+
+#### 2. 切换订阅方案
+
+```http
+POST /api/asset/{assetId}/changePlan
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{
+  "newPriceId": "price-2"
+}
+```
+
+**限制**：10 req/60s
+
+**功能**：
+- 升级套餐：新套餐费用 - 当前套餐剩余价值
+- 降级套餐：退款（以最小粒度计算）
+
+---
+
+#### 3. 取消订阅
+
+```http
+POST /api/asset/{assetId}/unsubscribe
+Authorization: Bearer <token>
+```
+
+**限制**：10 req/60s
+
+**功能**：
+1. 移除用户的激活资源
+2. 记录订单
+3. 处理部分退款（按剩余时长比例）
+
+---
+
+### 订单管理
+
+#### 1. 获取用户订单
+
+```http
+GET /api/user/orders?page=1&pageSize=50
+Authorization: Bearer <token>
+```
+
+**限制**：60 req/60s
+
+**查询参数**：
+- `page` (int)：页码
+- `pageSize` (int)：每页数量（1~200，默认 50）
+
+**响应**：
+```json
+{
+  "code": 0,
+  "message": "成功",
+  "data": [
+    {
+      "id": "order-1",
+      "orderType": "PURCHASE",
+      "assetId": 1,
+      "assetName": "资源名",
+      "cdkCode": "",
+      "goldChange": -900,
+      "goldChangeReason": "购买资源",
+      "planTransition": "无旧方案 -> price-1",
+      "description": "购买了资源",
+      "createdAt": 1700000000000
+    }
+  ],
+  "page": 1,
+  "pageSize": 50,
+  "total": 100
+}
+```
+
+---
+
+#### 2. 管理员查询用户订单
+
+```http
+GET /api/admin/orders/{userId}?page=1&pageSize=50
+Authorization: Bearer <token>
+```
+
+**限制**：60 req/60s
+
+**权限**：Admin 或以上
+
+---
+
+#### 3. 管理员删除单个订单
+
+```http
+DELETE /api/admin/orders/{userId}/{orderId}
+Authorization: Bearer <token>
+```
+
+**限制**：60 req/60s
+
+**权限**：Admin 或以上
+
+---
+
+#### 4. 管理员批量删除订单
+
+```http
+POST /api/admin/orders/{userId}/delete
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{
+  "orderIds": ["order-1", "order-2"]
+}
+```
+
+**限制**：30 req/60s
+
+**权限**：Admin 或以上
+
+---
+
+### CDK 管理
+
+#### 1. 检查 CDK
+
+```http
+POST /api/cdk/admin/inspect
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{
+  "code": "ABCD1234"
+}
+```
+
+**限制**：60 req/60s
+
+**权限**：CDK Admin 或以上
+
+**响应**：
+```json
+{
+  "contains": true,
+  "data": {
+    "id": 1,
+    "code": "ABCD1234",
+    "description": "CDK 描述",
+    "isUsed": false,
+    "goldValue": 1000,
+    "expiresInSeconds": 2592000,
+    "createdAt": 1700000000000,
+    "createdBy": "admin",
+    "usedAt": 0,
+    "usedBy": ""
   }
-  ```
-- 错误：400（assetId 无效）、401（未授权）、403（被封禁）、404（资源不存在）
-- 速率：60 次 / 60 秒
+}
+```
 
 ---
 
-### 26) 更变资源套餐 — POST /api/asset/{assetId}/changePlan
-- 认证：Bearer token
-- 参数：`assetId` 为资源 ID
-- 请求体（JSON）：
-  ```json
-  {
-    "newPlanId": 2,
-    "targetUid": 123
-  }
-  ```
-- 参数说明：
-  - `newPlanId`（必填）：新套餐 ID
-  - `targetUid`（必填）：目标用户 ID，**必须与当前登录用户 ID 一致**
-- 成功响应（200）：
-  ```json
-  {
-    "message": "套餐已更新",
-    "assetId": 123,
-    "newPlanId": 2,
-    "newExpiresAt": 1672593000000,
-    "costGold": 100
-  }
-  ```
-- 错误：400（参数无效）、401（未授权）、403（被封禁或无权修改）、404（资源或套餐不存在）、409（用户未拥有该资源）
-- 速率：10 次 / 60 秒
+#### 2. 生成 CDK 代码
+
+```http
+POST /api/cdk/admin/generate
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{
+  "prefix": "TEST",
+  "count": 100,
+  "length": 12
+}
+```
+
+**限制**：10 req/60s
+
+**权限**：CDK Admin 或以上
+
+**参数**：
+- `prefix` (string)：CDK 前缀
+- `count` (int)：生成数量（1~1000，默认 1）
+- `length` (int)：CDK 长度（4~256，默认 8）
+
+**响应**：
+```json
+{
+  "message": "生成成功",
+  "codes": ["TEST-ABCD1234", "TEST-EFGH5678", ...]
+}
+```
 
 ---
 
-### 27) 取消资源订阅 — POST /api/asset/{assetId}/unsubscribe
-- 认证：Bearer token
-- 参数：`assetId` 为资源 ID
-- 请求体（JSON）：
-  ```json
-  {
-    "targetUid": 123
-  }
-  ```
-- 参数说明：
-  - `targetUid`（必填）：目标用户 ID，**必须与当前登录用户 ID 一致**
-- 成功响应（200）：
-  ```json
-  {
-    "message": "订阅已取消",
-    "assetId": 123,
-    "refundGold": 50
-  }
-  ```
-- 错误：400（参数无效）、401（未授权）、403（被封禁或无权修改）、404（资源不存在或用户未拥有）
-- 速率：10 次 / 60 秒
+#### 3. 保存 CDK
+
+```http
+POST /api/cdk/admin/save
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{
+  "code": "ABCD1234",
+  "description": "CDK 描述",
+  "goldValue": 1000,
+  "expiresInSeconds": 2592000
+}
+```
+
+**限制**：5 req/60s
+
+**权限**：CDK Admin 或以上
 
 ---
 
-## 常见 HTTP 状态码 & 业务码
-- 200 — 成功（一般 JSON 返回）
-- 201 — 已创建（例如 CDK/资源成功保存）
-- 400 — 请求格式或字段验证失败
-- 401 — 未认证 / 令牌无效
-- 403 — 权限不足或账号被封禁
-- 404 — 资源未找到
-- 409 — 冲突（用户名/邮箱已存在）
-- 429 — 请求过于频繁（触发速率限制）
-- 500 — 服务器内部错误
+#### 4. 删除 CDK
 
-业务码：
-- `/api/user/verify/asset` 返回 `code: 0` 表示拥有，`code: 2004` 表示未拥有。
+```http
+POST /api/cdk/admin/delete
+Authorization: Bearer <token>
+Content-Type: application/json
 
----
+{
+  "code": "ABCD1234"
+}
+```
 
-## 使用示例（登录后调用受保护接口）
-1. 登录并取 token：
-   curl -X POST -H "Content-Type: application/json" -d '{"username":"alice","password":"..."}' http://host/api/user/login
-2. 使用 token 调用受保护接口：
-   curl -H "Authorization: Bearer <token>" http://host/api/user/verify/account
+**限制**：180 req/60s
+
+**权限**：CDK Admin 或以上
 
 ---
 
-## 注意与建议 🛡️
-- 所有敏感通信请走 HTTPS；不要在客户端硬编码 `login_token`。
-- 管理接口仅限 `Console/Root/Admin`；谨慎分配权限。
-- `RateLimitCallback` 会在高频请求时自动临时封禁用户（count > 20 → 封禁 60 秒）。
-- `user/unban` 接口使用固定开发者码，请仅在受控环境下使用。
+#### 5. CDK 列表
+
+```http
+GET /api/cdk/admin/list?page=1&pageSize=50&includeUsed=false
+Authorization: Bearer <token>
+```
+
+**限制**：60 req/60s
+
+**权限**：CDK Admin 或以上
+
+**查询参数**：
+- `page` (int)：页码
+- `pageSize` (int)：每页数量
+- `includeUsed` (bool)：是否包含已使用 CDK
 
 ---
+
+#### 6. CDK 搜索
+
+```http
+GET /api/cdk/admin/search?q=TEST&limit=10
+Authorization: Bearer <token>
+```
+
+**限制**：60 req/60s
+
+**权限**：CDK Admin 或以上
+
+**查询参数**：
+- `q` (string)：搜索关键词
+- `limit` (int)：返回数量
+
+---
+
+#### 7. 激活 CDK
+
+```http
+POST /api/cdk/activate
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{
+  "code": "ABCD1234"
+}
+```
+
+**限制**：20 req/60s
+
+**功能**：用户激活 CDK，获得对应的金币
+
+**响应成功**：
+```json
+{
+  "code": 0,
+  "message": "CDK 激活成功",
+  "goldValue": 1000
+}
+```
+
+**响应失败**：
+```json
+{
+  "code": 2001,
+  "message": "CDK 不存在"
+}
+```
+
+**错误码**：
+- `2001`：CDK 不存在
+- `2002`：CDK 已被使用
+- `2003`：CDK 已过期
+
+---
+
+### 系统控制台
+
+#### 1. 执行命令
+
+```http
+POST /api/console/execute
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{
+  "command": "help",
+  "args": ["asset"]
+}
+```
+
+**限制**：30 req/60s
+
+**权限**：Console 或以上
+
+**功能**：执行服务器命令
+
+---
+
+#### 2. 获取命令列表
+
+```http
+GET /api/console/commands
+Authorization: Bearer <token>
+```
+
+**功能**：获取所有可用命令
+
+**响应**：
+```json
+{
+  "commands": [
+    {
+      "name": "ban",
+      "description": "封禁用户",
+      "usage": "ban <username> <reason> [seconds]"
+    }
+  ]
+}
+```
+
+---
+
+#### 3. 日志流（SSE）
+
+```http
+GET /api/console/logs
+Authorization: Bearer <token>
+
+Accept: text/event-stream
+```
+
+**功能**：实时推送系统日志
+
+**事件格式**：
+```
+event: log
+data: {"message":"...", "level":"INFO", "time":"2024-01-01 12:00:00"}
+
+event: connected
+data: {"subscribers":5}
+```
+
+---
+
+## 错误响应
+
+### 通用错误码
+
+| 状态码 | 含义 | 场景 |
+|-------|------|------|
+| 400 | 请求错误 | 参数无效、请求体格式错误 |
+| 401 | 未授权 | 令牌缺失或无效 |
+| 403 | 禁止访问 | 权限不足、用户被封禁 |
+| 404 | 未找到 | 资源、用户、订单不存在 |
+| 409 | 冲突 | 用户名/邮箱已注册 |
+| 429 | 请求过于频繁 | 超过速率限制 |
+| 500 | 服务器错误 | 内部处理异常 |
+
+### 业务错误码
+
+| 错误码 | 含义 |
+|-------|------|
+| 0 | 成功 |
+| 2001 | CDK 不存在 |
+| 2002 | CDK 已被使用 |
+| 2003 | CDK 已过期 |
+| 2004 | 资源未拥有 |
+
+---
+
+## 命令系统
+
+### 命令类型
+
+#### 用户管理命令 (UserCommandHandler)
+- `ban <username> <reason> [seconds]`：封禁用户
+- `unban <username>`：解禁用户
+- `promote <username> <level>`：提升权限
+
+#### 资源管理命令 (AssetCommandHandler)
+- `asset.list`：列出所有资源
+- `asset.verify <assetId>`：验证资源
+- `asset.delete <assetId>`：删除资源
+
+#### 系统命令 (SystemCommandHandler)
+- `help [command]`：获取帮助
+- `stats`：系统统计
+- `clear.logs`：清空日志
+
+---
+
+## 数据模型
+
+### AssetModel（资源/商品）
+
+```csharp
+public class AssetModel : IDataBase
+{
+    // 基本信息
+    public int Id { get; set; }
+    public string Name { get; set; }
+    public string Version { get; set; }
+    public string Author { get; set; }
+    public string Description { get; set; }
+    public string Category { get; set; }
+    public string Tags { get; set; }
+    
+    // 媒体资源
+    public string PrimaryImage { get; set; }
+    public string ThumbnailImage { get; set; }
+    public string Screenshots { get; set; }
+    
+    // 价格与规格
+    public TableList<AssetPrice> Prices { get; set; }
+    public AssetSpecs Specs { get; set; }
+    
+    // 软删除
+    public bool IsDeleted { get; set; }
+    public long DeletedAt { get; set; }
+}
+```
+
+### UserData（用户）
+
+```csharp
+public class UserData : IDataBase
+{
+    public int Id { get; set; }
+    public string UserName { get; set; }
+    public string PasswordHash { get; set; }
+    public string Email { get; set; }
+    public string DisplayName { get; set; }
+    public int Gold { get; set; }
+    public TableList<UserActiveAsset> ActiveAssets { get; set; }
+    public TableList<UserOrderRecord> OrderRecords { get; set; }
+    public UserStatusData Status { get; set; }
+    // 其他字段...
+}
+```
+
+---
+
+## 最佳实践
+
+### 1. 令牌管理
+- 在登录后立即保存令牌到本地存储
+- 每小时重新获取新令牌
+- 在请求失败时检查令牌有效性
+
+### 2. 错误处理
+- 总是检查 HTTP 状态码
+- 对 429 状态码进行指数退避重试
+- 记录 500 错误便于调试
+
+### 3. 缓存策略
+- 头像缓存 1 小时
+- 资源列表可缓存 5 分钟
+- 用户资料可缓存 10 分钟
+
+### 4. 安全建议
+- 不在 URL 中传输敏感数据
+- 使用 HTTPS 传输令牌
+- 定期更新密码
+- 启用两因素认证（如可用）
+
+---
+
+**最后更新**：2026-03-01  
+**API 版本**：1.0

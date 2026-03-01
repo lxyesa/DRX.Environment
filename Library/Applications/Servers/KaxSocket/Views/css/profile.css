@@ -360,8 +360,8 @@
     gap: 16px;
 }
 
-/* section-card 在概览网格中的通用内容间距 */
-.overview-grid section-card {
+/* collapsible-card 在概览网格中的通用内容间距 */
+.overview-grid collapsible-card {
     display: block;
 }
 
@@ -488,6 +488,16 @@
     color: var(--profile-muted);
     font-size: 0.82rem;
     margin-right: auto;
+}
+
+.collapsible-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 16px;
+    padding-top: 12px;
+    border-top: 1px solid var(--profile-border);
 }
 
 @media (max-width: 600px) {
@@ -1447,5 +1457,225 @@
     }
 }
 
+/* #endregion */
+
+/* #region 订单卡片 */
+.order-card {
+    display: flex;
+    align-items: stretch;
+    background: var(--profile-card);
+    border: 1px solid var(--profile-border);
+    border-radius: var(--profile-radius);
+    overflow: hidden;
+    cursor: pointer;
+    transition: background var(--profile-transition), border-color var(--profile-transition), box-shadow var(--profile-transition), transform var(--profile-transition);
+    position: relative;
+    user-select: none;
+}
+
+.order-card:hover {
+    background: rgba(255, 255, 255, 0.045);
+    border-color: var(--profile-border-strong);
+    transform: translateY(-1px);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
+}
+
+.order-card:active {
+    transform: translateY(0);
+    box-shadow: none;
+}
+
+.order-card-stripe {
+    width: 3px;
+    flex-shrink: 0;
+}
+
+.order-card-inner {
+    flex: 1;
+    padding: 13px 16px;
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    gap: 14px;
+    align-items: center;
+    min-width: 0;
+}
+
+.order-type-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    padding: 3px 9px;
+    border-radius: 20px;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.order-card-body {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.order-asset-name {
+    font-size: 0.92rem;
+    font-weight: 600;
+    color: var(--profile-text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    line-height: 1.4;
+}
+
+.order-meta-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.order-id-chip {
+    font-size: 0.72rem;
+    color: var(--profile-muted);
+    font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+    background: rgba(255, 255, 255, 0.05);
+    padding: 1px 6px;
+    border-radius: 3px;
+    letter-spacing: 0.02em;
+    flex-shrink: 0;
+}
+
+.order-date {
+    font-size: 0.78rem;
+    color: var(--profile-muted);
+    white-space: nowrap;
+}
+
+.order-card-right {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 4px;
+    flex-shrink: 0;
+}
+
+.order-gold-change {
+    font-size: 0.95rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+}
+
+.order-gold-change.positive { color: #22c55e; }
+.order-gold-change.negative { color: #ef4444; }
+.order-gold-change.neutral  { color: var(--profile-muted); font-weight: 500; }
+
+.order-chevron {
+    font-size: 14px;
+    color: var(--profile-muted);
+    opacity: 0;
+    transform: translateX(-4px);
+    transition: opacity var(--profile-transition), transform var(--profile-transition);
+}
+
+.order-card:hover .order-chevron {
+    opacity: 1;
+    transform: translateX(0);
+}
+
+@media (max-width: 600px) {
+    .order-card-inner {
+        grid-template-columns: 1fr auto;
+        gap: 10px;
+    }
+    .order-type-badge { display: none; }
+}
+/* #endregion */
+
+/* #region 订单详情弹窗 */
+.order-detail-modal .modal-card {
+    max-width: 540px;
+}
+
+.order-detail-header-strip {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 20px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--profile-border);
+}
+
+.order-detail-type-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.order-detail-title {
+    flex: 1;
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--profile-text);
+}
+
+.order-detail-gold-badge {
+    font-size: 0.9rem;
+    font-weight: 700;
+    padding: 3px 10px;
+    border-radius: 20px;
+    background: rgba(255, 255, 255, 0.06);
+}
+
+.order-detail-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+}
+
+.order-detail-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.order-detail-field.span-full {
+    grid-column: 1 / -1;
+}
+
+.order-detail-label {
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--profile-muted);
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+}
+
+.order-detail-value {
+    font-size: 0.87rem;
+    color: var(--profile-text);
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--profile-border);
+    border-radius: 4px;
+    padding: 7px 10px;
+    word-break: break-all;
+    line-height: 1.45;
+}
+
+.order-detail-value.mono {
+    font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+    font-size: 0.8rem;
+    letter-spacing: 0.02em;
+}
+
+.order-detail-value.muted {
+    color: var(--profile-muted);
+}
+
+.order-detail-value.gold-pos { color: #22c55e; font-weight: 700; }
+.order-detail-value.gold-neg { color: #ef4444; font-weight: 700; }
 /* #endregion */
 

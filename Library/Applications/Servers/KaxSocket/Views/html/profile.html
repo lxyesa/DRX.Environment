@@ -12,8 +12,7 @@
     <script src="/js/avatarCache.js?v=2" defer></script>
     <script src="/js/global.js?v=2" defer></script>
     <script src="/js/topbar.js?v=2" defer></script>
-    <script src="/components/inputbox.js?v=2" defer></script>
-    <script src="/components/section-card.js?v=2" defer></script>
+    <script src="/components/inputbox.js?v=3" defer></script>
     <script src="/components/badge/userbadge.js?v=2" defer></script>
     <script src="/components/collapsible-card.js?v=2" defer></script>
     <script src="/components/select-box.js?v=2" defer></script>
@@ -152,15 +151,18 @@
             <section class="tab-panel active" id="panel-overview" role="tabpanel">
                 <div class="overview-grid">
 
-                    <section-card icon="info" title="个人简介">
+                    <collapsible-card title="个人简介" open>
+                        <span slot="icon" class="material-icons">info</span>
                         <p class="overview-text" id="overviewBio">这个人很懒，什么都没有留下。</p>
-                    </section-card>
+                    </collapsible-card>
 
-                    <section-card icon="format_quote" title="个性签名">
+                    <collapsible-card title="个性签名" open>
+                        <span slot="icon" class="material-icons">format_quote</span>
                         <p class="overview-text overview-signature" id="overviewSignature">—</p>
-                    </section-card>
+                    </collapsible-card>
 
-                    <section-card icon="bar_chart" title="详细信息" class="overview-card-wide">
+                    <collapsible-card title="详细信息" class="overview-card-wide" open>
+                        <span slot="icon" class="material-icons">bar_chart</span>
                         <div class="overview-info-grid">
                             <div class="overview-info-item">
                                 <span class="oi-label">角色</span>
@@ -187,7 +189,7 @@
                                 <span class="oi-value" id="overviewLastLogin">—</span>
                             </div>
                         </div>
-                    </section-card>
+                    </collapsible-card>
 
                 </div>
             </section>
@@ -195,7 +197,8 @@
             <!-- Tab: 编辑资料 -->
             <section class="tab-panel" id="panel-edit" role="tabpanel">
                 <form id="profileForm">
-                    <section-card icon="edit" title="编辑个人资料" desc="修改你的账户信息与个人页展示内容">
+                    <collapsible-card title="编辑个人资料" subtitle="修改你的账户信息与个人页展示内容" open>
+                        <span slot="icon" class="material-icons">edit</span>
 
                         <!-- 账户信息区 -->
                         <div class="edit-zone">
@@ -223,11 +226,11 @@
                             </div>
                         </div>
 
-                        <div slot="footer">
+                        <div class="collapsible-actions">
                             <button type="button" class="btn ghost" id="cancelBtn">取消</button>
                             <button type="submit" class="btn" id="saveBtn">保存更改</button>
                         </div>
-                    </section-card>
+                    </collapsible-card>
                 </form>
             </section>
 
@@ -236,7 +239,8 @@
                 <div class="security-layout">
 
                     <!-- 邮箱管理卡片 -->
-                    <section-card icon="email" title="邮箱地址" desc="登录账号绑定的邮箱地址">
+                    <collapsible-card title="邮箱地址" subtitle="登录账号绑定的邮箱地址" open>
+                        <span slot="icon" class="material-icons">email</span>
                         <div class="security-info-bar">
                             <span class="material-icons security-info-icon">mail_outline</span>
                             <span>当前邮箱：<strong id="currentEmailDisplay">—</strong></span>
@@ -245,10 +249,11 @@
                             <span class="material-icons">lock</span>
                             <span>邮箱修改功能暂未开放，请联系管理员处理</span>
                         </div>
-                    </section-card>
+                    </collapsible-card>
 
                     <!-- 修改密码卡片 -->
-                    <section-card icon="lock" title="修改密码" desc="定期更换密码以保护账户安全">
+                    <collapsible-card title="修改密码" subtitle="定期更换密码以保护账户安全" open>
+                        <span slot="icon" class="material-icons">lock</span>
                         <div class="security-field-group">
                             <input-box id="pwOld" label="当前密码" placeholder="输入当前密码以继续" type="password"
                                 name="currentPassword" autocomplete="current-password" size="small"></input-box>
@@ -262,11 +267,11 @@
                                 name="confirmPassword" minlength="8" autocomplete="new-password"
                                 size="small"></input-box>
                         </div>
-                        <div slot="footer">
+                        <div class="collapsible-actions">
                             <span class="edit-hint">密码长度至少 8 位，区分大小写</span>
                             <button class="btn" id="changePwBtn">更新密码</button>
                         </div>
-                    </section-card>
+                    </collapsible-card>
 
                 </div>
             </section>
@@ -277,7 +282,8 @@
 
                     <!-- 左侧主区域：资产列表 -->
                     <div class="assets-main-col">
-                        <section-card icon="inventory_2" title="已激活的资产" desc="当前账号的所有已激活资产">
+                        <collapsible-card title="已激活的资产" subtitle="当前账号的所有已激活资产" open>
+                            <span slot="icon" class="material-icons">inventory_2</span>
                             <div id="assetsLoading" class="assets-state">
                                 <span class="material-icons assets-state-icon spin">sync</span>
                                 <span>正在加载资产列表…</span>
@@ -287,15 +293,18 @@
                                 <span>暂无激活的资产</span>
                             </div>
                             <div id="assetsList" class="assets-list"></div>
-                            <span slot="footer" id="assetsCount" class="count-badge"></span>
-                        </section-card>
+                            <div class="collapsible-actions">
+                                <span id="assetsCount" class="count-badge"></span>
+                            </div>
+                        </collapsible-card>
                     </div>
 
                     <!-- 右侧操作区 -->
                     <div class="assets-side-col">
 
                         <!-- CDK 激活卡片 -->
-                        <section-card icon="card_giftcard" title="激活 CDK" desc="输入兑换码激活资产">
+                        <collapsible-card title="激活 CDK" subtitle="输入兑换码激活资产" open>
+                            <span slot="icon" class="material-icons">card_giftcard</span>
                             <div class="cdk-section">
                                 <input-box id="cdkInput" label="CDK 代码" placeholder="XXXX-XXXX-XXXX-XXXX"
                                     autocomplete="off" show-action size="small">
@@ -310,10 +319,11 @@
                                     </div>
                                 </div>
                             </div>
-                        </section-card>
+                        </collapsible-card>
 
                         <!-- 资产统计卡片 -->
-                        <section-card icon="bar_chart" title="资产概览">
+                        <collapsible-card title="资产概览" open>
+                            <span slot="icon" class="material-icons">bar_chart</span>
                             <div class="assets-summary-grid">
                                 <div class="assets-summary-item">
                                     <span class="assets-summary-label">总资产数</span>
@@ -332,7 +342,7 @@
                                     <span class="assets-summary-value accent" id="assetsSummaryForever">—</span>
                                 </div>
                             </div>
-                        </section-card>
+                        </collapsible-card>
 
                     </div>
 
@@ -344,7 +354,8 @@
                 <div class="security-layout">
 
                     <!-- 搜索/列表区 -->
-                    <section-card icon="store" title="资产列表" desc="管理所有已创建的资产，支持搜索、编辑与删除">
+                    <collapsible-card title="资产列表" subtitle="管理所有已创建的资产，支持搜索、编辑与删除" open>
+                        <span slot="icon" class="material-icons">store</span>
                         <div class="admin-toolbar">
                             <input-box id="adminAssetSearch" label="搜索资产" placeholder="输入名称、作者、版本…" show-action size="small">
                                 <button id="adminAssetSearchBtn" slot="action">搜索</button>
@@ -367,12 +378,12 @@
                             <span id="adminAssetPageInfo" class="admin-pager-info"></span>
                             <button class="btn ghost" id="adminAssetNextBtn">下一页</button>
                         </div>
-                        <div slot="footer">
+                        <div class="collapsible-actions">
                             <button class="btn" id="adminCreateAssetBtn">
                                 <span class="material-icons" style="font-size:1rem;margin-right:4px;">add</span>新建资产
                             </button>
                         </div>
-                    </section-card>
+                    </collapsible-card>
 
                 </div>
             </section>
@@ -382,7 +393,8 @@
                 <div class="security-layout">
 
                     <!-- CDK 生成区 -->
-                    <section-card icon="vpn_key" title="生成 CDK" desc="批量生成金币类型 CDK 并保存至数据库">
+                    <collapsible-card title="生成 CDK" subtitle="批量生成金币类型 CDK 并保存至数据库" open>
+                        <span slot="icon" class="material-icons">vpn_key</span>
                         <div class="edit-grid">
                             <input-box id="cdkAdminCount" label="数量" placeholder="1-1000" value="1" size="small"></input-box>
                             <input-box id="cdkAdminLength" label="长度" placeholder="4-256" value="16" size="small"></input-box>
@@ -393,14 +405,15 @@
                         </div>
                         <div id="cdkAdminPreview" class="cdk-preview-box" style="display:none;"></div>
                         <div id="cdkAdminGenMsg" class="admin-msg" style="display:none;"></div>
-                        <div slot="footer">
+                        <div class="collapsible-actions">
                             <button class="btn ghost" id="cdkAdminPreviewBtn">预览</button>
                             <button class="btn" id="cdkAdminSaveBtn">生成并保存</button>
                         </div>
-                    </section-card>
+                    </collapsible-card>
 
                     <!-- CDK 列表区 -->
-                    <section-card icon="list" title="CDK 列表" desc="查看、搜索、删除已生成的 CDK">
+                    <collapsible-card title="CDK 列表" subtitle="查看、搜索、删除已生成的 CDK" open>
+                        <span slot="icon" class="material-icons">list</span>
                         <div class="admin-toolbar">
                             <input-box id="cdkAdminSearch" label="搜索 CDK" placeholder="输入代码、创建者、使用者…" show-action size="small">
                                 <button id="cdkAdminSearchBtn" slot="action">搜索</button>
@@ -425,7 +438,7 @@
                             <span id="cdkAdminPageInfo" class="admin-pager-info"></span>
                             <button class="btn ghost" id="cdkAdminNextBtn">下一页</button>
                         </div>
-                    </section-card>
+                    </collapsible-card>
 
                 </div>
             </section>
@@ -434,7 +447,8 @@
             <section class="tab-panel" id="panel-orders" role="tabpanel">
                 <div class="security-layout">
 
-                    <section-card icon="shopping_cart" title="我的订单" desc="查看所有订单记录和交易历史">
+                    <collapsible-card title="我的订单" subtitle="查看所有订单记录和交易历史" open>
+                        <span slot="icon" class="material-icons">shopping_cart</span>
                         <div class="admin-toolbar">
                             <input-box id="orderSearch" label="搜索订单" placeholder="输入订单号、商品名称…" show-action size="small">
                                 <button id="orderSearchBtn" slot="action">搜索</button>
@@ -459,8 +473,10 @@
                             <span id="ordersPageInfo" class="admin-pager-info"></span>
                             <button class="btn ghost" id="ordersNextBtn">下一页</button>
                         </div>
-                        <span slot="footer" id="ordersCount" class="count-badge"></span>
-                    </section-card>
+                        <div class="collapsible-actions">
+                            <span id="ordersCount" class="count-badge"></span>
+                        </div>
+                    </collapsible-card>
 
                 </div>
             </section>

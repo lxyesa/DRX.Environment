@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Linq;
 using System.Threading.Tasks;
 using Drx.Sdk.Network.Http;
@@ -42,6 +42,9 @@ public partial class KaxHttp
             var all      = await KaxGlobal.AssetDataBase.SelectAllAsync();
             var filtered = all.AsQueryable();
 
+            // 公开查询仅返回状态为 Active 且未删除的资产
+            filtered = filtered.Where(a => !a.IsDeleted && a.Status == Model.AssetStatus.Active);
+
             if (!string.IsNullOrWhiteSpace(q))
             {
                 var qLower = q.ToLower();
@@ -83,11 +86,11 @@ public partial class KaxHttp
                     id           = a.Id,
                     name         = a.Name,
                     version      = a.Version,
-                    author       = a.Author,
+                    authorId     = a.AuthorId,
                     description  = a.Description,
                     category     = a.Category,
-                    primaryImage   = a.PrimaryImage,
-                    thumbnailImage = a.ThumbnailImage,
+                    coverImage   = a.CoverImage,
+                    iconImage    = a.IconImage,
                     fileSize       = s?.FileSize      ?? 0,
                     rating         = s?.Rating        ?? 0.0,
                     reviewCount    = s?.ReviewCount   ?? 0,
@@ -102,6 +105,9 @@ public partial class KaxHttp
                     originalPrice = p != null ? p.OriginalPrice : 0,
                     discountRate  = p != null ? p.DiscountRate  : 0.0,
                     salePrice     = p != null ? (int)Math.Round(p.Price * (1.0 - p.DiscountRate)) : 0,
+                    priceYuan         = p != null ? p.Price / 100.0 : 0,
+                    originalPriceYuan = p != null ? p.OriginalPrice / 100.0 : 0,
+                    salePriceYuan     = p != null ? Math.Round((p.Price * (1.0 - p.DiscountRate)) / 100.0, 2) : 0,
                     specs = s != null ? new
                     {
                         fileSize      = s.FileSize,
@@ -145,6 +151,7 @@ public partial class KaxHttp
             var all      = await KaxGlobal.AssetDataBase.SelectAllAsync();
             var filtered = all
                 .Where(a => string.Equals(a.Category ?? string.Empty, category, StringComparison.OrdinalIgnoreCase))
+                .Where(a => !a.IsDeleted && a.Status == Model.AssetStatus.Active)
                 .ToList();
 
             var total = filtered.Count;
@@ -160,7 +167,7 @@ public partial class KaxHttp
                         id            = a.Id,
                         name          = a.Name,
                         version       = a.Version,
-                        author        = a.Author,
+                        authorId      = a.AuthorId,
                         description   = a.Description,
                         category      = a.Category,
                         fileSize      = s?.FileSize      ?? 0,
@@ -231,7 +238,17 @@ public partial class KaxHttp
                 Logger.Warn($"更新资源 {assetId} viewCount 失败: {ex.Message}");
             }
 
-            var pricesList = asset.Prices?.ToList();
+            var pricesList = asset.Prices?.Select(p => new
+            {
+                id           = p.Id,
+                label        = p.Label ?? string.Empty,
+                price        = p.Price / 100.0,
+                originalPrice = p.OriginalPrice / 100.0,
+                unit         = p.Unit ?? "once",
+                duration     = p.Duration,
+                durationDays = p.DurationDays,
+                stock        = p.Stock
+            }).ToList();
             // 截图与标签均以分隔符存储，输出时转为数组
             var screenshotList = (asset.Screenshots ?? string.Empty).Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
             var tagList        = (asset.Tags        ?? string.Empty).Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
@@ -252,19 +269,25 @@ public partial class KaxHttp
                 lastUpdatedAt = specs.LastUpdatedAt
             };
 
+            // 徽章与特性：从数据库读取，为空则返回默认值（向后兼容）
+            var badgesRaw = asset.Badges ?? string.Empty;
+            var featuresRaw = asset.Features ?? string.Empty;
+
             var result = new
             {
                 id          = asset.Id,
                 name        = asset.Name,
                 version     = asset.Version,
-                author      = asset.Author,
+                authorId    = asset.AuthorId,
                 description = asset.Description,
                 category    = asset.Category,
                 isDeleted   = asset.IsDeleted,
-                primaryImage   = asset.PrimaryImage,
-                thumbnailImage = asset.ThumbnailImage,
+                coverImage   = asset.CoverImage,
+                iconImage = asset.IconImage,
                 screenshots    = screenshotList,
                 tags           = tagList,
+                badges         = badgesRaw,
+                features       = featuresRaw,
                 prices         = pricesList,
                 specs          = specsDto
             };
@@ -302,7 +325,7 @@ public partial class KaxHttp
                 (a.Specs?.Downloads ?? 0) * 0.6 + (a.Specs?.Rating ?? 0) * 10 + (a.Specs?.PurchaseCount ?? 0) * 0.3;
 
             var candidates = all
-                .Where(a => !a.IsDeleted && a.Id != assetId)
+                .Where(a => !a.IsDeleted && a.Id != assetId && a.Status == Model.AssetStatus.Active)
                 .Where(a => string.IsNullOrEmpty(category) || string.Equals(a.Category ?? string.Empty, category, StringComparison.OrdinalIgnoreCase))
                 .OrderByDescending(HotScore)
                 .Take(top)
@@ -313,7 +336,7 @@ public partial class KaxHttp
                 var existingIds = candidates.Select(c => c.Id).ToHashSet();
                 existingIds.Add(assetId);
                 var extras = all
-                    .Where(a => !a.IsDeleted && !existingIds.Contains(a.Id))
+                    .Where(a => !a.IsDeleted && !existingIds.Contains(a.Id) && a.Status == Model.AssetStatus.Active)
                     .OrderByDescending(HotScore)
                     .Take(top - candidates.Count)
                     .ToList();
@@ -329,15 +352,18 @@ public partial class KaxHttp
                     id             = a.Id,
                     name           = a.Name,
                     category       = a.Category,
-                    author         = a.Author,
-                    primaryImage   = a.PrimaryImage,
-                    thumbnailImage = a.ThumbnailImage,
+                    authorId       = a.AuthorId,
+                    coverImage   = a.CoverImage,
+                    iconImage = a.IconImage,
                     rating         = s?.Rating    ?? 0.0,
                     downloads      = s?.Downloads ?? 0,
                     price         = p != null ? p.Price         : 0,
                     originalPrice = p != null ? p.OriginalPrice : 0,
                     discountRate  = p != null ? p.DiscountRate  : 0.0,
-                    salePrice     = p != null ? (int)Math.Round(p.Price * (1.0 - p.DiscountRate)) : 0
+                    salePrice     = p != null ? (int)Math.Round(p.Price * (1.0 - p.DiscountRate)) : 0,
+                    priceYuan         = p != null ? p.Price / 100.0 : 0,
+                    originalPriceYuan = p != null ? p.OriginalPrice / 100.0 : 0,
+                    salePriceYuan     = p != null ? Math.Round((p.Price * (1.0 - p.DiscountRate)) / 100.0, 2) : 0
                 };
             }).ToList();
 
@@ -375,36 +401,39 @@ public partial class KaxHttp
             if (asset == null || asset.IsDeleted)
                 return new JsonResult(new { code = 404, message = "资产不存在" }, 404);
 
-            var pricesList = asset.Prices?.ToList();
+            var pricesList = asset.Prices?.Select(p => new
+            {
+                id           = p.Id,
+                label        = p.Label ?? string.Empty,
+                price        = p.Price / 100.0,
+                originalPrice = p.OriginalPrice / 100.0,
+                unit         = p.Unit ?? "once",
+                duration     = p.Duration,
+                durationDays = p.DurationDays,
+                stock        = p.Stock
+            }).ToList();
             if (pricesList == null || pricesList.Count == 0)
                 return new JsonResult(new { code = 200, message = "该资产暂无可用套餐", data = new object[0] }, 200);
 
-            string LocalizeDuration(string unit, int dur)
+            string LocalizeDuration(int days)
             {
-                if (dur <= 0) return string.Empty;
-                return unit switch
-                {
-                    "day"    => dur + "天",
-                    "month"  => dur + "月",
-                    "year"   => dur + "年",
-                    "hour"   => dur + "小时",
-                    "minute" => dur + "分钟",
-                    "once"   => "永久",
-                    _        => dur + unit
-                };
+                if (days == 0) return "永久授权";
+                if (days % 365 == 0) return days / 365 + "年";
+                if (days % 30 == 0) return days / 30 + "月";
+                return days + "天";
             }
 
             var plans = pricesList.Select(p => new
             {
-                id            = p.Id,
-                unit          = p.Unit,
-                duration      = p.Duration,
-                durationLabel = LocalizeDuration(p.Unit, p.Duration),
-                price         = p.Price,
-                originalPrice = p.OriginalPrice,
-                discountRate  = p.DiscountRate,
-                salePrice     = (int)Math.Round(p.Price * (1.0 - p.DiscountRate)),
-                stock         = p.Stock
+                id            = p.id,
+                label         = p.label,
+                unit          = p.unit,
+                duration      = p.duration,
+                durationDays  = p.durationDays,
+                durationLabel = LocalizeDuration(p.durationDays),
+                price         = p.price,
+                originalPrice = p.originalPrice,
+                stock         = p.stock
             }).ToList();
 
             return new JsonResult(new { code = 0, message = "成功", data = plans }, 200);

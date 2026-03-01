@@ -85,9 +85,8 @@
                             <span class="material-icons">chevron_right</span>
                         </button>
                     </div>
-                    <div class="gallery-thumbs" id="thumbnailContainer" role="list" aria-label="截图缩略图">
-                        <div class="gallery-thumb active" role="listitem">🎮</div>
-                    </div>
+                    <!-- tile缩略图导航已禁用，由JS隐藏 -->
+                    <div class="gallery-thumbs" id="thumbnailContainer" role="list" aria-label="截图缩略图" style="display:none;"></div>
                 </section>
 
                 <!-- Tab 导航 -->
@@ -104,36 +103,9 @@
                         <p class="overview-description" id="productDescription">加载中…</p>
                     </div>
 
-                    <!-- 亮点特性 -->
+                    <!-- 亮点特性（由 JS 动态渲染，支持 System 用户编辑） -->
                     <div class="features-grid" id="featuresGrid">
-                        <div class="feature-item">
-                            <span class="feature-icon material-icons">bolt</span>
-                            <div>
-                                <div class="feature-title">高性能</div>
-                                <div class="feature-desc">优化的运行效率，流畅无卡顿</div>
-                            </div>
-                        </div>
-                        <div class="feature-item">
-                            <span class="feature-icon material-icons">shield</span>
-                            <div>
-                                <div class="feature-title">安全可靠</div>
-                                <div class="feature-desc">通过安全扫描，保护你的游戏环境</div>
-                            </div>
-                        </div>
-                        <div class="feature-item">
-                            <span class="feature-icon material-icons">update</span>
-                            <div>
-                                <div class="feature-title">持续更新</div>
-                                <div class="feature-desc">定期维护，跟进游戏版本</div>
-                            </div>
-                        </div>
-                        <div class="feature-item">
-                            <span class="feature-icon material-icons">people</span>
-                            <div>
-                                <div class="feature-title">社区支持</div>
-                                <div class="feature-desc">活跃社区，问题快速响应</div>
-                            </div>
-                        </div>
+                        <!-- 由 shop_detail.js 动态生成 -->
                     </div>
                 </div>
 
@@ -240,20 +212,9 @@
                         </div>
                     </div>
 
-                    <!-- 快速信息 -->
-                    <div class="panel-quick-info">
-                        <div class="pqi-item">
-                            <span class="material-icons pqi-icon">verified_user</span>
-                            <span>安全认证资源</span>
-                        </div>
-                        <div class="pqi-item">
-                            <span class="material-icons pqi-icon">support_agent</span>
-                            <span>官方技术支持</span>
-                        </div>
-                        <div class="pqi-item">
-                            <span class="material-icons pqi-icon">history</span>
-                            <span>版本更新保障</span>
-                        </div>
+                    <!-- 快速信息徽章（由 JS 动态渲染，支持 System 用户编辑） -->
+                    <div class="panel-quick-info" id="panelBadges">
+                        <!-- 由 shop_detail.js 动态生成 -->
                     </div>
                 </div>
             </aside>
@@ -303,6 +264,74 @@
             </div>
         </section>
     </div>
+
+    <!-- ── System 编辑模式 UI ── -->
+    <!-- 编辑模式悬浮切换按钮（仅 System 用户可见） -->
+    <button class="edit-mode-toggle" id="editModeToggle" style="display:none;" title="进入编辑模式">
+        <span class="material-icons">edit</span>
+        <span class="edit-mode-label">编辑模式</span>
+    </button>
+
+    <!-- 编辑模式工具栏（顶部固定，编辑态显示） -->
+    <div class="edit-toolbar" id="editToolbar" style="display:none;">
+        <div class="edit-toolbar-inner">
+            <span class="edit-toolbar-title">
+                <span class="material-icons">edit_note</span>
+                编辑模式 — 点击高亮区域即可编辑
+            </span>
+            <div class="edit-toolbar-actions">
+                <button class="edit-btn-save" id="editSaveBtn">
+                    <span class="material-icons">save</span> 保存更改
+                </button>
+                <button class="edit-btn-cancel" id="editCancelBtn">
+                    <span class="material-icons">close</span> 退出编辑
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 内联编辑弹窗 -->
+    <div class="edit-overlay" id="editOverlay" style="display:none;">
+        <div class="edit-popup" id="editPopup">
+            <div class="edit-popup-header">
+                <span class="edit-popup-title" id="editPopupTitle">编辑字段</span>
+                <button class="edit-popup-close" id="editPopupClose"><span class="material-icons">close</span></button>
+            </div>
+            <div class="edit-popup-body" id="editPopupBody">
+                <!-- 动态内容 -->
+            </div>
+            <div class="edit-popup-footer">
+                <button class="edit-popup-confirm" id="editPopupConfirm">确认</button>
+                <button class="edit-popup-cancel" id="editPopupCancel">取消</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 列表编辑弹窗（徽章/特性编辑器） -->
+    <div class="edit-overlay" id="listEditOverlay" style="display:none;">
+        <div class="edit-popup edit-popup-wide" id="listEditPopup">
+            <div class="edit-popup-header">
+                <span class="edit-popup-title" id="listEditTitle">编辑列表</span>
+                <button class="edit-popup-close" id="listEditClose"><span class="material-icons">close</span></button>
+            </div>
+            <div class="edit-popup-body" id="listEditBody">
+                <!-- 动态内容 -->
+            </div>
+            <div class="edit-popup-footer">
+                <button class="edit-popup-add" id="listEditAdd"><span class="material-icons">add</span> 新增条目</button>
+                <div style="flex:1;"></div>
+                <button class="edit-popup-confirm" id="listEditConfirm">确认</button>
+                <button class="edit-popup-cancel" id="listEditCancel">取消</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast 通知 -->
+    <div class="edit-toast" id="editToast" style="display:none;">
+        <span class="material-icons" id="editToastIcon">check_circle</span>
+        <span id="editToastText">保存成功</span>
+    </div>
+
 
     <script src="/js/shop_detail.js"></script>
 </body>

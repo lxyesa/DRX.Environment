@@ -4,13 +4,32 @@ using Drx.Sdk.Network.DataBase;
 namespace KaxSocket.Model;
 
 /// <summary>
+/// 资产审核状态枚举
+/// </summary>
+public enum AssetStatus
+{
+    /// <summary>审核中（新提交或重新提交）</summary>
+    PendingReview = 0,
+
+    /// <summary>审核拒绝</summary>
+    Rejected = 1,
+
+    /// <summary>审核通过，待发布</summary>
+    ApprovedPendingPublish = 2,
+
+    /// <summary>正常运行（已发布到商店）</summary>
+    Active = 3
+}
+
+/// <summary>
 /// 资产/商品数据模型
 /// 
 /// 结构说明：
 /// - 基本信息：名称、版本、作者、分类等通用字段
-/// - 媒体资源：主图、缩略图、截图等图像 URL
+/// - 媒体资源：封面、图标、截图等图像 URL
 /// - 价格方案：多种购买选项（子表 <see cref="AssetPrice"/>），每个方案独立库存
 /// - 规格信息：文件信息、统计数据、时间戳等元数据（子表 <see cref="AssetSpecs"/>）
+/// - 审核状态：资产需经审核后方可在商店展示
 /// - 软删除：逻辑删除支持
 /// </summary>
 public class AssetModel : IDataBase
@@ -25,8 +44,8 @@ public class AssetModel : IDataBase
     /// <summary>资源版本号</summary>
     public string Version { get; set; }
 
-    /// <summary>资源作者</summary>
-    public string Author { get; set; }
+    /// <summary>资源作者用户 ID（关联 UserData.Id）</summary>
+    public int AuthorId { get; set; }
 
     /// <summary>资源描述</summary>
     public string Description { get; set; }
@@ -37,15 +56,27 @@ public class AssetModel : IDataBase
     /// <summary>标签列表（逗号分隔，如 "高性能,安全,稳定"）</summary>
     public string Tags { get; set; } = string.Empty;
 
+    /// <summary>
+    /// 购买面板徽章列表（JSON 数组格式，如 [{"icon":"verified_user","text":"安全认证资源"},...]）
+    /// 为空时前端使用默认硬编码值，保持向后兼容
+    /// </summary>
+    public string Badges { get; set; } = string.Empty;
+
+    /// <summary>
+    /// 概述 Tab 亮点特性列表（JSON 数组格式，如 [{"icon":"bolt","title":"高性能","desc":"优化的运行效率..."},...]）
+    /// 为空时前端使用默认硬编码值，保持向后兼容
+    /// </summary>
+    public string Features { get; set; } = string.Empty;
+
     #endregion
 
     #region 媒体资源
 
-    /// <summary>主图 URL（用于英雄区和商品卡片展示）</summary>
-    public string PrimaryImage { get; set; } = string.Empty;
+    /// <summary>封面 URL（用于英雄区背景和商品卡片展示）</summary>
+    public string CoverImage { get; set; } = string.Empty;
 
-    /// <summary>缩略图 URL（用于列表页和推荐卡片）</summary>
-    public string ThumbnailImage { get; set; } = string.Empty;
+    /// <summary>图标 URL（用于列表页和推荐卡片小图）</summary>
+    public string IconImage { get; set; } = string.Empty;
 
     /// <summary>截图 URL 列表（分号分隔，用于详情页画廊）</summary>
     public string Screenshots { get; set; } = string.Empty;
@@ -76,6 +107,19 @@ public class AssetModel : IDataBase
 
     #endregion
 
+    #region 审核状态
+
+    /// <summary>资产当前状态（审核流程）</summary>
+    public AssetStatus Status { get; set; } = AssetStatus.PendingReview;
+
+    /// <summary>最后一次提交审核时间戳（Unix 秒），用于4小时冷却检测</summary>
+    public long LastSubmittedAt { get; set; }
+
+    /// <summary>审核拒绝原因（仅在 Status == Rejected 时有值）</summary>
+    public string RejectReason { get; set; } = string.Empty;
+
+    #endregion
+
     #region 嵌套类型
 
     /// <summary>
@@ -100,6 +144,9 @@ public class AssetModel : IDataBase
         /// <summary>更新时间戳（Unix 毫秒）</summary>
         public long UpdatedAt { get; set; } = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
 
+        /// <summary>方案名称（如"月度授权"、"专业版"）</summary>
+        public string Label { get; set; } = string.Empty;
+
         /// <summary>最终价格（最小货币单位，如分）</summary>
         public int Price { get; set; }
 
@@ -108,6 +155,9 @@ public class AssetModel : IDataBase
 
         /// <summary>时间数量（如 Duration=1 + Unit="year" 表示 1 年）</summary>
         public int Duration { get; set; } = 1;
+
+        /// <summary>授权时长（天数，0 表示永久授权）</summary>
+        public int DurationDays { get; set; } = 0;
 
         /// <summary>原始价格（未折扣，最小货币单位）</summary>
         public int OriginalPrice { get; set; }

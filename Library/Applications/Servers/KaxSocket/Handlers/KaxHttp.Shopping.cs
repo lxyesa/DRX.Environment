@@ -82,8 +82,8 @@ public partial class KaxHttp
             if (assetPrice == null)
                 return new JsonResult(new { code = 404, message = "价格方案不存在" }, 404);
 
-            int discountedPrice = (int)Math.Round(assetPrice.Price * (1.0 - assetPrice.DiscountRate));
-            int minimumGold = Math.Max(0, discountedPrice);
+            // Price 已是最终价格（OriginalPrice × (1 - DiscountRate)），直接使用
+            int minimumGold = Math.Max(0, assetPrice.Price);
             if (user.Gold < minimumGold)
                 return new JsonResult(new { code = 403, message = $"金币不足，需要至少 {minimumGold} 点金币才能购买此资产" }, 403);
 
@@ -252,8 +252,8 @@ public partial class KaxHttp
             if (selectedPlan == null)
                 return new JsonResult(new { code = 404, message = "套餐不存在" }, 404);
 
-            int planPrice = (int)Math.Round(selectedPlan.Price * (1.0 - selectedPlan.DiscountRate));
-            planPrice = Math.Max(0, planPrice);
+            // Price 已是最终价格（OriginalPrice × (1 - DiscountRate)），直接使用
+            int planPrice = Math.Max(0, selectedPlan.Price);
 
             if (user.Gold < planPrice)
                 return new JsonResult(new { code = 402, message = $"金币不足，需 {planPrice} 金币" }, 402);

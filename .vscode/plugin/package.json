@@ -1,0 +1,59 @@
+{
+  "name": "thinking-block-display",
+  "displayName": "Thinking Block Display",
+  "description": "Display thinking blocks in VS Code Copilot with visual indicators",
+  "version": "1.0.0",
+  "engines": {
+    "vscode": "^1.92.0"
+  },
+  "publisher": "copilot-extension",
+  "categories": [
+    "AI",
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "chatParticipants": [
+      {
+        "id": "thinking-display.analyzer",
+        "name": "analyzer",
+        "fullName": "Thinking Analyzer",
+        "description": "AI assistant with visible thinking blocks",
+        "isSticky": true,
+        "commands": [
+          {
+            "name": "think",
+            "description": "Show detailed thinking process"
+          },
+          {
+            "name": "analyze",
+            "description": "Analyze with visible reasoning"
+          }
+        ]
+      }
+    ],
+    "commands": [
+      {
+        "command": "thinking-display.toggleThinkingView",
+        "title": "Toggle Thinking Block View"
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run esbuild-base -- --minify",
+    "esbuild-base": "esbuild ./src/extension.ts --bundle --outfile=out/extension.js --external:vscode --format=cjs --platform=node",
+    "esbuild": "npm run esbuild-base -- --sourcemap",
+    "esbuild-watch": "npm run esbuild-base -- --sourcemap --watch",
+    "compile": "npm run esbuild",
+    "watch": "npm run esbuild-watch"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "@types/vscode": "^1.92.0",
+    "esbuild": "^0.19.0",
+    "typescript": "^5.3.0"
+  }
+}

@@ -56,6 +56,7 @@ public class Program
             server.AddRoute(HttpMethod.Get, "/asset/detail/{id}", req => new HtmlResultFromFile($"{AppDomain.CurrentDomain.BaseDirectory}Views/html/shop_detail.html"));
             server.AddRoute(HttpMethod.Get, "/user/verify-email", req => new HtmlResultFromFile($"{AppDomain.CurrentDomain.BaseDirectory}Views/html/verify-email.html"));
             server.AddRoute(HttpMethod.Get, "/console", req => new HtmlResultFromFile($"{AppDomain.CurrentDomain.BaseDirectory}Views/html/console.html"));
+            server.AddRoute(HttpMethod.Get, "/developer", req => new HtmlResultFromFile($"{AppDomain.CurrentDomain.BaseDirectory}Views/html/developer.html"));
 
             server.FileUploadRouter("/api/file/upload", "uploads");
 
