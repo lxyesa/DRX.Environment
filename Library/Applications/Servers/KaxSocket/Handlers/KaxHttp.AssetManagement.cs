@@ -1,13 +1,16 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json.Nodes;
 using System.Threading.Tasks;
 using Drx.Sdk.Network.Http;
+using Drx.Sdk.Network.Http.Api;
 using Drx.Sdk.Network.Http.Protocol;
 using Drx.Sdk.Network.Http.Results;
 using Drx.Sdk.Network.Http.Configs;
 using Drx.Sdk.Shared;
 using KaxSocket;
+using KaxSocket.Handlers.Helpers;
 using KaxSocket.Model;
 using static KaxSocket.Model.AssetModel;
 
@@ -59,6 +62,15 @@ public partial class KaxHttp
             // 初始化Prices列表
             if (asset.Prices == null)
                 asset.Prices = new Drx.Sdk.Network.DataBase.TableList<AssetPrice>();
+
+            // 记录“当前资产已有”的价格方案 ID，仅允许复用这些 ID，避免外部传入 ID 与其他资产冲突
+            var existingPriceIds = asset.Prices
+                .Where(p => !string.IsNullOrWhiteSpace(p.Id))
+                .Select(p => p.Id)
+                .ToHashSet(StringComparer.Ordinal);
+
+            // 本次请求内去重，防止同一 payload 出现重复 id 触发主键冲突
+            var reservedIds = new HashSet<string>(StringComparer.Ordinal);
 
             // 清空现有价格方案，用新的替换
             asset.Prices.Clear();
@@ -178,10 +190,29 @@ public partial class KaxHttp
                     Stock         = stock
                 };
 
-                // 如果ID不是临时ID（new_开头），则保留原ID
-                if (!string.IsNullOrEmpty(id) && !id.StartsWith("new_"))
+                // ID 处理策略：
+                // 1) 仅复用“当前资产已有”且本次尚未占用的 ID；
+                // 2) 外部新传入 ID（包括跨资产复制来的）统一改为新 GUID，避免主键冲突；
+                // 3) 同一请求内强制唯一。
+                if (!string.IsNullOrEmpty(id) && !id.StartsWith("new_", StringComparison.Ordinal))
                 {
-                    assetPrice.Id = id;
+                    if (existingPriceIds.Contains(id) && reservedIds.Add(id))
+                    {
+                        assetPrice.Id = id;
+                    }
+                    else
+                    {
+                        var newId = Guid.NewGuid().ToString();
+                        while (!reservedIds.Add(newId))
+                            newId = Guid.NewGuid().ToString();
+
+                        assetPrice.Id = newId;
+                        Logger.Warn($"检测到不可复用或重复的价格方案ID（{id}），已重置为新ID以避免冲突。");
+                    }
+                }
+                else
+                {
+                    reservedIds.Add(assetPrice.Id);
                 }
 
                 asset.Prices.Add(assetPrice);
@@ -232,7 +263,7 @@ public partial class KaxHttp
     /// <summary>
     /// 从 JSON 请求体中提取规格信息（文件大小、评分、兼容性、许可证等）并写入 asset.Specs 子表
     /// </summary>
-    private static void ApplySpecsInfoToAsset(Model.AssetModel asset, JsonNode body, bool isCreate = false)
+    private static void ApplySpecsInfoToAsset(Model.AssetModel asset, JsonNode body)
     {
         if (body == null) return;
         var specs = EnsureSpecs(asset);
@@ -260,30 +291,24 @@ public partial class KaxHttp
     [HttpHandle("/api/asset/admin/create", "POST", RateLimitMaxRequests = 10, RateLimitWindowSeconds = 60, RateLimitCallbackMethodName = nameof(RateLimitCallback))]
     public static async Task<IActionResult> Post_CreateAsset(HttpRequest request)
     {
-        var token = request.Headers[HttpHeaders.Authorization]?.Replace("Bearer ", "");
-        var principal = KaxGlobal.ValidateToken(token!);
-        if (principal == null) return new JsonResult(new { message = "无效的登录令牌" }, 401);
+        var (operatorName, authError) = await Api.RequireAdminNameAsync(request);
+        if (authError != null) return authError;
+        if (string.IsNullOrEmpty(operatorName)) return new JsonResult(new { message = "管理员认证失败" }, 401);
 
-        var userName = principal.Identity?.Name;
-        if (string.IsNullOrWhiteSpace(userName))
-            return new JsonResult(new { message = "令牌缺少用户信息" }, 401);
-
-        if (await KaxGlobal.IsUserBanned(userName))
-            return new JsonResult(new { message = "您的账号已被封禁" }, 403);
-        if (!await IsAssetAdminUser(userName))
-            return new JsonResult(new { message = "权限不足" }, 403);
-
-        if (string.IsNullOrEmpty(request.Body))
-            return new JsonResult(new { message = "请求体不能为空" }, 400);
+        if (!ApiBody.TryParse(request, out var body, out var parseError))
+            return parseError!;
 
         try
         {
-            var body = JsonNode.Parse(request.Body);
-            if (body == null) return new JsonResult(new { message = "无法解析请求体" }, 400);
 
             var name = body["name"]?.ToString();
             var version = body["version"]?.ToString();
-            var description = body["description"]?.ToString() ?? "";
+
+            string description = body["description"]?.ToString()
+                ?? body["fullDesc"]?.ToString()
+                ?? body["introduction"]?.ToString()
+                ?? body["intro"]?.ToString()
+                ?? string.Empty;
 
             // authorId: 优先从请求体获取，否则通过当前用户名查找
             int authorId = 0;
@@ -291,7 +316,7 @@ public partial class KaxHttp
                 authorId = parsedAuthorId;
             else
             {
-                var currentUser = (await KaxGlobal.UserDatabase.SelectWhereAsync("UserName", userName)).FirstOrDefault();
+                var currentUser = (await KaxGlobal.UserDatabase.SelectWhereAsync("UserName", operatorName)).FirstOrDefault();
                 if (currentUser != null) authorId = currentUser.Id;
             }
 
@@ -306,8 +331,8 @@ public partial class KaxHttp
 
             var asset = new Model.AssetModel
             {
-                Name = name,
-                Version = version,
+                Name = name!,
+                Version = version!,
                 AuthorId = authorId,
                 Description = description
             };
@@ -322,10 +347,10 @@ public partial class KaxHttp
 
             // 创建后再写入子表，确保 ParentId 使用真实资产 ID
             ApplyPriceInfoToAsset(asset, body);
-            ApplySpecsInfoToAsset(asset, body, isCreate: true);
+            ApplySpecsInfoToAsset(asset, body);
             await KaxGlobal.AssetDataBase.UpdateAsync(asset);
 
-            Logger.Info($"用户 {userName} 创建了资源: {name} (v{version})");
+            Logger.Info($"用户 {operatorName} 创建了资源: {name} (v{version})");
             return new JsonResult(new { message = "资源创建成功", id = asset.Id });
         }
         catch (Exception ex)
@@ -338,23 +363,14 @@ public partial class KaxHttp
     [HttpHandle("/api/asset/admin/update", "POST", RateLimitMaxRequests = 10, RateLimitWindowSeconds = 60, RateLimitCallbackMethodName = nameof(RateLimitCallback))]
     public static async Task<IActionResult> Post_UpdateAsset(HttpRequest request)
     {
-        var token = request.Headers[HttpHeaders.Authorization]?.Replace("Bearer ", "");
-        var principal = KaxGlobal.ValidateToken(token!);
-        if (principal == null) return new JsonResult(new { message = "无效的登录令牌" }, 401);
+        var (operatorName, authError) = await Api.RequireAdminNameAsync(request);
+        if (authError != null) return authError;
 
-        var userName = principal.Identity?.Name;
-        if (await KaxGlobal.IsUserBanned(userName!))
-            return new JsonResult(new { message = "您的账号已被封禁" }, 403);
-        if (!await IsAssetAdminUser(userName))
-            return new JsonResult(new { message = "权限不足" }, 403);
-
-        if (string.IsNullOrEmpty(request.Body))
-            return new JsonResult(new { message = "请求体不能为空" }, 400);
+        if (!ApiBody.TryParse(request, out var body, out var parseError))
+            return parseError!;
 
         try
         {
-            var body = JsonNode.Parse(request.Body);
-            if (body == null) return new JsonResult(new { message = "无法解析请求体" }, 400);
 
             if (!int.TryParse(body["id"]?.ToString(), out var id) || id <= 0)
                 return new JsonResult(new { message = "资源ID无效" }, 400);
@@ -364,18 +380,31 @@ public partial class KaxHttp
                 return new JsonResult(new { message = "资源不存在" }, 404);
 
             var version = body["version"]?.ToString();
-            var description = body["description"]?.ToString() ?? "";
+            bool hasDescription = body["description"] != null || body["fullDesc"] != null || body["introduction"] != null || body["intro"] != null;
+            string? description = null;
+            if (hasDescription)
+            {
+                description = body["description"]?.ToString()
+                    ?? body["fullDesc"]?.ToString()
+                    ?? body["introduction"]?.ToString()
+                    ?? body["intro"]?.ToString()
+                    ?? string.Empty;
+            }
 
             if (!string.IsNullOrEmpty(version) && version.Length > 50)
                 return new JsonResult(new { message = "版本字段无效（最多50字符）" }, 400);
-            if (description.Length > 500)
+            if (description != null && description.Length > 500)
                 return new JsonResult(new { message = "描述过长（最多500字符）" }, 400);
 
             if (!string.IsNullOrEmpty(version)) asset.Version = version;
-            // 可选更新：作者ID
-            if (body["authorId"] != null && int.TryParse(body["authorId"]?.ToString(), out var newAuthorId) && newAuthorId > 0)
-                asset.AuthorId = newAuthorId;
-            asset.Description = description;
+
+            // 作者在创建时即确定，后续更新不允许修改
+            if (body["authorId"] != null || body["author"] != null)
+                Logger.Warn($"检测到资源 {id} 的作者变更请求，已忽略（作者固定为创建时绑定值: {asset.AuthorId}）。");
+
+            // 仅当请求显式携带描述字段时才更新，避免“只改其他字段导致简介被清空”
+            if (hasDescription && description != null)
+                asset.Description = description;
 
             // 可选更新：资源名称
             if (body["name"] != null)
@@ -448,7 +477,7 @@ public partial class KaxHttp
 
             await KaxGlobal.AssetDataBase.UpdateAsync(asset);
 
-            Logger.Info($"用户 {userName} 修改了资源: {asset.Name} (id={id})");
+            Logger.Info($"用户 {operatorName} 修改了资源: {asset.Name} (id={id})");
             return new JsonResult(new { message = "资源已更新" });
         }
         catch (Exception ex)
@@ -461,23 +490,14 @@ public partial class KaxHttp
     [HttpHandle("/api/asset/admin/inspect", "POST", RateLimitMaxRequests = 60, RateLimitWindowSeconds = 60, RateLimitCallbackMethodName = nameof(RateLimitCallback))]
     public static async Task<IActionResult> Post_InspectAsset(HttpRequest request)
     {
-        var token = request.Headers[HttpHeaders.Authorization]?.Replace("Bearer ", "");
-        var principal = KaxGlobal.ValidateToken(token!);
-        if (principal == null) return new JsonResult(new { message = "无效的登录令牌" }, 401);
+        var (_, authError) = await Api.RequireAdminNameAsync(request);
+        if (authError != null) return authError;
 
-        var userName = principal.Identity?.Name;
-        if (await KaxGlobal.IsUserBanned(userName!))
-            return new JsonResult(new { message = "您的账号已被封禁" }, 403);
-        if (!await IsAssetAdminUser(userName))
-            return new JsonResult(new { message = "权限不足" }, 403);
-
-        if (string.IsNullOrEmpty(request.Body))
-            return new JsonResult(new { message = "请求体不能为空" }, 400);
+        if (!ApiBody.TryParse(request, out var body, out var parseError))
+            return parseError!;
 
         try
         {
-            var body = JsonNode.Parse(request.Body);
-            if (body == null) return new JsonResult(new { message = "无法解析请求体" }, 400);
 
             if (!int.TryParse(body["id"]?.ToString(), out var id) || id <= 0)
                 return new JsonResult(new { message = "资源ID无效" }, 400);
@@ -550,23 +570,14 @@ public partial class KaxHttp
     [HttpHandle("/api/asset/admin/delete", "POST", RateLimitMaxRequests = 10, RateLimitWindowSeconds = 60, RateLimitCallbackMethodName = nameof(RateLimitCallback))]
     public static async Task<IActionResult> Post_DeleteAsset(HttpRequest request)
     {
-        var token = request.Headers[HttpHeaders.Authorization]?.Replace("Bearer ", "");
-        var principal = KaxGlobal.ValidateToken(token!);
-        if (principal == null) return new JsonResult(new { message = "无效的登录令牌" }, 401);
+        var (operatorName, authError) = await Api.RequireAdminNameAsync(request);
+        if (authError != null) return authError;
 
-        var userName = principal.Identity?.Name;
-        if (await KaxGlobal.IsUserBanned(userName!))
-            return new JsonResult(new { message = "您的账号已被封禁" }, 403);
-        if (!await IsAssetAdminUser(userName))
-            return new JsonResult(new { message = "权限不足" }, 403);
-
-        if (string.IsNullOrEmpty(request.Body))
-            return new JsonResult(new { message = "请求体不能为空" }, 400);
+        if (!ApiBody.TryParse(request, out var body, out var parseError))
+            return parseError!;
 
         try
         {
-            var body = JsonNode.Parse(request.Body);
-            if (body == null) return new JsonResult(new { message = "无法解析请求体" }, 400);
 
             if (!int.TryParse(body["id"]?.ToString(), out var id) || id <= 0)
                 return new JsonResult(new { message = "资源ID无效" }, 400);
@@ -582,7 +593,7 @@ public partial class KaxHttp
             specs.LastUpdatedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
             await KaxGlobal.AssetDataBase.UpdateAsync(asset);
 
-            Logger.Info($"用户 {userName} 软删除了资源: {asset.Name} (id={id})");
+            Logger.Info($"用户 {operatorName} 软删除了资源: {asset.Name} (id={id})");
             return new JsonResult(new { message = "资源已标记为已删除" });
         }
         catch (Exception ex)
@@ -595,23 +606,14 @@ public partial class KaxHttp
     [HttpHandle("/api/asset/admin/restore", "POST", RateLimitMaxRequests = 10, RateLimitWindowSeconds = 60, RateLimitCallbackMethodName = nameof(RateLimitCallback))]
     public static async Task<IActionResult> Post_RestoreAsset(HttpRequest request)
     {
-        var token = request.Headers[HttpHeaders.Authorization]?.Replace("Bearer ", "");
-        var principal = KaxGlobal.ValidateToken(token!);
-        if (principal == null) return new JsonResult(new { message = "无效的登录令牌" }, 401);
+        var (operatorName, authError) = await Api.RequireAdminNameAsync(request);
+        if (authError != null) return authError;
 
-        var userName = principal.Identity?.Name;
-        if (await KaxGlobal.IsUserBanned(userName!))
-            return new JsonResult(new { message = "您的账号已被封禁" }, 403);
-        if (!await IsAssetAdminUser(userName))
-            return new JsonResult(new { message = "权限不足" }, 403);
-
-        if (string.IsNullOrEmpty(request.Body))
-            return new JsonResult(new { message = "请求体不能为空" }, 400);
+        if (!ApiBody.TryParse(request, out var body, out var parseError))
+            return parseError!;
 
         try
         {
-            var body = JsonNode.Parse(request.Body);
-            if (body == null) return new JsonResult(new { message = "无法解析请求体" }, 400);
 
             if (!int.TryParse(body["id"]?.ToString(), out var id) || id <= 0)
                 return new JsonResult(new { message = "资源ID无效" }, 400);
@@ -626,7 +628,7 @@ public partial class KaxHttp
             specs.LastUpdatedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
             await KaxGlobal.AssetDataBase.UpdateAsync(asset);
 
-            Logger.Info($"用户 {userName} 恢复了资源: {asset.Name} (id={id})");
+            Logger.Info($"用户 {operatorName} 恢复了资源: {asset.Name} (id={id})");
             return new JsonResult(new { message = "资源已恢复" });
         }
         catch (Exception ex)
@@ -639,13 +641,8 @@ public partial class KaxHttp
     [HttpHandle("/api/asset/admin/list", "GET", RateLimitMaxRequests = 0, RateLimitWindowSeconds = 0, RateLimitCallbackMethodName = nameof(RateLimitCallback))]
     public static async Task<IActionResult> Get_AssetList(HttpRequest request)
     {
-        var token = request.Headers[HttpHeaders.Authorization]?.Replace("Bearer ", "");
-        var principal = KaxGlobal.ValidateToken(token!);
-        if (principal == null) return new JsonResult(new { message = "无效的登录令牌" }, 401);
-
-        var userName = principal.Identity?.Name;
-        if (!await IsAssetAdminUser(userName))
-            return new JsonResult(new { message = "权限不足" }, 403);
+        var (_, authError) = await Api.RequireAdminNameAsync(request);
+        if (authError != null) return authError;
 
         try
         {
@@ -654,10 +651,7 @@ public partial class KaxHttp
             var authorFilter = request.Query[("author")] ?? string.Empty;
             var versionFilter = request.Query[("version")] ?? string.Empty;
             var includeDeleted = (request.Query[("includeDeleted")] ?? "false").ToLower() == "true";
-            int page = 1;
-            int pageSize = 20;
-            if (!int.TryParse(request.Query[("page")], out page) || page <= 0) page = 1;
-            if (!int.TryParse(request.Query[("pageSize")], out pageSize) || pageSize <= 0) pageSize = 20;
+            var (page, pageSize) = ApiPagination.Parse(request, defaultPageSize: 20);
 
             var all = await KaxGlobal.AssetDataBase.SelectAllAsync();
 
@@ -675,7 +669,6 @@ public partial class KaxHttp
             }
             if (!string.IsNullOrEmpty(authorFilter))
             {
-                var alow = authorFilter.ToLowerInvariant();
                 if (int.TryParse(authorFilter, out var authorIdFilter))
                     filtered = filtered.Where(a => a.AuthorId == authorIdFilter).AsQueryable();
             }

@@ -338,36 +338,6 @@ document.getElementById('profileForm').addEventListener('submit', async (ev) => 
 
     saveBtn.disabled = true;
     try {
-        const avatarFileEl = document.getElementById('avatarFile');
-        if (avatarFileEl && avatarFileEl.files && avatarFileEl.files.length > 0) {
-            const file = avatarFileEl.files[0];
-            const fd = new FormData();
-            fd.append('avatar', file, file.name);
-            const upResp = await fetch('/api/user/avatar', { method: 'POST', headers: { 'Authorization': 'Bearer ' + token }, body: fd });
-            const upJson = await upResp.json().catch(() => ({}));
-            if (upResp.status === 200 || upResp.status === 201) {
-                if (upJson.url) {
-                    avatarImg.style.display = 'block';
-                    avatarInitials.style.display = 'none';
-                    originalProfile.avatarSrc = upJson.url;
-                    if (window.AvatarCache) {
-                        try {
-                            await AvatarCache.updateCache(upJson.url, file);
-                            var resolvedUrl = await AvatarCache.getAvatar(upJson.url);
-                            avatarImg.src = resolvedUrl;
-                        } catch (e) { avatarImg.src = upJson.url; }
-                    } else {
-                        avatarImg.src = upJson.url;
-                    }
-                }
-            } else if (upResp.status === 401) {
-                localStorage.removeItem('kax_login_token'); location.href = '/login'; return;
-            } else {
-                alert(upJson.message || '头像上传失败');
-                saveBtn.disabled = false; return;
-            }
-        }
-
         const resp = await fetch('/api/user/profile', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
@@ -417,7 +387,315 @@ cancelBtn.addEventListener('click', () => {
 });
 // #endregion
 
-// #region 头像上传交互
+// #region 头像上传交互（含裁剪）
+
+// ---- 裁剪弹窗状态 ----
+const _cropModal    = document.getElementById('avatarCropModal');
+const _cropImg      = document.getElementById('cropSourceImg');
+const _cropOverlay  = document.getElementById('cropOverlay');
+const _cropViewport = document.getElementById('cropViewport');
+const _cropZoom     = document.getElementById('cropZoomRange');
+const _cropConfirm  = document.getElementById('cropConfirmBtn');
+const _cropCancel   = document.getElementById('cropCancelBtn');
+
+let _cropNatW = 0, _cropNatH = 0;   // 原图自然尺寸
+let _cropVpW  = 0, _cropVpH  = 0;   // viewport 像素尺寸
+let _cropMinScale = 0.1;             // 最小缩放（使图像填满圆圈）
+let _cropMaxScale = 4;
+let _cropScale = 1;
+let _cropOffX  = 0, _cropOffY = 0;  // 图像左上角在 viewport 中的偏移（px）
+let _cropDragging = false;
+let _cropDragStartX = 0, _cropDragStartY = 0;
+let _cropDragOffX0 = 0, _cropDragOffY0 = 0;
+let _cropFile = null;
+
+/** 把 scale 限制在 [min, max] */
+function _cropClampScale(s) {
+    return Math.max(_cropMinScale, Math.min(_cropMaxScale, s));
+}
+
+/** 把偏移限制在「图像始终完全覆盖圆形裁剪框」范围内 */
+function _cropClampOffset(ox, oy, scale) {
+    const imgW = _cropNatW * scale;
+    const imgH = _cropNatH * scale;
+    // 圆形裁剪框 = viewport 正中，直径 = min(vW, vH)
+    const circleR = Math.min(_cropVpW, _cropVpH) / 2;
+    const cx = _cropVpW / 2, cy = _cropVpH / 2;
+    // 图像必须覆盖圆：left <= cx - circleR，right >= cx + circleR
+    const minOx = cx + circleR - imgW;
+    const maxOx = cx - circleR;
+    const minOy = cy + circleR - imgH;
+    const maxOy = cy - circleR;
+    return {
+        x: Math.max(minOx, Math.min(maxOx, ox)),
+        y: Math.max(minOy, Math.min(maxOy, oy))
+    };
+}
+
+/** 将当前 offset 重置为居中 */
+function _cropCenter() {
+    _cropOffX = (_cropVpW - _cropNatW * _cropScale) / 2;
+    _cropOffY = (_cropVpH - _cropNatH * _cropScale) / 2;
+    const clamped = _cropClampOffset(_cropOffX, _cropOffY, _cropScale);
+    _cropOffX = clamped.x;
+    _cropOffY = clamped.y;
+}
+
+/** 更新图片 transform */
+function _cropApplyTransform() {
+    _cropImg.style.transform = `translate(${_cropOffX}px, ${_cropOffY}px) scale(${_cropScale})`;
+    _cropDrawOverlay();
+}
+
+/** 绘制遮罩层：四角半透明 + 圆形透明孔 + 白色圆框 */
+function _cropDrawOverlay() {
+    const canvas = _cropOverlay;
+    const vW = _cropVpW, vH = _cropVpH;
+    if (!vW || !vH) return;
+    canvas.width  = vW;
+    canvas.height = vH;
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, vW, vH);
+    const cx = vW / 2, cy = vH / 2;
+    const r  = Math.min(vW, vH) / 2 - 4; // 4px 内边距
+    // 暗角
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    ctx.fillRect(0, 0, vW, vH);
+    // 抠出圆形
+    ctx.globalCompositeOperation = 'destination-out';
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.fill();
+    // 白边
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.stroke();
+    // 十字参考线
+    ctx.strokeStyle = 'rgba(255,255,255,0.25)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([4, 4]);
+    ctx.beginPath();
+    ctx.moveTo(cx - r, cy); ctx.lineTo(cx + r, cy);
+    ctx.moveTo(cx, cy - r); ctx.lineTo(cx, cy + r);
+    ctx.stroke();
+    ctx.setLineDash([]);
+}
+
+/** 计算最小 scale（图像能填满圆圈）*/
+function _cropCalcMinScale() {
+    const r = Math.min(_cropVpW, _cropVpH) / 2 - 4;
+    const diameter = r * 2;
+    return Math.max(diameter / _cropNatW, diameter / _cropNatH);
+}
+
+/** 打开裁剪弹窗 */
+function _cropOpen(file) {
+    _cropFile = file;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        _cropImg.onload = () => {
+            _cropNatW = _cropImg.naturalWidth;
+            _cropNatH = _cropImg.naturalHeight;
+            // 等 viewport 渲染完毕再取尺寸
+            requestAnimationFrame(() => {
+                const rect = _cropViewport.getBoundingClientRect();
+                _cropVpW = rect.width || _cropViewport.offsetWidth;
+                _cropVpH = rect.height || _cropViewport.offsetHeight;
+                _cropMinScale = _cropCalcMinScale();
+                _cropScale = _cropClampScale(_cropMinScale * 1.05);
+                _cropZoom.value = 50;
+                _cropCenter();
+                _cropApplyTransform();
+            });
+        };
+        _cropImg.src = e.target.result;
+        _cropModal.classList.add('active');
+    };
+    reader.readAsDataURL(file);
+}
+
+/** 关闭裁剪弹窗 */
+function _cropClose() {
+    _cropModal.classList.remove('active');
+    avatarFile.value = '';
+}
+
+// ---- 缩放滑竿 ----
+_cropZoom.addEventListener('input', () => {
+    const t     = _cropZoom.value / 100; // 0~1
+    const newS  = _cropMinScale + (_cropMaxScale - _cropMinScale) * t;
+    // 以圆心为缩放中心
+    const cx = _cropVpW / 2, cy = _cropVpH / 2;
+    _cropOffX = cx - (cx - _cropOffX) * (newS / _cropScale);
+    _cropOffY = cy - (cy - _cropOffY) * (newS / _cropScale);
+    _cropScale = newS;
+    const clamped = _cropClampOffset(_cropOffX, _cropOffY, _cropScale);
+    _cropOffX = clamped.x;
+    _cropOffY = clamped.y;
+    _cropApplyTransform();
+});
+
+// ---- 滚轮缩放 ----
+_cropViewport.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    const delta = e.deltaY > 0 ? -0.08 : 0.08;
+    const newS  = _cropClampScale(_cropScale + delta * _cropScale);
+    const rect  = _cropViewport.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+    _cropOffX = mx - (mx - _cropOffX) * (newS / _cropScale);
+    _cropOffY = my - (my - _cropOffY) * (newS / _cropScale);
+    _cropScale = newS;
+    const clamped = _cropClampOffset(_cropOffX, _cropOffY, _cropScale);
+    _cropOffX = clamped.x;
+    _cropOffY = clamped.y;
+    // 将 scale 同步回滑竿
+    _cropZoom.value = ((_cropScale - _cropMinScale) / (_cropMaxScale - _cropMinScale)) * 100;
+    _cropApplyTransform();
+}, { passive: false });
+
+// ---- 鼠标拖动 ----
+_cropViewport.addEventListener('mousedown', (e) => {
+    e.preventDefault();
+    _cropDragging   = true;
+    _cropViewport.style.cursor = 'grabbing';
+    _cropDragStartX = e.clientX;
+    _cropDragStartY = e.clientY;
+    _cropDragOffX0  = _cropOffX;
+    _cropDragOffY0  = _cropOffY;
+});
+window.addEventListener('mousemove', (e) => {
+    if (!_cropDragging) return;
+    const dx = e.clientX - _cropDragStartX;
+    const dy = e.clientY - _cropDragStartY;
+    const clamped = _cropClampOffset(_cropDragOffX0 + dx, _cropDragOffY0 + dy, _cropScale);
+    _cropOffX = clamped.x;
+    _cropOffY = clamped.y;
+    _cropApplyTransform();
+});
+window.addEventListener('mouseup', () => {
+    if (_cropDragging) {
+        _cropDragging = false;
+        _cropViewport.style.cursor = 'grab';
+    }
+});
+
+// ---- 触控拖动 ----
+let _touchPrevX = 0, _touchPrevY = 0, _touchStartDist = 0, _touchStartScale = 1;
+_cropViewport.addEventListener('touchstart', (e) => {
+    if (e.touches.length === 1) {
+        _touchPrevX = e.touches[0].clientX;
+        _touchPrevY = e.touches[0].clientY;
+    } else if (e.touches.length === 2) {
+        _touchStartDist  = Math.hypot(e.touches[1].clientX - e.touches[0].clientX, e.touches[1].clientY - e.touches[0].clientY);
+        _touchStartScale = _cropScale;
+    }
+    e.preventDefault();
+}, { passive: false });
+_cropViewport.addEventListener('touchmove', (e) => {
+    e.preventDefault();
+    if (e.touches.length === 1) {
+        const dx = e.touches[0].clientX - _touchPrevX;
+        const dy = e.touches[0].clientY - _touchPrevY;
+        _touchPrevX = e.touches[0].clientX;
+        _touchPrevY = e.touches[0].clientY;
+        const clamped = _cropClampOffset(_cropOffX + dx, _cropOffY + dy, _cropScale);
+        _cropOffX = clamped.x;
+        _cropOffY = clamped.y;
+        _cropApplyTransform();
+    } else if (e.touches.length === 2) {
+        const dist  = Math.hypot(e.touches[1].clientX - e.touches[0].clientX, e.touches[1].clientY - e.touches[0].clientY);
+        const newS  = _cropClampScale(_touchStartScale * (dist / _touchStartDist));
+        const cx = (_cropVpW) / 2, cy = (_cropVpH) / 2;
+        _cropOffX = cx - (cx - _cropOffX) * (newS / _cropScale);
+        _cropOffY = cy - (cy - _cropOffY) * (newS / _cropScale);
+        _cropScale = newS;
+        const clamped = _cropClampOffset(_cropOffX, _cropOffY, _cropScale);
+        _cropOffX = clamped.x;
+        _cropOffY = clamped.y;
+        _cropZoom.value = ((_cropScale - _cropMinScale) / (_cropMaxScale - _cropMinScale)) * 100;
+        _cropApplyTransform();
+    }
+}, { passive: false });
+
+// ---- 取消 ----
+_cropCancel.addEventListener('click', _cropClose);
+_cropModal.addEventListener('click', (e) => {
+    if (e.target === _cropModal) _cropClose();
+});
+
+// ---- 确认并上传 ----
+_cropConfirm.addEventListener('click', async () => {
+    // 将圆形区域绘制到离屏 canvas，输出正方形 PNG
+    const r       = Math.min(_cropVpW, _cropVpH) / 2 - 4;
+    const diameter = Math.round(r * 2);
+    const cx = _cropVpW / 2, cy = _cropVpH / 2;
+    const offscreen = document.createElement('canvas');
+    offscreen.width = offscreen.height = diameter;
+    const ctx = offscreen.getContext('2d');
+
+    // 裁剪为圆形（圆形 mask，实际后端存储正方形即可，上传的是方形裁剪结果）
+    ctx.drawImage(
+        _cropImg,
+        (cx - r - _cropOffX) / _cropScale,   // srcX
+        (cy - r - _cropOffY) / _cropScale,   // srcY
+        diameter / _cropScale,                // srcW
+        diameter / _cropScale,                // srcH
+        0, 0, diameter, diameter             // dst
+    );
+
+    offscreen.toBlob(async (blob) => {
+        if (!blob) { alert('裁剪失败，请重试'); return; }
+
+        const token = localStorage.getItem('kax_login_token');
+        if (!token) { location.href = '/login'; return; }
+
+        _cropConfirm.disabled = true;
+        _cropConfirm.textContent = '上传中…';
+        try {
+            const fd = new FormData();
+            fd.append('avatar', blob, 'avatar.png');
+            const resp = await fetch('/api/user/avatar', {
+                method: 'POST',
+                headers: { 'Authorization': 'Bearer ' + token },
+                body: fd
+            });
+            const json = await resp.json().catch(() => ({}));
+            if (resp.ok && json.url) {
+                // 立即更新页面头像
+                if (window.AvatarCache) {
+                    try {
+                        await AvatarCache.updateCache(json.url, blob);
+                        const resolved = await AvatarCache.getAvatar(json.url);
+                        avatarImg.src = resolved;
+                    } catch (e) { avatarImg.src = json.url; }
+                } else {
+                    avatarImg.src = json.url;
+                }
+                avatarImg.style.display = 'block';
+                avatarInitials.style.display = 'none';
+                originalProfile.avatarSrc = json.url;
+                _cropClose();
+            } else if (resp.status === 401) {
+                localStorage.removeItem('kax_login_token');
+                location.href = '/login';
+            } else {
+                alert(json.message || '头像上传失败');
+            }
+        } catch (err) {
+            console.error(err);
+            alert('无法连接到服务器，请稍后重试');
+        } finally {
+            _cropConfirm.disabled = false;
+            _cropConfirm.textContent = '确认并上传';
+        }
+    }, 'image/png');
+});
+
+// ---- 触发文件选择 ----
 avatarContainer.addEventListener('click', () => {
     if (!isViewingOtherProfile) avatarFile.click();
 });
@@ -430,13 +708,7 @@ avatarContainer.addEventListener('keydown', (e) => {
 avatarFile.addEventListener('change', (ev) => {
     const file = ev.target.files[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = function (e) {
-        avatarImg.src = e.target.result;
-        avatarImg.style.display = 'block';
-        avatarInitials.style.display = 'none';
-    };
-    reader.readAsDataURL(file);
+    _cropOpen(file);
 });
 // #endregion
 
@@ -1153,7 +1425,7 @@ async function openAssetEditModal(assetId) {
         const setVal = (id, v) => { const el = document.getElementById(id); if (el) el.value = v ?? ''; };
         setVal('assetEditName', d.name);
         setVal('assetEditVersion', d.version);
-        setVal('assetEditAuthor', d.author);
+        setVal('assetEditAuthor', d.author || (d.authorId ? `ID: ${d.authorId}` : ''));
         setVal('assetEditCategory', d.category);
         setVal('assetEditDesc', d.description);
         setVal('assetEditDownloadUrl', d.downloadUrl || d.specs?.downloadUrl);
@@ -1208,14 +1480,13 @@ document.getElementById('assetEditSaveBtn')?.addEventListener('click', async () 
 
     if (!name) { showMsg('请填写资产名称', false); return; }
     if (!version) { showMsg('请填写版本', false); return; }
-    if (!author) { showMsg('请填写作者', false); return; }
 
     const saveBtn = document.getElementById('assetEditSaveBtn');
     await withButtonLoading(saveBtn, '保存中…', async () => {
         try {
             const isEdit = !!id;
             const url = isEdit ? '/api/asset/admin/update' : '/api/asset/admin/create';
-            const payload = { name, version, author, category, description, downloadUrl, license, compatibility, fileSize, prices: assetPricePlans };
+            const payload = { name, version, category, description, downloadUrl, license, compatibility, fileSize, prices: assetPricePlans };
             if (isEdit) payload.id = parseInt(id);
 
             const resp = await fetch(url, {
@@ -1312,6 +1583,7 @@ let cdkAdminPage = 1;
 let cdkAdminTotalPages = 1;
 const cdkAdminPageSize = 50;
 let cdkAdminLastKeyword = '';
+const cdkSelectedCodes = new Set(); // 批量选择状态
 
 async function loadAdminCdks(page = 1) {
     const token = checkToken();
@@ -1353,12 +1625,24 @@ async function loadAdminCdks(page = 1) {
         if (items.length === 0) {
             setElementDisplay(emptyEl, true);
             emptyEl.querySelector('span:last-child').textContent = '暂无 CDK';
+            setElementDisplay(document.getElementById('cdkBatchBar'), false);
             return;
         }
 
         setElementDisplay(emptyEl, false);
-        listEl.innerHTML = items.map(c => `
-            <div class="admin-list-item">
+        // 显示批量操作工具栏
+        setElementDisplay(document.getElementById('cdkBatchBar'), true);
+        // 重置全选状态
+        const selectAllCb = document.getElementById('cdkSelectAll');
+        if (selectAllCb) selectAllCb.checked = false;
+
+        listEl.innerHTML = items.map(c => {
+            const isChecked = cdkSelectedCodes.has(c.code);
+            return `
+            <div class="admin-list-item${isChecked ? ' cdk-selected' : ''}" data-code="${escapeHtml(c.code)}">
+                <label class="cdk-select-all-label" style="flex-shrink:0;margin-right:4px;" title="选择此 CDK">
+                    <input type="checkbox" class="cdk-checkbox cdk-item-cb" data-code="${escapeHtml(c.code)}"${isChecked ? ' checked' : ''}>
+                </label>
                 <div class="admin-list-item-info">
                     <div class="admin-list-item-name" style="font-family:monospace;">${escapeHtml(c.code)}
                         ${c.isUsed ? '<span class="admin-list-item-badge">已使用</span>' : '<span class="admin-list-item-badge success">未使用</span>'}
@@ -1373,22 +1657,79 @@ async function loadAdminCdks(page = 1) {
                     </div>
                 </div>
                 <div class="admin-list-item-actions">
+                    <button class="asset-action-btn" onclick="copyCdkCode('${escapeHtml(c.code)}')" title="复制代码">
+                        <span class="material-icons">content_copy</span>复制
+                    </button>
                     <button class="asset-action-btn danger" onclick="openCdkDeleteModal('${escapeHtml(c.code)}')">
                         <span class="material-icons">delete</span>删除
                     </button>
                 </div>
-            </div>
-        `).join('');
+            </div>`;
+        }).join('');
+
+        // 绑定复选框交互
+        listEl.querySelectorAll('.cdk-item-cb').forEach(cb => {
+            cb.addEventListener('change', () => {
+                const code = cb.dataset.code;
+                const row = cb.closest('.admin-list-item');
+                if (cb.checked) {
+                    cdkSelectedCodes.add(code);
+                    row?.classList.add('cdk-selected');
+                } else {
+                    cdkSelectedCodes.delete(code);
+                    row?.classList.remove('cdk-selected');
+                }
+                updateCdkBatchBar();
+            });
+        });
 
         if (cdkAdminTotalPages > 1) {
             setElementDisplay(pagerEl, true);
             pageInfoEl.textContent = `第 ${cdkAdminPage} / ${cdkAdminTotalPages} 页，共 ${total} 条`;
             updatePaginationButtons(cdkAdminPage, cdkAdminTotalPages, 'cdkAdminPrevBtn', 'cdkAdminNextBtn');
         }
+        updateCdkBatchBar();
     } catch (err) {
         console.error('加载 CDK 列表失败:', err);
         setElementsDisplay({ 'cdkAdminLoading': false, 'cdkAdminEmpty': true });
         emptyEl.querySelector('span:last-child').textContent = '网络错误';
+    }
+}
+
+/** 更新批量操作工具栏状态 */
+function updateCdkBatchBar() {
+    const count = cdkSelectedCodes.size;
+    const countEl = document.getElementById('cdkBatchCount');
+    if (countEl) countEl.textContent = count > 0 ? `已选 ${count} 项` : '已选 0 项';
+    const batchDeleteBtn = document.getElementById('cdkBatchDeleteBtn');
+    const batchCopyBtn = document.getElementById('cdkBatchCopyBtn');
+    if (batchDeleteBtn) batchDeleteBtn.disabled = count === 0;
+    if (batchCopyBtn) batchCopyBtn.disabled = count === 0;
+}
+
+/** 复制单个 CDK 代码到剪贴板 */
+async function copyCdkCode(code) {
+    try {
+        await navigator.clipboard.writeText(code);
+        // 简短视觉反馈：找到对应按钮，短暂改变文字
+        const btns = document.querySelectorAll(`[data-code="${CSS.escape(code)}"]`);
+        const row = document.querySelector(`.admin-list-item[data-code="${CSS.escape(code)}"]`);
+        const copyBtn = row?.querySelector('.asset-action-btn:not(.danger)');
+        if (copyBtn) {
+            const orig = copyBtn.innerHTML;
+            copyBtn.innerHTML = '<span class="material-icons">check</span>已复制';
+            setTimeout(() => { copyBtn.innerHTML = orig; }, 1500);
+        }
+    } catch (e) {
+        // 降级：使用 execCommand
+        const ta = document.createElement('textarea');
+        ta.value = code;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
     }
 }
 
@@ -1400,6 +1741,207 @@ function formatCdkExpire(s) {
     return `${Math.floor(s / 86400)}天`;
 }
 
+// ── 全选 / 取消全选 ──
+document.getElementById('cdkSelectAll')?.addEventListener('change', function () {
+    const checked = this.checked;
+    document.querySelectorAll('#cdkAdminList .cdk-item-cb').forEach(cb => {
+        cb.checked = checked;
+        const code = cb.dataset.code;
+        const row = cb.closest('.admin-list-item');
+        if (checked) {
+            cdkSelectedCodes.add(code);
+            row?.classList.add('cdk-selected');
+        } else {
+            cdkSelectedCodes.delete(code);
+            row?.classList.remove('cdk-selected');
+        }
+    });
+    updateCdkBatchBar();
+});
+
+// ── 批量复制 ──
+document.getElementById('cdkBatchCopyBtn')?.addEventListener('click', async () => {
+    if (cdkSelectedCodes.size === 0) return;
+    const text = [...cdkSelectedCodes].join('\n');
+    try {
+        await navigator.clipboard.writeText(text);
+        const btn = document.getElementById('cdkBatchCopyBtn');
+        if (btn) {
+            const orig = btn.innerHTML;
+            btn.innerHTML = '<span class="material-icons">check</span>已复制';
+            setTimeout(() => { btn.innerHTML = orig; }, 1500);
+        }
+    } catch (e) {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.position = 'fixed'; ta.style.opacity = '0';
+        document.body.appendChild(ta); ta.select(); document.execCommand('copy');
+        document.body.removeChild(ta);
+    }
+});
+
+// ── 批量删除弹窗 ──
+document.getElementById('cdkBatchDeleteBtn')?.addEventListener('click', () => {
+    if (cdkSelectedCodes.size === 0) return;
+    document.getElementById('cdkBatchDeleteCount').textContent = cdkSelectedCodes.size;
+    document.getElementById('cdkBatchDeleteModal').classList.add('show');
+});
+
+document.getElementById('cdkBatchDeleteCancelBtn')?.addEventListener('click', () => {
+    document.getElementById('cdkBatchDeleteModal').classList.remove('show');
+});
+
+document.getElementById('cdkBatchDeleteConfirmBtn')?.addEventListener('click', async () => {
+    if (cdkSelectedCodes.size === 0) return;
+    const token = checkToken();
+    if (!token) return;
+    const btn = document.getElementById('cdkBatchDeleteConfirmBtn');
+    await withButtonLoading(btn, '删除中…', async () => {
+        try {
+            const resp = await fetch('/api/cdk/admin/delete', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+                body: JSON.stringify({ codes: [...cdkSelectedCodes] })
+            });
+            const result = await resp.json().catch(() => ({}));
+            if (resp.ok) {
+                document.getElementById('cdkBatchDeleteModal').classList.remove('show');
+                cdkSelectedCodes.clear();
+                loadAdminCdks(cdkAdminPage);
+            } else {
+                alert(result.message || '批量删除失败');
+            }
+        } catch (err) {
+            alert('网络错误');
+        }
+    });
+});
+
+// ── 规则删除弹窗 ──
+document.getElementById('cdkRuleDeleteBtn')?.addEventListener('click', () => {
+    document.getElementById('cdkRulePreviewMsg').style.display = 'none';
+    document.getElementById('cdkRuleDeleteModal').classList.add('show');
+});
+
+document.getElementById('cdkRuleDeleteCancelBtn')?.addEventListener('click', () => {
+    document.getElementById('cdkRuleDeleteModal').classList.remove('show');
+});
+
+/** 获取规则删除对应的 CDK codes（返回 string[] 或 null 表示失败） */
+async function fetchCdksByRule(scope, token) {
+    const keyword = scope === 'search' ? (document.getElementById('cdkAdminSearch')?.value || '').trim() : '';
+    const searchIn = scope === 'search' ? (document.getElementById('cdkAdminSearchIn')?.value || 'all') : 'all';
+
+    let allCodes = [];
+    let page = 1;
+    const pageSize = 200;
+    while (true) {
+        const params = new URLSearchParams({ page, pageSize });
+        let url;
+        if (scope === 'search' && keyword) {
+            params.append('keyword', keyword); params.append('searchIn', searchIn);
+            url = '/api/cdk/admin/search?' + params;
+        } else {
+            url = '/api/cdk/admin/list?' + params;
+        }
+        const resp = await fetch(url, { headers: { 'Authorization': 'Bearer ' + token } });
+        if (!resp.ok) return null;
+        const result = await resp.json().catch(() => ({}));
+        const items = result.data || [];
+        if (items.length === 0) break;
+
+        for (const c of items) {
+            if (scope === 'used' && !c.isUsed) continue;
+            if (scope === 'unused' && c.isUsed) continue;
+            allCodes.push(c.code);
+        }
+
+        const total = result.total || 0;
+        if (allCodes.length >= total || items.length < pageSize) break;
+        page++;
+    }
+    return allCodes;
+}
+
+// 规则删除：预览数量
+document.getElementById('cdkRulePreviewCountBtn')?.addEventListener('click', async () => {
+    const token = checkToken();
+    if (!token) return;
+    const scope = document.getElementById('cdkRuleScope')?.value || 'used';
+    const msgEl = document.getElementById('cdkRulePreviewMsg');
+    msgEl.style.display = '';
+    msgEl.className = 'admin-msg';
+    msgEl.textContent = '查询中…';
+    try {
+        const codes = await fetchCdksByRule(scope, token);
+        if (codes === null) {
+            msgEl.className = 'admin-msg admin-msg--err';
+            msgEl.textContent = '查询失败';
+        } else {
+            msgEl.className = 'admin-msg admin-msg--ok';
+            msgEl.textContent = `符合条件的 CDK 共 ${codes.length} 个`;
+        }
+    } catch (e) {
+        msgEl.className = 'admin-msg admin-msg--err';
+        msgEl.textContent = '网络错误';
+    }
+});
+
+// 规则删除：确认执行
+document.getElementById('cdkRuleDeleteConfirmBtn')?.addEventListener('click', async () => {
+    const token = checkToken();
+    if (!token) return;
+    const scope = document.getElementById('cdkRuleScope')?.value || 'used';
+    const scopeLabels = { used: '所有已使用', unused: '所有未使用', search: '当前搜索结果', all: '全部' };
+    if (!confirm(`确认删除"${scopeLabels[scope] || scope}"的 CDK？此操作不可撤销。`)) return;
+
+    const btn = document.getElementById('cdkRuleDeleteConfirmBtn');
+    const msgEl = document.getElementById('cdkRulePreviewMsg');
+    msgEl.style.display = '';
+    msgEl.className = 'admin-msg';
+    msgEl.textContent = '正在查询符合条件的 CDK…';
+
+    await withButtonLoading(btn, '删除中…', async () => {
+        try {
+            const codes = await fetchCdksByRule(scope, token);
+            if (codes === null) {
+                msgEl.className = 'admin-msg admin-msg--err';
+                msgEl.textContent = '查询失败，请重试';
+                return;
+            }
+            if (codes.length === 0) {
+                msgEl.className = 'admin-msg admin-msg--ok';
+                msgEl.textContent = '没有符合条件的 CDK，无需删除';
+                return;
+            }
+            msgEl.textContent = `正在删除 ${codes.length} 个 CDK…`;
+
+            // 分批删除（每批 50 个防止超时）
+            const batchSize = 50;
+            let removed = 0;
+            for (let i = 0; i < codes.length; i += batchSize) {
+                const batch = codes.slice(i, i + batchSize);
+                const resp = await fetch('/api/cdk/admin/delete', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+                    body: JSON.stringify({ codes: batch })
+                });
+                const result = await resp.json().catch(() => ({}));
+                if (resp.ok) removed += (result.removed || 0);
+            }
+            msgEl.className = 'admin-msg admin-msg--ok';
+            msgEl.textContent = `删除完成，共删除 ${removed} 个 CDK`;
+            setTimeout(() => {
+                document.getElementById('cdkRuleDeleteModal').classList.remove('show');
+                cdkSelectedCodes.clear();
+                loadAdminCdks(1);
+            }, 1200);
+        } catch (err) {
+            msgEl.className = 'admin-msg admin-msg--err';
+            msgEl.textContent = '网络错误：' + err.message;
+        }
+    });
+});
 document.getElementById('cdkAdminSearchBtn')?.addEventListener('click', () => loadAdminCdks(1));
 document.getElementById('cdkAdminSearch')?.addEventListener('keypress', e => { if (e.key === 'Enter') loadAdminCdks(1); });
 document.getElementById('cdkAdminPrevBtn')?.addEventListener('click', () => { if (cdkAdminPage > 1) loadAdminCdks(cdkAdminPage - 1); });

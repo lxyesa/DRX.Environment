@@ -1,14 +1,15 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json.Nodes;
 using System.Threading.Tasks;
 using Drx.Sdk.Network.Http;
+using Drx.Sdk.Network.Http.Api;
 using Drx.Sdk.Network.Http.Protocol;
 using Drx.Sdk.Network.Http.Results;
 using Drx.Sdk.Network.Http.Configs;
 using Drx.Sdk.Shared;
 using KaxSocket;
+using KaxSocket.Handlers.Helpers;
 using KaxSocket.Model;
 using static KaxSocket.Model.AssetModel;
 
@@ -40,25 +41,13 @@ public partial class KaxHttp
     [HttpHandle("/api/developer/assets", "GET", RateLimitMaxRequests = 30, RateLimitWindowSeconds = 60)]
     public static async Task<IActionResult> Get_DeveloperAssets(HttpRequest request)
     {
-        var token = request.Headers[HttpHeaders.Authorization]?.Replace("Bearer ", "");
-        var principal = KaxGlobal.ValidateToken(token!);
-        if (principal == null) return new JsonResult(new { message = "无效的登录令牌" }, 401);
-
-        var userName = principal.Identity?.Name;
-        if (string.IsNullOrWhiteSpace(userName))
-            return new JsonResult(new { message = "令牌缺少用户信息" }, 401);
-
-        if (await KaxGlobal.IsUserBanned(userName))
-            return new JsonResult(new { message = "您的账号已被封禁" }, 403);
-
-        var user = (await KaxGlobal.UserDatabase.SelectWhereAsync("UserName", userName)).FirstOrDefault();
-        if (user == null) return new JsonResult(new { message = "用户不存在" }, 404);
+        var (user, authError) = await Api.GetUserAsync(request);
+        if (authError != null) return authError;
+        var userName = user!.UserName;
 
         try
         {
-            int page = 1, pageSize = 20;
-            if (!int.TryParse(request.Query["page"], out page) || page <= 0) page = 1;
-            if (!int.TryParse(request.Query["pageSize"], out pageSize) || pageSize <= 0) pageSize = 20;
+            var (page, pageSize) = ApiPagination.Parse(request, defaultPageSize: 20);
 
             var statusFilter = request.Query["status"] ?? string.Empty;
 
@@ -113,27 +102,15 @@ public partial class KaxHttp
     [HttpHandle("/api/developer/asset/create", "POST", RateLimitMaxRequests = 5, RateLimitWindowSeconds = 60)]
     public static async Task<IActionResult> Post_DeveloperCreateAsset(HttpRequest request)
     {
-        var token = request.Headers[HttpHeaders.Authorization]?.Replace("Bearer ", "");
-        var principal = KaxGlobal.ValidateToken(token!);
-        if (principal == null) return new JsonResult(new { message = "无效的登录令牌" }, 401);
+        var (user, authError) = await Api.GetUserAsync(request);
+        if (authError != null) return authError;
+        var userName = user!.UserName;
 
-        var userName = principal.Identity?.Name;
-        if (string.IsNullOrWhiteSpace(userName))
-            return new JsonResult(new { message = "令牌缺少用户信息" }, 401);
-
-        if (await KaxGlobal.IsUserBanned(userName))
-            return new JsonResult(new { message = "您的账号已被封禁" }, 403);
-
-        var user = (await KaxGlobal.UserDatabase.SelectWhereAsync("UserName", userName)).FirstOrDefault();
-        if (user == null) return new JsonResult(new { message = "用户不存在" }, 404);
-
-        if (string.IsNullOrEmpty(request.Body))
-            return new JsonResult(new { message = "请求体不能为空" }, 400);
+        if (!ApiBody.TryParse(request, out var body, out var parseError))
+            return parseError!;
 
         try
         {
-            var body = JsonNode.Parse(request.Body);
-            if (body == null) return new JsonResult(new { message = "无法解析请求体" }, 400);
 
             var name = body["name"]?.ToString();
             var version = body["version"]?.ToString();
@@ -176,7 +153,7 @@ public partial class KaxHttp
 
             // 创建后再写入子表，确保价格/规格子表 ParentId 使用真实资产 ID
             ApplyPriceInfoToAsset(asset, body);
-            ApplySpecsInfoToAsset(asset, body, isCreate: true);
+            ApplySpecsInfoToAsset(asset, body);
             await KaxGlobal.AssetDataBase.UpdateAsync(asset);
 
             Logger.Info($"开发者 {userName} (id={user.Id}) 创建了资源: {name} (v{version})，状态：审核中");
@@ -195,27 +172,15 @@ public partial class KaxHttp
     [HttpHandle("/api/developer/asset/update", "POST", RateLimitMaxRequests = 10, RateLimitWindowSeconds = 60)]
     public static async Task<IActionResult> Post_DeveloperUpdateAsset(HttpRequest request)
     {
-        var token = request.Headers[HttpHeaders.Authorization]?.Replace("Bearer ", "");
-        var principal = KaxGlobal.ValidateToken(token!);
-        if (principal == null) return new JsonResult(new { message = "无效的登录令牌" }, 401);
+        var (user, authError) = await Api.GetUserAsync(request);
+        if (authError != null) return authError;
+        var userName = user!.UserName;
 
-        var userName = principal.Identity?.Name;
-        if (string.IsNullOrWhiteSpace(userName))
-            return new JsonResult(new { message = "令牌缺少用户信息" }, 401);
-
-        if (await KaxGlobal.IsUserBanned(userName))
-            return new JsonResult(new { message = "您的账号已被封禁" }, 403);
-
-        var user = (await KaxGlobal.UserDatabase.SelectWhereAsync("UserName", userName)).FirstOrDefault();
-        if (user == null) return new JsonResult(new { message = "用户不存在" }, 404);
-
-        if (string.IsNullOrEmpty(request.Body))
-            return new JsonResult(new { message = "请求体不能为空" }, 400);
+        if (!ApiBody.TryParse(request, out var body, out var parseError))
+            return parseError!;
 
         try
         {
-            var body = JsonNode.Parse(request.Body);
-            if (body == null) return new JsonResult(new { message = "无法解析请求体" }, 400);
 
             if (!int.TryParse(body["id"]?.ToString(), out var id) || id <= 0)
                 return new JsonResult(new { message = "资源ID无效" }, 400);
@@ -286,19 +251,9 @@ public partial class KaxHttp
     [HttpHandle("/api/developer/asset/{id}", "GET", RateLimitMaxRequests = 30, RateLimitWindowSeconds = 60)]
     public static async Task<IActionResult> Get_DeveloperAssetDetail(HttpRequest request)
     {
-        var token = request.Headers[HttpHeaders.Authorization]?.Replace("Bearer ", "");
-        var principal = KaxGlobal.ValidateToken(token!);
-        if (principal == null) return new JsonResult(new { message = "无效的登录令牌" }, 401);
-
-        var userName = principal.Identity?.Name;
-        if (string.IsNullOrWhiteSpace(userName))
-            return new JsonResult(new { message = "令牌缺少用户信息" }, 401);
-
-        if (await KaxGlobal.IsUserBanned(userName))
-            return new JsonResult(new { message = "您的账号已被封禁" }, 403);
-
-        var user = (await KaxGlobal.UserDatabase.SelectWhereAsync("UserName", userName)).FirstOrDefault();
-        if (user == null) return new JsonResult(new { message = "用户不存在" }, 404);
+        var (user, authError) = await Api.GetUserAsync(request);
+        if (authError != null) return authError;
+        if (user == null) return new JsonResult(new { message = "用户认证失败" }, 401);
 
         if (!request.PathParameters.TryGetValue("id", out var idStr) || !int.TryParse(idStr, out var assetId) || assetId <= 0)
             return new JsonResult(new { message = "id 参数无效" }, 400);
@@ -379,27 +334,15 @@ public partial class KaxHttp
     [HttpHandle("/api/developer/asset/submit", "POST", RateLimitMaxRequests = 5, RateLimitWindowSeconds = 60)]
     public static async Task<IActionResult> Post_DeveloperSubmitReview(HttpRequest request)
     {
-        var token = request.Headers[HttpHeaders.Authorization]?.Replace("Bearer ", "");
-        var principal = KaxGlobal.ValidateToken(token!);
-        if (principal == null) return new JsonResult(new { message = "无效的登录令牌" }, 401);
+        var (user, authError) = await Api.GetUserAsync(request);
+        if (authError != null) return authError;
+        var userName = user!.UserName;
 
-        var userName = principal.Identity?.Name;
-        if (string.IsNullOrWhiteSpace(userName))
-            return new JsonResult(new { message = "令牌缺少用户信息" }, 401);
-
-        if (await KaxGlobal.IsUserBanned(userName))
-            return new JsonResult(new { message = "您的账号已被封禁" }, 403);
-
-        var user = (await KaxGlobal.UserDatabase.SelectWhereAsync("UserName", userName)).FirstOrDefault();
-        if (user == null) return new JsonResult(new { message = "用户不存在" }, 404);
-
-        if (string.IsNullOrEmpty(request.Body))
-            return new JsonResult(new { message = "请求体不能为空" }, 400);
+        if (!ApiBody.TryParse(request, out var body, out var parseError))
+            return parseError!;
 
         try
         {
-            var body = JsonNode.Parse(request.Body);
-            if (body == null) return new JsonResult(new { message = "无法解析请求体" }, 400);
 
             if (!int.TryParse(body["id"]?.ToString(), out var id) || id <= 0)
                 return new JsonResult(new { message = "资源ID无效" }, 400);
@@ -487,26 +430,15 @@ public partial class KaxHttp
     [HttpHandle("/api/developer/asset/publish", "POST", RateLimitMaxRequests = 10, RateLimitWindowSeconds = 60)]
     public static async Task<IActionResult> Post_DeveloperPublishAsset(HttpRequest request)
     {
-        var token = request.Headers[HttpHeaders.Authorization]?.Replace("Bearer ", "");
-        var principal = KaxGlobal.ValidateToken(token!);
-        if (principal == null) return new JsonResult(new { message = "无效的登录令牌" }, 401);
+        var (user, authError) = await Api.GetUserAsync(request);
+        if (authError != null) return authError;
+        var userName = user!.UserName;
 
-        var userName = principal.Identity?.Name;
-        if (string.IsNullOrWhiteSpace(userName))
-            return new JsonResult(new { message = "令牌缺少用户信息" }, 401);
-
-        if (await KaxGlobal.IsUserBanned(userName))
-            return new JsonResult(new { message = "您的账号已被封禁" }, 403);
-
-        var user = (await KaxGlobal.UserDatabase.SelectWhereAsync("UserName", userName)).FirstOrDefault();
-        if (user == null) return new JsonResult(new { message = "用户不存在" }, 404);
-
-        if (string.IsNullOrEmpty(request.Body))
-            return new JsonResult(new { message = "请求体不能为空" }, 400);
+        if (!ApiBody.TryParse(request, out var body, out var parseError))
+            return parseError!;
 
         try
         {
-            var body = JsonNode.Parse(request.Body);
             if (!int.TryParse(body?["id"]?.ToString(), out var id) || id <= 0)
                 return new JsonResult(new { message = "资源ID无效" }, 400);
 
@@ -542,19 +474,12 @@ public partial class KaxHttp
     [HttpHandle("/api/review/pending", "GET", RateLimitMaxRequests = 30, RateLimitWindowSeconds = 60)]
     public static async Task<IActionResult> Get_ReviewPendingList(HttpRequest request)
     {
-        var token = request.Headers[HttpHeaders.Authorization]?.Replace("Bearer ", "");
-        var principal = KaxGlobal.ValidateToken(token!);
-        if (principal == null) return new JsonResult(new { message = "无效的登录令牌" }, 401);
-
-        var userName = principal.Identity?.Name;
-        if (!await IsAssetAdminUser(userName))
-            return new JsonResult(new { message = "权限不足" }, 403);
+        var (_, authError) = await Api.RequireAdminNameAsync(request);
+        if (authError != null) return authError;
 
         try
         {
-            int page = 1, pageSize = 20;
-            if (!int.TryParse(request.Query["page"], out page) || page <= 0) page = 1;
-            if (!int.TryParse(request.Query["pageSize"], out pageSize) || pageSize <= 0) pageSize = 20;
+            var (page, pageSize) = ApiPagination.Parse(request, defaultPageSize: 20);
 
             var statusFilter = request.Query["status"] ?? "0"; // 默认只看审核中
             int statusVal = 0;
@@ -614,13 +539,8 @@ public partial class KaxHttp
     [HttpHandle("/api/review/asset/{id}", "GET", RateLimitMaxRequests = 30, RateLimitWindowSeconds = 60)]
     public static async Task<IActionResult> Get_ReviewAssetDetail(HttpRequest request)
     {
-        var token = request.Headers[HttpHeaders.Authorization]?.Replace("Bearer ", "");
-        var principal = KaxGlobal.ValidateToken(token!);
-        if (principal == null) return new JsonResult(new { message = "无效的登录令牌" }, 401);
-
-        var userName = principal.Identity?.Name;
-        if (!await IsAssetAdminUser(userName))
-            return new JsonResult(new { message = "权限不足" }, 403);
+        var (_, authError) = await Api.RequireAdminNameAsync(request);
+        if (authError != null) return authError;
 
         if (!request.PathParameters.TryGetValue("id", out var idStr) || !int.TryParse(idStr, out var assetId) || assetId <= 0)
             return new JsonResult(new { message = "id 参数无效" }, 400);
@@ -708,20 +628,14 @@ public partial class KaxHttp
     [HttpHandle("/api/review/approve", "POST", RateLimitMaxRequests = 20, RateLimitWindowSeconds = 60)]
     public static async Task<IActionResult> Post_ReviewApprove(HttpRequest request)
     {
-        var token = request.Headers[HttpHeaders.Authorization]?.Replace("Bearer ", "");
-        var principal = KaxGlobal.ValidateToken(token!);
-        if (principal == null) return new JsonResult(new { message = "无效的登录令牌" }, 401);
+        var (operatorName, authError) = await Api.RequireAdminNameAsync(request);
+        if (authError != null) return authError;
 
-        var userName = principal.Identity?.Name;
-        if (!await IsAssetAdminUser(userName))
-            return new JsonResult(new { message = "权限不足" }, 403);
-
-        if (string.IsNullOrEmpty(request.Body))
-            return new JsonResult(new { message = "请求体不能为空" }, 400);
+        if (!ApiBody.TryParse(request, out var body, out var parseError))
+            return parseError!;
 
         try
         {
-            var body = JsonNode.Parse(request.Body);
             if (!int.TryParse(body?["id"]?.ToString(), out var id) || id <= 0)
                 return new JsonResult(new { message = "资源ID无效" }, 400);
 
@@ -738,7 +652,7 @@ public partial class KaxHttp
             specs.LastUpdatedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
             await KaxGlobal.AssetDataBase.UpdateAsync(asset);
 
-            Logger.Info($"管理员 {userName} 通过了资源审核: {asset.Name} (id={id})");
+            Logger.Info($"管理员 {operatorName} 通过了资源审核: {asset.Name} (id={id})");
             return new JsonResult(new { code = 0, message = "审核通过，资源已上线" }, 200);
         }
         catch (Exception ex)
@@ -754,20 +668,14 @@ public partial class KaxHttp
     [HttpHandle("/api/review/reject", "POST", RateLimitMaxRequests = 20, RateLimitWindowSeconds = 60)]
     public static async Task<IActionResult> Post_ReviewReject(HttpRequest request)
     {
-        var token = request.Headers[HttpHeaders.Authorization]?.Replace("Bearer ", "");
-        var principal = KaxGlobal.ValidateToken(token!);
-        if (principal == null) return new JsonResult(new { message = "无效的登录令牌" }, 401);
+        var (operatorName, authError) = await Api.RequireAdminNameAsync(request);
+        if (authError != null) return authError;
 
-        var userName = principal.Identity?.Name;
-        if (!await IsAssetAdminUser(userName))
-            return new JsonResult(new { message = "权限不足" }, 403);
-
-        if (string.IsNullOrEmpty(request.Body))
-            return new JsonResult(new { message = "请求体不能为空" }, 400);
+        if (!ApiBody.TryParse(request, out var body, out var parseError))
+            return parseError!;
 
         try
         {
-            var body = JsonNode.Parse(request.Body);
             if (!int.TryParse(body?["id"]?.ToString(), out var id) || id <= 0)
                 return new JsonResult(new { message = "资源ID无效" }, 400);
 
@@ -785,7 +693,7 @@ public partial class KaxHttp
             specs.LastUpdatedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
             await KaxGlobal.AssetDataBase.UpdateAsync(asset);
 
-            Logger.Info($"管理员 {userName} 拒绝了资源审核: {asset.Name} (id={id})，原因: {reason}");
+            Logger.Info($"管理员 {operatorName} 拒绝了资源审核: {asset.Name} (id={id})，原因: {reason}");
             return new JsonResult(new { code = 0, message = "已拒绝" }, 200);
         }
         catch (Exception ex)

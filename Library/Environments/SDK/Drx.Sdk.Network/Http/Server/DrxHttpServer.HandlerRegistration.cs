@@ -138,12 +138,7 @@ namespace Drx.Sdk.Network.Http
                                     }
                                     else if (nextParamType == typeof(Func<HttpRequest, HttpResponse?>) || nextParamType == typeof(Func<HttpRequest, HttpResponse>))
                                     {
-                                        Func<HttpRequest, HttpResponse?> syncNext = (r) =>
-                                        {
-                                            var t = next(r);
-                                            t.Wait();
-                                            return t.Result;
-                                        };
+                                        Func<HttpRequest, HttpResponse?> syncNext = (r) => next(r).ConfigureAwait(false).GetAwaiter().GetResult();
                                         secondArg = syncNext;
                                     }
                                     else if (nextParamType.IsGenericType && nextParamType.GetGenericTypeDefinition() == typeof(Func<,>))

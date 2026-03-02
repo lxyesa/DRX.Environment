@@ -239,7 +239,7 @@ const DevApp = (() => {
         empty.style.display = 'none';
 
         container.innerHTML = state.myAssets.map(a => {
-            const thumb = a.iconImage || a.coverImage || '';
+            const thumb = a.coverImage || a.iconImage || '';
             const thumbHtml = thumb
                 ? `<img class="dev-asset-thumb" src="${escapeHtml(thumb)}" alt="" loading="lazy">`
                 : `<div class="dev-asset-thumb" style="display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,0.15);font-size:1.5rem;">📦</div>`;
@@ -525,7 +525,7 @@ const DevApp = (() => {
         empty.style.display = 'none';
 
         container.innerHTML = state.reviewList.map(a => {
-            const thumb = a.iconImage || a.coverImage || '';
+            const thumb = a.coverImage || a.iconImage || '';
             const thumbHtml = thumb
                 ? `<img class="dev-review-thumb" src="${escapeHtml(thumb)}" alt="" loading="lazy">`
                 : `<div class="dev-review-thumb" style="display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,0.15);font-size:1.2rem;">📦</div>`;
@@ -618,7 +618,7 @@ const DevApp = (() => {
             document.getElementById('modalStatusBadge').innerHTML = statusBadge(a.status);
 
             // 头部图标
-            const thumb = a.iconImage || a.coverImage || '';
+            const thumb = a.coverImage || a.iconImage || '';
             if (thumb) {
                 headerIcon.innerHTML = `<img src="${escapeHtml(thumb)}" alt="">`;
             }

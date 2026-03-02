@@ -2,12 +2,13 @@
 using System.Linq;
 using System.Threading.Tasks;
 using Drx.Sdk.Network.Http;
+using Drx.Sdk.Network.Http.Api;
 using Drx.Sdk.Network.Http.Protocol;
 using Drx.Sdk.Network.Http.Results;
 using Drx.Sdk.Network.Http.Configs;
 using Drx.Sdk.Shared;
 using KaxSocket;
-using static KaxSocket.Model.AssetModel;
+using KaxSocket.Handlers.Helpers;
 
 namespace KaxSocket.Handlers;
 
@@ -28,16 +29,9 @@ public partial class KaxHttp
         {
             var q              = request.Query[("q")]         ?? string.Empty;
             var categoryFilter = request.Query[("category")]  ?? string.Empty;
-            var minPriceStr    = request.Query[("minPrice")]  ?? string.Empty;
-            var maxPriceStr    = request.Query[("maxPrice")]  ?? string.Empty;
             var sort           = request.Query[("sort")]      ?? "updated"; // updated | price_asc | price_desc
 
-            int page = 1, pageSize = 24;
-            if (!int.TryParse(request.Query[("page")],     out page)     || page     <= 0) page     = 1;
-            if (!int.TryParse(request.Query[("pageSize")], out pageSize) || pageSize <= 0) pageSize = 24;
-
-            int.TryParse(minPriceStr, out var minPrice);
-            int.TryParse(maxPriceStr, out var maxPrice);
+            var (page, pageSize) = ApiPagination.Parse(request, defaultPageSize: 24);
 
             var all      = await KaxGlobal.AssetDataBase.SelectAllAsync();
             var filtered = all.AsQueryable();
@@ -144,9 +138,7 @@ public partial class KaxHttp
 
         try
         {
-            int page = 1, pageSize = 24;
-            if (!int.TryParse(request.Query[("page")],     out page)     || page     <= 0) page     = 1;
-            if (!int.TryParse(request.Query[("pageSize")], out pageSize) || pageSize <= 0) pageSize = 24;
+            var (page, pageSize) = ApiPagination.Parse(request, defaultPageSize: 24);
 
             var all      = await KaxGlobal.AssetDataBase.SelectAllAsync();
             var filtered = all
@@ -383,14 +375,8 @@ public partial class KaxHttp
     [HttpHandle("/api/asset/{assetId}/plans", "GET", RateLimitMaxRequests = 60, RateLimitWindowSeconds = 60, RateLimitCallbackMethodName = nameof(RateLimitCallback))]
     public static async Task<IActionResult> Get_AssetPlans(HttpRequest request)
     {
-        var token = request.Headers[HttpHeaders.Authorization]?.Replace("Bearer ", "");
-        var principal = KaxGlobal.ValidateToken(token ?? string.Empty);
-        if (principal == null) return new JsonResult(new { code = 401, message = "未授权" }, 401);
-
-        var userName = principal.Identity?.Name;
-        if (string.IsNullOrWhiteSpace(userName)) return new JsonResult(new { code = 400, message = "用户名无效" }, 400);
-
-        if (await KaxGlobal.IsUserBanned(userName)) return new JsonResult(new { code = 403, message = "用户已被封禁" }, 403);
+        var (userName, authError) = await Api.AuthenticateAndCheckBanAsync(request);
+        if (authError != null) return authError;
 
         if (!request.PathParameters.TryGetValue("assetId", out var assetIdStr) || !int.TryParse(assetIdStr, out var assetId) || assetId <= 0)
             return new JsonResult(new { code = 400, message = "assetId 参数无效" }, 400);

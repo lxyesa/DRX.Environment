@@ -3,11 +3,13 @@ using System.Linq;
 using System.Text.Json.Nodes;
 using System.Threading.Tasks;
 using Drx.Sdk.Network.Http;
+using Drx.Sdk.Network.Http.Api;
 using Drx.Sdk.Network.Http.Protocol;
 using Drx.Sdk.Network.Http.Results;
 using Drx.Sdk.Network.Http.Configs;
 using Drx.Sdk.Shared;
 using KaxSocket;
+using KaxSocket.Handlers.Helpers;
 using KaxSocket.Model;
 
 namespace KaxSocket.Handlers;
@@ -22,18 +24,9 @@ public partial class KaxHttp
     [HttpHandle("/api/user/verify/asset/{assetId}", "GET", RateLimitMaxRequests = 60, RateLimitWindowSeconds = 60, RateLimitCallbackMethodName = nameof(RateLimitCallback))]
     public static async Task<IActionResult> Get_VerifyAsset(HttpRequest request)
     {
-        var token = request.Headers[HttpHeaders.Authorization]?.Replace("Bearer ", "");
-        var principal = KaxGlobal.ValidateToken(token!);
-        var userName = principal?.Identity?.Name;
-        if (string.IsNullOrWhiteSpace(userName))
-        {
-            return new JsonResult(new { message = "未授权" }, 401);
-        }
-
-        if (await KaxGlobal.IsUserBanned(userName))
-        {
-            return new JsonResult(new { message = "账号被封禁" }, 403);
-        }
+        var (userName, authError) = await Api.AuthenticateAndCheckBanAsync(request);
+        if (authError != null) return authError;
+        if (string.IsNullOrEmpty(userName)) return new JsonResult(new { message = "用户认证失败" }, 401);
 
         if (!request.PathParameters.TryGetValue("assetId", out var assetIdString) ||
             !int.TryParse(assetIdString, out var assetId) || assetId <= 0)
@@ -58,14 +51,9 @@ public partial class KaxHttp
     [HttpHandle("/api/user/verify/asset/{assetId}/raw", "GET", RateLimitMaxRequests = 60, RateLimitWindowSeconds = 60, RateLimitCallbackMethodName = nameof(RateLimitCallback))]
     public static async Task<IActionResult> Get_VerifyAssetRaw(HttpRequest request)
     {
-        var token = request.Headers[HttpHeaders.Authorization]?.Replace("Bearer ", "");
-        var principal = KaxGlobal.ValidateToken(token!);
-        var userName = principal?.Identity?.Name;
-        if (string.IsNullOrWhiteSpace(userName))
-            return new JsonResult(new { message = "未授权" }, 401);
-
-        if (await KaxGlobal.IsUserBanned(userName))
-            return new JsonResult(new { message = "账号被封禁" }, 403);
+        var (userName, authError) = await Api.AuthenticateAndCheckBanAsync(request);
+        if (authError != null) return authError;
+        if (string.IsNullOrEmpty(userName)) return new JsonResult(new { message = "用户认证失败" }, 401);
 
         if (!request.PathParameters.TryGetValue("assetId", out var assetIdString) ||
             !int.TryParse(assetIdString, out var assetId) || assetId <= 0)
@@ -86,14 +74,9 @@ public partial class KaxHttp
     [HttpHandle("/api/user/verify/asset/{assetId}/remaining", "GET", RateLimitMaxRequests = 60, RateLimitWindowSeconds = 60, RateLimitCallbackMethodName = nameof(RateLimitCallback))]
     public static async Task<IActionResult> Get_VerifyAssetRemaining(HttpRequest request)
     {
-        var token = request.Headers[HttpHeaders.Authorization]?.Replace("Bearer ", "");
-        var principal = KaxGlobal.ValidateToken(token!);
-        var userName = principal?.Identity?.Name;
-        if (string.IsNullOrWhiteSpace(userName))
-            return new JsonResult(new { message = "未授权" }, 401);
-
-        if (await KaxGlobal.IsUserBanned(userName))
-            return new JsonResult(new { message = "账号被封禁" }, 403);
+        var (userName, authError) = await Api.AuthenticateAndCheckBanAsync(request);
+        if (authError != null) return authError;
+        if (string.IsNullOrEmpty(userName)) return new JsonResult(new { message = "用户认证失败" }, 401);
 
         if (!request.PathParameters.TryGetValue("assetId", out var assetIdString) ||
             !int.TryParse(assetIdString, out var assetId) || assetId <= 0)
@@ -121,34 +104,12 @@ public partial class KaxHttp
     [HttpHandle("/api/cdk/activate", "POST", RateLimitMaxRequests = 20, RateLimitWindowSeconds = 60, RateLimitCallbackMethodName = nameof(RateLimitCallback))]
     public static async Task<IActionResult> Post_ActivateCdk(HttpRequest request)
     {
-        var token = request.Headers[HttpHeaders.Authorization]?.Replace("Bearer ", "");
-        var principal = KaxGlobal.ValidateToken(token!);
-        if (principal == null)
-        {
-            return new JsonResult(new { code = 401, message = "未授权" }, 401);
-        }
+        var (userName, authError) = await Api.AuthenticateAndCheckBanAsync(request);
+        if (authError != null) return authError;
+        if (string.IsNullOrEmpty(userName)) return new JsonResult(new { code = 401, message = "用户认证失败" }, 401);
 
-        var userName = principal.Identity?.Name;
-        if (string.IsNullOrWhiteSpace(userName))
-        {
-            return new JsonResult(new { code = 401, message = "未授权" }, 401);
-        }
-
-        if (await KaxGlobal.IsUserBanned(userName))
-        {
-            return new JsonResult(new { code = 403, message = "账号被封禁" }, 403);
-        }
-
-        if (string.IsNullOrEmpty(request.Body))
-        {
-            return new JsonResult(new { code = 400, message = "请求体不能为空" }, 400);
-        }
-
-        var body = JsonNode.Parse(request.Body);
-        if (body == null)
-        {
-            return new JsonResult(new { code = 400, message = "无效的 JSON" }, 400);
-        }
+        if (!ApiBody.TryParse(request, out var body, out var parseError))
+            return parseError!;
 
         var cdkCode = body["code"]?.ToString()?.Trim();
         if (string.IsNullOrEmpty(cdkCode))

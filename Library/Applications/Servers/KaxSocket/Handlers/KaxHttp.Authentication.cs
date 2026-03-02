@@ -3,12 +3,14 @@ using System.Linq;
 using System.Text.Json.Nodes;
 using System.Threading.Tasks;
 using Drx.Sdk.Network.Http;
+using Drx.Sdk.Network.Http.Api;
 using Drx.Sdk.Network.Http.Protocol;
 using Drx.Sdk.Network.Http.Results;
 using Drx.Sdk.Network.Http.Configs;
 using Drx.Sdk.Shared;
 using Drx.Sdk.Shared.Utility;
 using KaxSocket;
+using KaxSocket.Handlers.Helpers;
 
 namespace KaxSocket.Handlers;
 
@@ -156,6 +158,26 @@ public partial class KaxHttp
         var userExists = (await KaxGlobal.UserDatabase.SelectWhereAsync("UserName", userName)).FirstOrDefault();
         if (userExists != null && userExists.PasswordHash == CommonUtility.ComputeSHA256Hash(password))
         {
+            // 检查封禁状态
+            if (await KaxGlobal.IsUserBanned(userExists))
+            {
+                var banReason = string.IsNullOrWhiteSpace(userExists.Status.BanReason) ? "违反服务条款" : userExists.Status.BanReason;
+                var banExpireDesc = userExists.Status.BanExpiresAt > 0
+                    ? DateTimeOffset.FromUnixTimeSeconds(userExists.Status.BanExpiresAt).ToString("yyyy-MM-dd HH:mm:ss") + " (UTC)"
+                    : "永久";
+                Logger.Warn($"已封禁用户 {userName} 尝试登录，已拒绝。");
+                return new HttpResponse()
+                {
+                    StatusCode = 403,
+                    Body = new JsonObject
+                    {
+                        ["message"] = "您的账号已被封禁，无法登录。",
+                        ["ban_reason"] = banReason,
+                        ["ban_expires"] = banExpireDesc,
+                    }.ToJsonString(),
+                };
+            }
+
             var token = KaxGlobal.GenerateLoginToken(userExists);
             userExists.LastLoginAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
             await KaxGlobal.UserDatabase.UpdateAsync(userExists);
@@ -186,34 +208,9 @@ public partial class KaxHttp
     [HttpHandle("/api/user/verify/account", "POST", RateLimitMaxRequests = 60, RateLimitWindowSeconds = 60, RateLimitCallbackMethodName = nameof(RateLimitCallback))]
     public static async Task<IActionResult> Post_Verify(HttpRequest request)
     {
-        var token = request.Headers[HttpHeaders.Authorization]?.Replace("Bearer ", "");
-        var principal = KaxGlobal.ValidateToken(token!);
-        if (principal == null)
-        {
-            return new JsonResult(new
-            {
-                message = "无效的登录令牌。",
-            }, 401);
-        }
-
-        var userName = principal.Identity?.Name ?? "unknown user";
-
-        var userModel = (await KaxGlobal.UserDatabase.SelectWhereAsync("UserName", userName ?? "null")).FirstOrDefault();
-        if (userModel == null)
-        {
-            return new JsonResult(new
-            {
-                message = "令牌对应的用户不存在。",
-            }, 404);
-        }
-
-        if (await KaxGlobal.IsUserBanned(userName!))
-        {
-            return new JsonResult(new
-            {
-                message = "您的账号已被封禁，无法访问此资源。",
-            }, 403);
-        }
+        var (userModel, authError) = await Api.GetUserAsync(request);
+        if (authError != null) return authError;
+        var userName = userModel!.UserName;
 
         // 返回额外的权限信息，前端可据此决定是否显示管理员入口
         var permissionGroup = userModel.PermissionGroup;
@@ -232,7 +229,6 @@ public partial class KaxHttp
         }
         catch { /* 忽略异常，保持兼容 */ }
 
-        var _uname = userName ?? string.Empty;
         return new JsonResult(new
         {
             message = "令牌有效，欢迎您！",
@@ -241,10 +237,10 @@ public partial class KaxHttp
             isAdmin = isAdmin,
             avatarUrl = avatarUrl,
             // 兼容：返回用户统计摘要，方便 topbar/前端统一使用
-            resourceCount = await KaxGlobal.GetUserResourceCountAsync(_uname),
-            gold = await KaxGlobal.GetUserGoldAsync(_uname),
-            recentActivity = await KaxGlobal.GetUserRecentActivityAsync(_uname),
-            cdkCount = await KaxGlobal.GetUserCdkCountAsync(_uname)
+            resourceCount = userModel.ResourceCount,
+            gold = userModel.Gold,
+            recentActivity = userModel.RecentActivity,
+            cdkCount = await KaxGlobal.GetUserCdkCountAsync(userName ?? string.Empty)
         });
     }
 

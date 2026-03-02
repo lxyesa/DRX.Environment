@@ -10,7 +10,7 @@
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
     <link href="/css/global.css?v=2" rel="stylesheet">
     <script src="/js/avatarCache.js?v=2" defer></script>
-    <script src="/js/global.js?v=2" defer></script>
+    <script src="/js/global.js?v=2"></script>
     <script src="/js/topbar.js?v=2" defer></script>
     <script src="/components/inputbox.js?v=3" defer></script>
     <script src="/components/badge/userbadge.js?v=2" defer></script>
@@ -412,7 +412,7 @@
                     </collapsible-card>
 
                     <!-- CDK 列表区 -->
-                    <collapsible-card title="CDK 列表" subtitle="查看、搜索、删除已生成的 CDK" open>
+                    <collapsible-card title="CDK 列表" subtitle="查看、搜索、批量删除已生成的 CDK" open>
                         <span slot="icon" class="material-icons">list</span>
                         <div class="admin-toolbar">
                             <input-box id="cdkAdminSearch" label="搜索 CDK" placeholder="输入代码、创建者、使用者…" show-action size="small">
@@ -422,6 +422,26 @@
                                 <select-box id="cdkAdminSearchIn" size="headerless"
                                     options='[{"value":"all","label":"全部字段"},{"value":"code","label":"代码"},{"value":"creator","label":"创建者"},{"value":"user","label":"使用者"},{"value":"description","label":"描述"}]'>
                                 </select-box>
+                            </div>
+                        </div>
+                        <!-- 批量操作工具栏 -->
+                        <div class="cdk-batch-bar" id="cdkBatchBar" style="display:none;">
+                            <div class="cdk-batch-bar-left">
+                                <label class="cdk-select-all-label">
+                                    <input type="checkbox" id="cdkSelectAll" class="cdk-checkbox" title="全选/取消全选">
+                                    <span id="cdkBatchCount">已选 0 项</span>
+                                </label>
+                            </div>
+                            <div class="cdk-batch-bar-right">
+                                <button class="btn ghost small" id="cdkBatchCopyBtn" title="复制所有选中的 CDK 代码">
+                                    <span class="material-icons">content_copy</span>复制选中
+                                </button>
+                                <button class="btn ghost small cdk-btn-danger" id="cdkBatchDeleteBtn" title="删除选中的 CDK">
+                                    <span class="material-icons">delete_sweep</span>批量删除
+                                </button>
+                                <button class="btn ghost small cdk-btn-warning" id="cdkRuleDeleteBtn" title="按规则删除 CDK">
+                                    <span class="material-icons">rule</span>规则删除
+                                </button>
                             </div>
                         </div>
                         <div id="cdkAdminLoading" class="assets-state">
@@ -613,6 +633,93 @@
             <div class="modal-footer">
                 <button class="btn ghost" id="cdkDeleteCancelBtn">取消</button>
                 <button class="btn" style="background:var(--danger);border-color:var(--danger);color:#fff;" id="cdkDeleteConfirmBtn">确认删除</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 弹出卡片：批量删除 CDK -->
+    <div class="modal-overlay" id="cdkBatchDeleteModal">
+        <div class="modal-card">
+            <div class="modal-header">
+                <span class="material-icons icon" style="color:var(--danger);">delete_sweep</span>
+                <span>批量删除 CDK</span>
+            </div>
+            <div class="modal-warning">
+                <span class="material-icons icon">error_outline</span>
+                <span>此操作不可撤销</span>
+            </div>
+            <div class="modal-body">
+                确认删除选中的 <strong id="cdkBatchDeleteCount">0</strong> 个 CDK？
+            </div>
+            <div class="modal-footer">
+                <button class="btn ghost" id="cdkBatchDeleteCancelBtn">取消</button>
+                <button class="btn" style="background:var(--danger);border-color:var(--danger);color:#fff;" id="cdkBatchDeleteConfirmBtn">确认批量删除</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 弹出卡片：规则删除 CDK -->
+    <div class="modal-overlay" id="cdkRuleDeleteModal">
+        <div class="modal-card" style="max-width:440px;">
+            <div class="modal-header">
+                <span class="material-icons icon" style="color:var(--danger);">rule</span>
+                <span>规则删除 CDK</span>
+            </div>
+            <div class="modal-warning">
+                <span class="material-icons icon">error_outline</span>
+                <span>按条件批量删除，不可撤销</span>
+            </div>
+            <div class="modal-body">
+                <div class="cdk-rule-form">
+                    <div class="cdk-rule-item">
+                        <label class="cdk-rule-label">删除范围</label>
+                        <select id="cdkRuleScope" class="admin-select" style="width:100%;" title="选择删除规则范围" aria-label="删除规则范围">
+                            <option value="used">所有已使用的 CDK</option>
+                            <option value="unused">所有未使用的 CDK</option>
+                            <option value="search">当前搜索结果</option>
+                            <option value="all">全部 CDK（危险！）</option>
+                        </select>
+                    </div>
+                    <div id="cdkRulePreviewMsg" class="admin-msg" style="display:none;margin-top:10px;"></div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn ghost" id="cdkRuleDeleteCancelBtn">取消</button>
+                <button class="btn ghost" id="cdkRulePreviewCountBtn">预览数量</button>
+                <button class="btn" style="background:var(--danger);border-color:var(--danger);color:#fff;" id="cdkRuleDeleteConfirmBtn">确认删除</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 弹出卡片：头像裁剪 -->
+    <div class="modal-overlay" id="avatarCropModal" style="z-index:1100;">
+        <div class="modal-card" style="max-width:480px;width:95%;user-select:none;">
+            <div class="modal-header">
+                <span class="material-icons icon">crop</span>
+                <span>裁剪头像</span>
+            </div>
+            <div class="modal-body" style="padding:0;overflow:hidden;">
+                <!-- 裁剪画布区域 -->
+                <div id="cropViewport" style="position:relative;width:100%;aspect-ratio:1/1;background:#111;overflow:hidden;cursor:grab;touch-action:none;">
+                    <img id="cropSourceImg" alt="待裁剪图片"
+                        style="position:absolute;transform-origin:0 0;pointer-events:none;max-width:none;display:block;">
+                    <!-- 裁剪框叠加：四角暗角 + 圆形高亮 -->
+                    <canvas id="cropOverlay" style="position:absolute;inset:0;pointer-events:none;"></canvas>
+                </div>
+                <!-- 缩放滑竿 -->
+                <div style="padding:14px 20px 4px;display:flex;align-items:center;gap:12px;">
+                    <span class="material-icons" style="font-size:1rem;color:var(--muted);">zoom_out</span>
+                    <input id="cropZoomRange" type="range" min="0" max="100" value="50"
+                        style="flex:1;accent-color:var(--accent);" aria-label="缩放">
+                    <span class="material-icons" style="font-size:1.2rem;color:var(--muted);">zoom_in</span>
+                </div>
+                <div style="padding:4px 20px 14px;font-size:0.78rem;color:var(--muted);text-align:center;">
+                    拖动图片调整位置 &nbsp;·&nbsp; 滑竿调整大小
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn ghost" id="cropCancelBtn">取消</button>
+                <button class="btn" id="cropConfirmBtn">确认并上传</button>
             </div>
         </div>
     </div>

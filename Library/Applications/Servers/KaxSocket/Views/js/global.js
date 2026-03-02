@@ -3,6 +3,10 @@
 (function () {
     'use strict';
 
+    // 防止 global.js 被重复引入时二次执行（部分页面存在重复 script）
+    if (window.__kaxGlobalScriptLoaded) return;
+    window.__kaxGlobalScriptLoaded = true;
+
     // 动态加载头像缓存模块（若尚未加载）
     if (!window.AvatarCache) {
         var s = document.createElement('script');
@@ -260,123 +264,140 @@
         return remaining > 0 ? new Promise(function (resolve) { setTimeout(resolve, remaining); }) : Promise.resolve();
     };
 
-    // 骨架屏加载系统 — 根据页面类型自动生成骨架占位并在恒定 0.75s 后淡出
+    // 全局加载动画系统（GlobalLoader）
     (function () {
-        // 页面加载时间戳
         if (!window._pageLoadStartTime) window._pageLoadStartTime = Date.now();
 
-        // 根据当前路径自动检测页面类型
-        function detectPageType() {
-            var path = location.pathname.replace(/\/+$/, '').toLowerCase();
-            if (path === '' || path === '/' || path === '/index') return 'index';
-            if (path === '/login') return 'login';
-            if (path === '/register') return 'register';
-            if (path === '/shop') return 'shop';
-            if (path.indexOf('/asset/detail') === 0 || path.indexOf('/shop/detail') === 0) return 'shop_detail';
-            if (path.indexOf('/profile') === 0) return 'profile';
-            if (path.indexOf('/cdk/admin') === 0) return 'cdkadmin';
-            if (path.indexOf('/asset/admin') === 0) return 'assetadmin';
-            if (path.indexOf('/developer') === 0) return 'developer';
-            if (path.indexOf('/404') === 0) return '404';
-            return 'default';
-        }
+        var LOGO_PATH = 'M842.223,392.426C747.728,264.592,578.111,220.273,440.649,280.587,288.272,347.445,208.43,528.211,267.543,694.007l36.648-35.48c-35.041-137.6,32.327-276.622,151.273-330.89,98.677-45.021,221.578-26.327,309.563,52.448l-198.058,204.4,70.958,151.176h95.91L662.879,580.625Zm17.155,33.167C947.655,590.739,878.2,795.312,715.9,872.95,562.363,946.4,368.689,885.667,283.918,730.259L560.731,448.732h88.892L527.2,575.226l74.857,158.889-96.69.771L465.6,641.558,356.435,752.626c88.7,103.687,239.838,128.988,354.789,62.476,120.955-69.986,170.954-223.713,111.505-354.029ZM375.149,448.732H467.94l14.815,30.852-61.6,61.7Z';
+        var MIN_DURATION = 900;
+        var LEAVE_DURATION = 520;
+        var hidden = false;
 
-        // 构建骨架内容：全屏居中 Logo 光辉动画，不再分页面类型
-        function buildTopbarSkeleton() { return ''; }
-
-        // 所有页面统一使用 Logo 光辉动画
-        function buildBodySkeleton(type) {
-            var logoPath = 'M842.223,392.426C747.728,264.592,578.111,220.273,440.649,280.587,288.272,347.445,208.43,528.211,267.543,694.007l36.648-35.48c-35.041-137.6,32.327-276.622,151.273-330.89,98.677-45.021,221.578-26.327,309.563,52.448l-198.058,204.4,70.958,151.176h95.91L662.879,580.625Zm17.155,33.167C947.655,590.739,878.2,795.312,715.9,872.95,562.363,946.4,368.689,885.667,283.918,730.259L560.731,448.732h88.892L527.2,575.226l74.857,158.889-96.69.771L465.6,641.558,356.435,752.626c88.7,103.687,239.838,128.988,354.789,62.476,120.955-69.986,170.954-223.713,111.505-354.029ZM375.149,448.732H467.94l14.815,30.852-61.6,61.7Z';
-            return '<div class="sk-logo-wrap">'
-                + '<div class="sk-logo-glow"></div>'
-                + '<svg class="sk-logo-icon" viewBox="200 200 850 850" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">'
-                + '<defs>'
-                + '<linearGradient id="skLogoGrad" x1="0%" y1="0%" x2="100%" y2="100%">'
-                + '<stop offset="0%" stop-color="#7aa4ff"/>'
-                + '<stop offset="100%" stop-color="#5a6fff"/>'
-                + '</linearGradient>'
-                + '<filter id="skLogoGlow" x="-20%" y="-20%" width="140%" height="140%">'
-                + '<feGaussianBlur in="SourceGraphic" stdDeviation="6" result="blur"/>'
-                + '<feComposite in="SourceGraphic" in2="blur" operator="over"/>'
-                + '</filter>'
-                + '<clipPath id="skLogoClip">'
-                + '<path d="' + logoPath + '"/>'
-                + '</clipPath>'
-                + '<linearGradient id="skShimmerGrad" x1="0" y1="0" x2="1" y2="0.3" gradientUnits="objectBoundingBox">'
-                + '<stop offset="0%"   stop-color="white" stop-opacity="0"/>'
-                + '<stop offset="35%"  stop-color="white" stop-opacity="0"/>'
-                + '<stop offset="48%"  stop-color="white" stop-opacity="0.45"/>'
-                + '<stop offset="50%"  stop-color="white" stop-opacity="0.7"/>'
-                + '<stop offset="52%"  stop-color="white" stop-opacity="0.45"/>'
-                + '<stop offset="65%"  stop-color="white" stop-opacity="0"/>'
-                + '<stop offset="100%" stop-color="white" stop-opacity="0"/>'
-                + '</linearGradient>'
-                + '</defs>'
-                + '<path class="sk-logo-path" d="' + logoPath + '"/>'
-                + '<g clip-path="url(#skLogoClip)">'
-                + '<rect class="sk-shimmer-rect" x="100" y="150" width="1000" height="950" fill="url(#skShimmerGrad)" opacity="0.85">'
-                + '<animateTransform attributeName="transform" type="translate" values="-900,0;900,0;900,0" keyTimes="0;0.6;1" dur="2.4s" repeatCount="indefinite"/>'
-                + '</rect>'
-                + '</g>'
-                + '</svg>'
+        function markup() {
+            return ''
+                + '<div class="kax-loader-overlay" id="kaxGlobalLoader" aria-hidden="true">'
+                + '  <div class="kax-loader-noise" aria-hidden="true"></div>'
+                + '  <div class="kax-loader-aurora kax-loader-aurora-a" aria-hidden="true"></div>'
+                + '  <div class="kax-loader-aurora kax-loader-aurora-b" aria-hidden="true"></div>'
+                + '  <div class="kax-loader-grid" aria-hidden="true"></div>'
+                + '  <div class="kax-loader-core">'
+                + '    <svg class="kax-loader-ring" viewBox="0 0 320 320" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">'
+                + '      <circle class="ring ring-back" cx="160" cy="160" r="128"/>'
+                + '      <circle class="ring ring-mid" cx="160" cy="160" r="112"/>'
+                + '      <circle class="ring ring-front" cx="160" cy="160" r="92"/>'
+                + '    </svg>'
+                + '    <svg class="kax-loader-logo" viewBox="170 170 850 850" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">'
+                + '      <defs>'
+                + '        <linearGradient id="kaxLoaderGrad" x1="0%" y1="0%" x2="100%" y2="100%">'
+                + '          <stop offset="0%" stop-color="#9bc0ff"/>'
+                + '          <stop offset="55%" stop-color="#79a0ff"/>'
+                + '          <stop offset="100%" stop-color="#4a6fff"/>'
+                + '        </linearGradient>'
+                + '        <clipPath id="kaxLoaderClip">'
+                + '          <path d="' + LOGO_PATH + '"/>'
+                + '        </clipPath>'
+                + '      </defs>'
+                + '      <path class="logo-fill" d="' + LOGO_PATH + '"/>'
+                + '      <g clip-path="url(#kaxLoaderClip)">'
+                + '        <rect class="logo-scan" x="80" y="120" width="1020" height="980"></rect>'
+                + '      </g>'
+                + '      <path class="logo-stroke" d="' + LOGO_PATH + '"/>'
+                + '    </svg>'
+                + '    <div class="kax-loader-badge">KAXHUB</div>'
+                + '    <div class="kax-loader-text" aria-live="polite">LOADING<span class="dots"></span></div>'
+                + '  </div>'
                 + '</div>';
         }
 
-        // 创建并注入骨架 overlay
-        function createSkeletonOverlay() {
-            if (document.getElementById('kaxSkeletonOverlay')) return;
-            var pageType = detectPageType();
-            var overlay = document.createElement('div');
-            overlay.id = 'kaxSkeletonOverlay';
-            overlay.className = 'skeleton-overlay';
-            overlay.setAttribute('aria-hidden', 'true');
-            overlay.innerHTML = buildTopbarSkeleton() + buildBodySkeleton(pageType);
-
-            document.body.classList.add('skeleton-loading');
-            // 在 body 最前面插入
-            if (document.body.firstChild) {
-                document.body.insertBefore(overlay, document.body.firstChild);
+        function setLoadingClass(name, enabled) {
+            var html = document.documentElement;
+            var body = document.body;
+            if (enabled) {
+                if (html) html.classList.add(name);
+                if (body) body.classList.add(name);
             } else {
-                document.body.appendChild(overlay);
+                if (html) html.classList.remove(name);
+                if (body) body.classList.remove(name);
             }
         }
 
-        // 移除骨架 overlay（带淡出动画）
-        function removeSkeletonOverlay() {
-            var overlay = document.getElementById('kaxSkeletonOverlay');
+        function ensureOverlay() {
+            var overlay = document.getElementById('kaxGlobalLoader');
+            if (overlay) return overlay;
+
+            var host = document.createElement('div');
+            host.innerHTML = markup();
+            overlay = host.firstElementChild;
+            if (!overlay) return null;
+
+            var parent = document.body || document.documentElement;
+            if (!parent) return null;
+            if (parent.firstChild) parent.insertBefore(overlay, parent.firstChild);
+            else parent.appendChild(overlay);
+            return overlay;
+        }
+
+        function show() {
+            var overlay = ensureOverlay();
+            if (!overlay) return false;
+            hidden = false;
+            overlay.classList.remove('is-leaving');
+            overlay.classList.add('is-visible');
+            setLoadingClass('skeleton-loading', true);
+            return true;
+        }
+
+        function hide(force) {
+            if (hidden) return;
+            var overlay = document.getElementById('kaxGlobalLoader');
             if (!overlay) return;
-            overlay.classList.add('skeleton-hidden');
-            document.body.classList.remove('skeleton-loading');
-            document.body.classList.add('skeleton-done');
+
+            var elapsed = Date.now() - (window._pageLoadStartTime || Date.now());
+            if (!force && elapsed < MIN_DURATION) {
+                setTimeout(function () { hide(false); }, MIN_DURATION - elapsed);
+                return;
+            }
+
+            hidden = true;
+            overlay.classList.add('is-leaving');
+            overlay.classList.remove('is-visible');
+
+            setLoadingClass('skeleton-loading', false);
+            setLoadingClass('skeleton-done', true);
+
             setTimeout(function () {
                 try { overlay.remove(); } catch (_) { }
-                // 清理 skeleton-done（动画结束后不再需要）
-                setTimeout(function () { document.body.classList.remove('skeleton-done'); }, 500);
-            }, 400);
+                setTimeout(function () { setLoadingClass('skeleton-done', false); }, 500);
+            }, LEAVE_DURATION);
         }
 
-        // 骨架屏恒定显示 0.75s 后自动淡出（无需页面手动调用）
-        var SKELETON_DURATION = 750;
+        window.GlobalLoader = {
+            show: show,
+            hide: hide,
+            isVisible: function () {
+                var overlay = document.getElementById('kaxGlobalLoader');
+                return !!(overlay && !overlay.classList.contains('is-leaving'));
+            },
+            trackPromise: function (promise) {
+                show();
+                return Promise.resolve(promise).finally(function () { hide(false); });
+            }
+        };
 
-        function scheduleSkeletonRemoval() {
-            var elapsed = Date.now() - (window._pageLoadStartTime || Date.now());
-            var remaining = Math.max(0, SKELETON_DURATION - elapsed);
-            setTimeout(removeSkeletonOverlay, remaining);
+        // 兼容旧调用名称
+        window.finishSkeletonLoading = function () { hide(false); };
+
+        var bootstrapped = false;
+        function bootstrapLoader() {
+            if (bootstrapped) return;
+            bootstrapped = true;
+            if (!show()) return;
+            // 与旧行为兼容：页面进入后最少显示 MIN_DURATION 再淡出
+            setTimeout(function () { hide(false); }, MIN_DURATION);
         }
 
-        // 保留全局方法（兼容旧调用，但不再影响计时）
-        window.finishSkeletonLoading = function () { };
-
-        // 立即创建骨架屏并启动定时移除
-        if (document.body) {
-            createSkeletonOverlay();
-            scheduleSkeletonRemoval();
-        } else {
-            document.addEventListener('DOMContentLoaded', function () {
-                createSkeletonOverlay();
-                scheduleSkeletonRemoval();
-            });
-        }
+        // 立即启动：刷新瞬间显示（即使 body 尚未创建也先挂到 html）
+        bootstrapLoader();
     })();
 
 })();

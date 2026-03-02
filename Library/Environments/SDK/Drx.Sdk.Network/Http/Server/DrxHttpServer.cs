@@ -171,7 +171,11 @@ namespace Drx.Sdk.Network.Http
         private HttpListener _listener;
         private readonly List<(string Prefix, string RootDir)> _fileRoutes = new();
         private readonly List<RouteEntry> _routes = new();
-        private readonly System.Collections.Generic.Dictionary<HttpMethod, List<RouteEntry>> _routesByMethod = new();
+        /// <summary>
+        /// 路由表快照（不可变引用）。读取路径无锁——直接读 volatile 引用。
+        /// 写入路径通过 _routesLock 保护，创建新 Dictionary 后原子替换引用。
+        /// </summary>
+        private volatile System.Collections.Generic.Dictionary<HttpMethod, List<RouteEntry>> _routesByMethod = new();
         private readonly object _routesLock = new();
         private readonly System.Collections.Generic.Dictionary<string, string> _rateLimitKeyCache = new();
         private readonly object _rateLimitKeyCacheLock = new();
@@ -192,11 +196,15 @@ namespace Drx.Sdk.Network.Http
 
         private CancellationTokenSource _cts;
         private readonly Channel<HttpListenerContext> _requestChannel;
-        private readonly SemaphoreSlim _semaphore;
-        private const int MaxConcurrentRequests = 100;
-        private readonly MessageQueue<HttpListenerContext> _messageQueue;
+        private readonly ConcurrentDictionary<int, long> _requestEnqueueTimestamps = new();
+        private readonly AdaptiveConcurrencyLimiter _concurrencyLimiter;
         private readonly ThreadPoolManager _threadPool;
         private volatile int _perMessageProcessingDelayMs = 0;
+
+        /// <summary>
+        /// 服务器配置选项（不可变，构造后只读）
+        /// </summary>
+        internal readonly DrxHttpServerOptions _options;
 
         private readonly System.Collections.Concurrent.ConcurrentDictionary<int, TickerEntry> _tickers;
         private int _tickerIdCounter = 0;
@@ -230,7 +238,21 @@ namespace Drx.Sdk.Network.Http
         /// <param name="staticFileRoot">静态文件根目录（可为 null）</param>
         /// <param name="sessionTimeoutMinutes">会话超时时间（分钟），默认30分钟</param>
         public DrxHttpServer(IEnumerable<string> prefixes, string? staticFileRoot = null, int sessionTimeoutMinutes = 30)
+            : this(prefixes, staticFileRoot, new DrxHttpServerOptions { SessionTimeoutMinutes = sessionTimeoutMinutes })
         {
+        }
+
+        /// <summary>
+        /// 构造函数（带完整配置选项）
+        /// </summary>
+        /// <param name="prefixes">监听前缀，如 "http://localhost:8080/"</param>
+        /// <param name="staticFileRoot">静态文件根目录（可为 null）</param>
+        /// <param name="options">服务器配置选项</param>
+        public DrxHttpServer(IEnumerable<string> prefixes, string? staticFileRoot, DrxHttpServerOptions options)
+        {
+            _options = options ?? DrxHttpServerOptions.Default;
+            _options.Validate();
+
             _listener = new HttpListener();
             foreach (var prefix in prefixes)
             {
@@ -239,14 +261,32 @@ namespace Drx.Sdk.Network.Http
             _staticFileRoot = staticFileRoot;
             _fileRoutes = new List<(string Prefix, string RootDir)>();
             _rawRoutes = new System.Collections.Generic.List<(string Template, Func<HttpListenerContext, Task> Handler, int RateLimitMaxRequests, int RateLimitWindowSeconds, Func<int, HttpRequest, OverrideContext, Task<HttpResponse?>>? RateLimitCallback)>();
-            _requestChannel = Channel.CreateBounded<HttpListenerContext>(new BoundedChannelOptions(1000)
+            _requestChannel = Channel.CreateBounded<HttpListenerContext>(new BoundedChannelOptions(_options.ChannelCapacity)
             {
-                FullMode = BoundedChannelFullMode.DropOldest
+                // 使用 Wait 模式而非 DropOldest：DropOldest 会丢弃旧的 HttpListenerContext 而不关闭它们，
+                // 导致客户端连接永久挂起（无响应），最终占满服务器连接数。
+                // Wait 模式在 channel 满时会施加反压（backpressure），让 ListenAsync 暂停接收新连接。
+                FullMode = BoundedChannelFullMode.Wait
             });
-            _semaphore = new SemaphoreSlim(MaxConcurrentRequests);
-            _messageQueue = new MessageQueue<HttpListenerContext>(1000);
-            _threadPool = new ThreadPoolManager(Environment.ProcessorCount);
-            _sessionManager = new SessionManager(sessionTimeoutMinutes);
+
+            // 自适应并发控制器：替代硬编码的 SemaphoreSlim(100)
+            // 根据排队延迟动态调整并发上限，在 [MinConcurrency, MaxConcurrency] 范围内 AIMD 调节
+            _concurrencyLimiter = new AdaptiveConcurrencyLimiter(
+                initialLimit: _options.MaxConcurrentRequests,
+                minConcurrency: _options.AdaptiveMinConcurrency,
+                maxConcurrency: _options.AdaptiveMaxConcurrency,
+                targetLatencyMs: _options.AdaptiveTargetQueueLatencyMs
+            );
+
+            // 核心亲和线程池：per-core Worker 绑定 CPU 核心，支持工作窃取
+            _threadPool = new ThreadPoolManager(
+                workerCount: _options.ResolvedWorkerCount,
+                enableAffinity: _options.EnableCoreAffinity,
+                perCoreCapacity: _options.PerCoreQueueCapacity,
+                overflowCapacity: _options.OverflowQueueCapacity
+            );
+
+            _sessionManager = new SessionManager(_options.SessionTimeoutMinutes);
             _authorizationManager = new AuthorizationManager(5);
             _commandManager = new CommandManager();
 
@@ -254,12 +294,14 @@ namespace Drx.Sdk.Network.Http
 
             _tokenBucketManager = new TokenBucketManager();
 
-            _routeMatchCache = new RouteMatchCache(2048);
+            _routeMatchCache = new RouteMatchCache(_options.RouteCacheMaxSize);
 
             DrxJsonSerializerManager.ConfigureChainedMode();
 
             _tickers = new System.Collections.Concurrent.ConcurrentDictionary<int, TickerEntry>();
             _tickerWake = new AutoResetEvent(false);
+
+            Logger.Info($"DrxHttpServer 初始化完成: workers={_options.ResolvedWorkerCount}, affinity={_options.EnableCoreAffinity}, maxConcurrency={_options.MaxConcurrentRequests}");
         }
 
     }

@@ -35,8 +35,8 @@ public static partial class KaxGlobal
         if (string.IsNullOrWhiteSpace(userName)) return 0;
         try
         {
-            var all = await CdkDatabase.SelectAllAsync();
-            return all.Count(c => string.Equals(c.UsedBy ?? string.Empty, userName, StringComparison.OrdinalIgnoreCase));
+            var cdkList = await CdkDatabase.SelectWhereAsync("UsedBy", userName);
+            return cdkList.Count;
         }
         catch (Exception ex)
         {

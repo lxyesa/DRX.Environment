@@ -1,0 +1,14 @@
+{
+  "filePath": ".spec-workflow/specs/logger-refactor/requirements.md",
+  "currentVersion": 1,
+  "snapshots": [
+    {
+      "version": 1,
+      "filename": "snapshot-001.json",
+      "timestamp": "2026-03-02T08:02:04.951Z",
+      "trigger": "initial",
+      "approvalId": "approval_1772438524945_arulm3d25",
+      "approvalTitle": "Logger Refactor - Requirements"
+    }
+  ]
+}

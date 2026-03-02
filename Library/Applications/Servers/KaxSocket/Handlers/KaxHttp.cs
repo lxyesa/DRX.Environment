@@ -3,7 +3,6 @@ using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
-using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using Drx.Sdk.Network.Http;
 using Drx.Sdk.Network.Http.Auth;
@@ -54,6 +53,9 @@ public partial class KaxHttp
             Audience = "KaxUsers",
             Expiration = TimeSpan.FromHours(1)
         });
+
+        // 配置 API 守卫的 Token 验证器（供 Api / ApiGuard 使用）
+        Drx.Sdk.Network.Http.Api.ApiGuard.Configure(token => KaxGlobal.ValidateToken(token));
     }
 
     #region Rate Limit Callback
@@ -78,32 +80,12 @@ public partial class KaxHttp
 
     #region HTTP Handlers
 
-    // 检查当前用户是否属于允许使用 CDK 管理 API 的权限组（Console/Root/Admin）
-    private static async Task<bool> IsCdkAdminUser(string? userName)
-    {
-        if (string.IsNullOrWhiteSpace(userName)) return false;
-        var user = (await KaxGlobal.UserDatabase.SelectWhereAsync("UserName", userName)).FirstOrDefault();
-        if (user == null) return false;
-        var g = user.PermissionGroup;
-        return g == UserPermissionGroup.System || g == UserPermissionGroup.Console || g == UserPermissionGroup.Admin;
-    }
-
-    // 检查当前用户是否属于允许使用 Asset 管理 API 的权限组（Console/Root/Admin）
-    private static async Task<bool> IsAssetAdminUser(string? userName)
-    {
-        if (string.IsNullOrWhiteSpace(userName)) return false;
-        var user = (await KaxGlobal.UserDatabase.SelectWhereAsync("UserName", userName)).FirstOrDefault();
-        if (user == null) return false;
-        var g = user.PermissionGroup;
-        return g == UserPermissionGroup.System || g == UserPermissionGroup.Console || g == UserPermissionGroup.Admin;
-    }
-
     [HttpMiddleware]
-    public static HttpResponse Echo(HttpRequest request, Func<HttpRequest, HttpResponse> next)
+    public static async Task<HttpResponse?> Echo(HttpRequest request, Func<HttpRequest, Task<HttpResponse?>> next)
     {
-        Logger.Info($"收到 HTTP 请求: {request.Method} {request.Path} from {request.ClientAddress.Ip}:{request.ClientAddress.Port}");
+        _ = Logger.InfoAsync($"收到 HTTP 请求: {request.Method} {request.Path} from {request.ClientAddress.Ip}:{request.ClientAddress.Port}");
         // 继续处理请求
-        return next(request);
+        return await next(request).ConfigureAwait(false);
     }
 
     /// <summary>

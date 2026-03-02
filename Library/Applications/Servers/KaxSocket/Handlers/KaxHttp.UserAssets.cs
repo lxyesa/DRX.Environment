@@ -3,12 +3,13 @@ using System.Linq;
 using System.Text.Json.Nodes;
 using System.Threading.Tasks;
 using Drx.Sdk.Network.Http;
+using Drx.Sdk.Network.Http.Api;
 using Drx.Sdk.Network.Http.Protocol;
 using Drx.Sdk.Network.Http.Results;
 using Drx.Sdk.Network.Http.Configs;
 using Drx.Sdk.Shared;
 using KaxSocket;
-using static KaxSocket.Model.AssetModel;
+using KaxSocket.Handlers.Helpers;
 
 namespace KaxSocket.Handlers;
 
@@ -26,18 +27,8 @@ public partial class KaxHttp
     [HttpHandle("/api/user/assets/active", "GET", RateLimitMaxRequests = 60, RateLimitWindowSeconds = 60, RateLimitCallbackMethodName = nameof(RateLimitCallback))]
     public static async Task<IActionResult> Get_UserActiveAssets(HttpRequest request)
     {
-        var token = request.Headers[HttpHeaders.Authorization]?.Replace("Bearer ", "");
-        var principal = KaxGlobal.ValidateToken(token ?? string.Empty);
-        if (principal == null) return new JsonResult(new { code = 401, message = "未授权" }, 401);
-
-        var userName = principal.Identity?.Name;
-        if (string.IsNullOrWhiteSpace(userName)) return new JsonResult(new { code = 400, message = "用户名无效" }, 400);
-
-        if (await KaxGlobal.IsUserBanned(userName)) return new JsonResult(new { code = 403, message = "用户已被封禁" }, 403);
-
-        var user = (await KaxGlobal.UserDatabase.SelectWhereAsync("UserName", userName)).FirstOrDefault();
-        if (user == null) return new JsonResult(new { code = 404, message = "用户不存在" }, 404);
-
+        var (user, authError) = await Api.GetUserAsync(request);
+        if (authError != null) return authError;        if (user == null) return new JsonResult(new { code = 401, message = "用户认证失败" }, 401);
         var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
         var activeAssets = user.ActiveAssets
             .Select(a => new
@@ -58,15 +49,9 @@ public partial class KaxHttp
     [HttpHandle("/api/user/favorites", "GET", RateLimitMaxRequests = 60, RateLimitWindowSeconds = 60, RateLimitCallbackMethodName = nameof(RateLimitCallback))]
     public static async Task<IActionResult> Get_UserFavorites(HttpRequest request)
     {
-        var token = request.Headers[HttpHeaders.Authorization]?.Replace("Bearer ", "");
-        var principal = KaxGlobal.ValidateToken(token ?? string.Empty);
-        if (principal == null) return new JsonResult(new { code = 401, message = "未授权" }, 401);
-
-        var userName = principal.Identity?.Name;
-        if (string.IsNullOrWhiteSpace(userName)) return new JsonResult(new { code = 400, message = "用户名无效" }, 400);
-
-        var user = (await KaxGlobal.UserDatabase.SelectWhereAsync("UserName", userName)).FirstOrDefault();
-        if (user == null) return new JsonResult(new { code = 404, message = "用户不存在" }, 404);
+        var (user, authError) = await Api.GetUserAsync(request);
+        if (authError != null) return authError;
+        if (user == null) return new JsonResult(new { code = 401, message = "用户认证失败" }, 401);
 
         var favs = user.FavoriteAssets?.Select(f => f.AssetId).ToList() ?? new List<int>();
         return new JsonResult(new { code = 0, message = "成功", data = favs }, 200);
@@ -75,22 +60,15 @@ public partial class KaxHttp
     [HttpHandle("/api/user/favorites", "POST", RateLimitMaxRequests = 60, RateLimitWindowSeconds = 60, RateLimitCallbackMethodName = nameof(RateLimitCallback))]
     public static async Task<IActionResult> Post_AddFavorite(HttpRequest request)
     {
-        var token = request.Headers[HttpHeaders.Authorization]?.Replace("Bearer ", "");
-        var principal = KaxGlobal.ValidateToken(token ?? string.Empty);
-        if (principal == null) return new JsonResult(new { code = 401, message = "未授权" }, 401);
+        var (user, authError) = await Api.GetUserAsync(request);
+        if (authError != null) return authError;
+        if (user == null) return new JsonResult(new { code = 401, message = "用户认证失败" }, 401);
 
-        var userName = principal.Identity?.Name;
-        if (string.IsNullOrWhiteSpace(userName)) return new JsonResult(new { code = 400, message = "用户名无效" }, 400);
+        if (!ApiBody.TryParse(request, out var body, out var parseError))
+            return parseError!;
 
-        if (string.IsNullOrEmpty(request.Body)) return new JsonResult(new { code = 400, message = "请求体不能为空" }, 400);
-
-        var body = JsonNode.Parse(request.Body);
-        if (body == null) return new JsonResult(new { code = 400, message = "无法解析请求体" }, 400);
         if (!int.TryParse(body["assetId"]?.ToString(), out var assetId) || assetId <= 0)
             return new JsonResult(new { code = 400, message = "assetId 无效" }, 400);
-
-        var user = (await KaxGlobal.UserDatabase.SelectWhereAsync("UserName", userName)).FirstOrDefault();
-        if (user == null) return new JsonResult(new { code = 404, message = "用户不存在" }, 404);
 
         var asset = await KaxGlobal.AssetDataBase.SelectByIdAsync(assetId);
         if (asset == null) return new JsonResult(new { code = 404, message = "资源不存在" }, 404);
@@ -117,18 +95,12 @@ public partial class KaxHttp
     [HttpHandle("/api/user/favorites/{assetId}", "DELETE", RateLimitMaxRequests = 60, RateLimitWindowSeconds = 60, RateLimitCallbackMethodName = nameof(RateLimitCallback))]
     public static async Task<IActionResult> Delete_Favorite(HttpRequest request)
     {
-        var token = request.Headers[HttpHeaders.Authorization]?.Replace("Bearer ", "");
-        var principal = KaxGlobal.ValidateToken(token ?? string.Empty);
-        if (principal == null) return new JsonResult(new { code = 401, message = "未授权" }, 401);
-
-        var userName = principal.Identity?.Name;
-        if (string.IsNullOrWhiteSpace(userName)) return new JsonResult(new { code = 400, message = "用户名无效" }, 400);
+        var (user, authError) = await Api.GetUserAsync(request);
+        if (authError != null) return authError;
+        if (user == null) return new JsonResult(new { code = 401, message = "用户认证失败" }, 401);
 
         if (!request.PathParameters.TryGetValue("assetId", out var idStr) || !int.TryParse(idStr, out var assetId) || assetId <= 0)
             return new JsonResult(new { code = 400, message = "assetId 参数无效" }, 400);
-
-        var user = (await KaxGlobal.UserDatabase.SelectWhereAsync("UserName", userName)).FirstOrDefault();
-        if (user == null) return new JsonResult(new { code = 404, message = "用户不存在" }, 404);
 
         var existing = user.FavoriteAssets?.FirstOrDefault(f => f.AssetId == assetId);
         if (existing == null) return new JsonResult(new { code = 0, message = "未收藏" }, 200);
@@ -153,15 +125,9 @@ public partial class KaxHttp
     [HttpHandle("/api/user/cart", "GET", RateLimitMaxRequests = 60, RateLimitWindowSeconds = 60, RateLimitCallbackMethodName = nameof(RateLimitCallback))]
     public static async Task<IActionResult> Get_UserCart(HttpRequest request)
     {
-        var token = request.Headers[HttpHeaders.Authorization]?.Replace("Bearer ", "");
-        var principal = KaxGlobal.ValidateToken(token ?? string.Empty);
-        if (principal == null) return new JsonResult(new { code = 401, message = "未授权" }, 401);
-
-        var userName = principal.Identity?.Name;
-        if (string.IsNullOrWhiteSpace(userName)) return new JsonResult(new { code = 400, message = "用户名无效" }, 400);
-
-        var user = (await KaxGlobal.UserDatabase.SelectWhereAsync("UserName", userName)).FirstOrDefault();
-        if (user == null) return new JsonResult(new { code = 404, message = "用户不存在" }, 404);
+        var (user, authError) = await Api.GetUserAsync(request);
+        if (authError != null) return authError;
+        if (user == null) return new JsonResult(new { code = 401, message = "用户认证失败" }, 401);
 
         var items = user.CartItems?.Select(c => c.AssetId).ToList() ?? new List<int>();
         return new JsonResult(new { code = 0, message = "成功", data = items }, 200);
@@ -170,21 +136,15 @@ public partial class KaxHttp
     [HttpHandle("/api/user/cart", "POST", RateLimitMaxRequests = 60, RateLimitWindowSeconds = 60, RateLimitCallbackMethodName = nameof(RateLimitCallback))]
     public static async Task<IActionResult> Post_AddCart(HttpRequest request)
     {
-        var token = request.Headers[HttpHeaders.Authorization]?.Replace("Bearer ", "");
-        var principal = KaxGlobal.ValidateToken(token ?? string.Empty);
-        if (principal == null) return new JsonResult(new { code = 401, message = "未授权" }, 401);
+        var (user, authError) = await Api.GetUserAsync(request);
+        if (authError != null) return authError;
+        if (user == null) return new JsonResult(new { code = 401, message = "用户认证失败" }, 401);
 
-        var userName = principal.Identity?.Name;
-        if (string.IsNullOrWhiteSpace(userName)) return new JsonResult(new { code = 400, message = "用户名无效" }, 400);
+        if (!ApiBody.TryParse(request, out var body, out var parseError))
+            return parseError!;
 
-        if (string.IsNullOrEmpty(request.Body)) return new JsonResult(new { code = 400, message = "请求体不能为空" }, 400);
-        var body = JsonNode.Parse(request.Body);
-        if (body == null) return new JsonResult(new { code = 400, message = "无法解析请求体" }, 400);
         if (!int.TryParse(body["assetId"]?.ToString(), out var assetId) || assetId <= 0)
             return new JsonResult(new { code = 400, message = "assetId 无效" }, 400);
-
-        var user = (await KaxGlobal.UserDatabase.SelectWhereAsync("UserName", userName)).FirstOrDefault();
-        if (user == null) return new JsonResult(new { code = 404, message = "用户不存在" }, 404);
 
         if (user.CartItems == null) user.CartItems = new Drx.Sdk.Network.DataBase.TableList<UserCartItem>();
         if (!user.CartItems.Any(c => c.AssetId == assetId))
@@ -199,20 +159,14 @@ public partial class KaxHttp
     [HttpHandle("/api/user/cart/{assetId}", "DELETE", RateLimitMaxRequests = 60, RateLimitWindowSeconds = 60, RateLimitCallbackMethodName = nameof(RateLimitCallback))]
     public static async Task<IActionResult> Delete_CartItem(HttpRequest request)
     {
-        var token = request.Headers[HttpHeaders.Authorization]?.Replace("Bearer ", "");
-        var principal = KaxGlobal.ValidateToken(token ?? string.Empty);
-        if (principal == null) return new JsonResult(new { code = 401, message = "未授权" }, 401);
-
-        var userName = principal.Identity?.Name;
-        if (string.IsNullOrWhiteSpace(userName)) return new JsonResult(new { code = 400, message = "用户名无效" }, 400);
+        var (user, authError) = await Api.GetUserAsync(request);
+        if (authError != null) return authError;
+        if (user == null) return new JsonResult(new { code = 401, message = "用户认证失败" }, 401);
 
         if (!request.PathParameters.TryGetValue("assetId", out var idStr) || !int.TryParse(idStr, out var assetId) || assetId <= 0)
             return new JsonResult(new { code = 400, message = "assetId 参数无效" }, 400);
 
-        var user = (await KaxGlobal.UserDatabase.SelectWhereAsync("UserName", userName)).FirstOrDefault();
-        if (user == null) return new JsonResult(new { code = 404, message = "用户不存在" }, 404);
-
-        var existing = user.CartItems?.FirstOrDefault(c => c.AssetId == assetId);
+        var existing = user!.CartItems?.FirstOrDefault(c => c.AssetId == assetId);
         if (existing != null && user.CartItems != null)
         {
             user.CartItems.Remove(existing);

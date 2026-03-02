@@ -240,6 +240,7 @@
                 renderFeatures(product);
                 renderGallery(product);
                 setupEventListeners();
+                initHeroScrollMorph();
             } catch (renderErr) {
                 console.error('[shop_detail] 页面渲染出错，部分功能可能不可用', renderErr);
             }
@@ -286,6 +287,9 @@
             const heroBgEl = document.getElementById('productHeroBg');
             if (heroBgEl && product.coverImage) {
                 heroBgEl.style.backgroundImage = `url(${product.coverImage})`;
+                heroBgEl.style.backgroundSize = 'cover';
+                heroBgEl.style.backgroundRepeat = 'no-repeat';
+                heroBgEl.style.backgroundPosition = 'center';
             }
 
             // ── 英雄区 ──
@@ -873,6 +877,147 @@
             if (nextBtn) nextBtn.disabled = slides.length <= 1;
         }
 
+        /**
+         * 英雄区滚动形态切换 v3 — 极简纯 CSS 驱动
+         *
+         * 原理：
+         *   1. 面板在文档流中（position: relative）
+         *   2. 滚动超出面板底部 → 添加 .is-docked → position: fixed，placeholder 撑位
+         *   3. JS 只做两件事：切 class + 写 --t (0→1)
+         *   4. 所有视觉变化都由 CSS 的 --t 和 .is-docked 驱动
+         */
+        function initHeroScrollMorph() {
+            const panel = document.querySelector('.hero-product-row');
+            const heroInner = document.querySelector('.product-hero-inner');
+            if (!panel || !heroInner) return;
+
+            /* ── 迷你购买槽：docked 时右侧显示价格 + 购买按钮 ── */
+            const barSlot = document.createElement('div');
+            barSlot.className = 'bar-purchase-slot';
+            barSlot.innerHTML =
+                '<span class="bar-price"></span>' +
+                '<button class="bar-buy-btn" type="button">' +
+                '<span class="material-icons">shopping_bag</span>购买</button>';
+            panel.appendChild(barSlot);
+
+            const barPriceEl = barSlot.querySelector('.bar-price');
+            const barBuyBtn = barSlot.querySelector('.bar-buy-btn');
+
+            // 同步价格文本
+            const syncBarPrice = () => {
+                const src = document.getElementById('priceCurrent');
+                if (src && barPriceEl) barPriceEl.textContent = src.textContent;
+            };
+            syncBarPrice();
+
+            // 监听价格变化（套餐切换时自动同步）
+            const priceTarget = document.getElementById('priceCurrent');
+            if (priceTarget) {
+                new MutationObserver(syncBarPrice)
+                    .observe(priceTarget, { childList: true, characterData: true, subtree: true });
+            }
+
+            // 迷你购买按钮 → 代理到真正的购买按钮
+            barBuyBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const realBtn = document.getElementById('purchaseBtn');
+                if (realBtn) realBtn.click();
+            });
+
+            let placeholder = null;
+            let docked = false;
+            let ticking = false;
+            let anchorY = 0; // 面板在页面中的初始 offsetTop
+
+            /* ── 占位符：保持布局不跳 ── */
+            const addPlaceholder = () => {
+                if (placeholder) return;
+                const r = panel.getBoundingClientRect();
+                placeholder = document.createElement('div');
+                placeholder.className = 'hero-row-ph';
+                placeholder.style.cssText =
+                    `width:${r.width}px;height:${r.height}px;visibility:hidden;pointer-events:none;`;
+                panel.after(placeholder);
+            };
+            const removePlaceholder = () => {
+                if (!placeholder) return;
+                placeholder.remove();
+                placeholder = null;
+            };
+
+            /* ── 测量锚点位置（面板自然状态的 pageY） ── */
+            const measureAnchor = () => {
+                if (docked && placeholder) {
+                    anchorY = placeholder.getBoundingClientRect().top + window.scrollY;
+                } else {
+                    anchorY = panel.getBoundingClientRect().top + window.scrollY;
+                }
+            };
+
+            /* ── 进/出坞 ── */
+            const dock = () => {
+                if (docked) return;
+                addPlaceholder();
+                docked = true;
+                panel.classList.add('is-docked');
+                heroInner.classList.add('panel-docked');
+            };
+            const undock = () => {
+                if (!docked) return;
+                docked = false;
+                panel.classList.remove('is-docked');
+                heroInner.classList.remove('panel-docked');
+                panel.style.setProperty('--t', '0');
+                removePlaceholder();
+            };
+
+            /* ── 常量 ── */
+            const DOCK_OFFSET = 8;                // 面板顶部距 hero 顶部多少 px 时触发
+            const UNDOCK_MARGIN = 6;               // 回弹容差
+            const MORPH_DISTANCE = 220;            // --t 从 0→1 需要滚过的像素
+
+            /* ── 核心更新 ── */
+            const update = () => {
+                ticking = false;
+                // 小屏降级
+                if (window.innerWidth <= 640) {
+                    if (docked) undock();
+                    return;
+                }
+
+                const sy = window.scrollY;
+                const topbarH = parseFloat(getComputedStyle(document.documentElement)
+                    .getPropertyValue('--topbar-height')) || 60;
+                const triggerY = anchorY - topbarH - DOCK_OFFSET;
+
+                if (!docked && sy >= triggerY) {
+                    dock();
+                } else if (docked && sy < triggerY - UNDOCK_MARGIN) {
+                    undock();
+                    measureAnchor();              // 脱坞后重新测量
+                }
+
+                if (docked) {
+                    const t = Math.min(1, Math.max(0, (sy - triggerY) / MORPH_DISTANCE));
+                    panel.style.setProperty('--t', t.toFixed(3));
+                }
+            };
+
+            const onScroll = () => {
+                if (ticking) return;
+                ticking = true;
+                requestAnimationFrame(update);
+            };
+
+            measureAnchor();
+            window.addEventListener('scroll', onScroll, { passive: true });
+            window.addEventListener('resize', () => {
+                measureAnchor();
+                onScroll();
+            }, { passive: true });
+            update();
+        }
+
         /** 从后端 API 加载相关推荐商品并渲染到推荐区域 */
         async function loadRelatedProducts(currentId) {
             const grid = document.getElementById('relatedProductsGrid');
@@ -889,7 +1034,7 @@
                 const showCurrency = (v) => (v === null || v === undefined) ? '--' : ('💰' + Number(v).toFixed(2));
 
                 grid.innerHTML = items.map(item => {
-                    const thumbSrc = item.iconImage || item.IconImage || item.coverImage || item.CoverImage || normalizeMediaArray(item.screenshots || item.Screenshots)[0] || '';
+                    const thumbSrc = item.coverImage || item.CoverImage || item.iconImage || item.IconImage || normalizeMediaArray(item.screenshots || item.Screenshots)[0] || '';
                     const thumbHtml = thumbSrc
                         ? `<img src="${thumbSrc}" alt="${item.name || ''}" style="width:100%;height:100%;object-fit:cover;">`
                         : '🎮';
@@ -1500,7 +1645,6 @@
                     description:   'description',
                     fullDesc:      'description',
                     category:      'category',
-                    author:        'author',
                     version:       'version',
                     license:       'license',
                     compatibility: 'compatibility',

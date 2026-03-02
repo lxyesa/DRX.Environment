@@ -1,0 +1,16 @@
+{
+  "id": "snapshot_1772438524951_n9ognrs2l",
+  "approvalId": "approval_1772438524945_arulm3d25",
+  "approvalTitle": "Logger Refactor - Requirements",
+  "version": 1,
+  "timestamp": "2026-03-02T08:02:04.951Z",
+  "trigger": "initial",
+  "status": "pending",
+  "content": "# Logger Refactor - Requirements\r\n\r\n## Overview\r\n彻底重构 `Drx.Sdk.Shared.Logger` 静态日志系统，改善内部架构质量、可维护性和可扩展性，同时 **100% 保留现有公共 API 签名**，并新增现代化 API。\r\n\r\n## Stakeholders\r\n- 所有使用 `Logger.*` 的 SDK / 应用层项目（KaxSocket、Drx.Sdk.Network、Drx.Sdk.Shared.JavaScript 等）\r\n\r\n---\r\n\r\n## Functional Requirements\r\n\r\n### FR-1: 保留旧 API 完全兼容\r\n**As** 一个现有项目开发者  \r\n**I want** 重构后所有 `Logger.Info/Warn/Error/Debug/Trace/Log/StreamAsync/StreamFromAsync` 签名不变  \r\n**So that** 无需修改任何调用方代码即可升级\r\n\r\n**Acceptance Criteria:**\r\n- 所有现有方法签名（含 `[CallerLineNumber]`/`[CallerFilePath]` 参数）保持不变\r\n- `LogLevel` 枚举值不变 (`Dbug, Info, Warn, Fail, Fatal`)\r\n- `OnLogEntry` 回调钩子保留\r\n- `ConsoleInterceptor` 公共 API 保留（`Initialize()`, `EnableFileLogging`, `BeginRealtimeConsoleWriteScope()`）\r\n- 编译后所有依赖项目零修改通过编译\r\n\r\n### FR-2: 现代化 API 扩展\r\n**As** 一个新功能开发者  \r\n**I want** 使用结构化日志、作用域上下文和条件过滤能力  \r\n**So that** 能更高效地调试和监控\r\n\r\n**新增 API:**\r\n- **`Logger.SetMinimumLevel(LogLevel)`** — 全局最低日志级别过滤\r\n- **`Logger.WithContext(string key, object value)`** — 返回 `IDisposable` 作用域，自动附加上下文属性到后续日志\r\n- **`Logger.AddSink(ILogSink)`** / **`Logger.RemoveSink(ILogSink)`** — 可插拔输出目标接口\r\n- **`ILogSink`** 接口定义：`void Write(LogEntry entry)` / `Task WriteAsync(LogEntry entry)`\r\n- **`Logger.Fatal(string message)` / `Logger.Fatal(Text text)`** — 显式 Fatal 级别快捷方法（同步+异步）\r\n- **`Logger.IsEnabled(LogLevel)`** — 检查某级别是否会被输出（避免无谓字符串构造）\r\n\r\n### FR-3: 内部架构改进\r\n**As** 一个框架维护者  \r\n**I want** 代码职责分离清晰、可测试  \r\n**So that** 能独立修改各模块\r\n\r\n**要求:**\r\n- 将 `Logger.cs` 单文件拆分为多个 partial class 文件：核心入口、控制台 Sink、文件 Sink、流式日志、崩溃处理\r\n- `ConsoleInterceptor` 独立为单独文件\r\n- `LogEntry` 升级为公共只读结构体，包含上下文属性字典\r\n- 内部使用 `ILogSink` Pipeline 替代直接 Console 写入\r\n\r\n### FR-4: 性能保持\r\n**As** 一个高吞吐服务开发者  \r\n**I want** 重构后性能不退化  \r\n**So that** 日志系统不成为瓶颈\r\n\r\n**要求:**\r\n- 保留 `Channel<T>` 批量写入机制\r\n- 保留 ThreadStatic StringBuilder 复用\r\n- 保留 ConcurrentDictionary 类名缓存\r\n- 新增的最低级别过滤在 Enqueue 之前短路\r\n\r\n---\r\n\r\n## Non-Functional Requirements\r\n\r\n### NFR-1: 目标框架\r\n- .NET 9.0-windows（与 csproj 一致）\r\n\r\n### NFR-2: 零新依赖\r\n- 不引入新 NuGet 包\r\n\r\n### NFR-3: 文件组织\r\n- 所有 Logger 相关文件放在 `Drx.Sdk.Shared/` 目录下\r\n- 使用 `partial class Logger` 模式\r\n\r\n### NFR-4: 文档\r\n- 所有新增公共 API 必须有 XML 文档注释\r\n\r\n---\r\n\r\n## Out of Scope\r\n- 不改变 `Text` 类\r\n- 不改变 `LogLevel` 枚举值名称\r\n- 不添加日志文件轮转（可由 ILogSink 未来扩展）\r\n- 不支持跨进程日志聚合\r\n",
+  "fileStats": {
+    "size": 3304,
+    "lines": 84,
+    "lastModified": "2026-03-02T08:01:58.549Z"
+  },
+  "comments": []
+}

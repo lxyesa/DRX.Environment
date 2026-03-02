@@ -6,12 +6,18 @@ using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using Drx.Sdk.Network.Http.Performance;
 
 namespace Drx.Sdk.Network.Http.Sse
 {
     /// <summary>
     /// ISseWriter 的默认实现，封装 HttpListenerContext 的 OutputStream 进行 SSE 推送。
     /// 框架内部创建，在 [HttpSse] 方法调用前初始化。
+    /// 
+    /// 线程安全保证：
+    ///   - 所有写入操作通过 SemaphoreSlim(1,1) 互斥，防止并发写入导致 SSE 帧交错损坏
+    ///   - StringBuilder 从 HttpObjectPool 租借，减少高频推送场景的 GC 压力
+    ///   - _eventId 使用 Interlocked 原子操作
     /// </summary>
     public class SseWriter : ISseWriter
     {
@@ -20,7 +26,12 @@ namespace Drx.Sdk.Network.Http.Sse
         private long _eventId;
         private bool _rejected;
         private bool _headersSent;
-        private readonly object _writeLock = new();
+
+        /// <summary>
+        /// 写入互斥锁：确保同一客户端的 SSE 帧不会因并发写入而交错。
+        /// 使用 SemaphoreSlim(1,1) 而非 lock，因为写入是异步操作。
+        /// </summary>
+        private readonly SemaphoreSlim _writeLock = new(1, 1);
 
         public string ClientId { get; }
         public string? LastEventId { get; }
@@ -55,15 +66,22 @@ namespace Drx.Sdk.Network.Http.Sse
             InitializeHeaders();
 
             var id = Interlocked.Increment(ref _eventId);
-            var sb = new StringBuilder();
-            sb.Append("id: ").Append(id).Append('\n');
-            if (!string.IsNullOrEmpty(eventName))
-                sb.Append("event: ").Append(eventName).Append('\n');
-            foreach (var line in data.Split('\n'))
-                sb.Append("data: ").Append(line).Append('\n');
-            sb.Append('\n');
+            var sb = HttpObjectPool.RentStringBuilder();
+            try
+            {
+                sb.Append("id: ").Append(id).Append('\n');
+                if (!string.IsNullOrEmpty(eventName))
+                    sb.Append("event: ").Append(eventName).Append('\n');
+                foreach (var line in data.Split('\n'))
+                    sb.Append("data: ").Append(line).Append('\n');
+                sb.Append('\n');
 
-            await WriteRawAsync(sb.ToString()).ConfigureAwait(false);
+                await WriteRawAsync(sb.ToString()).ConfigureAwait(false);
+            }
+            finally
+            {
+                HttpObjectPool.ReturnStringBuilder(sb);
+            }
         }
 
         public async Task SendJsonAsync<T>(string? eventName, T data)
@@ -81,19 +99,26 @@ namespace Drx.Sdk.Network.Http.Sse
             EnsureConnected();
             InitializeHeaders();
 
-            var sb = new StringBuilder();
-            foreach (var (eventName, data) in events)
+            var sb = HttpObjectPool.RentStringBuilder();
+            try
             {
-                var id = Interlocked.Increment(ref _eventId);
-                sb.Append("id: ").Append(id).Append('\n');
-                if (!string.IsNullOrEmpty(eventName))
-                    sb.Append("event: ").Append(eventName).Append('\n');
-                foreach (var line in data.Split('\n'))
-                    sb.Append("data: ").Append(line).Append('\n');
-                sb.Append('\n');
-            }
+                foreach (var (eventName, data) in events)
+                {
+                    var id = Interlocked.Increment(ref _eventId);
+                    sb.Append("id: ").Append(id).Append('\n');
+                    if (!string.IsNullOrEmpty(eventName))
+                        sb.Append("event: ").Append(eventName).Append('\n');
+                    foreach (var line in data.Split('\n'))
+                        sb.Append("data: ").Append(line).Append('\n');
+                    sb.Append('\n');
+                }
 
-            await WriteRawAsync(sb.ToString()).ConfigureAwait(false);
+                await WriteRawAsync(sb.ToString()).ConfigureAwait(false);
+            }
+            finally
+            {
+                HttpObjectPool.ReturnStringBuilder(sb);
+            }
         }
 
         public async Task PingAsync()
@@ -137,9 +162,18 @@ namespace Drx.Sdk.Network.Http.Sse
 
         private async Task WriteRawAsync(string text)
         {
-            var bytes = Encoding.UTF8.GetBytes(text);
-            await _stream.WriteAsync(bytes, 0, bytes.Length).ConfigureAwait(false);
-            await _stream.FlushAsync().ConfigureAwait(false);
+            // 互斥写入：防止并发调用（如 BroadcastSseAsync + SendSseToClientAsync）导致帧交错
+            await _writeLock.WaitAsync().ConfigureAwait(false);
+            try
+            {
+                var bytes = Encoding.UTF8.GetBytes(text);
+                await _stream.WriteAsync(bytes, 0, bytes.Length).ConfigureAwait(false);
+                await _stream.FlushAsync().ConfigureAwait(false);
+            }
+            finally
+            {
+                _writeLock.Release();
+            }
         }
 
         private void EnsureConnected()

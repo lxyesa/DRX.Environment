@@ -3,6 +3,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Net;
 using Drx.Sdk.Shared;
@@ -13,6 +14,12 @@ namespace Drx.Sdk.Network.Http
 {
     /// <summary>
     /// DrxHttpServer 中间件部分：中间件管理
+    /// 
+    /// 线程安全模型：
+    ///   - _middlewares 受 _middlewareCacheLock 保护（读写均加锁，但中间件注册是低频操作）
+    ///   - _cachedSortedMiddlewares 是不可变快照，运行时读取无锁
+    ///   - _pathMiddlewareCache 使用 ConcurrentDictionary，线程安全
+    ///   - _middlewareCounter 使用 Interlocked 原子操作
     /// </summary>
     public partial class DrxHttpServer
     {
@@ -44,12 +51,12 @@ namespace Drx.Sdk.Network.Http
                 Path = path,
                 Priority = priority,
                 OverrideGlobal = overrideGlobal,
-                AddOrder = _middlewareCounter++
+                AddOrder = Interlocked.Increment(ref _middlewareCounter)
             };
 
-            _middlewares.Add(entry);
             lock (_middlewareCacheLock)
             {
+                _middlewares.Add(entry);
                 _cachedSortedMiddlewares = null;
             }
             Logger.Info($"添加中间件: {path ?? "全局"} (优先级: {priority})");
@@ -77,21 +84,23 @@ namespace Drx.Sdk.Network.Http
                 Path = path,
                 Priority = priority == -1 ? (path == null ? 0 : 100) : priority,
                 OverrideGlobal = overrideGlobal,
-                AddOrder = _middlewareCounter++
+                AddOrder = Interlocked.Increment(ref _middlewareCounter)
             };
 
-            _middlewares.Add(entry);
             lock (_middlewareCacheLock)
             {
+                _middlewares.Add(entry);
                 _cachedSortedMiddlewares = null;
             }
             Logger.Info($"添加中间件: {path ?? "全局"} (优先级: {entry.Priority})");
         }
 
         /// <summary>
-        /// 路径级中间件列表缓存，避免每次请求都重新过滤和分配列表
+        /// 路径级中间件列表缓存，避免每次请求都重新过滤和分配列表。
+        /// 设置上限防止动态路径参数导致的无限增长。
         /// </summary>
         private readonly ConcurrentDictionary<string, List<MiddlewareEntry>> _pathMiddlewareCache = new(StringComparer.OrdinalIgnoreCase);
+        private const int MaxPathMiddlewareCacheSize = 2048;
 
         /// <summary>
         /// 执行中间件管道
@@ -133,7 +142,11 @@ namespace Drx.Sdk.Network.Http
                         applicableForPath.Add(m);
                     }
                 }
-                _pathMiddlewareCache.TryAdd(rawPath, applicableForPath);
+                // 防止动态路径参数（如 /user/123）导致缓存无限增长
+                if (_pathMiddlewareCache.Count < MaxPathMiddlewareCacheSize)
+                {
+                    _pathMiddlewareCache.TryAdd(rawPath, applicableForPath);
+                }
             }
 
             Func<HttpRequest, Task<HttpResponse?>> pipeline = finalHandler;

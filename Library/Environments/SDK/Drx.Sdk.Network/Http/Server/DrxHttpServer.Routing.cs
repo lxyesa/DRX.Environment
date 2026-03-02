@@ -16,9 +16,40 @@ namespace Drx.Sdk.Network.Http
 {
     /// <summary>
     /// DrxHttpServer 路由部分：路由添加与匹配
+    /// 
+    /// 线程安全模型（不可变快照）：
+    ///   - _routesByMethod 是 volatile 引用，读取无锁
+    ///   - AddRoute 在 lock(_routesLock) 内创建新 Dictionary 副本，修改后原子替换引用
+    ///   - 路由匹配（热路径）直接读取当前快照引用，零锁开销
+    ///   - 路由注册（冷路径）通过 lock 序列化写入
     /// </summary>
     public partial class DrxHttpServer
     {
+        /// <summary>
+        /// 在 lock(_routesLock) 内调用：将路由添加到内部列表并重建不可变快照。
+        /// 新快照通过 volatile write 原子发布，后续读取无需加锁。
+        /// </summary>
+        private void AddRouteAndRebuildSnapshot(RouteEntry route, HttpMethod method)
+        {
+            // 必须在 lock(_routesLock) 内调用
+            _routes.Add(route);
+
+            // 创建 _routesByMethod 的完整副本
+            var newDict = new System.Collections.Generic.Dictionary<HttpMethod, List<RouteEntry>>();
+            foreach (var kvp in _routesByMethod)
+            {
+                newDict[kvp.Key] = new List<RouteEntry>(kvp.Value);
+            }
+
+            if (!newDict.ContainsKey(method))
+                newDict[method] = new List<RouteEntry>();
+            newDict[method].Add(route);
+
+            // 原子替换引用（volatile write）
+            _routesByMethod = newDict;
+
+            _routeMatchCache?.Invalidate();
+        }
         #region 原始路由（Raw Route）
 
         /// <summary>
@@ -198,11 +229,7 @@ namespace Drx.Sdk.Network.Http
                 };
                 lock (_routesLock)
                 {
-                    _routes.Add(route);
-                    if (!_routesByMethod.ContainsKey(method))
-                        _routesByMethod[method] = new();
-                    _routesByMethod[method].Add(route);
-                    _routeMatchCache?.Invalidate();
+                    AddRouteAndRebuildSnapshot(route, method);
                 }
                 Logger.Info($"添加同步路由: {method} {path}");
             }
@@ -225,11 +252,7 @@ namespace Drx.Sdk.Network.Http
                 };
                 lock (_routesLock)
                 {
-                    _routes.Add(route);
-                    if (!_routesByMethod.ContainsKey(method))
-                        _routesByMethod[method] = new();
-                    _routesByMethod[method].Add(route);
-                    _routeMatchCache?.Invalidate();
+                    AddRouteAndRebuildSnapshot(route, method);
                 }
                 Logger.Info($"添加同步路由: {method} {path}");
             }
@@ -254,11 +277,7 @@ namespace Drx.Sdk.Network.Http
                 };
                 lock (_routesLock)
                 {
-                    _routes.Add(route);
-                    if (!_routesByMethod.ContainsKey(method))
-                        _routesByMethod[method] = new();
-                    _routesByMethod[method].Add(route);
-                    _routeMatchCache?.Invalidate();
+                    AddRouteAndRebuildSnapshot(route, method);
                 }
                 Logger.Info($"添加同步路由: {method} {path} (rate={rateLimitMaxRequests}/{rateLimitWindowSeconds}s)");
             }
@@ -283,11 +302,7 @@ namespace Drx.Sdk.Network.Http
                 };
                 lock (_routesLock)
                 {
-                    _routes.Add(route);
-                    if (!_routesByMethod.ContainsKey(method))
-                        _routesByMethod[method] = new();
-                    _routesByMethod[method].Add(route);
-                    _routeMatchCache?.Invalidate();
+                    AddRouteAndRebuildSnapshot(route, method);
                 }
                 Logger.Info($"添加同步路由: {method} {path} (rate={rateLimitMaxRequests}/{rateLimitWindowSeconds}s)");
             }
@@ -315,10 +330,7 @@ namespace Drx.Sdk.Network.Http
                 };
                 lock (_routesLock)
                 {
-                    _routes.Add(route);
-                    if (!_routesByMethod.ContainsKey(method))
-                        _routesByMethod[method] = new();
-                    _routesByMethod[method].Add(route);
+                    AddRouteAndRebuildSnapshot(route, method);
                 }
                 Logger.Info($"添加异步路由: {method} {path}");
             }
@@ -343,10 +355,7 @@ namespace Drx.Sdk.Network.Http
                 };
                 lock (_routesLock)
                 {
-                    _routes.Add(route);
-                    if (!_routesByMethod.ContainsKey(method))
-                        _routesByMethod[method] = new();
-                    _routesByMethod[method].Add(route);
+                    AddRouteAndRebuildSnapshot(route, method);
                 }
                 Logger.Info($"添加异步路由: {method} {path}");
             }
@@ -372,10 +381,7 @@ namespace Drx.Sdk.Network.Http
                 };
                 lock (_routesLock)
                 {
-                    _routes.Add(route);
-                    if (!_routesByMethod.ContainsKey(method))
-                        _routesByMethod[method] = new();
-                    _routesByMethod[method].Add(route);
+                    AddRouteAndRebuildSnapshot(route, method);
                 }
                 Logger.Info($"添加异步路由: {method} {path} (rate={rateLimitMaxRequests}/{rateLimitWindowSeconds}s)");
             }
@@ -401,10 +407,7 @@ namespace Drx.Sdk.Network.Http
                 };
                 lock (_routesLock)
                 {
-                    _routes.Add(route);
-                    if (!_routesByMethod.ContainsKey(method))
-                        _routesByMethod[method] = new();
-                    _routesByMethod[method].Add(route);
+                    AddRouteAndRebuildSnapshot(route, method);
                 }
                 Logger.Info($"添加异步路由: {method} {path} (rate={rateLimitMaxRequests}/{rateLimitWindowSeconds}s)");
             }
@@ -441,11 +444,7 @@ namespace Drx.Sdk.Network.Http
                 };
                 lock (_routesLock)
                 {
-                    _routes.Add(route);
-                    if (!_routesByMethod.ContainsKey(method))
-                        _routesByMethod[method] = new();
-                    _routesByMethod[method].Add(route);
-                    _routeMatchCache?.Invalidate();
+                    AddRouteAndRebuildSnapshot(route, method);
                 }
                 Logger.Info($"添加同步路由: {method} {path}");
             }
@@ -475,11 +474,7 @@ namespace Drx.Sdk.Network.Http
                 };
                 lock (_routesLock)
                 {
-                    _routes.Add(route);
-                    if (!_routesByMethod.ContainsKey(method))
-                        _routesByMethod[method] = new();
-                    _routesByMethod[method].Add(route);
-                    _routeMatchCache?.Invalidate();
+                    AddRouteAndRebuildSnapshot(route, method);
                 }
                 Logger.Info($"添加同步路由: {method} {path}");
             }
@@ -514,10 +509,7 @@ namespace Drx.Sdk.Network.Http
                 };
                 lock (_routesLock)
                 {
-                    _routes.Add(route);
-                    if (!_routesByMethod.ContainsKey(method))
-                        _routesByMethod[method] = new();
-                    _routesByMethod[method].Add(route);
+                    AddRouteAndRebuildSnapshot(route, method);
                 }
                 Logger.Info($"添加异步路由: {method} {path}");
             }
@@ -549,10 +541,7 @@ namespace Drx.Sdk.Network.Http
                 };
                 lock (_routesLock)
                 {
-                    _routes.Add(route);
-                    if (!_routesByMethod.ContainsKey(method))
-                        _routesByMethod[method] = new();
-                    _routesByMethod[method].Add(route);
+                    AddRouteAndRebuildSnapshot(route, method);
                 }
                 Logger.Info($"添加异步路由: {method} {path}");
             }
@@ -585,10 +574,7 @@ namespace Drx.Sdk.Network.Http
                 };
                 lock (_routesLock)
                 {
-                    _routes.Add(route);
-                    if (!_routesByMethod.ContainsKey(method))
-                        _routesByMethod[method] = new();
-                    _routesByMethod[method].Add(route);
+                    AddRouteAndRebuildSnapshot(route, method);
                 }
                 Logger.Info($"添加异步路由: {method} {path} (rate={rateLimitMaxRequests}/{rateLimitWindowSeconds}s)");
             }
@@ -621,10 +607,7 @@ namespace Drx.Sdk.Network.Http
                 };
                 lock (_routesLock)
                 {
-                    _routes.Add(route);
-                    if (!_routesByMethod.ContainsKey(method))
-                        _routesByMethod[method] = new();
-                    _routesByMethod[method].Add(route);
+                    AddRouteAndRebuildSnapshot(route, method);
                 }
                 Logger.Info($"添加异步路由: {method} {path} (rate={rateLimitMaxRequests}/{rateLimitWindowSeconds}s)");
             }

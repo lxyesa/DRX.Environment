@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Concurrent;
-using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
@@ -10,6 +9,7 @@ using System.Threading;
 using System.Threading.Channels;
 using System.Threading.Tasks;
 using Drx.Sdk.Network.Http;
+using Drx.Sdk.Network.Http.Api;
 using Drx.Sdk.Network.Http.Auth;
 using Drx.Sdk.Network.Http.Protocol;
 using Drx.Sdk.Network.Http.Results;
@@ -17,6 +17,7 @@ using Drx.Sdk.Network.Http.Configs;
 using Drx.Sdk.Network.Http.Sse;
 using Drx.Sdk.Shared;
 using KaxSocket;
+using KaxSocket.Handlers.Helpers;
 
 namespace KaxSocket.Handlers;
 
@@ -191,56 +192,26 @@ public partial class KaxHttp
     #region 控制台 (Console)
 
     /// <summary>
-    /// 验证请求用户是否具有控制台访问权限
-    /// </summary>
-    private static async Task<(bool Allowed, string? UserName, string? ErrorMessage, int StatusCode)> VerifyConsoleAccess(HttpRequest request)
-    {
-        var userToken = request.Headers[HttpHeaders.Authorization]?.Replace("Bearer ", "");
-        if (string.IsNullOrWhiteSpace(userToken))
-            return (false, null, "未提供登录令牌", 401);
-
-        var principal = JwtHelper.ValidateToken(userToken);
-        var userName = principal?.Identity?.Name;
-        if (string.IsNullOrWhiteSpace(userName))
-            return (false, null, "无效的登录令牌", 401);
-
-        if (await KaxGlobal.IsUserBanned(userName))
-            return (false, userName, "您的账号已被封禁", 403);
-
-        var user = (await KaxGlobal.UserDatabase.SelectWhereAsync("UserName", userName)).FirstOrDefault();
-        if (user == null)
-            return (false, userName, "用户不存在", 401);
-
-        var group = user.PermissionGroup;
-        if (group != UserPermissionGroup.System && group != UserPermissionGroup.Console && group != UserPermissionGroup.Admin)
-            return (false, userName, "权限不足，仅管理员可使用控制台", 403);
-
-        return (true, userName, null, 200);
-    }
-
-    /// <summary>
     /// 执行远程命令。接收 JSON 请求体 { "command": "..." }，
     /// 通过 DrxHttpServer.SubmitCommandAndWaitAsync 执行并返回结果。
     /// </summary>
     [HttpHandle("/api/console/execute", "POST", RateLimitMaxRequests = 30, RateLimitWindowSeconds = 60)]
     public static async Task<IActionResult> PostConsoleExecute(HttpRequest request, DrxHttpServer server)
     {
-        var verify = await VerifyConsoleAccess(request);
-        if (!verify.Allowed)
-            return new JsonResult(new { success = false, error = verify.ErrorMessage }, verify.StatusCode);
+        var (operatorName, authError) = await Api.RequireAdminNameAsync(request);
+        if (authError != null) return authError;
 
-        if (string.IsNullOrWhiteSpace(request.Body))
-            return new JsonResult(new { success = false, error = "请求体不能为空" }, 400);
+        if (!ApiBody.TryParse(request, out var body, out var parseError))
+            return parseError!;
 
         try
         {
-            var body = JsonNode.Parse(request.Body);
             var command = body?["command"]?.GetValue<string>();
 
             if (string.IsNullOrWhiteSpace(command))
                 return new JsonResult(new { success = false, error = "命令不能为空" }, 400);
 
-            Logger.Info($"[Console] 用户 {verify.UserName} 执行命令: {command}");
+            Logger.Info($"[Console] 用户 {operatorName} 执行命令: {command}");
 
             // 捕获 Console.WriteLine 的输出
             var originalOut = Console.Out;
@@ -280,9 +251,8 @@ public partial class KaxHttp
     [HttpHandle("/api/console/commands", "GET")]
     public static async Task<IActionResult> GetConsoleCommands(HttpRequest request, DrxHttpServer server)
     {
-        var verify = await VerifyConsoleAccess(request);
-        if (!verify.Allowed)
-            return new JsonResult(new { error = verify.ErrorMessage }, verify.StatusCode);
+        var (_, authError) = await Api.RequireAdminNameAsync(request);
+        if (authError != null) return authError;
 
         try
         {

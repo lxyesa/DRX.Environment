@@ -4,11 +4,13 @@ using System.Linq;
 using System.Text.Json.Nodes;
 using System.Threading.Tasks;
 using Drx.Sdk.Network.Http;
+using Drx.Sdk.Network.Http.Api;
 using Drx.Sdk.Network.Http.Protocol;
 using Drx.Sdk.Network.Http.Results;
 using Drx.Sdk.Network.Http.Configs;
 using Drx.Sdk.Shared;
 using KaxSocket;
+using KaxSocket.Handlers.Helpers;
 
 namespace KaxSocket.Handlers;
 
@@ -26,16 +28,11 @@ public partial class KaxHttp
     [HttpHandle("/api/cdk/admin/inspect", "POST", RateLimitMaxRequests = 60, RateLimitWindowSeconds = 60, RateLimitCallbackMethodName = nameof(RateLimitCallback))]
     public static async Task<IActionResult> Post_InspectCdk(HttpRequest request)
     {
-        var token = request.Headers[HttpHeaders.Authorization]?.Replace("Bearer ", "");
-        var principal = KaxGlobal.ValidateToken(token!);
-        if (principal == null) return new JsonResult(new { message = "未授权" }, 401);
-        var userName = principal.Identity?.Name;
-        if (await KaxGlobal.IsUserBanned(userName!)) return new JsonResult(new { message = "账号被封禁" }, 403);
-        if (!await IsCdkAdminUser(userName)) return new JsonResult(new { message = "权限不足" }, 403);
+        var (operatorName, authError) = await Api.RequireAdminNameAsync(request);
+        if (authError != null) return authError;
 
-        if (string.IsNullOrEmpty(request.Body)) return new JsonResult(new { message = "请求体不能为空" }, 400);
-        var body = JsonNode.Parse(request.Body);
-        if (body == null) return new JsonResult(new { message = "无效的 JSON" }, 400);
+        if (!ApiBody.TryParse(request, out var body, out var parseError))
+            return parseError!;
 
         var code = body["code"]?.ToString()?.Trim();
         if (string.IsNullOrEmpty(code)) return new JsonResult(new { message = "缺少 code 字段" }, 400);
@@ -78,16 +75,11 @@ public partial class KaxHttp
     [HttpHandle("/api/cdk/admin/generate", "POST", RateLimitMaxRequests = 10, RateLimitWindowSeconds = 60, RateLimitCallbackMethodName = nameof(RateLimitCallback))]
     public static async Task<IActionResult> Post_GenerateCdk(HttpRequest request)
     {
-        var token = request.Headers[HttpHeaders.Authorization]?.Replace("Bearer ", "");
-        var principal = KaxGlobal.ValidateToken(token!);
-        if (principal == null) return new JsonResult(new { message = "未授权" }, 401);
-        var userName = principal.Identity?.Name;
-        if (await KaxGlobal.IsUserBanned(userName!)) return new JsonResult(new { message = "账号被封禁" }, 403);
-        if (!await IsCdkAdminUser(userName)) return new JsonResult(new { message = "权限不足" }, 403);
+        var (operatorName, authError) = await Api.RequireAdminNameAsync(request);
+        if (authError != null) return authError;
 
-        if (string.IsNullOrEmpty(request.Body)) return new JsonResult(new { message = "请求体不能为空" }, 400);
-        var body = JsonNode.Parse(request.Body);
-        if (body == null) return new JsonResult(new { message = "无效的 JSON" }, 400);
+        if (!ApiBody.TryParse(request, out var body, out var parseError))
+            return parseError!;
 
         var prefix = body["prefix"]?.ToString() ?? string.Empty;
         int count = 1; int.TryParse(body["count"]?.ToString() ?? "1", out count);
@@ -111,16 +103,11 @@ public partial class KaxHttp
     [HttpHandle("/api/cdk/admin/save", "POST", RateLimitMaxRequests = 5, RateLimitWindowSeconds = 60, RateLimitCallbackMethodName = nameof(RateLimitCallback))]
     public static async Task<IActionResult> Post_SaveCdk(HttpRequest request)
     {
-        var token = request.Headers[HttpHeaders.Authorization]?.Replace("Bearer ", "");
-        var principal = KaxGlobal.ValidateToken(token!);
-        if (principal == null) return new JsonResult(new { message = "未授权" }, 401);
-        var userName = principal.Identity?.Name ?? "anonymous";
-        if (await KaxGlobal.IsUserBanned(userName!)) return new JsonResult(new { message = "账号被封禁" }, 403);
-        if (!await IsCdkAdminUser(userName)) return new JsonResult(new { message = "权限不足" }, 403);
+        var (operatorName, authError) = await Api.RequireAdminNameAsync(request);
+        if (authError != null) return authError;
 
-        if (string.IsNullOrEmpty(request.Body)) return new JsonResult(new { message = "请求体不能为空" }, 400);
-        var body = JsonNode.Parse(request.Body);
-        if (body == null) return new JsonResult(new { message = "无效的 JSON" }, 400);
+        if (!ApiBody.TryParse(request, out var body, out var parseError))
+            return parseError!;
 
         var codes = new List<string>();
         var codesNode = body["codes"] as JsonArray;
@@ -184,7 +171,7 @@ public partial class KaxHttp
                     CreatedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
                     UsedAt = 0,
                     UsedBy = string.Empty,
-                    CreatedBy = userName,
+                    CreatedBy = operatorName ?? string.Empty,
                     GoldValue = goldValue,
                     ExpiresInSeconds = expiresInSeconds
                 };
@@ -193,7 +180,7 @@ public partial class KaxHttp
                 saved++;
             }
 
-            Logger.Info($"用户 {userName} 保存了 {saved} 个 CDK");
+            Logger.Info($"用户 {operatorName} 保存了 {saved} 个 CDK");
             return new JsonResult(new { message = "已保存到数据库", count = saved }, saved > 0 ? 201 : 200);
         }
         catch (Exception ex)
@@ -209,16 +196,11 @@ public partial class KaxHttp
     [HttpHandle("/api/cdk/admin/delete", "POST", RateLimitMaxRequests = 180, RateLimitWindowSeconds = 60, RateLimitCallbackMethodName = nameof(RateLimitCallback))]
     public static async Task<IActionResult> Post_DeleteCdk(HttpRequest request)
     {
-        var token = request.Headers[HttpHeaders.Authorization]?.Replace("Bearer ", "");
-        var principal = KaxGlobal.ValidateToken(token!);
-        if (principal == null) return new JsonResult(new { message = "未授权" }, 401);
-        var userName = principal.Identity?.Name;
-        if (await KaxGlobal.IsUserBanned(userName!)) return new JsonResult(new { message = "账号被封禁" }, 403);
-        if (!await IsCdkAdminUser(userName)) return new JsonResult(new { message = "权限不足" }, 403);
+        var (operatorName, authError) = await Api.RequireAdminNameAsync(request);
+        if (authError != null) return authError;
 
-        if (string.IsNullOrEmpty(request.Body)) return new JsonResult(new { message = "请求体不能为空" }, 400);
-        var body = JsonNode.Parse(request.Body);
-        if (body == null) return new JsonResult(new { message = "无效的 JSON" }, 400);
+        if (!ApiBody.TryParse(request, out var body, out var parseError))
+            return parseError!;
 
         // 支持批量删除：请求体可包含单个字段 "code" 或数组字段 "codes"
         var codesNode = body["codes"] as JsonArray;
@@ -295,19 +277,12 @@ public partial class KaxHttp
     [HttpHandle("/api/cdk/admin/list", "GET", RateLimitMaxRequests = 60, RateLimitWindowSeconds = 60, RateLimitCallbackMethodName = nameof(RateLimitCallback))]
     public static async Task<IActionResult> Get_CdkList(HttpRequest request)
     {
-        var token = request.Headers[HttpHeaders.Authorization]?.Replace("Bearer ", "");
-        var principal = KaxGlobal.ValidateToken(token!);
-        if (principal == null) return new JsonResult(new { message = "未授权" }, 401);
-        var userName = principal.Identity?.Name;
-        if (!await IsCdkAdminUser(userName)) return new JsonResult(new { message = "权限不足" }, 403);
+        var (_, authError) = await Api.RequireAdminNameAsync(request);
+        if (authError != null) return authError;
 
         try
         {
-            int page = 1;
-            int pageSize = 50;
-            if (!int.TryParse(request.Query["page"], out page) || page <= 0) page = 1;
-            if (!int.TryParse(request.Query["pageSize"], out pageSize) || pageSize <= 0) pageSize = 50;
-            pageSize = Math.Clamp(pageSize, 1, 200);
+            var (page, pageSize) = ApiPagination.Parse(request);
 
             var all = await KaxGlobal.CdkDatabase.SelectAllAsync();
             var ordered = all.OrderByDescending(c => c.CreatedAt).ToList();
@@ -344,11 +319,8 @@ public partial class KaxHttp
     [HttpHandle("/api/cdk/admin/search", "GET", RateLimitMaxRequests = 60, RateLimitWindowSeconds = 60, RateLimitCallbackMethodName = nameof(RateLimitCallback))]
     public static async Task<IActionResult> Get_SearchCdk(HttpRequest request)
     {
-        var token = request.Headers[HttpHeaders.Authorization]?.Replace("Bearer ", "");
-        var principal = KaxGlobal.ValidateToken(token!);
-        if (principal == null) return new JsonResult(new { message = "未授权" }, 401);
-        var userName = principal.Identity?.Name;
-        if (!await IsCdkAdminUser(userName)) return new JsonResult(new { message = "权限不足" }, 403);
+        var (_, authError) = await Api.RequireAdminNameAsync(request);
+        if (authError != null) return authError;
 
         try
         {
@@ -356,11 +328,7 @@ public partial class KaxHttp
             // searchIn: code | creator | user | description | all (默认 all)
             var searchIn = (request.Query["searchIn"] ?? "all").Trim().ToLowerInvariant();
 
-            int page = 1;
-            int pageSize = 50;
-            if (!int.TryParse(request.Query["page"], out page) || page <= 0) page = 1;
-            if (!int.TryParse(request.Query["pageSize"], out pageSize) || pageSize <= 0) pageSize = 50;
-            pageSize = Math.Clamp(pageSize, 1, 200);
+            var (page, pageSize) = ApiPagination.Parse(request);
 
             var all = await KaxGlobal.CdkDatabase.SelectAllAsync();
             IEnumerable<Model.CdkModel> filtered = all;

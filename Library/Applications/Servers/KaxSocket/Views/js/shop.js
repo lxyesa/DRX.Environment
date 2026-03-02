@@ -123,9 +123,9 @@
                     const items = body?.data?.items ?? body?.items ?? [];
 
                     state.products = items.map(a => ({
-                        // 媒体资源字段兼容：AssetModel 可能为 camelCase 或 PascalCase
-                        coverImage: getAssetField(a, 'coverImage', 'CoverImage') || '',
-                        iconImage: getAssetField(a, 'iconImage', 'IconImage') || '',
+                        // 媒体资源字段兼容：优先 coverUrl/iconUrl，回退到 coverImage/iconImage
+                        coverImage: getAssetField(a, 'coverUrl', 'CoverUrl') || getAssetField(a, 'coverImage', 'CoverImage') || '',
+                        iconImage: getAssetField(a, 'iconUrl', 'IconUrl') || getAssetField(a, 'iconImage', 'IconImage') || '',
                         screenshots: normalizeMediaArray(getAssetField(a, 'screenshots', 'Screenshots')),
                         id: Number(a.id) || a.id,
                         name: a.name,
@@ -296,7 +296,7 @@
                 const cartTitle = inCart ? '已在购物车中，点击可移除' : '加入购物车';
                 const cartDisabled = '';
                 const downloadsText = product.downloads > 0 ? `${product.downloads}` : '0';
-                const imageUrl = product.iconImage || product.coverImage || product.screenshots?.[0] || '';
+                const imageUrl = product.coverImage || product.iconImage || product.screenshots?.[0] || '';
                 const imageHtml = imageUrl
                     ? `<img src="${escapeHtml(imageUrl)}" alt="${escapeHtml(product.name || '')}" loading="lazy" style="width:100%;height:100%;object-fit:cover;">`
                     : product.icon;

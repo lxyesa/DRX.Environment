@@ -3,11 +3,13 @@ using System.Linq;
 using System.Text.Json.Nodes;
 using System.Threading.Tasks;
 using Drx.Sdk.Network.Http;
+using Drx.Sdk.Network.Http.Api;
 using Drx.Sdk.Network.Http.Protocol;
 using Drx.Sdk.Network.Http.Results;
 using Drx.Sdk.Network.Http.Configs;
 using Drx.Sdk.Shared;
 using KaxSocket;
+using KaxSocket.Handlers.Helpers;
 using KaxSocket.Model;
 using static KaxSocket.Model.AssetModel;
 
@@ -34,29 +36,19 @@ public partial class KaxHttp
     [HttpHandle("/api/shop/purchase", "POST", RateLimitMaxRequests = 20, RateLimitWindowSeconds = 60, RateLimitCallbackMethodName = nameof(RateLimitCallback))]
     public static async Task<IActionResult> Post_PurchaseAsset(HttpRequest request)
     {
-        var token = request.Headers[HttpHeaders.Authorization]?.Replace("Bearer ", "");
-        var principal = KaxGlobal.ValidateToken(token ?? string.Empty);
-        if (principal == null) return new JsonResult(new { code = 401, message = "未授权" }, 401);
+        var (user, authError) = await Api.GetUserAsync(request);
+        if (authError != null) return authError;
+        var userName = user!.UserName;
 
-        var userName = principal.Identity?.Name;
-        if (string.IsNullOrWhiteSpace(userName)) return new JsonResult(new { code = 400, message = "用户名无效" }, 400);
-
-        if (await KaxGlobal.IsUserBanned(userName)) 
-            return new JsonResult(new { code = 403, message = "账号被封禁，无法购买" }, 403);
-
-        if (string.IsNullOrEmpty(request.Body)) 
-            return new JsonResult(new { code = 400, message = "请求体不能为空" }, 400);
-
-        var body = JsonNode.Parse(request.Body);
-        if (body == null) 
-            return new JsonResult(new { code = 400, message = "无法解析请求体" }, 400);
+        if (!ApiBody.TryParse(request, out var body, out var parseError))
+            return parseError!;
 
         if (!int.TryParse(body["assetId"]?.ToString(), out var assetId) || assetId <= 0)
-            return new JsonResult(new { code = 400, message = "assetId 无效" }, 400);
+            return ApiResult.BadRequest("assetId 无效");
 
         var priceId = body["priceId"]?.ToString();
         if (string.IsNullOrEmpty(priceId))
-            return new JsonResult(new { code = 400, message = "priceId 参数缺失" }, 400);
+            return ApiResult.BadRequest("priceId 参数缺失");
 
         long durationOverride = 0;
         if (body["durationOverride"] != null)
@@ -67,10 +59,6 @@ public partial class KaxHttp
 
         try
         {
-            var user = (await KaxGlobal.UserDatabase.SelectWhereAsync("UserName", userName)).FirstOrDefault();
-            if (user == null) 
-                return new JsonResult(new { code = 404, message = "用户不存在" }, 404);
-
             var asset = await KaxGlobal.AssetDataBase.SelectByIdAsync(assetId);
             if (asset == null) 
                 return new JsonResult(new { code = 404, message = "资产不存在" }, 404);
@@ -82,8 +70,8 @@ public partial class KaxHttp
             if (assetPrice == null)
                 return new JsonResult(new { code = 404, message = "价格方案不存在" }, 404);
 
-            // Price 已是最终价格（OriginalPrice × (1 - DiscountRate)），直接使用
-            int minimumGold = Math.Max(0, assetPrice.Price);
+            // Price 存储单位为「分」（前端输入元 × 100），Gold 单位为「点」，需除以 100 换算
+            int minimumGold = Math.Max(0, assetPrice.Price / 100);
             if (user.Gold < minimumGold)
                 return new JsonResult(new { code = 403, message = $"金币不足，需要至少 {minimumGold} 点金币才能购买此资产" }, 403);
 
@@ -213,32 +201,22 @@ public partial class KaxHttp
     [HttpHandle("/api/asset/{assetId}/changePlan", "POST", RateLimitMaxRequests = 10, RateLimitWindowSeconds = 60, RateLimitCallbackMethodName = nameof(RateLimitCallback))]
     public static async Task<IActionResult> Post_ChangeAssetPlan(HttpRequest request)
     {
-        var token = request.Headers[HttpHeaders.Authorization]?.Replace("Bearer ", "");
-        var principal = KaxGlobal.ValidateToken(token ?? string.Empty);
-        if (principal == null) return new JsonResult(new { code = 401, message = "未授权" }, 401);
+        var (user, authError) = await Api.GetUserAsync(request);
+        if (authError != null) return authError;
+        var userName = user!.UserName;
 
-        var userName = principal.Identity?.Name;
-        if (string.IsNullOrWhiteSpace(userName)) return new JsonResult(new { code = 400, message = "用户名无效" }, 400);
-
-        if (await KaxGlobal.IsUserBanned(userName)) return new JsonResult(new { code = 403, message = "用户已被封禁" }, 403);
-
-        if (string.IsNullOrEmpty(request.Body)) return new JsonResult(new { code = 400, message = "请求体不能为空" }, 400);
+        if (!ApiBody.TryParse(request, out var body, out var parseError))
+            return parseError!;
 
         if (!request.PathParameters.TryGetValue("assetId", out var assetIdStr) || !int.TryParse(assetIdStr, out var assetId) || assetId <= 0)
-            return new JsonResult(new { code = 400, message = "assetId 参数无效" }, 400);
+            return ApiResult.BadRequest("assetId 参数无效");
 
         try
         {
-            var body = JsonNode.Parse(request.Body);
-            if (body == null) return new JsonResult(new { code = 400, message = "无效的 JSON" }, 400);
-
             // planId 为 price.Id（字符串 GUID）
             var planId = body["planId"]?.ToString();
             if (string.IsNullOrWhiteSpace(planId))
-                return new JsonResult(new { code = 400, message = "planId 参数缺失" }, 400);
-
-            var user = (await KaxGlobal.UserDatabase.SelectWhereAsync("UserName", userName)).FirstOrDefault();
-            if (user == null) return new JsonResult(new { code = 404, message = "用户不存在" }, 404);
+                return ApiResult.BadRequest("planId 参数缺失");
 
             var activeAsset = user.ActiveAssets?.FirstOrDefault(a => a.AssetId == assetId);
             if (activeAsset == null)
@@ -252,8 +230,8 @@ public partial class KaxHttp
             if (selectedPlan == null)
                 return new JsonResult(new { code = 404, message = "套餐不存在" }, 404);
 
-            // Price 已是最终价格（OriginalPrice × (1 - DiscountRate)），直接使用
-            int planPrice = Math.Max(0, selectedPlan.Price);
+            // Price 存储单位为「分」（前端输入元 × 100），Gold 单位为「点」，需除以 100 换算
+            int planPrice = Math.Max(0, selectedPlan.Price / 100);
 
             if (user.Gold < planPrice)
                 return new JsonResult(new { code = 402, message = $"金币不足，需 {planPrice} 金币" }, 402);
@@ -319,23 +297,15 @@ public partial class KaxHttp
     [HttpHandle("/api/asset/{assetId}/unsubscribe", "POST", RateLimitMaxRequests = 10, RateLimitWindowSeconds = 60, RateLimitCallbackMethodName = nameof(RateLimitCallback))]
     public static async Task<IActionResult> Post_UnsubscribeAsset(HttpRequest request)
     {
-        var token = request.Headers[HttpHeaders.Authorization]?.Replace("Bearer ", "");
-        var principal = KaxGlobal.ValidateToken(token ?? string.Empty);
-        if (principal == null) return new JsonResult(new { code = 401, message = "未授权" }, 401);
-
-        var userName = principal.Identity?.Name;
-        if (string.IsNullOrWhiteSpace(userName)) return new JsonResult(new { code = 400, message = "用户名无效" }, 400);
-
-        if (await KaxGlobal.IsUserBanned(userName)) return new JsonResult(new { code = 403, message = "用户已被封禁" }, 403);
+        var (user, authError) = await Api.GetUserAsync(request);
+        if (authError != null) return authError;
+        var userName = user!.UserName;
 
         if (!request.PathParameters.TryGetValue("assetId", out var assetIdStr) || !int.TryParse(assetIdStr, out var assetId) || assetId <= 0)
-            return new JsonResult(new { code = 400, message = "assetId 参数无效" }, 400);
+            return ApiResult.BadRequest("assetId 参数无效");
 
         try
         {
-            var user = (await KaxGlobal.UserDatabase.SelectWhereAsync("UserName", userName)).FirstOrDefault();
-            if (user == null) return new JsonResult(new { code = 404, message = "用户不存在" }, 404);
-
             var activeAsset = user.ActiveAssets?.FirstOrDefault(a => a.AssetId == assetId);
             if (activeAsset == null)
                 return new JsonResult(new { code = 404, message = "您未激活此资产，无法取消订阅" }, 404);

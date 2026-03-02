@@ -8,6 +8,7 @@ using System.IO;
 using System.Threading;
 using System.Threading.Channels;
 using System.Diagnostics;
+using System.Runtime.CompilerServices;
 using Drx.Sdk.Shared;
 using Drx.Sdk.Network.Http.Protocol;
 using Drx.Sdk.Network.Http.Serialization;
@@ -19,9 +20,16 @@ namespace Drx.Sdk.Network.Http
 {
     /// <summary>
     /// DrxHttpServer 请求处理部分：服务器启停、请求解析与响应发送
+    /// 
+    /// 多核优化架构：
+    ///   ListenAsync (单线程 accept) → BoundedChannel → N 个 ProcessRequestsAsync 消费者
+    ///     → AdaptiveConcurrencyLimiter 动态并发控制
+    ///     → ThreadPoolManager (per-core Worker, CPU 亲和, 工作窃取)
+    ///     → HandleRequestAsync (路由匹配 + 中间件管道 + 响应发送)
     /// </summary>
     public partial class DrxHttpServer
     {
+
         /// <summary>
         /// 启动服务器
         /// </summary>
@@ -89,8 +97,7 @@ namespace Drx.Sdk.Network.Http
                 _cts?.Cancel();
                 _tickerWake?.Set();
                 _listener.Stop();
-                _semaphore.Dispose();
-                try { _messageQueue?.Complete(); } catch { }
+                _concurrencyLimiter?.Dispose();
                 try { _threadPool?.Dispose(); } catch { }
                 try { _tokenBucketManager?.Dispose(); } catch { }
                 try { _routeMatchCache?.Clear(); } catch { }
@@ -109,9 +116,24 @@ namespace Drx.Sdk.Network.Http
                 try
                 {
                     var context = await _listener.GetContextAsync();
-                    await _requestChannel.Writer.WriteAsync(context);
+                    var contextKey = RuntimeHelpers.GetHashCode(context);
+                    _requestEnqueueTimestamps[contextKey] = Stopwatch.GetTimestamp();
+
+                    try
+                    {
+                        await _requestChannel.Writer.WriteAsync(context, token);
+                    }
+                    catch
+                    {
+                        _requestEnqueueTimestamps.TryRemove(contextKey, out _);
+                        throw;
+                    }
                 }
                 catch (HttpListenerException) when (token.IsCancellationRequested)
+                {
+                    break;
+                }
+                catch (OperationCanceledException) when (token.IsCancellationRequested)
                 {
                     break;
                 }
@@ -123,19 +145,44 @@ namespace Drx.Sdk.Network.Http
             _requestChannel.Writer.Complete();
         }
 
-        private ValueTask _message_queue_write(HttpListenerContext context) => _messageQueue.WriteAsync(context);
-
         private async Task ProcessRequestsAsync(CancellationToken token)
         {
             await foreach (var context in _requestChannel.Reader.ReadAllAsync(token))
             {
-                await _semaphore.WaitAsync(token);
-                _threadPool?.QueueWork(async () =>
+                var contextKey = RuntimeHelpers.GetHashCode(context);
+                double queueWaitMs = 0;
+                if (_requestEnqueueTimestamps.TryRemove(contextKey, out var enqueueTimestamp))
+                {
+                    queueWaitMs = (Stopwatch.GetTimestamp() - enqueueTimestamp) * 1000.0 / Stopwatch.Frequency;
+                }
+
+                var semaphoreWaitSw = Stopwatch.StartNew();
+                await _concurrencyLimiter.WaitAsync(token);
+                semaphoreWaitSw.Stop();
+                var semaphoreWaitMs = semaphoreWaitSw.Elapsed.TotalMilliseconds;
+
+                var capturedQueueWaitMs = queueWaitMs;
+                var capturedSemaphoreWaitMs = semaphoreWaitMs;
+
+                // 通过核心亲和线程池分发请求：
+                // Worker 线程已绑定到特定 CPU 核心，请求在对应核心上执行，
+                // 减少跨核缓存失效和上下文切换开销。
+                await _threadPool.SubmitAsync(async () =>
                 {
                     var sw = Stopwatch.StartNew();
                     try
                     {
-                        await HandleRequestAsync(context).ConfigureAwait(false);
+                        await HandleRequestAsync(context, capturedQueueWaitMs, capturedSemaphoreWaitMs).ConfigureAwait(false);
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Error($"处理请求时未捕获的异常: {ex}");
+                        try
+                        {
+                            context.Response.StatusCode = 500;
+                            context.Response.OutputStream.Close();
+                        }
+                        catch { }
                     }
                     finally
                     {
@@ -160,18 +207,26 @@ namespace Drx.Sdk.Network.Http
                             Logger.Warn($"应用每消息最小处理延迟时发生错误: {ex.Message}");
                         }
 
-                        _semaphore.Release();
+                        _concurrencyLimiter.Release(capturedQueueWaitMs);
                     }
-                });
+                }).ConfigureAwait(false);
             }
         }
 
-        private async Task HandleRequestAsync(HttpListenerContext context)
+        private async Task HandleRequestAsync(HttpListenerContext context, double queueWaitMs = 0, double semaphoreWaitMs = 0)
         {
+            var totalSw = Stopwatch.StartNew();
+            string requestMethod = "UNKNOWN";
+            string requestPath = context.Request?.Url?.AbsolutePath ?? "/";
+            int responseStatusCode = 0;
+
             try
             {
-                var request = await ParseRequestAsync(context.Request);
+                var listenerRequest = context.Request!;
+                var request = await ParseRequestAsync(listenerRequest);
                 request.ListenerContext = context;
+                requestMethod = request.Method ?? "UNKNOWN";
+                requestPath = request.Path ?? requestPath;
 
                 Func<HttpRequest, Task<HttpResponse?>> finalHandler = async (req) =>
                 {
@@ -180,9 +235,9 @@ namespace Drx.Sdk.Network.Http
                         return null;
                     }
 
-                    var clientIP = req.ClientAddress.Ip ?? context.Request.RemoteEndPoint?.Address.ToString();
+                    var clientIP = req.ClientAddress.Ip ?? listenerRequest.RemoteEndPoint?.Address.ToString();
 
-                    var rawPath = context.Request.Url?.AbsolutePath ?? "/";
+                    var rawPath = listenerRequest.Url?.AbsolutePath ?? "/";
                     foreach (var (Template, Handler, RateLimitMaxRequests, RateLimitWindowSeconds, RateLimitCallback) in _raw_routes_reader())
                     {
                         if (rawPath.StartsWith(Template, StringComparison.OrdinalIgnoreCase))
@@ -225,32 +280,25 @@ namespace Drx.Sdk.Network.Http
                         RouteEntry matchedRoute = null;
                         Dictionary<string, string> pathParameters = null;
 
+                        // 读取路由表快照（volatile read，无锁）
+                        var routeSnapshot = _routesByMethod;
+
                         if (_routeMatchCache!.TryGet(method.ToString(), req.Path, out var cacheResult) && cacheResult != null)
                         {
                             if (!cacheResult.IsNotFound)
                             {
-                                lock (_routesLock)
+                                // 无锁读取：routeSnapshot 是不可变快照
+                                if (routeSnapshot.TryGetValue(method, out var routesForMethod) && cacheResult.RouteIndex >= 0 && cacheResult.RouteIndex < routesForMethod.Count)
                                 {
-                                    if (_routesByMethod.TryGetValue(method, out var routesForMethod) && cacheResult.RouteIndex >= 0 && cacheResult.RouteIndex < routesForMethod.Count)
-                                    {
-                                        matchedRoute = routesForMethod[cacheResult.RouteIndex];
-                                        pathParameters = cacheResult.Parameters;
-                                    }
+                                    matchedRoute = routesForMethod[cacheResult.RouteIndex];
+                                    pathParameters = cacheResult.Parameters;
                                 }
                             }
                         }
                         else
                         {
-                            List<RouteEntry> routesForMethod = null;
-                            lock (_routesLock)
-                            {
-                                if (_routesByMethod.TryGetValue(method, out var routes))
-                                {
-                                    routesForMethod = routes;
-                                }
-                            }
-
-                            if (routesForMethod != null)
+                            // 无锁读取：routeSnapshot 是不可变快照
+                            if (routeSnapshot.TryGetValue(method, out var routesForMethod))
                             {
                                 for (int i = 0; i < routesForMethod.Count; i++)
                                 {
@@ -336,16 +384,27 @@ namespace Drx.Sdk.Network.Http
 
                 if (response == null)
                 {
+                    responseStatusCode = context.Response.StatusCode > 0 ? context.Response.StatusCode : 204;
                     return;
                 }
 
+                responseStatusCode = response.StatusCode;
                 SendResponse(context.Response, response);
             }
             catch (Exception ex)
             {
+                responseStatusCode = 500;
                 Logger.Error($"处理请求时发生错误: {ex}");
                 var errorResponse = new HttpResponse(500, $"Internal Server Error: {ex.Message}");
                 SendResponse(context.Response, errorResponse);
+            }
+            finally
+            {
+                totalSw.Stop();
+                if (totalSw.ElapsedMilliseconds >= _options.SlowRequestWarnThresholdMs)
+                {
+                    Logger.Warn($"慢请求: {requestMethod} {requestPath} status={responseStatusCode} total={totalSw.ElapsedMilliseconds}ms queue={queueWaitMs:F1}ms semaphore={semaphoreWaitMs:F1}ms");
+                }
             }
         }
 
@@ -425,7 +484,7 @@ namespace Drx.Sdk.Network.Http
                     try
                     {
                         int bytesRead;
-                        while ((bytesRead = request.InputStream.Read(buffer, 0, buffer.Length)) > 0)
+                        while ((bytesRead = await request.InputStream.ReadAsync(buffer, 0, buffer.Length).ConfigureAwait(false)) > 0)
                         {
                             memoryStream.Write(buffer, 0, bytesRead);
                         }

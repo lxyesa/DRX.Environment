@@ -11,10 +11,13 @@ namespace Drx.Sdk.Network.Http.Performance
     /// <summary>
     /// HTTP 请求/响应处理的对象池和缓冲区复用管理器。
     /// 通过池化频繁创建的对象和复用字节缓冲区，显著减少 GC 压力和内存分配。
-    /// 核心策略：
+    /// 
+    /// 多核优化策略：
+    ///   - 使用 ThreadLocal + 全局 ConcurrentQueue 的两层池化，减少跨核争用
+    ///   - ThreadLocal 层（L1 缓存）：每线程独享，零竞争
+    ///   - ConcurrentQueue 层（L2 缓存）：线程间共享，低争用回退
     ///   - 使用 ArrayPool&lt;byte&gt; 复用字节缓冲区（避免每次请求分配新数组）
-    ///   - 使用 RecyclableMemoryStream 替代 MemoryStream（减少 LOH 分配）
-    ///   - 池化 Dictionary 和 StringBuilder 等频繁创建的集合对象
+    ///   - 使用 PooledMemoryStream 替代 MemoryStream（减少 LOH 分配）
     /// </summary>
     internal static class HttpObjectPool
     {
@@ -34,62 +37,108 @@ namespace Drx.Sdk.Network.Http.Performance
         /// </summary>
         public const int LargeBufferSize = 65536;
 
-        #region Dictionary 对象池
+        #region Dictionary 对象池（两层池化）
 
-        private static readonly ConcurrentBag<Dictionary<string, string>> _dictPool = new();
-        private static int _dictPoolCount = 0;
-        private const int MaxDictPoolSize = 64;
+        // L1: ThreadLocal 层（每线程独享栈，零竞争）
+        [ThreadStatic]
+        private static Stack<Dictionary<string, string>>? _dictLocalPool;
+        private const int MaxLocalDictPoolSize = 8;
+
+        // L2: 全局 ConcurrentQueue 回退层
+        private static readonly ConcurrentQueue<Dictionary<string, string>> _dictGlobalPool = new();
+        private static int _dictGlobalPoolCount = 0;
+        private const int MaxGlobalDictPoolSize = 64;
 
         /// <summary>
         /// 从池中租借一个 Dictionary&lt;string, string&gt;（用于路由参数等场景）
+        /// 优先从 ThreadLocal L1 缓存获取，回退到全局 L2 缓存。
         /// </summary>
         public static Dictionary<string, string> RentDictionary()
         {
-            if (_dictPool.TryTake(out var dict))
+            // L1: ThreadLocal 栈
+            _dictLocalPool ??= new Stack<Dictionary<string, string>>();
+            if (_dictLocalPool.Count > 0)
             {
-                Interlocked.Decrement(ref _dictPoolCount);
+                var dict = _dictLocalPool.Pop();
                 dict.Clear();
                 return dict;
             }
+
+            // L2: 全局 ConcurrentQueue
+            if (_dictGlobalPool.TryDequeue(out var globalDict))
+            {
+                Interlocked.Decrement(ref _dictGlobalPoolCount);
+                globalDict.Clear();
+                return globalDict;
+            }
+
             return new Dictionary<string, string>();
         }
 
         /// <summary>
         /// 将 Dictionary 归还到池中供下次复用
+        /// 优先归还到 ThreadLocal L1 缓存，溢出部分归还到全局 L2 缓存。
         /// </summary>
         public static void ReturnDictionary(Dictionary<string, string> dict)
         {
             if (dict == null) return;
-            if (Interlocked.Increment(ref _dictPoolCount) <= MaxDictPoolSize)
+            dict.Clear();
+
+            // L1: ThreadLocal 栈
+            _dictLocalPool ??= new Stack<Dictionary<string, string>>();
+            if (_dictLocalPool.Count < MaxLocalDictPoolSize)
             {
-                dict.Clear();
-                _dictPool.Add(dict);
+                _dictLocalPool.Push(dict);
+                return;
+            }
+
+            // L2: 全局 ConcurrentQueue（溢出）
+            if (Interlocked.Increment(ref _dictGlobalPoolCount) <= MaxGlobalDictPoolSize)
+            {
+                _dictGlobalPool.Enqueue(dict);
             }
             else
             {
-                Interlocked.Decrement(ref _dictPoolCount);
+                Interlocked.Decrement(ref _dictGlobalPoolCount);
             }
         }
 
         #endregion
 
-        #region StringBuilder 对象池
+        #region StringBuilder 对象池（两层池化）
 
-        private static readonly ConcurrentBag<StringBuilder> _sbPool = new();
-        private static int _sbPoolCount = 0;
-        private const int MaxSbPoolSize = 32;
+        // L1: ThreadLocal 层
+        [ThreadStatic]
+        private static Stack<StringBuilder>? _sbLocalPool;
+        private const int MaxLocalSbPoolSize = 4;
+
+        // L2: 全局 ConcurrentQueue 回退层
+        private static readonly ConcurrentQueue<StringBuilder> _sbGlobalPool = new();
+        private static int _sbGlobalPoolCount = 0;
+        private const int MaxGlobalSbPoolSize = 32;
 
         /// <summary>
         /// 从池中租借一个 StringBuilder
         /// </summary>
         public static StringBuilder RentStringBuilder()
         {
-            if (_sbPool.TryTake(out var sb))
+            // L1: ThreadLocal 栈
+            _sbLocalPool ??= new Stack<StringBuilder>();
+            if (_sbLocalPool.Count > 0)
             {
-                Interlocked.Decrement(ref _sbPoolCount);
+                var sb = _sbLocalPool.Pop();
                 sb.Clear();
                 return sb;
             }
+
+            // L2: 全局 ConcurrentQueue
+            if (_sbGlobalPool.TryDequeue(out var globalSb))
+            {
+                Interlocked.Decrement(ref _sbGlobalPoolCount);
+                globalSb.Clear();
+                return globalSb;
+            }
+
             return new StringBuilder(256);
         }
 
@@ -99,18 +148,27 @@ namespace Drx.Sdk.Network.Http.Performance
         public static void ReturnStringBuilder(StringBuilder sb)
         {
             if (sb == null) return;
-            if (sb.Capacity > 8192)
+            // 过大的 StringBuilder 不归还（避免内存浪费）
+            if (sb.Capacity > 8192) return;
+
+            sb.Clear();
+
+            // L1: ThreadLocal 栈
+            _sbLocalPool ??= new Stack<StringBuilder>();
+            if (_sbLocalPool.Count < MaxLocalSbPoolSize)
             {
+                _sbLocalPool.Push(sb);
                 return;
             }
-            if (Interlocked.Increment(ref _sbPoolCount) <= MaxSbPoolSize)
+
+            // L2: 全局 ConcurrentQueue（溢出）
+            if (Interlocked.Increment(ref _sbGlobalPoolCount) <= MaxGlobalSbPoolSize)
             {
-                sb.Clear();
-                _sbPool.Add(sb);
+                _sbGlobalPool.Enqueue(sb);
             }
             else
             {
-                Interlocked.Decrement(ref _sbPoolCount);
+                Interlocked.Decrement(ref _sbGlobalPoolCount);
             }
         }
 

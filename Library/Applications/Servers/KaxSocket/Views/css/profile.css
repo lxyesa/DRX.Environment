@@ -1679,3 +1679,123 @@
 .order-detail-value.gold-neg { color: #ef4444; font-weight: 700; }
 /* #endregion */
 
+/* #region CDK 批量操作工具栏 */
+.cdk-batch-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 8px 12px;
+    margin-bottom: 10px;
+    background: rgba(59, 130, 246, 0.07);
+    border: 1px solid rgba(59, 130, 246, 0.18);
+    border-radius: 8px;
+    flex-wrap: wrap;
+}
+
+.cdk-batch-bar-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.cdk-batch-bar-right {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.cdk-select-all-label {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    color: var(--profile-muted-mid, rgba(255,255,255,0.70));
+    user-select: none;
+}
+
+/* 自定义复选框 */
+.cdk-checkbox {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 16px;
+    height: 16px;
+    border: 1.5px solid rgba(255, 255, 255, 0.25);
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.04);
+    cursor: pointer;
+    position: relative;
+    flex-shrink: 0;
+    transition: border-color 0.15s, background 0.15s;
+    vertical-align: middle;
+}
+
+.cdk-checkbox:checked {
+    background: var(--profile-accent, #3b82f6);
+    border-color: var(--profile-accent, #3b82f6);
+}
+
+.cdk-checkbox:checked::after {
+    content: '';
+    position: absolute;
+    left: 4px;
+    top: 1px;
+    width: 5px;
+    height: 9px;
+    border: 2px solid #fff;
+    border-top: none;
+    border-left: none;
+    transform: rotate(42deg);
+}
+
+.cdk-checkbox:hover {
+    border-color: var(--profile-accent, #3b82f6);
+}
+
+/* 选中行高亮 */
+.admin-list-item.cdk-selected {
+    background: rgba(59, 130, 246, 0.08);
+    border-color: rgba(59, 130, 246, 0.25);
+}
+
+/* 按钮颜色变体 */
+.cdk-btn-danger {
+    color: var(--profile-danger, #ef4444) !important;
+    border-color: rgba(239, 68, 68, 0.3) !important;
+}
+.cdk-btn-danger:hover {
+    background: rgba(239, 68, 68, 0.08) !important;
+}
+
+.cdk-btn-warning {
+    color: #fbbf24 !important;
+    border-color: rgba(251, 191, 36, 0.3) !important;
+}
+.cdk-btn-warning:hover {
+    background: rgba(251, 191, 36, 0.08) !important;
+}
+
+/* 规则删除表单 */
+.cdk-rule-form {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.cdk-rule-item {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.cdk-rule-label {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--profile-muted);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+/* #endregion */
+
