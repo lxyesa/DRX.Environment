@@ -29,6 +29,8 @@ using Drx.Sdk.Network.Http.Entry;
 using Drx.Sdk.Network.Http.Session;
 using Drx.Sdk.Network.Http.Authorization;
 using Drx.Sdk.Network.Http.Commands;
+using Drx.Sdk.Network.DataBase;
+using Drx.Sdk.Network.Http.Models;
 
 namespace Drx.Sdk.Network.Http
 {
@@ -189,6 +191,7 @@ namespace Drx.Sdk.Network.Http
         private readonly object _middlewareCacheLock = new();
         private readonly SessionManager _sessionManager;
         private readonly AuthorizationManager _authorizationManager;
+        private readonly SqliteV2<AuthAppDataModel> _authAppDatabase;
         private readonly DataPersistentManager _dataPersistentManager;
         private readonly CommandManager _commandManager;
         private InteractiveCommandConsole? _interactiveConsole;
@@ -288,6 +291,7 @@ namespace Drx.Sdk.Network.Http
 
             _sessionManager = new SessionManager(_options.SessionTimeoutMinutes);
             _authorizationManager = new AuthorizationManager(5);
+            _authAppDatabase = new SqliteV2<AuthAppDataModel>("drx_http_auth_apps.db", AppDomain.CurrentDomain.BaseDirectory);
             _commandManager = new CommandManager();
 
             _dataPersistentManager = new DataPersistentManager();

@@ -144,18 +144,31 @@ public partial class KaxHttp
         }
 
         // 处理登录逻辑
-        var userName = bodyJson["username"]?.ToString();
+        var loginValue = bodyJson["username"]?.ToString();
         var password = bodyJson["password"]?.ToString();
 
-        if (string.IsNullOrEmpty(userName) || string.IsNullOrEmpty(password))
+        if (string.IsNullOrEmpty(loginValue) || string.IsNullOrEmpty(password))
         {
             return new HttpResponse()
             {
                 StatusCode = 400,
-                Body = "用户名和密码不能为空。",
+                Body = "用户名/邮箱和密码不能为空。",
             };
         }
-        var userExists = (await KaxGlobal.UserDatabase.SelectWhereAsync("UserName", userName)).FirstOrDefault();
+
+        // 支持用户名或邮箱登录
+        UserData userExists = null;
+        if (CommonUtility.IsValidEmail(loginValue))
+        {
+            // 按邮箱查询
+            userExists = (await KaxGlobal.UserDatabase.SelectWhereAsync("Email", loginValue)).FirstOrDefault();
+        }
+        else
+        {
+            // 按用户名查询
+            userExists = (await KaxGlobal.UserDatabase.SelectWhereAsync("UserName", loginValue)).FirstOrDefault();
+        }
+
         if (userExists != null && userExists.PasswordHash == CommonUtility.ComputeSHA256Hash(password))
         {
             // 检查封禁状态
@@ -165,7 +178,7 @@ public partial class KaxHttp
                 var banExpireDesc = userExists.Status.BanExpiresAt > 0
                     ? DateTimeOffset.FromUnixTimeSeconds(userExists.Status.BanExpiresAt).ToString("yyyy-MM-dd HH:mm:ss") + " (UTC)"
                     : "永久";
-                Logger.Warn($"已封禁用户 {userName} 尝试登录，已拒绝。");
+                Logger.Warn($"已封禁用户 {userExists.UserName} 尝试登录，已拒绝。");
                 return new HttpResponse()
                 {
                     StatusCode = 403,
@@ -196,11 +209,11 @@ public partial class KaxHttp
         }
         else
         {
-            Logger.Warn($"用户登录失败，用户名或密码错误：{userName}");
+            Logger.Warn($"用户登录失败，用户名/邮箱或密码错误：{loginValue}");
             return new HttpResponse()
             {
                 StatusCode = 401,
-                Body = "用户名或密码错误。",
+                Body = "用户名/邮箱或密码错误。",
             };
         }
     }

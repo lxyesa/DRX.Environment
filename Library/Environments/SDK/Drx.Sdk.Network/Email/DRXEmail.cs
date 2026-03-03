@@ -1,17 +1,14 @@
 using Drx.Sdk.Shared;
-using Markdig;
-using System.Net.Mail;
+using System;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace Drx.Sdk.Network.Email
 {
     public class DRXEmail
     {
-        private string _address;
-        private string _password;
-        private string _stmpHost;
-        private int _stmpPort = 587;
-        private bool _enableSsl = true;
-        private string _displayName;
+        private readonly EmailSenderOptions _options;
+        private SmtpEmailSender _sender;
 
         /// <summary>
         /// 初始化 QQ 邮件客户端
@@ -21,12 +18,16 @@ namespace Drx.Sdk.Network.Email
         /// <param name="displayName">发件人显示名称</param>
         public DRXEmail(string qqEmail, string authCode = "umrroeavogwsdjci", string displayName = "")
         {
-            _address = qqEmail;
-            _password = authCode; // QQ邮箱使用授权码而不是密码
-            _stmpHost = "smtp.qq.com";
-            _stmpPort = 587;
-            _enableSsl = true;
-            _displayName = displayName;
+            _options = new EmailSenderOptions
+            {
+                SenderAddress = qqEmail,
+                Password = authCode,
+                SmtpHost = "smtp.qq.com",
+                SmtpPort = 587,
+                EnableSsl = true,
+                DisplayName = displayName
+            };
+            _sender = new SmtpEmailSender(_options);
         }
 
         /// <summary>
@@ -34,12 +35,25 @@ namespace Drx.Sdk.Network.Email
         /// </summary>
         public DRXEmail(string address, string stmpHost, string password, int stmpPort, bool enableSSL, string displayName = "")
         {
-            _address = address;
-            _password = password;
-            _stmpHost = stmpHost;
-            _stmpPort = stmpPort;
-            _enableSsl = enableSSL;
-            _displayName = displayName;
+            _options = new EmailSenderOptions
+            {
+                SenderAddress = address,
+                Password = password,
+                SmtpHost = stmpHost,
+                SmtpPort = stmpPort,
+                EnableSsl = enableSSL,
+                DisplayName = displayName
+            };
+            _sender = new SmtpEmailSender(_options);
+        }
+
+        /// <summary>
+        /// 使用新的 SMTP 配置创建邮件客户端。
+        /// </summary>
+        public DRXEmail(EmailSenderOptions options)
+        {
+            _options = options ?? throw new ArgumentNullException(nameof(options));
+            _sender = new SmtpEmailSender(_options);
         }
 
         /// <summary>
@@ -47,7 +61,8 @@ namespace Drx.Sdk.Network.Email
         /// </summary>
         public void SetDisplayName(string displayName)
         {
-            _displayName = displayName;
+            _options.DisplayName = displayName;
+            _sender = new SmtpEmailSender(_options);
         }
 
         /// <summary>
@@ -55,25 +70,7 @@ namespace Drx.Sdk.Network.Email
         /// </summary>
         public void SendEmail(string subject, string body, string to)
         {
-            using var mail = new MailMessage();
-            using var smtpServer = new SmtpClient(_stmpHost);
-
-            // 使用显示名称创建发件人地址
-            mail.From = string.IsNullOrEmpty(_displayName)
-                ? new MailAddress(_address)
-                : new MailAddress(_address, _displayName);
-
-            mail.To.Add(new MailAddress(to));
-            mail.Subject = subject;
-            mail.Body = body;
-            mail.IsBodyHtml = false;
-
-            smtpServer.Port = _stmpPort;
-            smtpServer.Credentials = new System.Net.NetworkCredential(_address, _password);
-            smtpServer.EnableSsl = _enableSsl;
-            smtpServer.DeliveryMethod = SmtpDeliveryMethod.Network;
-
-            smtpServer.Send(mail);
+            SendAsync(EmailMessage.Create(to, subject, body, EmailContentType.PlainText)).GetAwaiter().GetResult();
         }
 
         /// <summary>
@@ -102,24 +99,7 @@ namespace Drx.Sdk.Network.Email
         /// <param name="to">收件人地址</param>
         public void SendHtmlEmail(string subject, string htmlBody, string to)
         {
-            using var mail = new MailMessage();
-            using var smtpServer = new SmtpClient(_stmpHost);
-
-            mail.From = string.IsNullOrEmpty(_displayName)
-                ? new MailAddress(_address)
-                : new MailAddress(_address, _displayName);
-
-            mail.To.Add(new MailAddress(to));
-            mail.Subject = subject;
-            mail.Body = htmlBody;
-            mail.IsBodyHtml = true;  // 启用HTML格式
-
-            smtpServer.Port = _stmpPort;
-            smtpServer.Credentials = new System.Net.NetworkCredential(_address, _password);
-            smtpServer.EnableSsl = _enableSsl;
-            smtpServer.DeliveryMethod = SmtpDeliveryMethod.Network;
-
-            smtpServer.Send(mail);
+            SendAsync(EmailMessage.Create(to, subject, htmlBody, EmailContentType.Html)).GetAwaiter().GetResult();
         }
 
         /// <summary>
@@ -147,36 +127,7 @@ namespace Drx.Sdk.Network.Email
         /// <param name="to">收件人地址</param>
         public void SendMarkdownEmail(string subject, string markdownBody, string to)
         {
-            // 将Markdown转换为HTML
-            var htmlBody = Markdown.ToHtml(markdownBody, new MarkdownPipelineBuilder()
-                .UseAdvancedExtensions()
-                .Build());
-
-            // 添加基本的HTML样式
-            var styledHtml = $@"
-            <html>
-                <head>
-                    <style>
-                        body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; 
-                               line-height: 1.6;
-                               padding: 20px;
-                               max-width: 800px;
-                               margin: auto; }}
-                        code {{ background-color: #f6f8fa;
-                               padding: 2px 4px;
-                               border-radius: 3px; }}
-                        pre {{ background-color: #f6f8fa;
-                              padding: 16px;
-                              border-radius: 6px; }}
-                        img {{ max-width: 100%; }}
-                    </style>
-                </head>
-                <body>
-                    {htmlBody}
-                </body>
-            </html>";
-
-            SendHtmlEmail(subject, styledHtml, to);
+            SendAsync(EmailMessage.Create(to, subject, markdownBody, EmailContentType.Markdown)).GetAwaiter().GetResult();
         }
 
         /// <summary>
@@ -194,6 +145,22 @@ namespace Drx.Sdk.Network.Email
                 Logger.Error(ex.Message);
                 return false;
             }
+        }
+
+        /// <summary>
+        /// 现代化异步发送入口。
+        /// </summary>
+        public Task SendAsync(EmailMessage message, CancellationToken cancellationToken = default)
+        {
+            return _sender.SendAsync(message, cancellationToken);
+        }
+
+        /// <summary>
+        /// 现代化异步尝试发送入口。
+        /// </summary>
+        public Task<bool> TrySendAsync(EmailMessage message, CancellationToken cancellationToken = default)
+        {
+            return _sender.TrySendAsync(message, cancellationToken);
         }
     }
 } 

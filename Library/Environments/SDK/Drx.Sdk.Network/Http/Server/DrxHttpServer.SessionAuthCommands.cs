@@ -1,6 +1,9 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Net;
+using System.Security.Cryptography;
+using System.Text;
 using System.Threading;
 using System.Threading.Channels;
 using System.Threading.Tasks;
@@ -70,6 +73,185 @@ namespace Drx.Sdk.Network.Http
         /// 获取授权管理器
         /// </summary>
         public AuthorizationManager AuthorizationManager => _authorizationManager;
+
+        /// <summary>
+        /// 获取 Auth App 数据库（用于底层扩展或调试）
+        /// </summary>
+        public DataBase.SqliteV2<Models.AuthAppDataModel> AuthAppDatabase => _authAppDatabase;
+
+        /// <summary>
+        /// 快速注册（或更新）Auth App。
+        /// </summary>
+        /// <param name="clientId">客户端标识</param>
+        /// <param name="redirectUri">回调地址</param>
+        /// <param name="applicationName">应用显示名</param>
+        /// <param name="applicationDescription">应用描述</param>
+        /// <param name="scopes">默认权限范围</param>
+        /// <param name="clientSecret">客户端密钥（可空，空表示公开客户端）</param>
+        /// <param name="enabled">是否启用</param>
+        /// <returns>注册后的 Auth App 模型</returns>
+        public Models.AuthAppDataModel RegisterAuthApp(
+            string clientId,
+            string redirectUri,
+            string applicationName,
+            string applicationDescription = "",
+            string scopes = "",
+            string? clientSecret = null,
+            bool enabled = true)
+        {
+            if (string.IsNullOrWhiteSpace(clientId))
+                throw new ArgumentException("clientId 不能为空", nameof(clientId));
+
+            if (string.IsNullOrWhiteSpace(redirectUri))
+                throw new ArgumentException("redirectUri 不能为空", nameof(redirectUri));
+
+            if (!Uri.TryCreate(redirectUri, UriKind.Absolute, out var redirectUriObj)
+                || (redirectUriObj.Scheme != Uri.UriSchemeHttp && redirectUriObj.Scheme != Uri.UriSchemeHttps))
+            {
+                throw new ArgumentException("redirectUri 必须是有效的 http/https 地址", nameof(redirectUri));
+            }
+
+            var normalizedClientId = clientId.Trim();
+            var normalizedRedirect = redirectUriObj.ToString();
+            var normalizedName = string.IsNullOrWhiteSpace(applicationName) ? normalizedClientId : applicationName.Trim();
+            var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+            var secretHash = ComputeSha256Hex(clientSecret);
+
+            var existing = _authAppDatabase.SelectWhere("ClientId", normalizedClientId).FirstOrDefault();
+            if (existing == null)
+            {
+                var model = new Models.AuthAppDataModel
+                {
+                    ClientId = normalizedClientId,
+                    ClientSecretHash = secretHash,
+                    ApplicationName = normalizedName,
+                    ApplicationDescription = applicationDescription?.Trim() ?? string.Empty,
+                    RedirectUri = normalizedRedirect,
+                    Scopes = scopes?.Trim() ?? string.Empty,
+                    IsEnabled = enabled,
+                    CreatedAt = now,
+                    UpdatedAt = now
+                };
+
+                _authAppDatabase.Insert(model);
+                Logger.Info($"[AuthApp] 注册成功: {normalizedClientId} -> {normalizedRedirect}");
+                return model;
+            }
+
+            existing.ApplicationName = normalizedName;
+            existing.ApplicationDescription = applicationDescription?.Trim() ?? string.Empty;
+            existing.RedirectUri = normalizedRedirect;
+            existing.Scopes = scopes?.Trim() ?? string.Empty;
+            existing.IsEnabled = enabled;
+            existing.UpdatedAt = now;
+            if (!string.IsNullOrWhiteSpace(clientSecret))
+            {
+                existing.ClientSecretHash = secretHash;
+            }
+
+            _authAppDatabase.Update(existing);
+            Logger.Info($"[AuthApp] 更新成功: {normalizedClientId} -> {normalizedRedirect}");
+            return existing;
+        }
+
+        /// <summary>
+        /// 根据 clientId 获取 Auth App。
+        /// </summary>
+        public Models.AuthAppDataModel? GetAuthApp(string clientId)
+        {
+            if (string.IsNullOrWhiteSpace(clientId)) return null;
+            return _authAppDatabase.SelectWhere("ClientId", clientId.Trim()).FirstOrDefault();
+        }
+
+        /// <summary>
+        /// 校验 Auth App 是否允许参与 OpenAuth。
+        /// </summary>
+        /// <param name="clientId">客户端标识</param>
+        /// <param name="redirectUri">回调地址</param>
+        /// <param name="clientSecret">客户端密钥（可空）</param>
+        /// <param name="app">命中的 Auth App</param>
+        /// <param name="error">失败原因</param>
+        /// <returns>是否通过</returns>
+        public bool ValidateAuthApp(string clientId, string redirectUri, string? clientSecret, out Models.AuthAppDataModel? app, out string? error)
+        {
+            app = null;
+            error = null;
+
+            if (string.IsNullOrWhiteSpace(clientId))
+            {
+                error = "client_id 不能为空";
+                return false;
+            }
+
+            if (string.IsNullOrWhiteSpace(redirectUri))
+            {
+                error = "redirect_uri 不能为空";
+                return false;
+            }
+
+            if (!Uri.TryCreate(redirectUri, UriKind.Absolute, out var redirectUriObj)
+                || (redirectUriObj.Scheme != Uri.UriSchemeHttp && redirectUriObj.Scheme != Uri.UriSchemeHttps))
+            {
+                error = "redirect_uri 非法";
+                return false;
+            }
+
+            app = GetAuthApp(clientId);
+            if (app == null)
+            {
+                error = "Auth App 未注册";
+                return false;
+            }
+
+            if (!app.IsEnabled)
+            {
+                error = "Auth App 已被禁用";
+                return false;
+            }
+
+            var normalizedRedirect = redirectUriObj.ToString();
+            if (!string.Equals(app.RedirectUri?.Trim(), normalizedRedirect, StringComparison.OrdinalIgnoreCase))
+            {
+                error = "redirect_uri 不匹配";
+                return false;
+            }
+
+            if (!string.IsNullOrWhiteSpace(app.ClientSecretHash))
+            {
+                if (string.IsNullOrWhiteSpace(clientSecret))
+                {
+                    error = "client_secret 不能为空";
+                    return false;
+                }
+
+                var inputHash = ComputeSha256Hex(clientSecret);
+                if (!string.Equals(app.ClientSecretHash, inputHash, StringComparison.OrdinalIgnoreCase))
+                {
+                    error = "client_secret 错误";
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// 快速判断是否已注册并通过校验（不返回错误详情）。
+        /// </summary>
+        public bool IsAuthAppRegistered(string clientId, string redirectUri, string? clientSecret = null)
+        {
+            return ValidateAuthApp(clientId, redirectUri, clientSecret, out _, out _);
+        }
+
+        private static string ComputeSha256Hex(string? raw)
+        {
+            if (string.IsNullOrWhiteSpace(raw)) return string.Empty;
+
+            using var sha = SHA256.Create();
+            var bytes = Encoding.UTF8.GetBytes(raw.Trim());
+            var hash = sha.ComputeHash(bytes);
+            return Convert.ToHexString(hash).ToLowerInvariant();
+        }
 
         /// <summary>
         /// 从指定类型注册命令

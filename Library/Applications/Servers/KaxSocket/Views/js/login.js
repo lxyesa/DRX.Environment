@@ -1,6 +1,22 @@
 // 简单客户端验证与交互（界面演示）
         (function () {
 
+            function getRedirectTarget() {
+                try {
+                    var u = new URL(window.location.href);
+                    var target = (u.searchParams.get('redirect') || '').trim();
+                    // 仅允许站内相对路径，避免开放重定向
+                    if (!target) return '/';
+                    if (!target.startsWith('/')) return '/';
+                    if (target.startsWith('//')) return '/';
+                    return target;
+                } catch {
+                    return '/';
+                }
+            }
+
+            var postLoginRedirect = getRedirectTarget();
+
             // ── 封禁弹窗（动态创建 DOM，无需额外 CSS 文件） ──
             function showBanMsgBox(reason, expires) {
                 if (!document.getElementById('kax-msgbox-style')) {
@@ -179,7 +195,7 @@
 
                     if (resp.status === 200) {
                         // token 有效：跳转到首页
-                        window.location.href = '/';
+                        window.location.href = postLoginRedirect;
                         return;
                     }
 
@@ -241,7 +257,7 @@
                             try { localStorage.setItem('kax_login_token', token); } catch { }
                         }
 
-                        window.location.href = '/';
+                        window.location.href = postLoginRedirect;
                         return;
                     }
 

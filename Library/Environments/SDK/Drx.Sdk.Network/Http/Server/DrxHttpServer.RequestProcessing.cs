@@ -40,6 +40,7 @@ namespace Drx.Sdk.Network.Http
                 _cts = new CancellationTokenSource();
                 _listener.Start();
                 Logger.Info("HttpServer 已启动");
+                InitializeDevRuntime();
                 var processingTasks = new Task[Environment.ProcessorCount];
                 for (int i = 0; i < processingTasks.Length; i++)
                 {
@@ -96,6 +97,7 @@ namespace Drx.Sdk.Network.Http
 
                 _cts?.Cancel();
                 _tickerWake?.Set();
+                ShutdownDevRuntime();
                 _listener.Stop();
                 _concurrencyLimiter?.Dispose();
                 try { _threadPool?.Dispose(); } catch { }

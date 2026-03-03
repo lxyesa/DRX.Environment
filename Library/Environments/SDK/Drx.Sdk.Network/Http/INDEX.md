@@ -9,6 +9,7 @@
 - ✅ **灵活的路由系统** - 支持动态参数和通配符
 - ✅ **中间件系统** - 类似 ASP.NET Core 的中间件管道
 - ✅ **完整的认证/授权** - JWT、OAuth 授权码流程
+- ✅ **OpenAuth 应用注册** - AuthApp 持久化注册与校验
 - ✅ **会话管理** - Cookie 会话、分布式支持
 - ✅ **文件处理** - 流式上传下载、断点续传
 - ✅ **Server-Sent Events** - 实时服务器推送
@@ -32,7 +33,7 @@
 | **Protocol** | HTTP 请求/响应核心定义 | [📖 Protocol](Protocol/README.md) |
 | **Serialization** | JSON 序列化工具 | [📖 Serialization](Serialization/README.md) |
 | **Utilities** | URL、编码等工具方法 | [📖 Utilities](Utilities/README.md) |
-| **Models** | 数据模型基类 | [📖 Models](Models/README.md) |
+| **Models** | 数据模型基类与 AuthApp 模型 | [📖 Models](Models/README.md) |
 
 #### 服务器层 (HTTP 服务器实现)
 | 模块 | 描述 | 进入 |
@@ -55,7 +56,7 @@
 #### 客户端层 (HTTP 客户端实现)
 | 模块 | 描述 | 进入 |
 |------|------|------|
-| **Client** | 功能完整的 HTTP 客户端 | [📖 Client](Client/README.md) |
+| **Client** | 功能完整的 HTTP 客户端（含 OpenAuth 快速封装） | [📖 Client](Client/README.md) |
 | **Asp** | ASP.NET Core 集成 | [📖 Asp](Asp/README.md) |
 
 #### 优化层 (性能和特殊优化)
@@ -262,6 +263,9 @@ var response = await client.GetAsync("/api/secure", headers);
 
 #### 实现用户认证
 → 阅读 [Auth 目录](Auth/README.md) 和 [JwtHelper.DEVGUIDE](Guides/JwtHelper.DEVGUIDE.md)
+
+#### 接入 OpenAuth（一键登录）
+→ 阅读 [Client 目录](Client/README.md)（`DrxHttpClient.OpenAuth`）和 [Server 目录](Server/README.md)（`RegisterAuthApp` / `ValidateAuthApp`）
 
 #### 上传/下载文件
 → 阅读 [ResourceManagement 目录](ResourceManagement/README.md) 和 [Client 目录](Client/README.md)

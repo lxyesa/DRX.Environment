@@ -235,6 +235,103 @@ public partial class KaxHttp
         }
     }
 
+    // POST /api/user/profile/update-field -> 更新当前登录用户的单个资料字段（保留旧全量接口用于兼容）
+    [HttpHandle("/api/user/profile/update-field", "POST", RateLimitMaxRequests = 20, RateLimitWindowSeconds = 60, RateLimitCallbackMethodName = nameof(RateLimitCallback))]
+    public static async Task<IActionResult> Post_UpdateUserProfileField(HttpRequest request)
+    {
+        var (userName, authError) = await Api.AuthenticateAndCheckBanAsync(request);
+        if (authError != null) return authError;
+
+        if (!ApiBody.TryParse(request, out var body, out var parseError))
+            return parseError!;
+
+        var field = body["field"]?.ToString()?.Trim() ?? string.Empty;
+        var targetUidStr = body["targetUid"]?.ToString() ?? string.Empty;
+        var valueNode = body["value"];
+
+        if (string.IsNullOrEmpty(field))
+            return new JsonResult(new { message = "field 参数缺失" }, 400);
+
+        if (string.IsNullOrEmpty(targetUidStr))
+            return new JsonResult(new { message = "targetUid 参数缺失" }, 400);
+
+        if (!long.TryParse(targetUidStr, out var targetUid) || targetUid <= 0)
+            return new JsonResult(new { message = "targetUid 参数无效" }, 400);
+
+        field = field.ToLowerInvariant();
+        if (field != "displayname" && field != "email" && field != "bio" && field != "signature")
+            return new JsonResult(new { message = "不支持的字段，只允许 displayName/email/bio/signature" }, 400);
+
+        try
+        {
+            var user = (await KaxGlobal.UserDatabase.SelectWhereAsync("UserName", userName!)).FirstOrDefault();
+            if (user == null) return new JsonResult(new { message = "用户不存在" }, 404);
+
+            // 权限验证：只能改自己的资料
+            if (user.Id != targetUid)
+            {
+                Logger.Warn($"用户 {userName}(ID:{user.Id}) 尝试单字段修改他人资料（目标 UID: {targetUid}），请求被拒绝");
+                return new JsonResult(new { message = "无权修改他人资料" }, 403);
+            }
+
+            var value = valueNode?.ToString() ?? string.Empty;
+            switch (field)
+            {
+                case "displayname":
+                    value = value.Trim();
+                    if (string.IsNullOrEmpty(value))
+                        return new JsonResult(new { message = "显示名称不能为空" }, 400);
+                    if (value.Length > 100)
+                        return new JsonResult(new { message = "显示名称过长（最多100字符）" }, 400);
+                    user.DisplayName = value;
+                    break;
+
+                case "email":
+                    value = value.Trim();
+                    if (string.IsNullOrEmpty(value))
+                        return new JsonResult(new { message = "邮箱不能为空" }, 400);
+                    if (!CommonUtility.IsValidEmail(value))
+                        return new JsonResult(new { message = "无效的电子邮箱地址" }, 400);
+
+                    if (!string.Equals(user.Email ?? string.Empty, value, StringComparison.OrdinalIgnoreCase))
+                    {
+                        var byEmail = (await KaxGlobal.UserDatabase.SelectWhereAsync("Email", value)).FirstOrDefault();
+                        if (byEmail != null && !string.Equals(byEmail.UserName, user.UserName, StringComparison.OrdinalIgnoreCase))
+                            return new JsonResult(new { message = "该邮箱已被占用" }, 409);
+                    }
+                    user.Email = value;
+                    break;
+
+                case "bio":
+                    if (value.Length > 500)
+                        return new JsonResult(new { message = "个人简介过长（最多500字符）" }, 400);
+                    user.Bio = value;
+                    break;
+
+                case "signature":
+                    if (value.Length > 500)
+                        return new JsonResult(new { message = "个性签名过长（最多500字符）" }, 400);
+                    user.Signature = value;
+                    break;
+            }
+
+            await KaxGlobal.UserDatabase.UpdateAsync(user);
+
+            Logger.Info($"用户 {userName} 单字段更新成功: {field}");
+            return new JsonResult(new
+            {
+                message = "字段已更新",
+                field,
+                value
+            });
+        }
+        catch (Exception ex)
+        {
+            Logger.Error("单字段更新用户资料时出错: " + ex.Message);
+            return new JsonResult(new { message = "服务器错误" }, 500);
+        }
+    }
+
     // POST /api/user/password -> 修改当前登录用户的密码（需提供旧密码、新密码、确认新密码）
     [HttpHandle("/api/user/password", "POST", RateLimitMaxRequests = 6, RateLimitWindowSeconds = 60, RateLimitCallbackMethodName = nameof(RateLimitCallback))]
     public static async Task<IActionResult> Post_ChangePassword(HttpRequest request)

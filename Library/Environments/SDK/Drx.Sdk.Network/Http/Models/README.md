@@ -10,15 +10,26 @@ Models 目录定义了 HTTP 框架中使用的基础数据模型类。
 - 所有数据模型的基础类
 - 提供通用的数据模型功能
 - 特点：
-  - ID 主键管理
-  - 时间戳字段
-  - 基础验证
+  - ID 主键管理（`Id`）
 
 **主要属性：**
 - `Id` - 主键 (通常为数据库自增 ID)
-- `CreatedAt` - 创建时间
-- `UpdatedAt` - 更新时间
-- `IsDeleted` - 软删除标记（可选）
+
+### AuthAppDataModel.cs
+**OpenAuth 客户端应用注册模型**
+- 用于管理允许参与 OpenAuth 的客户端应用
+- 可与 `SqliteV2<AuthAppDataModel>` 直接持久化
+- 支持 `client_id`、`redirect_uri`、`scope`、启用状态与密钥哈希存储
+
+**主要字段：**
+- `ClientId` - 客户端标识
+- `ClientSecretHash` - 客户端密钥哈希（可为空）
+- `ApplicationName` - 应用展示名
+- `ApplicationDescription` - 应用描述
+- `RedirectUri` - 回调地址
+- `Scopes` - 默认授权范围
+- `IsEnabled` - 是否启用
+- `CreatedAt` / `UpdatedAt` - 时间戳（Unix 秒）
 
 **示例：**
 ```csharp

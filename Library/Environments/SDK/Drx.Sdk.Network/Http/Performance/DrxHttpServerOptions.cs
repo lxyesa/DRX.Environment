@@ -1,5 +1,6 @@
 using System;
 using System.Threading;
+using Drx.Sdk.Network.Http.Configs;
 using Drx.Sdk.Shared;
 
 namespace Drx.Sdk.Network.Http.Performance
@@ -99,6 +100,12 @@ namespace Drx.Sdk.Network.Http.Performance
         public int SessionTimeoutMinutes { get; set; } = 30;
 
         /// <summary>
+        /// 开发态前端运行时配置。
+        /// 默认关闭，避免生产环境暴露调试能力。
+        /// </summary>
+        public DevRuntimeOptions DevRuntime { get; set; } = DevRuntimeOptions.CreateDefault();
+
+        /// <summary>
         /// 获取实际 Worker 数量（解析 0 为自动值）
         /// </summary>
         internal int ResolvedWorkerCount => WorkerCount > 0 ? WorkerCount : Environment.ProcessorCount;
@@ -118,6 +125,9 @@ namespace Drx.Sdk.Network.Http.Performance
             if (AdaptiveMinConcurrency <= 0) AdaptiveMinConcurrency = Environment.ProcessorCount;
             if (AdaptiveMaxConcurrency < AdaptiveMinConcurrency) AdaptiveMaxConcurrency = AdaptiveMinConcurrency * 4;
             if (AdaptiveTargetQueueLatencyMs <= 0) AdaptiveTargetQueueLatencyMs = 50.0;
+
+            DevRuntime ??= DevRuntimeOptions.CreateDefault();
+            DevRuntime.Validate();
         }
 
         /// <summary>

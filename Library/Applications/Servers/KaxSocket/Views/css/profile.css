@@ -1298,6 +1298,43 @@
     color: #fcd34d;
 }
 
+.auth-app-extra-row {
+    margin-top: 12px;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 10px;
+    align-items: end;
+}
+
+.auth-app-enable-check {
+    height: 38px;
+    border: 1px solid var(--profile-border);
+    border-radius: 8px;
+    padding: 0 12px;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--profile-muted-strong);
+    background: rgba(255, 255, 255, 0.02);
+    font-size: 0.86rem;
+    white-space: nowrap;
+}
+
+.auth-app-enable-check input {
+    accent-color: var(--profile-accent);
+}
+
+@media (max-width: 700px) {
+    .auth-app-extra-row {
+        grid-template-columns: 1fr;
+    }
+
+    .auth-app-enable-check {
+        justify-content: flex-start;
+        height: 36px;
+    }
+}
+
 /* 分页工具栏 */
 .admin-pager {
     display: flex;

@@ -1,5 +1,30 @@
 # Http 模块 Guides 文档更新说明
 
+## 更新日期: 2026 年 3 月 3 日
+
+### 📋 OpenAuth / AuthApp 文档补充
+
+本次补充围绕“自有 OpenAuth 授权码流程 + AuthApp 注册白名单”展开，更新了总览与关键模块 README，确保开发者能快速落地。
+
+**新增/更新要点：**
+- `INDEX.md`
+  - 新增 OpenAuth 应用注册能力说明
+  - 新增“接入 OpenAuth（一键登录）”导航入口
+- `Client/README.md`
+  - 新增 `DrxHttpClient.OpenAuth.cs` 说明
+  - 补充 `CreateOpenAuthState / BuildOpenAuthAuthorizeUrl / ExchangeOpenAuthCodeAsync` 使用示例
+- `Server/README.md`
+  - 补充 `RegisterAuthApp / ValidateAuthApp` 服务端能力与示例
+- `Models/README.md`
+  - 新增 `AuthAppDataModel` 字段说明
+  - 修正 `DataModelBase` 实际属性描述
+- `Auth/OAuth/README.md`
+  - 增加与自有 OpenAuth 服务端/客户端的集成章节
+
+**影响范围：**
+- 文档层更新，不涉及协议破坏性变更说明
+- 新接入方可按 README 示例直接完成 AuthApp 注册与授权跳转联调
+
 ## 更新日期: 2026 年 3 月 1 日
 
 ### 📋 更新概览

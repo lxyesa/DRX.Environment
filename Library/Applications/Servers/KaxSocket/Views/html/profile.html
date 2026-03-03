@@ -245,9 +245,13 @@
                             <span class="material-icons security-info-icon">mail_outline</span>
                             <span>当前邮箱：<strong id="currentEmailDisplay">—</strong></span>
                         </div>
-                        <div class="security-email-locked">
-                            <span class="material-icons">lock</span>
-                            <span>邮箱修改功能暂未开放，请联系管理员处理</span>
+                        <div class="security-field-group" style="margin-top:10px;">
+                            <input-box id="emailEditInput" label="新邮箱" placeholder="请输入新邮箱地址" type="email"
+                                name="newEmail" autocomplete="email" size="small"></input-box>
+                        </div>
+                        <div class="collapsible-actions">
+                            <span class="edit-hint">邮箱将单独更新，不会覆盖其它资料字段</span>
+                            <button class="btn" id="updateEmailBtn">更新邮箱</button>
                         </div>
                     </collapsible-card>
 
@@ -724,7 +728,57 @@
         </div>
     </div>
 
-    <script src="/js/profile.js"></script>
+    <script>
+        (function bootstrapProfileEntry() {
+            const search = new URLSearchParams(window.location.search);
+            const forceDev = search.has('dev') || localStorage.getItem('profile_frontend_mode') === 'dev';
+
+            const devModuleEntry = window.__PROFILE_DEV_ENTRY__ || '/src/profile/main.js';
+            const prodModuleEntry = window.__PROFILE_PROD_ENTRY__ || '/dist/assets/profile-main.js';
+
+            const legacyScripts = [
+                '/js/profile.shared.js?v=1',
+                '/js/profile.user.js?v=1',
+                '/js/profile.admin.js?v=1',
+                '/js/profile.orders.js?v=1',
+                '/js/profile.js'
+            ];
+
+            function appendScript(src, type = 'text/javascript') {
+                return new Promise((resolve, reject) => {
+                    const script = document.createElement('script');
+                    script.src = src;
+                    script.type = type;
+                    script.defer = true;
+                    script.onload = () => resolve();
+                    script.onerror = () => reject(new Error('Failed to load script: ' + src));
+                    document.body.appendChild(script);
+                });
+            }
+
+            async function loadLegacyChain() {
+                for (const src of legacyScripts) {
+                    await appendScript(src);
+                }
+            }
+
+            async function loadEntry() {
+                try {
+                    if (forceDev) {
+                        await appendScript(devModuleEntry, 'module');
+                        return;
+                    }
+
+                    await appendScript(prodModuleEntry, 'module');
+                } catch (error) {
+                    console.warn('[profile] Module entry load failed, fallback to legacy scripts.', error);
+                    await loadLegacyChain();
+                }
+            }
+
+            loadEntry();
+        })();
+    </script>
 </body>
 
 </html>

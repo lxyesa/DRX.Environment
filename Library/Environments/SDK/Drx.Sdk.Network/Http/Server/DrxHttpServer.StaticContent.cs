@@ -301,9 +301,18 @@ namespace Drx.Sdk.Network.Http
             var resp = new HttpResponse(304, "");
             resp.Headers["ETag"] = cacheEntry.ETag;
             resp.Headers["Last-Modified"] = cacheEntry.LastModifiedUtc.ToString("R");
-            resp.Headers["Cache-Control"] = StaticContentMaxAgeSec > 0
-                ? $"public, max-age={StaticContentMaxAgeSec}"
-                : "no-cache";
+            if (_options.DevRuntime.Enabled)
+            {
+                resp.Headers["Cache-Control"] = "no-store, no-cache, must-revalidate";
+                resp.Headers["Pragma"] = "no-cache";
+                resp.Headers["Expires"] = "0";
+            }
+            else
+            {
+                resp.Headers["Cache-Control"] = StaticContentMaxAgeSec > 0
+                    ? $"public, max-age={StaticContentMaxAgeSec}"
+                    : "no-cache";
+            }
             return resp;
         }
 
@@ -335,9 +344,18 @@ namespace Drx.Sdk.Network.Http
             resp.Headers["Content-Type"] = cacheEntry.ContentType;
             resp.Headers["ETag"] = cacheEntry.ETag;
             resp.Headers["Last-Modified"] = cacheEntry.LastModifiedUtc.ToString("R");
-            resp.Headers["Cache-Control"] = StaticContentMaxAgeSec > 0
-                ? $"public, max-age={StaticContentMaxAgeSec}"
-                : "no-cache";
+            if (_options.DevRuntime.Enabled)
+            {
+                resp.Headers["Cache-Control"] = "no-store, no-cache, must-revalidate";
+                resp.Headers["Pragma"] = "no-cache";
+                resp.Headers["Expires"] = "0";
+            }
+            else
+            {
+                resp.Headers["Cache-Control"] = StaticContentMaxAgeSec > 0
+                    ? $"public, max-age={StaticContentMaxAgeSec}"
+                    : "no-cache";
+            }
             resp.Headers["Content-Length"] = (resp.BodyBytes?.Length ?? 0).ToString();
 
             return resp;

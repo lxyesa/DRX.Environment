@@ -1,7 +1,9 @@
 using Drx.Sdk.Network.DataBase;
 using Drx.Sdk.Network.Tcp;
 using Drx.Sdk.Network.Http;
+using Drx.Sdk.Network.Http.Configs;
 using Drx.Sdk.Network.Http.Protocol;
+using Drx.Sdk.Network.Http.Performance;
 using Drx.Sdk.Network.Http.Models;
 using Drx.Sdk.Shared;
 using Drx.Sdk.Shared.Serialization;
@@ -13,6 +15,7 @@ using System;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Net;
+using System.Collections.Generic;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -38,7 +41,19 @@ public class Program
         }
 
         var prefixes = new[] { "http://+:8462/" };
-        var server = new DrxHttpServer(prefixes);
+        var serverOptions = new DrxHttpServerOptions
+        {
+            DevRuntime = new DevRuntimeOptions
+            {
+                Enabled = true,
+                WatchDirectories = new List<string>
+                {
+                    $"{AppDomain.CurrentDomain.BaseDirectory}Views"
+                },
+                DebounceMilliseconds = 200,
+            }
+        };
+        var server = new DrxHttpServer(prefixes, null, serverOptions);
 
         try
         {
@@ -50,6 +65,7 @@ public class Program
             server.AddRoute(HttpMethod.Get, "/", req => new HtmlResultFromFile($"{AppDomain.CurrentDomain.BaseDirectory}Views/html/index.html"));
             server.AddRoute(HttpMethod.Get, "/login", req => new HtmlResultFromFile($"{AppDomain.CurrentDomain.BaseDirectory}Views/html/login.html"));
             server.AddRoute(HttpMethod.Get, "/register", req => new HtmlResultFromFile($"{AppDomain.CurrentDomain.BaseDirectory}Views/html/register.html"));
+            server.AddRoute(HttpMethod.Get, "/oauth/authorize", req => new HtmlResultFromFile($"{AppDomain.CurrentDomain.BaseDirectory}Views/html/oauth_authorize.html"));
             server.AddRoute(HttpMethod.Get, "/profile", req => new HtmlResultFromFile($"{AppDomain.CurrentDomain.BaseDirectory}Views/html/profile.html"));
             server.AddRoute(HttpMethod.Get, "/profile/{uid}", req => new HtmlResultFromFile($"{AppDomain.CurrentDomain.BaseDirectory}Views/html/profile.html"));
             server.AddRoute(HttpMethod.Get, "/shop", req => new HtmlResultFromFile($"{AppDomain.CurrentDomain.BaseDirectory}Views/html/shop.html"));
@@ -62,6 +78,7 @@ public class Program
             server.FileUploadRouter("/api/file/upload", "uploads");
 
             server.RegisterHandlersFromAssembly(typeof(KaxHttp));
+            KaxHttp.RegisterOAuthTokenApi(server);
             server.RegisterCommandsFromType(typeof(AssetCommandHandler));
             server.RegisterCommandsFromType(typeof(UserCommandHandler));
             server.RegisterCommandsFromType(typeof(SystemCommandHandler));

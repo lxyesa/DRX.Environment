@@ -1,5 +1,7 @@
 using System;
 using Drx.Sdk.Network.Tcp;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace Drx.Sdk.Network.Email
 {
@@ -24,12 +26,19 @@ namespace Drx.Sdk.Network.Email
             if (string.IsNullOrWhiteSpace(to)) throw new ArgumentNullException(nameof(to));
             if (string.IsNullOrWhiteSpace(senderAddress)) throw new ArgumentNullException(nameof(senderAddress));
 
-            // 使用 DRXEmail 发送
-            var email = authCode == null ? new DRXEmail(senderAddress) : new DRXEmail(senderAddress, authCode);
             try
             {
-                email.SendEmail(subject, body, to);
-                return true;
+                var options = new EmailSenderOptions
+                {
+                    SenderAddress = senderAddress,
+                    Password = authCode ?? "umrroeavogwsdjci",
+                    SmtpHost = "smtp.qq.com",
+                    SmtpPort = 587,
+                    EnableSsl = true
+                };
+                var sender = new SmtpEmailSender(options);
+                var message = EmailMessage.Create(to, subject, body, EmailContentType.PlainText);
+                return sender.TrySendAsync(message).GetAwaiter().GetResult();
             }
             catch (Exception ex)
             {
@@ -50,28 +59,50 @@ namespace Drx.Sdk.Network.Email
             if (string.IsNullOrWhiteSpace(cfg.SenderAddress)) throw new ArgumentException("SenderAddress must be provided in EmailConfig", nameof(cfg));
             if (string.IsNullOrWhiteSpace(cfg.To)) throw new ArgumentException("To (recipient) must be provided in EmailConfig", nameof(cfg));
 
-            // 根据配置构造 DRXEmail（自定义 SMTP）
-            var drx = new DRXEmail(cfg.SenderAddress, cfg.SmtpHost, cfg.Password, cfg.SmtpPort, cfg.EnableSsl, cfg.DisplayName);
             try
             {
-                // 如果传入的是 HTML 内容（例如包含 <html>），则使用 SendHtmlEmail，否则当作普通文本
-                if (!string.IsNullOrEmpty(cfg.Body) && (cfg.Body.Contains("<html", StringComparison.OrdinalIgnoreCase) || cfg.Body.Contains("<body", StringComparison.OrdinalIgnoreCase)))
-                {
-                    drx.SendHtmlEmail(cfg.Subject ?? "", cfg.Body, cfg.To);
-                }
-                else
-                {
-                    // 对于纯文本，调用 SendEmail
-                    drx.SendEmail(cfg.Subject ?? "", cfg.Body ?? string.Empty, cfg.To);
-                }
-
-                return true;
+                var sender = new SmtpEmailSender(cfg.ToSenderOptions());
+                return sender.TrySendAsync(cfg.ToMessage()).GetAwaiter().GetResult();
             }
             catch (Exception ex)
             {
                 try { System.Diagnostics.Debug.WriteLine($"SendEmail(config) error: {ex}"); } catch { }
                 return false;
             }
+        }
+
+        /// <summary>
+        /// 异步发送（简化参数）。
+        /// </summary>
+        public static Task<bool> SendEmailAsync(this NetworkServer server, string to, string body, string senderAddress, string authCode, string subject = "DRX Notification", CancellationToken cancellationToken = default)
+        {
+            if (string.IsNullOrWhiteSpace(to)) throw new ArgumentNullException(nameof(to));
+            if (string.IsNullOrWhiteSpace(senderAddress)) throw new ArgumentNullException(nameof(senderAddress));
+            if (string.IsNullOrWhiteSpace(authCode)) throw new ArgumentNullException(nameof(authCode));
+
+            var sender = new SmtpEmailSender(new EmailSenderOptions
+            {
+                SenderAddress = senderAddress,
+                Password = authCode,
+                SmtpHost = "smtp.qq.com",
+                SmtpPort = 587,
+                EnableSsl = true
+            });
+
+            return sender.TrySendAsync(EmailMessage.Create(to, subject, body, EmailContentType.PlainText), cancellationToken);
+        }
+
+        /// <summary>
+        /// 异步发送（完整配置）。
+        /// </summary>
+        public static Task<bool> SendEmailAsync(this NetworkServer server, EmailConfig cfg, CancellationToken cancellationToken = default)
+        {
+            if (cfg == null) throw new ArgumentNullException(nameof(cfg));
+            if (string.IsNullOrWhiteSpace(cfg.SenderAddress)) throw new ArgumentException("SenderAddress must be provided in EmailConfig", nameof(cfg));
+            if (string.IsNullOrWhiteSpace(cfg.To)) throw new ArgumentException("To (recipient) must be provided in EmailConfig", nameof(cfg));
+
+            var sender = new SmtpEmailSender(cfg.ToSenderOptions());
+            return sender.TrySendAsync(cfg.ToMessage(), cancellationToken);
         }
     }
 }

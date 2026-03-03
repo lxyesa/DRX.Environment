@@ -487,6 +487,168 @@ public partial class KaxHttp
         }
     }
 
+    private static bool TryApplyAssetSingleField(Model.AssetModel asset, string field, JsonNode? valueNode, out string error)
+    {
+        error = string.Empty;
+        field = field.ToLowerInvariant();
+        var value = valueNode?.ToString() ?? string.Empty;
+
+        switch (field)
+        {
+            case "name":
+                value = value.Trim();
+                if (string.IsNullOrEmpty(value) || value.Length > 200)
+                {
+                    error = "名称无效（1-200字符）";
+                    return false;
+                }
+                asset.Name = value;
+                return true;
+
+            case "version":
+                value = value.Trim();
+                if (string.IsNullOrEmpty(value) || value.Length > 50)
+                {
+                    error = "版本字段无效（1-50字符）";
+                    return false;
+                }
+                asset.Version = value;
+                return true;
+
+            case "description":
+                if (value.Length > 500)
+                {
+                    error = "描述过长（最多500字符）";
+                    return false;
+                }
+                asset.Description = value;
+                return true;
+
+            case "category":
+                asset.Category = value;
+                return true;
+
+            case "tags":
+                if (value.Length > 500)
+                {
+                    error = "标签过长（最多500字符）";
+                    return false;
+                }
+                asset.Tags = value;
+                return true;
+
+            case "coverimage":
+                asset.CoverImage = value;
+                return true;
+
+            case "iconimage":
+                asset.IconImage = value;
+                return true;
+
+            case "screenshots":
+                if (value.Length > 5000)
+                {
+                    error = "截图列表数据过长";
+                    return false;
+                }
+                asset.Screenshots = value;
+                return true;
+
+            case "badges":
+                if (value.Length > 2000)
+                {
+                    error = "徽章数据过长（最多2000字符）";
+                    return false;
+                }
+                asset.Badges = value;
+                return true;
+
+            case "features":
+                if (value.Length > 2000)
+                {
+                    error = "特性数据过长（最多2000字符）";
+                    return false;
+                }
+                asset.Features = value;
+                return true;
+
+            case "filesize":
+            case "rating":
+            case "reviewcount":
+            case "compatibility":
+            case "downloads":
+            case "uploaddate":
+            case "license":
+            case "downloadurl":
+                {
+                    var patchBody = new JsonObject
+                    {
+                        [field] = valueNode?.DeepClone() ?? JsonValue.Create(value)
+                    };
+                    ApplySpecsInfoToAsset(asset, patchBody);
+                    return true;
+                }
+
+            case "prices":
+                {
+                    if (valueNode is not JsonArray arr)
+                    {
+                        error = "prices 字段必须是数组";
+                        return false;
+                    }
+                    var patchBody = new JsonObject
+                    {
+                        ["prices"] = arr.DeepClone()
+                    };
+                    ApplyPriceInfoToAsset(asset, patchBody);
+                    return true;
+                }
+
+            default:
+                error = "不支持的字段";
+                return false;
+        }
+    }
+
+    [HttpHandle("/api/asset/admin/update-field", "POST", RateLimitMaxRequests = 20, RateLimitWindowSeconds = 60, RateLimitCallbackMethodName = nameof(RateLimitCallback))]
+    public static async Task<IActionResult> Post_UpdateAssetField(HttpRequest request)
+    {
+        var (operatorName, authError) = await Api.RequireAdminNameAsync(request);
+        if (authError != null) return authError;
+
+        if (!ApiBody.TryParse(request, out var body, out var parseError))
+            return parseError!;
+
+        try
+        {
+            if (!int.TryParse(body["id"]?.ToString(), out var id) || id <= 0)
+                return new JsonResult(new { message = "资源ID无效" }, 400);
+
+            var field = body["field"]?.ToString()?.Trim() ?? string.Empty;
+            if (string.IsNullOrEmpty(field))
+                return new JsonResult(new { message = "field 参数缺失" }, 400);
+
+            var asset = await KaxGlobal.AssetDataBase.SelectByIdAsync(id);
+            if (asset == null)
+                return new JsonResult(new { message = "资源不存在" }, 404);
+
+            if (!TryApplyAssetSingleField(asset, field, body["value"], out var fieldError))
+                return new JsonResult(new { message = fieldError }, 400);
+
+            var specs = EnsureSpecs(asset);
+            specs.LastUpdatedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+            await KaxGlobal.AssetDataBase.UpdateAsync(asset);
+
+            Logger.Info($"用户 {operatorName} 单字段修改了资源: {asset.Name} (id={id}, field={field})");
+            return new JsonResult(new { message = "字段已更新", id, field });
+        }
+        catch (Exception ex)
+        {
+            Logger.Error($"单字段更新资源失败: {ex}");
+            return new JsonResult(new { message = "服务器错误" }, 500);
+        }
+    }
+
     [HttpHandle("/api/asset/admin/inspect", "POST", RateLimitMaxRequests = 60, RateLimitWindowSeconds = 60, RateLimitCallbackMethodName = nameof(RateLimitCallback))]
     public static async Task<IActionResult> Post_InspectAsset(HttpRequest request)
     {

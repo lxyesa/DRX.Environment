@@ -51,5 +51,46 @@ namespace Drx.Sdk.Network.Email
         /// 发件人显示名称（可选）
         /// </summary>
         public string DisplayName { get; set; } = string.Empty;
+
+        /// <summary>
+        /// 正文类型，默认自动识别（兼容旧逻辑）。
+        /// </summary>
+        public EmailContentType ContentType { get; set; } = EmailContentType.Auto;
+
+        /// <summary>
+        /// 转换为 SMTP 发送配置。
+        /// </summary>
+        public EmailSenderOptions ToSenderOptions()
+        {
+            return new EmailSenderOptions
+            {
+                SenderAddress = SenderAddress,
+                Password = Password,
+                SmtpHost = SmtpHost,
+                SmtpPort = SmtpPort,
+                EnableSsl = EnableSsl,
+                DisplayName = DisplayName
+            };
+        }
+
+        /// <summary>
+        /// 转换为邮件消息模型。
+        /// </summary>
+        public EmailMessage ToMessage()
+        {
+            var message = new EmailMessage
+            {
+                Subject = Subject ?? string.Empty,
+                Body = Body ?? string.Empty,
+                ContentType = ContentType
+            };
+
+            if (!string.IsNullOrWhiteSpace(To))
+            {
+                message.To.Add(To);
+            }
+
+            return message;
+        }
     }
 }

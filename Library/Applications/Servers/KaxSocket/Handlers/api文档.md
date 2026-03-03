@@ -231,25 +231,63 @@ Authorization: Bearer <token>
 Content-Type: application/json
 
 {
+  "targetUid": 1,
   "displayName": "新名称",
   "email": "newemail@example.com",
-  "bio": "新的个人简介"
+  "bio": "新的个人简介",
+  "signature": "新的个性签名"
 }
 ```
 
 **限制**：10 req/60s
 
+**说明**：该接口为**全量更新兼容接口**，适合一次更新多个字段。
+
 **响应**：
 ```json
 {
-  "code": 0,
-  "message": "资料更新成功"
+  "message": "资料已更新"
 }
 ```
 
 ---
 
-#### 4. 修改密码
+#### 4. 单字段更新用户资料
+
+```http
+POST /api/user/profile/update-field
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{
+  "targetUid": 1,
+  "field": "email",
+  "value": "newemail@example.com"
+}
+```
+
+**限制**：20 req/60s
+
+**支持字段**：
+- `displayName`
+- `email`
+- `bio`
+- `signature`
+
+**说明**：用于前端单项编辑（如只改邮箱），避免覆盖其它字段。
+
+**响应**：
+```json
+{
+  "message": "字段已更新",
+  "field": "email",
+  "value": "newemail@example.com"
+}
+```
+
+---
+
+#### 5. 修改密码
 
 ```http
 POST /api/user/password
@@ -268,7 +306,7 @@ Content-Type: application/json
 
 ---
 
-#### 5. 上传头像
+#### 6. 上传头像
 
 ```http
 POST /api/user/avatar
@@ -280,15 +318,15 @@ Content-Type: multipart/form-data
 
 **限制**：10 req/60s
 
-**支持格式**：JPEG, PNG, GIF
+**支持格式**：JPG, PNG
 
 **图像处理**：
-- 自动缩放成正方形
-- 保存为 JPG 缩略图（128x128）
+- 自动转码为 PNG
+- 保存路径为 `resources/user/icon/{uid}.png`
 
 ---
 
-#### 6. 获取用户头像
+#### 7. 获取用户头像
 
 ```http
 GET /api/user/avatar/{userId}?v={timestamp}
@@ -300,7 +338,7 @@ GET /api/user/avatar/{userId}?v={timestamp}
 
 ---
 
-#### 7. 获取用户统计数据
+#### 8. 获取用户统计数据
 
 ```http
 GET /api/user/stats
@@ -528,9 +566,40 @@ Content-Type: application/json
 
 **权限**：Admin 或以上
 
+**说明**：该接口为**全量更新兼容接口**，适合一次更新多个字段。
+
 ---
 
-#### 3. 检查资源
+#### 3. 单字段更新资源
+
+```http
+POST /api/asset/admin/update-field
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{
+  "id": 1,
+  "field": "category",
+  "value": "工具"
+}
+```
+
+**限制**：20 req/60s
+
+**权限**：Admin 或以上
+
+**支持字段（常用）**：
+- 基础信息：`name` `version` `description` `category` `tags`
+- 媒体信息：`coverImage` `iconImage` `screenshots`
+- 展示扩展：`badges` `features`
+- 规格字段：`fileSize` `rating` `reviewCount` `compatibility` `downloads` `uploadDate` `license` `downloadUrl`
+- 价格方案：`prices`（数组）
+
+**说明**：用于单项编辑（例如仅改分类、仅改下载地址）。
+
+---
+
+#### 4. 检查资源
 
 ```http
 POST /api/asset/admin/inspect
@@ -550,7 +619,7 @@ Content-Type: application/json
 
 ---
 
-#### 4. 删除资源
+#### 5. 删除资源
 
 ```http
 POST /api/asset/admin/delete
@@ -570,7 +639,7 @@ Content-Type: application/json
 
 ---
 
-#### 5. 恢复资源
+#### 6. 恢复资源
 
 ```http
 POST /api/asset/admin/restore
@@ -590,7 +659,7 @@ Content-Type: application/json
 
 ---
 
-#### 6. 管理员资源列表
+#### 7. 管理员资源列表
 
 ```http
 GET /api/asset/admin/list?page=1&pageSize=20&includeDeleted=false&q=搜索词
@@ -1433,5 +1502,5 @@ public class UserData : IDataBase
 
 ---
 
-**最后更新**：2026-03-01  
-**API 版本**：1.0
+**最后更新**：2026-03-03  
+**API 版本**：1.1

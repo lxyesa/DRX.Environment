@@ -11,6 +11,14 @@
 *.userosscache
 *.sln.docstates
 .vs/
+.spec-workflow/
+.project-index/
+.claude/
+.cursor/
+.idea/
+.promptx/
+.roo/
+.Backup/
 
 # 构建结果
 [Dd]ebug/

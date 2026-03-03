@@ -158,6 +158,97 @@ public class MyOAuthProvider : OAuthProvider
 var newToken = await OAuthManager.RefreshTokenAsync("google", oldToken.RefreshToken);
 ```
 
+## 与自有 OpenAuth 服务集成（AuthApp 模式）
+
+除第三方社交登录外，框架还支持自有 OpenAuth 授权码流程。
+
+### 服务端（DrxHttpServer）
+
+在启动时注册允许接入的 AuthApp：
+
+```csharp
+server.RegisterAuthApp(
+    clientId: "demo_client",
+    redirectUri: "https://client.example.com/callback",
+    applicationName: "Demo Client",
+    applicationDescription: "示例客户端",
+    scopes: "profile",
+    clientSecret: "optional-secret",
+    enabled: true
+);
+```
+
+### Auth App 管理 API（需 System 权限 = 0）
+
+服务端内置了以下管理端点，供具有 System 权限的用户通过 API 动态管理 AuthApp：
+
+| 方法 | 路径 | 说明 | 权限 |
+|------|------|------|------|
+| `GET`  | `/api/oauth/apps` | 获取所有 AuthApp 列表 | System (0) |
+| `POST` | `/api/oauth/apps/save` | 创建或更新 AuthApp | System (0) |
+| `GET`  | `/api/oauth/apps/quick-login-url` | 根据 clientId 生成授权 URL | 公开 |
+
+**`POST /api/oauth/apps/save` 请求体：**
+
+```json
+{
+  "id": "",
+  "clientId": "demo_client",
+  "applicationName": "Demo Client",
+  "applicationDescription": "示例客户端",
+  "redirectUri": "https://client.example.com/callback",
+  "scopes": "profile",
+  "clientSecret": "optional-secret",
+  "isEnabled": true
+}
+```
+> `id` 为空时创建新 App，非空时更新已有记录（通过数据库 Id 定位）。  
+> `clientSecret` 留空表示不修改密钥（更新场景）。
+
+**`GET /api/oauth/apps/quick-login-url` 查询参数：**
+
+| 参数 | 说明 |
+|------|------|
+| `clientId` | AuthApp 的 clientId |
+| `scope` | 请求权限范围（默认 `profile`） |
+
+### 客户端（DrxHttpClient.OpenAuth）
+
+**完整流程（手动管理 state）：**
+
+```csharp
+var state = DrxHttpClient.CreateOpenAuthState();
+
+var authUrl = DrxHttpClient.BuildOpenAuthAuthorizeUrl(
+    serverBaseUrl: "https://auth.example.com",
+    clientId: "demo_client",
+    redirectUri: "https://client.example.com/callback",
+    state: state,
+    scope: "profile"
+);
+
+// 浏览器跳转 authUrl，回调后拿到 code
+var token = await client.ExchangeOpenAuthCodeAsync(
+    serverBaseUrl: "https://auth.example.com",
+    code: code,
+    clientId: "demo_client",
+    redirectUri: "https://client.example.com/callback"
+);
+```
+
+**快捷方式 `AuthLogin`（推荐，服务端自动查找配置）：**
+
+```csharp
+// 一行获取完整授权 URL，服务端自动拼装 redirectUri、state 等参数
+var authUrl = await client.AuthLogin(
+    serverBaseUrl: "https://auth.example.com",
+    appId: "demo_client",
+    scope: "profile"          // 可选，默认 "profile"
+);
+
+// 将 authUrl 重定向给用户浏览器即可完成登录引导
+```
+
 ## PKCE 工具
 
 ```csharp
