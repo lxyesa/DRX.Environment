@@ -7,23 +7,143 @@
             return date.toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' });
         }
 
-        /** 兼容后端 camelCase/PascalCase 字段读取 */
-        function getAssetField(asset, camelKey, pascalKey) {
-            return asset?.[camelKey] ?? asset?.[pascalKey];
+        // ================================================================
+        // 统一错误码映射与提示语义（FR-8, FR-10, NFR-3, NFR-4）
+        // 与 shop.js 保持一致的错误处理体系
+        // ================================================================
+
+        /**
+         * 统一错误码映射表：将后端 HTTP 状态码/业务 code 映射为用户友好提示
+         * 商店域关键接口错误响应统一出口
+         */
+        const ERROR_CODE_MAP = {
+            // HTTP 状态码
+            0:   { title: '成功', message: '操作成功', type: 'success' },
+            400: { title: '参数错误', message: '请求参数有误，请检查后重试。', type: 'error' },
+            401: { title: '未登录', message: '请先登录以继续操作。', type: 'warn', action: 'login' },
+            403: { title: '无权限', message: '您没有执行此操作的权限。', type: 'error' },
+            404: { title: '未找到', message: '请求的资源不存在或已被删除。', type: 'error' },
+            409: { title: '操作冲突', message: '资源已存在或状态冲突，请稍后重试。', type: 'warn' },
+            500: { title: '服务异常', message: '服务器出现问题，请稍后重试。', type: 'error' },
+            502: { title: '服务异常', message: '服务暂时不可用，请稍后重试。', type: 'error' },
+            503: { title: '服务繁忙', message: '系统繁忙，请稍后重试。', type: 'error' },
+            // 业务错误码（1000+）
+            1001: { title: '余额不足', message: '您的账户余额不足，请先充值。', type: 'warn' },
+            1002: { title: '已购买', message: '您已拥有该资产，无需重复购买。', type: 'info' },
+            1003: { title: '库存不足', message: '该商品已售罄，请选择其他方案。', type: 'warn' },
+            1004: { title: '已下架', message: '该商品已下架，暂时无法购买。', type: 'warn' },
+            // 网络相关
+            'NETWORK_ERROR': { title: '网络错误', message: '网络连接异常，请检查网络后重试。', type: 'error' },
+            'TIMEOUT':       { title: '请求超时', message: '服务响应超时，请稍后重试。', type: 'error' },
+            'PARSE_ERROR':   { title: '数据异常', message: '服务返回数据格式错误，请稍后重试。', type: 'error' },
+            'UNKNOWN':       { title: '未知错误', message: '发生未知错误，请稍后重试。', type: 'error' }
+        };
+
+        /**
+         * 根据错误码/HTTP状态获取统一错误提示
+         * @param {number|string} code - HTTP 状态码或业务错误码
+         * @param {string} [fallbackMsg] - 后端返回的原始消息（兜底文案）
+         * @returns {{ title: string, message: string, type: string, action?: string }}
+         */
+        function getErrorInfo(code, fallbackMsg) {
+            const mapped = ERROR_CODE_MAP[code] || ERROR_CODE_MAP['UNKNOWN'];
+            return {
+                title: mapped.title,
+                message: fallbackMsg || mapped.message,
+                type: mapped.type,
+                action: mapped.action
+            };
         }
 
-        /** 兼容截图字段：数组 或 分号/逗号分隔字符串 */
-        function normalizeMediaArray(raw) {
-            if (Array.isArray(raw)) {
-                return raw.map(v => String(v || '').trim()).filter(Boolean);
-            }
-            if (typeof raw === 'string') {
-                return raw
-                    .split(/[;,，\n\r]+/)
-                    .map(v => v.trim())
-                    .filter(Boolean);
-            }
-            return [];
+        /**
+         * 显示统一错误消息弹窗（使用 showMsgBox）
+         * @param {number|string} code - 错误码
+         * @param {string} [serverMessage] - 服务端返回的错误消息
+         */
+        function showUnifiedError(code, serverMessage) {
+            const info = getErrorInfo(code, serverMessage);
+            showMsgBox({
+                title: info.title,
+                message: info.message,
+                type: info.type,
+                onConfirm: info.action === 'login' ? () => { location.href = '/login'; } : null
+            });
+        }
+
+        // ================================================================
+        // 映射层：AssetDetail DTO → ShopDetailVM（单一契约，见 design.md 附录 B）
+        // ================================================================
+
+        /**
+         * 将后端 /api/asset/detail/{id} 的 data 对象映射为页面稳定 ViewModel。
+         * 价格字段已统一为元（decimal），前端不再做分↔元猜测换算。
+         *
+         * @param {object} dto  - 后端返回的 data 对象
+         * @returns {object}    - ShopDetailVM
+         */
+        function mapDetailToVM(dto) {
+            // 截图：数组或分号/逗号分隔字符串均可
+            const parseMediaArray = (raw) => {
+                if (Array.isArray(raw)) return raw.map(v => String(v || '').trim()).filter(Boolean);
+                if (typeof raw === 'string') {
+                    return raw.split(/[;,，\n\r]+/).map(v => v.trim()).filter(Boolean);
+                }
+                return [];
+            };
+
+            // 价格方案：PriceOption[]，直接映射（priceYuan 已是元）
+            const priceOptions = Array.isArray(dto.prices) ? dto.prices.map(p => ({
+                id: String(p.id ?? ''),
+                name: String(p.name ?? ''),
+                priceYuan: Number(p.priceYuan ?? 0),
+                originalPriceYuan: Number(p.originalPriceYuan ?? p.priceYuan ?? 0),
+                duration: p.duration ?? null,
+                unit: p.unit ?? null,
+                stock: p.stock ?? -1
+            })) : [];
+
+            return {
+                // 主键（页面内统一使用 assetId）
+                assetId: Number(dto.id ?? 0),
+                displayName: String(dto.name ?? '--'),
+                description: String(dto.description ?? '--'),
+                category: String(dto.category ?? '--'),
+                coverImage: String(dto.coverImage ?? ''),
+                iconImage: String(dto.iconImage ?? ''),
+                screenshots: parseMediaArray(dto.screenshots),
+                badges: dto.badges ?? '',
+                features: dto.features ?? '',
+                // 价格方案
+                priceOptions,
+                // 规格信息
+                version: String(dto.version ?? '--'),
+                compatibility: String(dto.compatibility ?? '--'),
+                fileSize: String(dto.fileSize ?? '--'),
+                uploadDate: dto.uploadDate ?? dto.createdAt ?? '--',
+                license: String(dto.license ?? '--'),
+                // 统计
+                authorName: String(dto.authorName ?? '--'),
+                downloadCount: Number(dto.downloads ?? dto.downloadCount ?? 0),
+                purchaseCount: Number(dto.purchaseCount ?? 0),
+                favoriteCount: Number(dto.favoriteCount ?? 0),
+                viewCount: Number(dto.viewCount ?? 0),
+                rating: Number(dto.rating ?? 0),
+                reviewCount: Number(dto.reviewCount ?? 0),
+                isDeleted: Boolean(dto.isDeleted)
+            };
+        }
+
+        /**
+         * 将相关推荐 DTO → RelatedCardVM（design.md 附录 C）
+         */
+        function mapRelatedToVM(dto) {
+            return {
+                assetId: Number(dto.id ?? 0),
+                displayName: String(dto.name ?? '--'),
+                category: String(dto.category ?? '--'),
+                coverImage: String(dto.coverImage ?? ''),
+                priceYuan: Number(dto.priceYuan ?? 0)
+            };
         }
 
         // 未登录直接跳转登录页
@@ -47,43 +167,7 @@
 
         const productId = parseInt(getProductIdFromUrl(), 10) || 1;
 
-        // 模拟产品数据（作为回退，实际优先从后端 API 获取）
-        const productData = {
-            1: {
-                id: 1,
-                name: '高级游戏模组包',
-                description: '一个功能完整的游戏模组，包含多项高级功能和优化。提供完整的文档和技术支持。',
-                price: 79.99,
-                originalPrice: 99.99,
-                category: '模组',
-                rating: 4.8,
-                reviews: 128,
-                version: '2.1.0',
-                compatibility: '98%',
-                downloads: 1243,
-                fileSize: '256 MB',
-                uploadDate: '2026-02-20',
-                author: '开发者团队',
-                license: 'MIT',
-            },
-            2: {
-                id: 2,
-                name: '轻量化优化模组',
-                description: '专注于性能优化的轻量级模组，为低配置设备提供最佳体验。',
-                price: 49.99,
-                originalPrice: 69.99,
-                category: '模组',
-                rating: 4.6,
-                reviews: 89,
-                version: '1.8.5',
-                compatibility: '95%',
-                downloads: 856,
-                fileSize: '128 MB',
-                uploadDate: '2026-02-18',
-                author: '优化团队',
-                license: 'MIT',
-            }
-        };
+        // 模拟产品数据已移除 — 详情页现在仅使用后端 API 契约数据（见 design.md 附录 B）
 
         // 渲染骨架屏 — 对应新版 HTML 结构（.detail-main-col / .detail-side-col）
         const _skeletonCache = {};
@@ -143,102 +227,77 @@
             if (relatedGrid && _skeletonCache.related) relatedGrid.innerHTML = _skeletonCache.related;
         }
 
-        // 初始化页面（优先从后端获取）
+        // 初始化页面
         async function initPage() {
             renderDetailSkeleton();
-            let product = productData[productId] || productData[1];
 
+            // ── 请求层：从后端获取详情 ──────────────────────────────────────
+            let vm = null;
             try {
-                const resp = await fetch(`/api/asset/detail/${productId}`, { credentials: 'same-origin' });
-                if (resp.ok) {
-                    const json = await resp.json();
-                    const asset = (json && typeof json === 'object') ? (json.data || json) : null;
-                    if (asset) {
-                        const coverImage = getAssetField(asset, 'coverImage', 'CoverImage') || '';
-                        const iconImage = getAssetField(asset, 'iconImage', 'IconImage') || '';
-                        const screenshots = normalizeMediaArray(getAssetField(asset, 'screenshots', 'Screenshots'));
-
-                        // Helper: normalize price units (backend may return integer cents)
-                        const toNumber = v => (v === null || v === undefined) ? null : (typeof v === 'number' ? v : (isNaN(Number(v)) ? null : Number(v)));
-                        const normalizeCurrency = v => {
-                            const n = toNumber(v);
-                            if (n === null) return null;
-                            return n;
-                        };
-
-                        const rawPrice = toNumber(asset.price ?? asset.priceCents ?? asset.price_in_cents);
-                        const rawOriginal = toNumber(asset.originalPrice ?? asset.priceOriginal ?? asset.original_price);
-                        const rawSale = toNumber(asset.salePrice ?? asset.sale_price);
-
-                        const price = normalizeCurrency(rawPrice);
-                        const originalPrice = normalizeCurrency(rawOriginal);
-                        const salePrice = rawSale != null ? normalizeCurrency(rawSale) : null;
-
-                        // fileSize: prefer human-readable if provided, otherwise convert bytes number to readable
-                        const rawFileSize = asset.fileSize ?? asset.size ?? null;
-                        const fileSizeStr = (() => {
-                            if (rawFileSize == null) return '--';
-                            if (typeof rawFileSize === 'string') return rawFileSize;
-                            const n = Number(rawFileSize);
-                            if (isNaN(n)) return '--';
-                            const units = ['B','KB','MB','GB','TB'];
-                            let idx = 0; let val = n;
-                            while (val >= 1024 && idx < units.length-1) { val /= 1024; idx++; }
-                            return (idx === 0 ? val.toFixed(0) : val.toFixed(2)) + ' ' + units[idx];
-                        })();
-
-                        product = {
-                            id: asset.id ?? productId,
-                            name: asset.name ?? asset.title ?? '--',
-                            description: asset.description ?? '--',
-                            price: price,
-                            originalPrice: originalPrice ?? price,
-                            salePrice: salePrice,
-                            category: asset.category ?? asset.type ?? '--',
-                            // 规格字段：优先从平铺级别获取，回退到 specs 对象
-                            rating: (asset.rating !== undefined && asset.rating !== null) ? Number(asset.rating) : ((asset.specs?.rating !== undefined && asset.specs.rating !== null) ? Number(asset.specs.rating) : 0),
-                            reviews: asset.reviewCount ?? asset.reviews ?? (asset.specs?.reviewCount ?? 0),
-                            reviewCount: asset.reviewCount ?? asset.reviews ?? (asset.specs?.reviewCount ?? 0),
-                            version: asset.version ?? '--',
-                            compatibility: asset.compatibility ?? (asset.specs?.compatibility ?? '--'),
-                            downloads: asset.downloads ?? (asset.specs?.downloads ?? 0),
-                            downloadCount: asset.downloads ?? (asset.specs?.downloads ?? 0),
-                            purchaseCount: asset.purchaseCount ?? (asset.specs?.purchaseCount ?? 0),
-                            fileSize: fileSizeStr,
-                            uploadDate: asset.uploadDate ?? (asset.specs?.uploadDate ?? asset.createdAt ?? '--'),
-                            author: asset.author ?? (asset.specs?.author ?? '--'),
-                            license: asset.license ?? (asset.specs?.license ?? '--'),
-                            discountRate: (asset.discountRate !== undefined && asset.discountRate !== null) ? Number(asset.discountRate) : 0,
-                            favoriteCount: asset.favoriteCount ?? (asset.specs?.favoriteCount ?? 0),
-                            viewCount: asset.viewCount ?? (asset.specs?.viewCount ?? 0),
-                            downloadUrl: asset.downloadUrl ?? (asset.specs?.downloadUrl ?? ''),
-                            // 价格方案数组
-                            prices: Array.isArray(asset.prices) ? asset.prices : (Array.isArray(asset.Prices) ? asset.Prices : []),
-                            // 媒体资源
-                            coverImage: coverImage,
-                            iconImage: iconImage,
-                            screenshots: screenshots,
-                            // 标签
-                            tags: Array.isArray(asset.tags) ? asset.tags : [],
-                            // 徽章与特性（JSON 字符串，空则使用默认值）
-                            badges: asset.badges || '',
-                            features: asset.features || '',
-                            // 规格子表（保持原始数据）
-                            specs: asset.specs || null,
-                            isDeleted: asset.isDeleted ?? false
-                        };
-                    }
+                const resp = await fetch(`/api/asset/detail/${productId}`, {
+                    headers: { 'Authorization': 'Bearer ' + (localStorage.getItem('kax_login_token') || '') }
+                });
+                
+                // 根据 HTTP 状态码提供精确错误提示
+                if (!resp.ok) {
+                    const errorInfo = getErrorInfo(resp.status);
+                    console.error('[shop_detail] 获取详情失败, HTTP', resp.status);
+                    removeSkeleton();
+                    showDetailError(errorInfo.title, errorInfo.message);
+                    return;
                 }
+                
+                let json;
+                try {
+                    json = await resp.json();
+                } catch (parseErr) {
+                    const errorInfo = getErrorInfo('PARSE_ERROR');
+                    console.error('[shop_detail] JSON 解析失败', parseErr);
+                    removeSkeleton();
+                    showDetailError(errorInfo.title, errorInfo.message);
+                    return;
+                }
+                
+                // 处理业务错误码
+                if (!json || (json.code !== 0 && json.code !== undefined)) {
+                    const errorInfo = getErrorInfo(json?.code || 'UNKNOWN', json?.message);
+                    console.error('[shop_detail] 业务错误, code:', json?.code);
+                    removeSkeleton();
+                    showDetailError(errorInfo.title, errorInfo.message);
+                    return;
+                }
+                
+                if (!json.data) {
+                    const errorInfo = getErrorInfo(404);
+                    removeSkeleton();
+                    showDetailError(errorInfo.title, '商品数据为空，可能已被删除。');
+                    return;
+                }
+                
+                // ── 映射层：DTO → ShopDetailVM ──────────────────────────────
+                vm = mapDetailToVM(json.data);
             } catch (e) {
-                console.warn('获取商品详情失败，使用本地回退数据', e);
+                console.error('[shop_detail] 获取详情失败', e);
+                removeSkeleton();
+                // 网络异常
+                const errorInfo = e.name === 'TypeError' && e.message.includes('fetch')
+                    ? getErrorInfo('NETWORK_ERROR')
+                    : getErrorInfo('UNKNOWN');
+                showDetailError(errorInfo.title, errorInfo.message);
+                return;
             }
 
+            // 挂载到 window 供事件监听器使用（保持向后兼容命名）
+            window.currentProduct = vm;
+
             removeSkeleton();
+
+            // ── 视图层：渲染 ─────────────────────────────────────────────────
             try {
-                loadProductData(product);
-                renderBadges(product);
-                renderFeatures(product);
-                renderGallery(product);
+                loadProductData(vm);
+                renderBadges(vm);
+                renderFeatures(vm);
+                renderGallery(vm);
                 setupEventListeners();
                 initHeroScrollMorph();
             } catch (renderErr) {
@@ -249,12 +308,34 @@
             try { initGlobalFooter && initGlobalFooter(); } catch (e) {}
             try { initButtonEffects && initButtonEffects(); } catch (e) {}
 
-            // System 权限检测 → 初始化编辑模式（await 确保完成初始化）
+            // System 权限检测 → 初始化编辑模式
             await checkSystemPermission();
         }
 
-        /** 将后端/本地产品数据渲染到页面所有元素 */
-        function loadProductData(product) {
+        /**
+         * 详情页加载失败时展示错误态（替代旧的静态模拟数据兜底）
+         * 提供统一样式的错误展示与重试入口
+         */
+        function showDetailError(title, message) {
+            const mainCol = document.querySelector('.detail-main-col');
+            if (mainCol) {
+                mainCol.innerHTML = `
+                    <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:260px;gap:16px;color:var(--text-muted,#888);">
+                        <span class="material-icons" style="font-size:48px;opacity:0.4;">error_outline</span>
+                        <div style="font-size:18px;font-weight:600;">${escHtml(title)}</div>
+                        <div style="font-size:14px;">${escHtml(message)}</div>
+                        <div style="display:flex;gap:12px;margin-top:8px;">
+                            <button onclick="location.reload()" style="padding:8px 20px;border-radius:8px;background:var(--accent,#638cff);color:#fff;border:none;cursor:pointer;font-size:14px;">
+                                <span class="material-icons" style="font-size:16px;vertical-align:middle;margin-right:4px;">refresh</span>重试
+                            </button>
+                            <button onclick="history.back()" style="padding:8px 20px;border-radius:8px;background:rgba(255,255,255,0.1);color:var(--text-muted,#888);border:1px solid rgba(255,255,255,0.1);cursor:pointer;font-size:14px;">返回</button>
+                        </div>
+                    </div>`;
+            }
+        }
+
+        /** 将 ShopDetailVM 渲染到页面所有元素（仅消费 ViewModel 字段，不再兼容旧字段名） */
+        function loadProductData(vm) {
             const orDash = (v) => (v === null || v === undefined) ? '--' : v;
             const showDate = (v) => {
                 if (!v || v === '--') return '--';
@@ -273,67 +354,55 @@
             const setText = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = orDash(val); };
 
             // ── 面包屑 + 页面标题 ──
-            setText('breadcrumbCategory', product.category);
+            setText('breadcrumbCategory', vm.category);
             const pageTitleEl = document.getElementById('pageTitle');
-            if (pageTitleEl) pageTitleEl.textContent = (product.name || '商品详情') + ' - KaxHub';
+            if (pageTitleEl) pageTitleEl.textContent = (vm.displayName || '商品详情') + ' - KaxHub';
 
             // ── 英雄区图标（显示 iconImage）──
             const heroIconEl = document.getElementById('heroIcon');
-            if (heroIconEl && product.iconImage) {
-                heroIconEl.innerHTML = `<img src="${product.iconImage}" alt="${product.name || ''}" style="width:100%;height:100%;object-fit:cover;border-radius:inherit;">`;
+            if (heroIconEl && vm.iconImage) {
+                heroIconEl.innerHTML = `<img src="${vm.iconImage}" alt="${vm.displayName || ''}" style="width:100%;height:100%;object-fit:cover;border-radius:inherit;">`;
             }
 
             // ── 英雄区背景（显示 coverImage 封面）──
             const heroBgEl = document.getElementById('productHeroBg');
-            if (heroBgEl && product.coverImage) {
-                heroBgEl.style.backgroundImage = `url(${product.coverImage})`;
+            if (heroBgEl && vm.coverImage) {
+                heroBgEl.style.backgroundImage = `url(${vm.coverImage})`;
                 heroBgEl.style.backgroundSize = 'cover';
                 heroBgEl.style.backgroundRepeat = 'no-repeat';
                 heroBgEl.style.backgroundPosition = 'center';
             }
 
             // ── 英雄区 ──
-            setText('productName',    product.name);
-            setText('heroDesc',       product.description);
-            setText('heroCategory',   product.category);
-            setText('heroAuthor',     product.author);
-            setText('heroDownloads',  showDownloads(product.downloads));
-            setText('heroVersion',    product.version);
+            setText('productName',    vm.displayName);
+            setText('heroDesc',       vm.description);
+            setText('heroCategory',   vm.category);
+            setText('heroAuthor',     vm.authorName);
+            setText('heroDownloads',  showDownloads(vm.downloadCount));
+            setText('heroVersion',    vm.version);
 
-            // 评分（英雄区 + 评价 Tab 同步）
-            const ratingNum = (product.rating != null && !isNaN(Number(product.rating))) ? Number(product.rating) : null;
+            // 评分
+            const ratingNum = (vm.rating != null && !isNaN(Number(vm.rating))) ? Number(vm.rating) : null;
             const starsStr  = ratingNum != null
                 ? '★'.repeat(Math.round(ratingNum)) + '☆'.repeat(5 - Math.round(ratingNum))
                 : '☆☆☆☆☆';
             const ratingStr = ratingNum != null ? ratingNum.toFixed(1) : '--';
-            // reviewCount 和 reviews 都可能存在，优先使用 reviewCount
-            const reviewsNum = product.reviewCount ?? product.reviews;
-            const reviewsStr = reviewsNum != null ? String(reviewsNum) : '--';
+            const reviewsStr = vm.reviewCount != null ? String(vm.reviewCount) : '--';
 
-            // 英雄区评分 IDs：heroStars / heroRatingVal / heroRatingCount
             setText('heroStars',       starsStr);
             setText('heroRatingVal',   ratingStr);
             setText('heroRatingCount', '(' + reviewsStr + ')');
-
-            // 评价 Tab IDs：reviewScoreBig / reviewStarsBig / reviewsTotal
             setText('reviewScoreBig',  ratingStr);
             setText('reviewStarsBig',  starsStr);
             setText('reviewsTotal',    reviewsStr + ' 条评价');
 
-            // ── 价格计算 ──
+            // ── 价格计算（使用 priceOptions[0] 作为默认展示价） ──
             let displayOriginal = null;
             let displayCurrent  = null;
-            if (product.prices && Array.isArray(product.prices) && product.prices.length > 0) {
-                const p0 = product.prices[0];
-                const origCents = Number(p0.originalPrice ?? p0.price ?? 0);
-                const disc      = Number(p0.discountRate) || 0;
-                const saleCents = Math.round(origCents * (1 - disc));
-                displayOriginal = origCents;
-                displayCurrent  = saleCents;
-                product.discountRate = disc;
-            } else {
-                displayOriginal = product.originalPrice ?? null;
-                displayCurrent  = product.salePrice ?? product.price ?? null;
+            if (vm.priceOptions && vm.priceOptions.length > 0) {
+                const p0 = vm.priceOptions[0];
+                displayOriginal = p0.originalPriceYuan;
+                displayCurrent  = p0.priceYuan;
             }
 
             // 当前价
@@ -352,13 +421,11 @@
                 }
             }
 
-            // 折扣徽标（用 hidden 属性控制）
+            // 折扣徽标
             const priceBadgeEl = document.getElementById('priceBadge');
             if (priceBadgeEl) {
                 let discountPercent = null;
-                if (product.discountRate != null) {
-                    discountPercent = Math.round(Number(product.discountRate) * 100);
-                } else if (displayOriginal != null && displayCurrent != null && Number(displayOriginal) > 0) {
+                if (displayOriginal != null && displayCurrent != null && Number(displayOriginal) > 0) {
                     const d = Math.round(((Number(displayOriginal) - Number(displayCurrent)) / Number(displayOriginal)) * 100);
                     if (d > 0) discountPercent = d;
                 }
@@ -371,20 +438,18 @@
                 }
             }
 
-            // ── 库存状态（根据价格方案的库存汇总） ──
+            // ── 库存状态（根据 priceOptions 汇总） ──
             const stockInfoEl = document.getElementById('stockInfo');
             if (stockInfoEl) {
-                let stockText  = '库存：--';
-                let isLow      = false;
-
-                // 从价格方案中计算汇总库存（-1 表示无限）
-                const prices = product.prices || [];
-                if (prices.length > 0) {
-                    const hasUnlimited = prices.some(p => (p.stock ?? -1) < 0);
+                let stockText = '库存：--';
+                let isLow = false;
+                const opts = vm.priceOptions || [];
+                if (opts.length > 0) {
+                    const hasUnlimited = opts.some(p => (p.stock ?? -1) < 0);
                     if (hasUnlimited) {
                         stockText = '库存：充足';
                     } else {
-                        const totalStock = prices.reduce((sum, p) => sum + Math.max(0, p.stock ?? 0), 0);
+                        const totalStock = opts.reduce((sum, p) => sum + Math.max(0, p.stock ?? 0), 0);
                         if (totalStock > 50) {
                             stockText = `库存：${totalStock}（充足）`;
                         } else if (totalStock > 0) {
@@ -394,52 +459,46 @@
                         }
                     }
                 }
-
                 const stockTextEl = stockInfoEl.querySelector('.stock-text');
-                if (stockTextEl) {
-                    stockTextEl.textContent = stockText;
-                } else {
-                    stockInfoEl.textContent = stockText;
-                }
+                if (stockTextEl) stockTextEl.textContent = stockText;
+                else stockInfoEl.textContent = stockText;
                 stockInfoEl.classList.toggle('low', isLow);
             }
 
-            // ── 规格 Tab —— 使用新 HTML 中预置的独立 ID ──
-            setText('specSize',           product.fileSize);
-            setText('productVersion',     product.version);
-            setText('specDate',           showDate(product.uploadDate));
-            setText('specAuthor',         product.author);
-            setText('productCompatibility', product.compatibility);
-            setText('specLicense',        product.license);
-            setText('productDownloads',   showDownloads(product.downloads));
+            // ── 规格 Tab ──
+            setText('specSize',             vm.fileSize);
+            setText('productVersion',       vm.version);
+            setText('specDate',             showDate(vm.uploadDate));
+            setText('specAuthor',           vm.authorName);
+            setText('productCompatibility', vm.compatibility);
+            setText('specLicense',          vm.license);
+            setText('productDownloads',     showDownloads(vm.downloadCount));
             const purchasesEl = document.getElementById('productPurchases');
-            if (purchasesEl) purchasesEl.textContent = showDownloads(product.purchaseCount);
+            if (purchasesEl) purchasesEl.textContent = showDownloads(vm.purchaseCount);
 
             // ── 概述 Tab 描述 ──
-            setText('productDescription', product.description);
+            setText('productDescription', vm.description);
 
-            // 将当前产品数据挂到 window，供事件监听器使用
-            window.currentProduct = product;
+            // 挂载给事件监听器使用
+            window.currentProduct = vm;
         }
 
-        /** 根据选中的价格对象更新顶部价格显示 */
-        function updatePriceDisplay(priceObj) {
+        /** 根据选中的价格方案对象（PriceOptionVM）更新顶部价格显示 */
+        function updatePriceDisplay(priceOpt) {
+            const showCurrency = (v) => (v === null || v === undefined) ? '--' : ('💰' + Number(v).toFixed(2));
             let displayOriginal = null;
             let displayCurrent  = null;
 
-            if (priceObj) {
-                const origCents = Number(priceObj.originalPrice ?? priceObj.price ?? 0);
-                const disc      = Number(priceObj.discountRate) || 0;
-                const saleCents = origCents * (1 - disc);
-                displayOriginal = origCents;
-                displayCurrent  = saleCents;
+            if (priceOpt) {
+                displayOriginal = priceOpt.originalPriceYuan ?? priceOpt.priceYuan ?? null;
+                displayCurrent  = priceOpt.priceYuan ?? null;
             }
 
             // 当前价
             const priceCurrentEl = document.getElementById('priceCurrent');
             if (priceCurrentEl) priceCurrentEl.textContent = displayCurrent != null ? showCurrency(displayCurrent) : '--';
 
-            // 原价（用 hidden 属性控制）
+            // 原价
             const priceOriginalEl = document.getElementById('priceOriginal');
             if (priceOriginalEl) {
                 if (displayOriginal != null && displayCurrent != null && Number(displayOriginal) > Number(displayCurrent)) {
@@ -451,24 +510,20 @@
                 }
             }
 
-            // 折扣徽标（用 hidden 属性控制）
+            // 折扣徽标
             const priceBadgeEl = document.getElementById('priceBadge');
             if (priceBadgeEl) {
                 let discountPercent = null;
-                if (priceObj && priceObj.discountRate != null) {
-                    discountPercent = Math.round(Number(priceObj.discountRate) * 100);
-                } else if (displayOriginal != null && displayCurrent != null && Number(displayOriginal) > 0) {
+                if (displayOriginal != null && displayCurrent != null && Number(displayOriginal) > 0) {
                     const d = Math.round(((Number(displayOriginal) - Number(displayCurrent)) / Number(displayOriginal)) * 100);
                     if (d > 0) discountPercent = d;
                 }
-                
+
                 if (discountPercent != null && discountPercent > 0) {
-                    // 有折扣：显示折扣百分比
                     priceBadgeEl.textContent = discountPercent + '% OFF';
                     priceBadgeEl.classList.remove('no-discount');
                     priceBadgeEl.removeAttribute('hidden');
                 } else {
-                    // 无折扣：显示"无折扣"提示
                     priceBadgeEl.textContent = '无折扣';
                     priceBadgeEl.classList.add('no-discount');
                     priceBadgeEl.removeAttribute('hidden');
@@ -515,49 +570,38 @@
                 }
             }
 
-            /** 动态生成和显示价格套餐 */
+            /** 动态生成和显示价格套餐（消费 ViewModel.priceOptions） */
             function loadPricePlans() {
-                const product = window.currentProduct;
-                let prices = (product && Array.isArray(product.prices) && product.prices.length > 0) ? product.prices : null;
+                const vm = window.currentProduct;
+                const opts = (vm && Array.isArray(vm.priceOptions) && vm.priceOptions.length > 0) ? vm.priceOptions : null;
 
-                // 如果后端没有返回 prices 数组但有基础价格，自动构建默认方案
-                if (!prices && product && product.price != null) {
-                    prices = [{
-                        id: '__default__',
-                        price: product.price,
-                        originalPrice: product.originalPrice ?? product.price,
-                        discountRate: product.discountRate ?? 0,
-                        unit: null,
-                        duration: null
-                    }];
-                }
-
-                if (!prices || prices.length === 0) {
+                if (!opts || opts.length === 0) {
                     plansGrid.innerHTML = '<div style="color: var(--text-muted); padding: 12px;">暂无价格方案</div>';
                     setPurchaseBtnEnabled(false);
                     return;
                 }
 
                 plansGrid.innerHTML = '';
-                prices.forEach((price, index) => {
+                opts.forEach((opt, index) => {
                     let durationText = '';
-                    switch (price.unit?.toLowerCase()) {
-                        case 'year':  durationText = `${price.duration}年`; break;
-                        case 'month': durationText = `${price.duration}个月`; break;
-                        case 'day':   durationText = `${price.duration}天`; break;
-                        case 'hour':  durationText = `${price.duration}小时`; break;
-                        default:      durationText = '一次性';
+                    switch ((opt.unit ?? '').toLowerCase()) {
+                        case 'year':  durationText = `${opt.duration}年`; break;
+                        case 'month': durationText = `${opt.duration}个月`; break;
+                        case 'day':   durationText = `${opt.duration}天`; break;
+                        case 'hour':  durationText = `${opt.duration}小时`; break;
+                        default:      durationText = opt.name || '一次性';
                     }
 
-                    // price.price 已是最终价格（originalPrice × (1 - discountRate)），直接使用
-                    const salePrice = price.price;
-                    const hasDiscount = price.discountRate && price.discountRate > 0;
+                    const priceYuan = opt.priceYuan;
+                    const origYuan  = opt.originalPriceYuan;
+                    const hasDiscount = origYuan != null && Number(origYuan) > Number(priceYuan);
 
-                    // 每个方案的独立库存（-1 表示无限）
-                    const planStock = price.stock ?? -1;
-                    const stockHtml = planStock < 0 ? '' : (planStock > 0 ? `<span style="color: var(--text-muted); font-size: 12px;">库存: ${planStock}</span>` : `<span style="color: var(--danger, #e74c3c); font-size: 12px;">已售罄</span>`);
+                    const planStock = opt.stock ?? -1;
+                    const stockHtml = planStock < 0 ? '' : (planStock > 0
+                        ? `<span style="color: var(--text-muted); font-size: 12px;">库存: ${planStock}</span>`
+                        : `<span style="color: var(--danger, #e74c3c); font-size: 12px;">已售罄</span>`);
                     const isOutOfStock = planStock === 0;
-                    
+
                     const planItem = document.createElement('button');
                     planItem.className = 'plan-item' + (index === 0 && !isOutOfStock ? ' selected' : '');
                     planItem.type = 'button';
@@ -565,26 +609,25 @@
                     planItem.innerHTML = `
                         <div class="plan-name">${durationText}</div>
                         <div class="plan-details">
-                            ${hasDiscount ? `<span style="text-decoration: line-through; color: var(--text-muted); margin-right: 4px;">💰${Number(price.originalPrice).toFixed(2)}</span>` : ''}
-                            <span style="color: var(--accent); font-weight: 600;">💰${Number(salePrice).toFixed(2)}</span>
+                            ${hasDiscount ? `<span style="text-decoration: line-through; color: var(--text-muted); margin-right: 4px;">💰${Number(origYuan).toFixed(2)}</span>` : ''}
+                            <span style="color: var(--accent); font-weight: 600;">💰${Number(priceYuan).toFixed(2)}</span>
                         </div>
                         ${stockHtml ? `<div class="plan-stock">${stockHtml}</div>` : ''}
                     `;
-                    
+
                     planItem.addEventListener('click', () => {
                         if (isOutOfStock) return;
                         document.querySelectorAll('.plan-item').forEach(item => item.classList.remove('selected'));
                         planItem.classList.add('selected');
-                        selectedPriceId = price.id;
+                        selectedPriceId = opt.id;
                         setPurchaseBtnEnabled(true);
-                        // 更新顶部价格显示
-                        updatePriceDisplay(price);
+                        updatePriceDisplay(opt);
                     });
 
                     plansGrid.appendChild(planItem);
-                    
+
                     if (index === 0 && !isOutOfStock) {
-                        selectedPriceId = price.id;
+                        selectedPriceId = opt.id;
                         setPurchaseBtnEnabled(true);
                     }
                 });
@@ -600,11 +643,11 @@
                     return;
                 }
 
-                const product = window.currentProduct;
+                const vm = window.currentProduct;
                 const token = localStorage.getItem('kax_login_token');
 
                 if (!token) {
-                    showMsgBox({ title: '未登录', message: '请先登录后再进行购买。', type: 'warn', onConfirm: () => { location.href = '/login'; } });
+                    showUnifiedError(401);
                     return;
                 }
 
@@ -618,25 +661,24 @@
                             'Authorization': 'Bearer ' + token,
                             'Content-Type': 'application/json'
                         },
+                        // 请求体使用契约字段 assetId（design.md 12.2 节）
                         body: JSON.stringify({
-                            assetId: product.id,
+                            assetId: vm.assetId,
                             priceId: selectedPriceId
                         })
                     });
 
-                    const data = await resp.json();
+                    let data;
+                    try {
+                        data = await resp.json();
+                    } catch (parseErr) {
+                        showUnifiedError('PARSE_ERROR');
+                        purchaseBtn.innerHTML = '<span class="material-icons">shopping_bag</span> 立即购买';
+                        purchaseBtn.disabled = false;
+                        return;
+                    }
 
                     if (resp.ok && data.code === 0) {
-                        // 更新本地 product 对象的统计数据
-                        if (data.data) {
-                            if (data.data.purchaseCount != null) product.purchaseCount = data.data.purchaseCount;
-                            if (data.data.favoriteCount != null) product.favoriteCount = data.data.favoriteCount;
-                            if (data.data.viewCount != null) product.viewCount = data.data.viewCount;
-                            if (data.data.rating != null) product.rating = data.data.rating;
-                            if (data.data.downloads != null) product.downloads = data.data.downloads;
-                        }
-                        
-                        // 立即刷新页面显示新的统计数据
                         purchaseBtn.innerHTML = '<span class="material-icons" style="font-size:18px;vertical-align:middle;">check_circle</span> 购买成功';
                         showMsgBox({
                             title: '购买成功',
@@ -645,13 +687,15 @@
                             onConfirm: () => { location.reload(); }
                         });
                     } else {
-                        showMsgBox({ title: '购买失败', message: data.message || '未知错误，请稍后再试。', type: 'error' });
+                        // 使用统一错误码映射
+                        const errorCode = data.code || resp.status;
+                        showUnifiedError(errorCode, data.message);
                         purchaseBtn.innerHTML = '<span class="material-icons">shopping_bag</span> 立即购买';
                         purchaseBtn.disabled = false;
                     }
                 } catch (e) {
                     console.error('购买失败', e);
-                    showMsgBox({ title: '网络错误', message: '网络连接异常，请稍后重试。', type: 'error' });
+                    showUnifiedError('NETWORK_ERROR');
                     purchaseBtn.innerHTML = '<span class="material-icons">shopping_bag</span> 立即购买';
                     purchaseBtn.disabled = false;
                 }
@@ -659,11 +703,14 @@
 
             // 收藏按钮 — 使用后端 API（登录用户），未登录则跳转登录
             favBtn.addEventListener('click', async () => {
-                const product = window.currentProduct;
+                const vm = window.currentProduct;
                 const token = localStorage.getItem('kax_login_token');
                 const icon = favBtn.querySelector('.material-icons');
 
-                if (!token) { showMsgBox({ title: '未登录', message: '请先登录以使用收藏功能。', type: 'warn', onConfirm: () => { location.href = '/login'; } }); return; }
+                if (!token) {
+                    showUnifiedError(401);
+                    return;
+                }
 
                 try {
                     const isActive = favBtn.classList.contains('active');
@@ -671,16 +718,21 @@
                         const resp = await fetch('/api/user/favorites', {
                             method: 'POST',
                             headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ assetId: product.id })
+                            body: JSON.stringify({ assetId: vm.assetId })
                         });
                         if (resp.ok) {
-                            favBtn.classList.add('active');
-                            icon.textContent = 'favorite';
+                            const body = await resp.json();
+                            if (body.code === 0 || body.code === undefined) {
+                                favBtn.classList.add('active');
+                                icon.textContent = 'favorite';
+                            } else {
+                                showUnifiedError(body.code, body.message);
+                            }
                         } else {
-                            console.warn('收藏失败', resp.status);
+                            showUnifiedError(resp.status);
                         }
                     } else {
-                        const resp = await fetch(`/api/user/favorites/${product.id}`, {
+                        const resp = await fetch(`/api/user/favorites/${vm.assetId}`, {
                             method: 'DELETE',
                             headers: { 'Authorization': 'Bearer ' + token }
                         });
@@ -688,11 +740,12 @@
                             favBtn.classList.remove('active');
                             icon.textContent = 'favorite_border';
                         } else {
-                            console.warn('取消收藏失败', resp.status);
+                            showUnifiedError(resp.status);
                         }
                     }
                 } catch (e) {
                     console.error('收藏操作失败', e);
+                    showUnifiedError('NETWORK_ERROR');
                 }
             });
 
@@ -701,18 +754,17 @@
 
             // 分享按钮
             shareBtn.addEventListener('click', () => {
-                const product = window.currentProduct;
+                const vm = window.currentProduct;
                 const shareUrl = window.location.href;
-                const shareText = `我发现了一个不错的模组：${product.name}，快来看看吧！`;
+                const shareText = `我发现了一个不错的模组：${vm.displayName}，快来看看吧！`;
 
                 if (navigator.share) {
                     navigator.share({
-                        title: product.name,
+                        title: vm.displayName,
                         text: shareText,
                         url: shareUrl
                     }).catch(err => console.log('分享取消或出错:', err));
                 } else {
-                    // 复制到剪贴板
                     navigator.clipboard.writeText(shareUrl).then(() => {
                         shareBtn.innerHTML = '<span class="material-icons">check</span><span>已复制</span>';
                         setTimeout(() => {
@@ -754,96 +806,69 @@
             setTimeout(() => flying.remove(), 600);
         }
 
-        // 检查是否已收藏（优先使用后端 API，未登录回退本地）
+        // 检查是否已收藏（/api/user/favorites 返回 number[] — design.md 附录 D）
         async function checkIfFavorited() {
-            const product = window.currentProduct;
+            const vm = window.currentProduct;
             const favBtn = document.getElementById('favBtn');
             const icon = favBtn && favBtn.querySelector('.material-icons');
             const token = localStorage.getItem('kax_login_token');
 
-            if (token) {
-                try {
-                    const resp = await fetch('/api/user/favorites', { headers: { 'Authorization': 'Bearer ' + token } });
-                    if (resp.ok) {
-                        const j = await resp.json();
-                        const arr = (j && j.data) ? j.data : [];
-                        const ids = (Array.isArray(arr) ? arr : []).map(item => {
-                            if (typeof item === 'number') return Number(item);
-                            if (typeof item === 'string') return Number(item);
-                            if (typeof item === 'object' && item != null) return Number(item.id != null ? item.id : (item.assetId != null ? item.assetId : NaN));
-                            return NaN;
-                        }).filter(n => !isNaN(n));
-                        if (ids.includes(Number(product.id))) {
-                            favBtn.classList.add('active');
-                            if (icon) icon.textContent = 'favorite';
-                            return;
-                        }
-                    }
-                } catch (e) {
-                    console.warn('检查收藏状态失败，回退到本地存储', e);
-                }
-            }
+            if (!token || !vm) return;
 
-            // 本地回退
-            const favorites = JSON.parse(localStorage.getItem('favorites') || '[]');
-            if (favorites && favorites.includes(product.id)) {
-                favBtn.classList.add('active');
-                if (icon) icon.textContent = 'favorite';
+            try {
+                const resp = await fetch('/api/user/favorites', {
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
+                if (!resp.ok) return;
+                const j = await resp.json();
+                // 契约：data 为 number[]（资产 ID 数组）
+                const raw = (j && j.code === 0 && Array.isArray(j.data)) ? j.data : [];
+                const favSet = new Set(raw.map(id => Number(id)).filter(n => !isNaN(n)));
+                if (favSet.has(vm.assetId)) {
+                    favBtn.classList.add('active');
+                    if (icon) icon.textContent = 'favorite';
+                }
+            } catch (e) {
+                console.warn('[shop_detail] 检查收藏状态失败', e);
             }
         }
 
-        // 更新购物车计数（优先使用后端 API，未登录回退本地）
+        // 更新购物车计数（/api/user/cart 返回 CartItem[] — design.md 附录 D）
         async function updateCartBadge() {
             const cartCountEl = document.getElementById('cartCount');
             const token = localStorage.getItem('kax_login_token');
-            if (!cartCountEl) return;
+            if (!cartCountEl || !token) return;
 
-            if (token) {
-                try {
-                    const resp = await fetch('/api/user/cart', { headers: { 'Authorization': 'Bearer ' + token } });
-                    if (resp.ok) {
-                        const j = await resp.json();
-                        const raw = (j && j.data) ? j.data : [];
-                        // raw may be array of objects or ids
-                        let count = 0;
-                        if (Array.isArray(raw)) {
-                            raw.forEach(item => {
-                                if (item && typeof item === 'object') count += Number(item.quantity || 1);
-                                else if (!isNaN(Number(item))) count += 1;
-                            });
-                        }
-                        cartCountEl.textContent = count;
-                        return;
-                    }
-                } catch (e) {
-                    console.warn('获取远端购物车失败，回退本地', e);
+            try {
+                const resp = await fetch('/api/user/cart', {
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
+                if (!resp.ok) return;
+                const j = await resp.json();
+                // 契约：data 为 CartItem[]，每项包含 assetId/priceId/quantity
+                if (j && j.code === 0 && Array.isArray(j.data)) {
+                    const count = j.data.reduce((sum, item) => sum + Number(item.quantity || 1), 0);
+                    cartCountEl.textContent = count;
                 }
+            } catch (e) {
+                console.warn('[shop_detail] 获取购物车失败', e);
             }
-
-            // 本地回退
-            const cart = JSON.parse(localStorage.getItem('cart') || '[]');
-            const count = cart.reduce((sum, item) => sum + (item.quantity || 1), 0);
-            cartCountEl.textContent = count;
         }
 
         // 导航到其他商品详情
         function goToShopDetail(id) {
-            window.location.href = `/shop/detail?id=${id}`;
+            window.location.href = `/asset/detail/${id}`;
         }
 
-        /** 渲染截图画廊（仅显示截图，不含封面），无图片则保留占位 */
-        function renderGallery(product) {
+        /** 渲染截图画廊（消费 ShopDetailVM.screenshots） */
+        function renderGallery(vm) {
             const track = document.getElementById('galleryTrack');
             const thumbContainer = document.getElementById('thumbnailContainer');
             const prevBtn = document.getElementById('galleryPrev');
             const nextBtn = document.getElementById('galleryNext');
             if (!track) return;
 
-            // 只收集截图，不加入封面
-            const images = [];
-            if (Array.isArray(product.screenshots)) {
-                product.screenshots.forEach(url => { if (url) images.push(url); });
-            }
+            const images = Array.isArray(vm.screenshots) ? vm.screenshots.filter(Boolean) : [];
             if (images.length === 0) return;
 
             track.innerHTML = images.map((url, i) =>
@@ -1018,38 +1043,59 @@
             update();
         }
 
-        /** 从后端 API 加载相关推荐商品并渲染到推荐区域 */
+        /** 从后端 API 加载相关推荐商品并渲染到推荐区域（使用 RelatedCardVM） */
         async function loadRelatedProducts(currentId) {
             const grid = document.getElementById('relatedProductsGrid');
             if (!grid) return;
 
             try {
-                const resp = await fetch(`/api/asset/related/${currentId}?top=4`, { credentials: 'same-origin' });
-                if (!resp.ok) return;
+                const resp = await fetch(`/api/asset/related/${currentId}?top=4`, {
+                    headers: { 'Authorization': 'Bearer ' + (localStorage.getItem('kax_login_token') || '') }
+                });
+                
+                if (!resp.ok) {
+                    // 相关推荐加载失败不阻断主流程，仅展示空态
+                    console.warn('[shop_detail] 加载相关推荐失败, HTTP', resp.status);
+                    grid.innerHTML = '<div style="color:var(--text-muted,#888);padding:12px;text-align:center;">暂无相关推荐</div>';
+                    return;
+                }
 
-                const json = await resp.json();
-                const items = (json && json.data) ? json.data : [];
-                if (!Array.isArray(items) || items.length === 0) return;
+                let json;
+                try {
+                    json = await resp.json();
+                } catch (parseErr) {
+                    console.warn('[shop_detail] 相关推荐 JSON 解析失败', parseErr);
+                    return;
+                }
+
+                if (!json || (json.code !== 0 && json.code !== undefined) || !Array.isArray(json.data) || json.data.length === 0) {
+                    // 空结果展示空态
+                    grid.innerHTML = '<div style="color:var(--text-muted,#888);padding:12px;text-align:center;">暂无相关推荐</div>';
+                    return;
+                }
+
+                // ── 映射层：RelatedDTO → RelatedCardVM ──────────────────────
+                const items = json.data.map(mapRelatedToVM);
 
                 const showCurrency = (v) => (v === null || v === undefined) ? '--' : ('💰' + Number(v).toFixed(2));
 
                 grid.innerHTML = items.map(item => {
-                    const thumbSrc = item.coverImage || item.CoverImage || item.iconImage || item.IconImage || normalizeMediaArray(item.screenshots || item.Screenshots)[0] || '';
-                    const thumbHtml = thumbSrc
-                        ? `<img src="${thumbSrc}" alt="${item.name || ''}" style="width:100%;height:100%;object-fit:cover;">`
+                    const thumbHtml = item.coverImage
+                        ? `<img src="${item.coverImage}" alt="${item.displayName}" style="width:100%;height:100%;object-fit:cover;">`
                         : '🎮';
-                    const displayPrice = item.salePrice != null ? item.salePrice : item.price;
-                    return `<div class="related-card" onclick="goToShopDetail(${item.id})">
+                    return `<div class="related-card" onclick="goToShopDetail(${item.assetId})">
                         <div class="related-thumb">${thumbHtml}</div>
                         <div class="related-info">
-                            <div class="related-name">${item.name || '--'}</div>
-                            <div class="related-meta">${item.category || '--'}</div>
-                            <div class="related-price">${showCurrency(displayPrice)}</div>
+                            <div class="related-name">${item.displayName}</div>
+                            <div class="related-meta">${item.category}</div>
+                            <div class="related-price">${showCurrency(item.priceYuan)}</div>
                         </div>
                     </div>`;
                 }).join('');
             } catch (e) {
-                console.warn('加载相关推荐失败', e);
+                console.warn('[shop_detail] 加载相关推荐失败', e);
+                // 网络异常不阻断主流程
+                grid.innerHTML = '<div style="color:var(--text-muted,#888);padding:12px;text-align:center;">加载失败</div>';
             }
         }
 
@@ -1379,43 +1425,41 @@
             overlay.addEventListener('click', (e) => { if (e.target === overlay) dismiss(); }, { once: true });
         }
 
-        /** 获取字段当前值 */
+        /** 获取字段当前值（从 ShopDetailVM 读取） */
         function getFieldCurrentValue(fieldKey) {
-            const product = window.currentProduct;
-            if (!product) return '';
+            const vm = window.currentProduct;
+            if (!vm) return '';
 
             switch (fieldKey) {
-                case 'name':          return product.name || '';
-                case 'description':   return product.description || '';
-                case 'category':      return product.category || '';
-                case 'author':        return product.author || '';
-                case 'version':       return product.version || '';
-                case 'fullDesc':      return product.description || '';
-                case 'license':       return product.license || '';
-                case 'compatibility': return product.compatibility || '';
+                case 'name':          return vm.displayName || '';
+                case 'description':   return vm.description || '';
+                case 'category':      return vm.category || '';
+                case 'author':        return vm.authorName || '';
+                case 'version':       return vm.version || '';
+                case 'fullDesc':      return vm.description || '';
+                case 'license':       return vm.license || '';
+                case 'compatibility': return vm.compatibility || '';
                 default:              return '';
             }
         }
 
-        /** 应用字段编辑到 DOM 和 _editedFields */
+        /** 应用字段编辑到 DOM 和 _editedFields（同步 ViewModel 字段） */
         function applyFieldEdit(fieldKey, cfg, el, newValue) {
             el.textContent = newValue || '--';
 
-            // 跟踪已编辑字段
             window._editedFields[fieldKey] = newValue;
 
-            // 同步 currentProduct
-            const product = window.currentProduct;
-            if (product) {
+            const vm = window.currentProduct;
+            if (vm) {
                 switch (fieldKey) {
-                    case 'name':          product.name = newValue; break;
-                    case 'description':   product.description = newValue; break;
-                    case 'category':      product.category = newValue; break;
-                    case 'author':        product.author = newValue; break;
-                    case 'version':       product.version = newValue; break;
-                    case 'fullDesc':      product.description = newValue; break;
-                    case 'license':       product.license = newValue; break;
-                    case 'compatibility': product.compatibility = newValue; break;
+                    case 'name':          vm.displayName = newValue; break;
+                    case 'description':   vm.description = newValue; break;
+                    case 'category':      vm.category = newValue; break;
+                    case 'author':        vm.authorName = newValue; break;
+                    case 'version':       vm.version = newValue; break;
+                    case 'fullDesc':      vm.description = newValue; break;
+                    case 'license':       vm.license = newValue; break;
+                    case 'compatibility': vm.compatibility = newValue; break;
                 }
             }
 
@@ -1429,7 +1473,6 @@
                 window._editedFields['description'] = newValue;
             }
 
-            // 更新保存按钮状态
             updateSaveBtnState();
         }
 
@@ -1630,16 +1673,15 @@
                 return;
             }
 
-            const product = window.currentProduct;
+            const vm = window.currentProduct;
             const saveBtn = document.getElementById('editSaveBtn');
             saveBtn.disabled = true;
             saveBtn.innerHTML = '<span class="material-icons">hourglass_top</span> 保存中…';
 
             try {
-                // 构建请求体：只发送修改过的字段
-                const body = { id: product.id };
+                // 使用 ViewModel 的 assetId 作为请求主键
+                const body = { id: vm.assetId };
 
-                // 简单文本字段映射到 API 字段名
                 const fieldApiMap = {
                     name:          'name',
                     description:   'description',

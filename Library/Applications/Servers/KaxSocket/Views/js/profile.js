@@ -61,9 +61,9 @@ function formatUnix(ts) {
 
 function mapPermissionToRole(n) {
     switch (Number(n)) {
-        case 0: return '控制台';
-        case 1: return 'Root';
-        case 2: return '管理员';
+        case 0: return '系统';
+        case 2: return '控制台';
+        case 3: return '管理员';
         default: return '普通用户';
     }
 }
@@ -76,7 +76,8 @@ function maskEmail(email) {
 }
 
 function isAdminPermission(permissionGroup) {
-    return typeof permissionGroup !== 'undefined' && Number(permissionGroup) <= 2;
+    const group = Number(permissionGroup);
+    return group === 0 || group === 2 || group === 3;
 }
 
 function showAdminTabs() {

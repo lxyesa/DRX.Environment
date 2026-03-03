@@ -1,24 +1,133 @@
 ﻿/* ================================================================
          *  ShopApp — 商城页面核心控制器
-         *  职责划分：
-         *    • Auth     — 登录令牌与请求头
-         *    • Api      — 与后端通信（资产列表、收藏、购物车）
-         *    • State    — 页面状态管理（产品、筛选、分页、用户数据）
-         *    • Renderer — DOM 渲染（产品网格、分页、购物车徽章）
-         *    • Actions  — 用户交互（加购、收藏、翻页、搜索）
+         *  架构分层（单一新契约主路径）：
+         *    • Auth      — 登录令牌与请求头
+         *    • Request   — 与后端通信，处理传输层（不做字段兜底）
+         *    • Mapping   — DTO -> ViewModel（ShopAssetCardVM）唯一转换入口
+         *    • State     — 页面状态管理（ViewModel 列表、筛选、分页、用户数据）
+         *    • Renderer  — DOM 渲染，仅依赖 ViewModel 字段
+         *    • Actions   — 用户交互（加购、收藏、翻页、搜索）
+         *
+         *  ViewModel 字段（ShopAssetCardVM）：
+         *    assetId, displayName, category, coverImage, priceYuan,
+         *    authorName, purchaseCount, favoriteCount, description, lastUpdatedAt
          * ================================================================ */
         const ShopApp = (() => {
             const ITEMS_PER_PAGE = 12;
             const TOKEN_KEY = 'kax_login_token';
             const LOCAL_CART_KEY = 'kax_cart';
 
+            // #region ErrorHandling —— 统一错误码映射与提示语义（FR-8, FR-10, NFR-3, NFR-4）
+
+            /**
+             * 统一错误码映射表：将后端 HTTP 状态码/业务 code 映射为用户友好提示
+             * 商店域关键接口错误响应统一出口
+             */
+            const ERROR_CODE_MAP = {
+                // HTTP 状态码
+                0:   { title: '成功', message: '操作成功', type: 'success' },
+                400: { title: '参数错误', message: '请求参数有误，请检查后重试。', type: 'error' },
+                401: { title: '未登录', message: '请先登录以继续操作。', type: 'warn', action: 'login' },
+                403: { title: '无权限', message: '您没有执行此操作的权限。', type: 'error' },
+                404: { title: '未找到', message: '请求的资源不存在。', type: 'error' },
+                409: { title: '操作冲突', message: '资源已存在或状态冲突，请稍后重试。', type: 'warn' },
+                500: { title: '服务异常', message: '服务器出现问题，请稍后重试。', type: 'error' },
+                502: { title: '服务异常', message: '服务暂时不可用，请稍后重试。', type: 'error' },
+                503: { title: '服务繁忙', message: '系统繁忙，请稍后重试。', type: 'error' },
+                // 业务错误码（1000+）
+                1001: { title: '余额不足', message: '您的账户余额不足，请先充值。', type: 'warn' },
+                1002: { title: '已购买', message: '您已拥有该资产，无需重复购买。', type: 'info' },
+                1003: { title: '库存不足', message: '该商品已售罄，请选择其他方案。', type: 'warn' },
+                1004: { title: '已下架', message: '该商品已下架，暂时无法购买。', type: 'warn' },
+                // 网络相关
+                'NETWORK_ERROR': { title: '网络错误', message: '网络连接异常，请检查网络后重试。', type: 'error' },
+                'TIMEOUT':       { title: '请求超时', message: '服务响应超时，请稍后重试。', type: 'error' },
+                'PARSE_ERROR':   { title: '数据异常', message: '服务返回数据格式错误，请稍后重试。', type: 'error' },
+                'UNKNOWN':       { title: '未知错误', message: '发生未知错误，请稍后重试。', type: 'error' }
+            };
+
+            /**
+             * 根据错误码/HTTP状态获取统一错误提示
+             * @param {number|string} code - HTTP 状态码或业务错误码
+             * @param {string} [fallbackMsg] - 后端返回的原始消息（兜底文案）
+             * @returns {{ title: string, message: string, type: string, action?: string }}
+             */
+            function getErrorInfo(code, fallbackMsg) {
+                const mapped = ERROR_CODE_MAP[code] || ERROR_CODE_MAP['UNKNOWN'];
+                return {
+                    title: mapped.title,
+                    message: fallbackMsg || mapped.message,
+                    type: mapped.type,
+                    action: mapped.action
+                };
+            }
+
+            /**
+             * 显示统一错误消息弹窗（使用 showMsgBox 或降级为 alert）
+             * @param {number|string} code - 错误码
+             * @param {string} [serverMessage] - 服务端返回的错误消息
+             */
+            function showErrorMessage(code, serverMessage) {
+                const info = getErrorInfo(code, serverMessage);
+                if (typeof window.showMsgBox === 'function') {
+                    window.showMsgBox({
+                        title: info.title,
+                        message: info.message,
+                        type: info.type,
+                        onConfirm: info.action === 'login' ? () => { location.href = '/login'; } : null
+                    });
+                } else {
+                    alert(`${info.title}: ${info.message}`);
+                    if (info.action === 'login') location.href = '/login';
+                }
+            }
+
+            /**
+             * 显示空态界面
+             * @param {string} [message] - 自定义空态消息
+             */
+            function showEmptyState(message = '暂无数据') {
+                const grid = document.getElementById('productGrid');
+                const empty = document.getElementById('emptyState');
+                if (grid) grid.innerHTML = '';
+                if (empty) {
+                    empty.style.display = 'block';
+                    const emptyText = empty.querySelector('.empty-message, p');
+                    if (emptyText) emptyText.textContent = message;
+                }
+            }
+
+            /**
+             * 显示列表加载失败态，支持重试
+             * @param {string} message - 错误消息
+             */
+            function showListError(message) {
+                const grid = document.getElementById('productGrid');
+                const empty = document.getElementById('emptyState');
+                const pagination = document.getElementById('pagination');
+                if (empty) empty.style.display = 'none';
+                if (pagination) pagination.innerHTML = '';
+                if (grid) {
+                    grid.innerHTML = `
+                        <div class="list-error-state" style="grid-column: 1 / -1; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 260px; gap: 16px; color: var(--text-muted, #888);">
+                            <span class="material-icons" style="font-size: 48px; opacity: 0.4;">error_outline</span>
+                            <div style="font-size: 16px; font-weight: 500;">${escapeHtml(message)}</div>
+                            <button onclick="ShopApp.retryLoad()" style="margin-top: 8px; padding: 8px 24px; border-radius: 8px; background: var(--accent, #638cff); color: #fff; border: none; cursor: pointer; font-size: 14px;">
+                                <span class="material-icons" style="font-size: 16px; vertical-align: middle; margin-right: 4px;">refresh</span>重试
+                            </button>
+                        </div>`;
+                }
+            }
+
+            // #endregion
+
             // #region State —— 页面状态
             const state = {
-                products: [],
-                filteredProducts: [],
+                products: [],          // ShopAssetCardVM[]
+                filteredProducts: [],  // ShopAssetCardVM[]（经筛选+排序后）
                 currentPage: 1,
-                userFavorites: new Set(),
-                userCartItems: []
+                userFavorites: new Set(),  // Set<number> — assetId 集合
+                userCartIds: new Set()     // Set<number> — assetId 集合
             };
             // #endregion
 
@@ -46,22 +155,7 @@
             }
             // #endregion
 
-            // #region Utils —— 工具函数
-
-            /** 将后端返回的异构 ID 数据（number / string / { id } / { assetId }）归一化为数字数组 */
-            function normalizeIdList(rawArray) {
-                return (Array.isArray(rawArray) ? rawArray : [])
-                    .map(item => {
-                        if (item == null) return NaN;
-                        if (typeof item === 'number' || typeof item === 'string') return Number(item);
-                        if (typeof item === 'object') {
-                            if (item.id != null) return Number(item.id);
-                            if (item.assetId != null) return Number(item.assetId);
-                        }
-                        return NaN;
-                    })
-                    .filter(n => !isNaN(n));
-            }
+            // #region Utils —— 通用工具函数
 
             /** 将时间戳转换为可读的日期格式 */
             function formatDate(timestamp) {
@@ -79,25 +173,6 @@
                 return div.innerHTML;
             }
 
-            /** 兼容后端 camelCase/PascalCase 字段读取 */
-            function getAssetField(asset, camelKey, pascalKey) {
-                return asset?.[camelKey] ?? asset?.[pascalKey];
-            }
-
-            /** 兼容截图字段：数组 或 分号/逗号分隔字符串 */
-            function normalizeMediaArray(raw) {
-                if (Array.isArray(raw)) {
-                    return raw.map(v => String(v || '').trim()).filter(Boolean);
-                }
-                if (typeof raw === 'string') {
-                    return raw
-                        .split(/[;,，\n\r]+/)
-                        .map(v => v.trim())
-                        .filter(Boolean);
-                }
-                return [];
-            }
-
             /** 从产品列表中提取唯一的分类并排序 */
             function extractCategories() {
                 const categories = new Set();
@@ -110,40 +185,61 @@
             }
             // #endregion
 
-            // #region Api —— 后端接口交互
+            // #region Mapping —— DTO -> ViewModel（唯一映射入口）
 
-            /** 拉取资产列表并映射为前端产品模型 */
+            /**
+             * 将 GET /api/asset/list 返回的单个条目映射为 ShopAssetCardVM。
+             * 严格按附录 A 字段对应；不做字段猜测兜底。
+             * @param {object} a — AssetListItem DTO
+             * @returns {ShopAssetCardVM}
+             */
+            function mapListItem(a) {
+                return {
+                    assetId: Number(a.id),
+                    displayName: a.name || '',
+                    category: a.category || '',
+                    coverImage: a.coverImage || '',
+                    priceYuan: typeof a.priceYuan === 'number' ? a.priceYuan : 0,
+                    authorName: a.authorName || '',
+                    purchaseCount: a.purchaseCount || 0,
+                    favoriteCount: a.favoriteCount || 0,
+                    description: a.description || '',
+                    lastUpdatedAt: a.lastUpdatedAt || 0
+                };
+            }
+            // #endregion
+
+            // #region Request —— 请求层（传输处理，不做业务字段兜底）
+
+            /** 拉取资产列表并通过映射层转换为 ViewModel 数组 */
             async function fetchAssets() {
                 try {
                     const resp = await fetch('/api/asset/list?page=1&pageSize=200');
-                    if (!resp.ok) { console.warn('获取资产列表失败', resp.status); return; }
-
+                    if (!resp.ok) {
+                        console.warn('[Request] 获取资产列表失败, status:', resp.status);
+                        showListError(getErrorInfo(resp.status).message);
+                        return;
+                    }
                     const body = await resp.json();
-                    // 后端返回分页对象 { items: [...], total: ... }
-                    const items = body?.data?.items ?? body?.items ?? [];
-
-                    state.products = items.map(a => ({
-                        // 媒体资源字段兼容：优先 coverUrl/iconUrl，回退到 coverImage/iconImage
-                        coverImage: getAssetField(a, 'coverUrl', 'CoverUrl') || getAssetField(a, 'coverImage', 'CoverImage') || '',
-                        iconImage: getAssetField(a, 'iconUrl', 'IconUrl') || getAssetField(a, 'iconImage', 'IconImage') || '',
-                        screenshots: normalizeMediaArray(getAssetField(a, 'screenshots', 'Screenshots')),
-                        id: Number(a.id) || a.id,
-                        name: a.name,
-                        desc: a.description || '',
-                        price: a.priceYuan ?? a.price ?? (a.prices?.length > 0 ? (a.prices[0].priceYuan ?? a.prices[0].price) : 0),
-                        prices: a.prices || [],
-                        category: a.category || '',
-                        icon: '📦',
-                        // 规格字段既可能在平铺级别，也可能在 specs 对象中
-                        downloads: a.downloads ?? (a.specs?.downloads ?? 0),
-                        purchaseCount: a.purchaseCount ?? (a.specs?.purchaseCount ?? 0),
-                        lastUpdatedAt: a.lastUpdatedAt ?? (a.specs?.lastUpdatedAt ?? 0),
-                        rating: a.rating ?? (a.specs?.rating ?? 0),
-                        reviewCount: a.reviewCount ?? (a.specs?.reviewCount ?? 0)
-                    }));
+                    if (body.code !== 0 && body.code !== undefined) {
+                        console.warn('[Request] 获取资产列表业务错误, code:', body.code);
+                        showListError(getErrorInfo(body.code, body.message).message);
+                        return;
+                    }
+                    const items = body?.data?.items ?? [];
+                    if (items.length === 0) {
+                        showEmptyState('暂无商品，请稍后再来');
+                        return;
+                    }
+                    state.products = items.map(mapListItem);
                     state.filteredProducts = [...state.products];
                 } catch (e) {
-                    console.error('拉取资产出错', e);
+                    console.error('[Request] 拉取资产出错', e);
+                    if (e.name === 'TypeError' && e.message.includes('fetch')) {
+                        showListError(getErrorInfo('NETWORK_ERROR').message);
+                    } else {
+                        showListError(getErrorInfo('UNKNOWN').message);
+                    }
                 }
             }
 
@@ -158,66 +254,105 @@
                         fetch('/api/user/cart', { headers: { 'Authorization': 'Bearer ' + token } })
                     ]);
 
+                    // favorites: number[] — 直接是 assetId 数组
                     if (favResp.ok) {
                         const favBody = await favResp.json();
-                        state.userFavorites = new Set(normalizeIdList(favBody?.data ?? []));
+                        const ids = Array.isArray(favBody?.data) ? favBody.data : [];
+                        state.userFavorites = new Set(ids.map(Number).filter(n => !isNaN(n)));
+                    } else if (favResp.status === 401) {
+                        // 令牌过期，清理本地存储
+                        localStorage.removeItem(TOKEN_KEY);
+                        console.warn('[Request] 用户令牌已过期');
                     }
+
+                    // cart: CartItem[] — 每项含 assetId 字段
                     if (cartResp.ok) {
                         const cartBody = await cartResp.json();
-                        state.userCartItems = normalizeIdList(cartBody?.data ?? []);
+                        const cartItems = Array.isArray(cartBody?.data) ? cartBody.data : [];
+                        state.userCartIds = new Set(
+                            cartItems.map(ci => Number(ci.assetId)).filter(n => !isNaN(n))
+                        );
                     }
                 } catch (e) {
-                    console.warn('获取用户收藏/购物车失败', e);
+                    console.warn('[Request] 获取用户收藏/购物车失败', e);
                 }
             }
 
-            /** 向后端发送购物车加入请求并返回解析后的资产 ID */
+            /** 向后端发送购物车加入请求，返回 { success, code, message } */
             async function apiAddToCart(token, assetId) {
-                const resp = await fetch('/api/user/cart', {
-                    method: 'POST',
-                    headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ assetId })
-                });
-                if (!resp.ok) { console.warn('加入购物车失败', resp.status); return null; }
-
                 try {
-                    const body = await resp.json();
-                    const added = body?.data?.id ?? body?.data?.assetId ?? body?.id ?? assetId;
-                    return Number(added);
-                } catch {
-                    return assetId;
-                }
-            }
-
-            /** 向后端发送购物车移除请求 */
-            async function apiRemoveFromCart(token, assetId) {
-                const resp = await fetch(`/api/user/cart/${assetId}`, {
-                    method: 'DELETE',
-                    headers: { 'Authorization': 'Bearer ' + token }
-                });
-                if (!resp.ok) console.warn('从购物车移除失败', resp.status);
-                return resp.ok;
-            }
-
-            /** 向后端发送收藏 / 取消收藏请求 */
-            async function apiToggleFavorite(token, assetId, shouldAdd) {
-                if (shouldAdd) {
-                    const resp = await fetch('/api/user/favorites', {
+                    const resp = await fetch('/api/user/cart', {
                         method: 'POST',
                         headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
                         body: JSON.stringify({ assetId })
                     });
-                    return resp.ok;
+                    if (!resp.ok) {
+                        console.warn('[Request] 加入购物车失败, status:', resp.status);
+                        return { success: false, code: resp.status };
+                    }
+                    const body = await resp.json();
+                    if (body.code !== 0 && body.code !== undefined) {
+                        return { success: false, code: body.code, message: body.message };
+                    }
+                    return { success: true, assetId };
+                } catch (e) {
+                    console.error('[Request] 加入购物车异常', e);
+                    return { success: false, code: 'NETWORK_ERROR' };
                 }
-                const resp = await fetch(`/api/user/favorites/${assetId}`, {
-                    method: 'DELETE',
-                    headers: { 'Authorization': 'Bearer ' + token }
-                });
-                return resp.ok;
+            }
+
+            /** 向后端发送购物车移除请求，返回 { success, code, message } */
+            async function apiRemoveFromCart(token, assetId) {
+                try {
+                    const resp = await fetch(`/api/user/cart/${assetId}`, {
+                        method: 'DELETE',
+                        headers: { 'Authorization': 'Bearer ' + token }
+                    });
+                    if (!resp.ok) {
+                        console.warn('[Request] 从购物车移除失败, status:', resp.status);
+                        return { success: false, code: resp.status };
+                    }
+                    return { success: true };
+                } catch (e) {
+                    console.error('[Request] 移除购物车异常', e);
+                    return { success: false, code: 'NETWORK_ERROR' };
+                }
+            }
+
+            /** 向后端发送收藏 / 取消收藏请求，返回 { success, code, message } */
+            async function apiToggleFavorite(token, assetId, shouldAdd) {
+                try {
+                    if (shouldAdd) {
+                        const resp = await fetch('/api/user/favorites', {
+                            method: 'POST',
+                            headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ assetId })
+                        });
+                        if (!resp.ok) {
+                            return { success: false, code: resp.status };
+                        }
+                        const body = await resp.json();
+                        if (body.code !== 0 && body.code !== undefined) {
+                            return { success: false, code: body.code, message: body.message };
+                        }
+                        return { success: true };
+                    }
+                    const resp = await fetch(`/api/user/favorites/${assetId}`, {
+                        method: 'DELETE',
+                        headers: { 'Authorization': 'Bearer ' + token }
+                    });
+                    if (!resp.ok) {
+                        return { success: false, code: resp.status };
+                    }
+                    return { success: true };
+                } catch (e) {
+                    console.error('[Request] 收藏操作异常', e);
+                    return { success: false, code: 'NETWORK_ERROR' };
+                }
             }
             // #endregion
 
-            // #region Renderer —— DOM 渲染
+            // #region Renderer —— DOM 渲染（仅依赖 ShopAssetCardVM 字段）
 
             /** 渲染骨架屏占位卡片，count 为卡片数量 */
             function renderSkeletons(count = 12) {
@@ -267,26 +402,26 @@
                 const pageProducts = state.filteredProducts.slice(start, start + ITEMS_PER_PAGE);
 
                 const token = getToken();
-                const localCartIds = token ? [] : getLocalCartIds();
+                const localCartIds = token ? new Set() : getLocalCartIds();
 
-                grid.innerHTML = pageProducts.map(p => buildProductCard(p, token, localCartIds)).join('');
+                grid.innerHTML = pageProducts.map(vm => buildProductCard(vm, token, localCartIds)).join('');
                 renderPagination();
             }
 
-            /** 获取本地 localStorage 购物车中的 ID 列表 */
+            /** 获取本地 localStorage 购物车中的 assetId 集合（未登录时使用） */
             function getLocalCartIds() {
                 try {
                     const cart = JSON.parse(localStorage.getItem(LOCAL_CART_KEY) || '[]');
-                    return cart.map(ci => Number(ci.id));
-                } catch { return []; }
+                    return new Set(cart.map(ci => Number(ci.assetId || ci.id)).filter(n => !isNaN(n)));
+                } catch { return new Set(); }
             }
 
-            /** 构建单张产品卡片 HTML */
-            function buildProductCard(product, token, localCartIds) {
-                const isFav = state.userFavorites.has(product.id);
+            /** 构建单张产品卡片 HTML（严格使用 ShopAssetCardVM 字段） */
+            function buildProductCard(vm, token, localCartIds) {
+                const isFav = state.userFavorites.has(vm.assetId);
                 const inCart = token
-                    ? state.userCartItems.includes(product.id)
-                    : (state.userCartItems.includes(product.id) || localCartIds.includes(product.id));
+                    ? state.userCartIds.has(vm.assetId)
+                    : localCartIds.has(vm.assetId);
 
                 const favIcon = isFav ? 'favorite' : 'favorite_border';
                 const favClass = isFav ? ' active' : '';
@@ -294,33 +429,33 @@
                 const cartClass = inCart ? ' active has-count' : '';
                 const cartIcon = inCart ? 'shopping_cart' : 'add_shopping_cart';
                 const cartTitle = inCart ? '已在购物车中，点击可移除' : '加入购物车';
-                const cartDisabled = '';
-                const downloadsText = product.downloads > 0 ? `${product.downloads}` : '0';
-                const imageUrl = product.coverImage || product.iconImage || product.screenshots?.[0] || '';
+                const authorText = escapeHtml(vm.authorName || '未知作者');
+                const imageUrl = vm.coverImage || '';
                 const imageHtml = imageUrl
-                    ? `<img src="${escapeHtml(imageUrl)}" alt="${escapeHtml(product.name || '')}" loading="lazy" style="width:100%;height:100%;object-fit:cover;">`
-                    : product.icon;
+                    ? `<img src="${escapeHtml(imageUrl)}" alt="${escapeHtml(vm.displayName)}" loading="lazy" style="width:100%;height:100%;object-fit:cover;">`
+                    : '📦';
 
                 return `
                 <div class="product-card">
                     <div class="product-image">${imageHtml}</div>
                     <div class="product-content">
-                        ${product.category ? `<span class="product-category-tag">${product.category}</span>` : ''}
-                        <div class="product-name">${product.name}</div>
-                        <div class="product-desc">${product.desc}</div>
+                        ${vm.category ? `<span class="product-category-tag">${escapeHtml(vm.category)}</span>` : ''}
+                        <div class="product-name">${escapeHtml(vm.displayName)}</div>
+                        <div class="product-desc">${escapeHtml(vm.description)}</div>
                         <div class="product-meta">
-                            <div class="product-price">💰${Number(product.price).toFixed(2)}</div>
+                            <div class="product-price">💰${vm.priceYuan.toFixed(2)}</div>
                             <div class="product-meta-row">
-                                <span class="meta-item"><span class="meta-label">下载</span> ${downloadsText}</span>
-                                <span class="meta-item"><span class="meta-label">更新</span> ${formatDate(product.lastUpdatedAt)}</span>
+                                <span class="meta-item"><span class="meta-label">作者</span> ${authorText}</span>
+                                <span class="meta-item"><span class="meta-label">销量</span> ${vm.purchaseCount}</span>
+                                <span class="meta-item"><span class="meta-label">更新</span> ${formatDate(vm.lastUpdatedAt)}</span>
                             </div>
                         </div>
                         <div class="product-actions">
-                            <button class="btn" onclick="ShopApp.viewDetail(${product.id})">查看详细</button>
-                            <button class="btn icon cart-icon${cartClass}" onclick="ShopApp.toggleCart(${product.id})" title="${cartTitle}" data-asset-id="${product.id}"${cartDisabled}>
+                            <button class="btn" onclick="ShopApp.viewDetail(${vm.assetId})">查看详细</button>
+                            <button class="btn icon cart-icon${cartClass}" onclick="ShopApp.toggleCart(${vm.assetId})" title="${cartTitle}" data-asset-id="${vm.assetId}">
                                 <span class="material-icons">${cartIcon}</span>
                             </button>
-                            <button class="btn icon${favClass}" onclick="ShopApp.toggleFavorite(this, ${product.id})" title="收藏" data-asset-id="${product.id}"${favAria}>
+                            <button class="btn icon${favClass}" onclick="ShopApp.toggleFavorite(this, ${vm.assetId})" title="收藏" data-asset-id="${vm.assetId}"${favAria}>
                                 <span class="material-icons">${favIcon}</span>
                             </button>
                         </div>
@@ -348,7 +483,7 @@
                 if (!el) return;
 
                 if (getToken()) {
-                    el.textContent = state.userCartItems.length || 0;
+                    el.textContent = state.userCartIds.size || 0;
                     return;
                 }
                 try {
@@ -360,23 +495,24 @@
 
             // #region Actions —— 用户交互
 
-            /** 按搜索关键词、分类与排序规则过滤产品 */
+            /** 按搜索关键词、分类与排序规则过滤产品（基于 ViewModel 字段） */
             function filterProducts() {
                 const search = document.getElementById('searchInput').value.toLowerCase();
                 const category = document.getElementById('categorySelect').value;
                 const sort = document.getElementById('sortSelect').value;
 
-                state.filteredProducts = state.products.filter(p => {
-                    const matchSearch = p.name.toLowerCase().includes(search) || p.desc.toLowerCase().includes(search);
-                    const matchCategory = !category || p.category === category;
+                state.filteredProducts = state.products.filter(vm => {
+                    const matchSearch = vm.displayName.toLowerCase().includes(search)
+                        || vm.description.toLowerCase().includes(search);
+                    const matchCategory = !category || vm.category === category;
                     return matchSearch && matchCategory;
                 });
 
                 const sortStrategies = {
-                    'price-low': (a, b) => a.price - b.price,
-                    'price-high': (a, b) => b.price - a.price,
-                    'popular': (a, b) => (b.downloads + b.purchaseCount) - (a.downloads + a.purchaseCount),
-                    'newest': (a, b) => b.id - a.id
+                    'price-low':  (a, b) => a.priceYuan - b.priceYuan,
+                    'price-high': (a, b) => b.priceYuan - a.priceYuan,
+                    'popular':    (a, b) => b.purchaseCount - a.purchaseCount,
+                    'newest':     (a, b) => b.assetId - a.assetId
                 };
                 state.filteredProducts.sort(sortStrategies[sort] || sortStrategies['newest']);
 
@@ -392,28 +528,34 @@
             }
 
             /** 切换购物车状态（加入 / 移除） */
-            async function toggleCart(productId) {
+            async function toggleCart(assetId) {
                 if (!requireLogin('购物车')) return;
 
                 const token = getToken();
-                const product = state.products.find(p => p.id === productId);
-                if (!product) return;
-
-                const inCart = state.userCartItems.includes(productId);
+                const inCart = state.userCartIds.has(assetId);
                 try {
                     if (!inCart) {
-                        const addedId = await apiAddToCart(token, productId);
-                        if (addedId != null && !isNaN(addedId) && !state.userCartItems.includes(addedId)) {
-                            state.userCartItems.push(addedId);
+                        const result = await apiAddToCart(token, assetId);
+                        if (result.success) {
+                            state.userCartIds.add(assetId);
+                        } else {
+                            showErrorMessage(result.code, result.message);
+                            return;
                         }
                     } else {
-                        const ok = await apiRemoveFromCart(token, productId);
-                        if (ok) state.userCartItems = state.userCartItems.filter(id => id !== productId);
+                        const result = await apiRemoveFromCart(token, assetId);
+                        if (result.success) {
+                            state.userCartIds.delete(assetId);
+                        } else {
+                            showErrorMessage(result.code, result.message);
+                            return;
+                        }
                     }
                     updateCartBadge();
                     renderProducts();
                 } catch (e) {
-                    console.error('购物车操作出错', e);
+                    console.error('[Action] 购物车操作出错', e);
+                    showErrorMessage('UNKNOWN');
                 }
             }
 
@@ -424,23 +566,29 @@
 
                 const token = getToken();
                 const icon = btn.querySelector('.material-icons');
-                const isActive = state.userFavorites.has(assetId) || btn.classList.contains('active');
+                const isActive = state.userFavorites.has(assetId);
 
                 try {
-                    const ok = await apiToggleFavorite(token, assetId, !isActive);
-                    if (!ok) return;
+                    const result = await apiToggleFavorite(token, assetId, !isActive);
+                    if (!result.success) {
+                        showErrorMessage(result.code, result.message);
+                        return;
+                    }
 
                     if (!isActive) {
                         btn.classList.add('active');
+                        btn.setAttribute('aria-pressed', 'true');
                         icon.textContent = 'favorite';
                         state.userFavorites.add(assetId);
                     } else {
                         btn.classList.remove('active');
+                        btn.removeAttribute('aria-pressed');
                         icon.textContent = 'favorite_border';
                         state.userFavorites.delete(assetId);
                     }
                 } catch (e) {
-                    console.error('收藏操作失败', e);
+                    console.error('[Action] 收藏操作失败', e);
+                    showErrorMessage('UNKNOWN');
                 }
             }
 
@@ -479,10 +627,20 @@
                 renderProducts();
                 updateCartBadge();
             }
+
+            /** 重新加载列表（用于错误态重试） */
+            async function retryLoad() {
+                renderSkeletons(ITEMS_PER_PAGE);
+                await fetchAssets();
+                renderCategories();
+                await fetchUserState();
+                renderProducts();
+                updateCartBadge();
+            }
             // #endregion
 
             // 暴露给 HTML onclick 使用的公共接口
-            return { init, goToPage, toggleCart, toggleFavorite, viewDetail, goToCart };
+            return { init, goToPage, toggleCart, toggleFavorite, viewDetail, goToCart, retryLoad };
         })();
 
         // 页面加载时启动应用

@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Drx.Sdk.Network.Http;
@@ -30,6 +31,11 @@ public partial class KaxHttp
             var q              = request.Query[("q")]         ?? string.Empty;
             var categoryFilter = request.Query[("category")]  ?? string.Empty;
             var sort           = request.Query[("sort")]      ?? "updated"; // updated | price_asc | price_desc
+            var minPriceRaw    = request.Query[("minPrice")];
+            var maxPriceRaw    = request.Query[("maxPrice")];
+
+            var hasMinPrice = double.TryParse(minPriceRaw, out var minPriceYuan);
+            var hasMaxPrice = double.TryParse(maxPriceRaw, out var maxPriceYuan);
 
             var (page, pageSize) = ApiPagination.Parse(request, defaultPageSize: 24);
 
@@ -53,6 +59,19 @@ public partial class KaxHttp
                 filtered = filtered.Where(a => (a.Category ?? string.Empty).ToLowerInvariant() == cat).AsQueryable();
             }
 
+            if (hasMinPrice || hasMaxPrice)
+            {
+                var materialized = filtered.ToList();
+                filtered = materialized.Where(a =>
+                {
+                    var p = a.Prices != null && a.Prices.Any() ? a.Prices.First() : null;
+                    var priceYuan = p != null ? p.Price / 100.0 : 0.0;
+                    if (hasMinPrice && priceYuan < minPriceYuan) return false;
+                    if (hasMaxPrice && priceYuan > maxPriceYuan) return false;
+                    return true;
+                }).AsQueryable();
+            }
+
             // 价格排序需先 materialize，避免表达式树访问子集合时的翻译 / 空引用问题
             IQueryable<Model.AssetModel> ordered;
             if (sort == "price_asc" || sort == "price_desc")
@@ -71,6 +90,28 @@ public partial class KaxHttp
             var total     = ordered.Count();
             var pageItems = ordered.Skip((page - 1) * pageSize).Take(pageSize).ToList();
 
+            var authorNameMap = new Dictionary<int, string>();
+            foreach (var authorId in pageItems.Select(x => x.AuthorId).Distinct())
+            {
+                if (authorId <= 0)
+                {
+                    authorNameMap[authorId] = "未知";
+                    continue;
+                }
+
+                try
+                {
+                    var author = await KaxGlobal.UserDatabase.SelectByIdAsync(authorId);
+                    authorNameMap[authorId] = !string.IsNullOrWhiteSpace(author?.DisplayName)
+                        ? author.DisplayName
+                        : (author?.UserName ?? "未知");
+                }
+                catch
+                {
+                    authorNameMap[authorId] = "未知";
+                }
+            }
+
             var result = pageItems.Select(a =>
             {
                 var p = a.Prices != null && a.Prices.Any() ? a.Prices.First() : null;
@@ -79,42 +120,12 @@ public partial class KaxHttp
                 {
                     id           = a.Id,
                     name         = a.Name,
-                    version      = a.Version,
-                    authorId     = a.AuthorId,
-                    description  = a.Description,
                     category     = a.Category,
-                    coverImage   = a.CoverImage,
-                    iconImage    = a.IconImage,
-                    fileSize       = s?.FileSize      ?? 0,
-                    rating         = s?.Rating        ?? 0.0,
-                    reviewCount    = s?.ReviewCount   ?? 0,
-                    downloads      = s?.Downloads     ?? 0,
-                    license        = s?.License       ?? string.Empty,
-                    downloadUrl    = s?.DownloadUrl   ?? string.Empty,
+                    coverImage    = a.CoverImage,
+                    authorName    = authorNameMap.TryGetValue(a.AuthorId, out var n) ? n : "未知",
                     purchaseCount  = s?.PurchaseCount ?? 0,
                     favoriteCount  = s?.FavoriteCount ?? 0,
-                    viewCount      = s?.ViewCount     ?? 0,
-                    lastUpdatedAt  = s?.LastUpdatedAt ?? 0,
-                    price         = p != null ? p.Price         : 0,
-                    originalPrice = p != null ? p.OriginalPrice : 0,
-                    discountRate  = p != null ? p.DiscountRate  : 0.0,
-                    salePrice     = p != null ? (int)Math.Round(p.Price * (1.0 - p.DiscountRate)) : 0,
-                    priceYuan         = p != null ? p.Price / 100.0 : 0,
-                    originalPriceYuan = p != null ? p.OriginalPrice / 100.0 : 0,
-                    salePriceYuan     = p != null ? Math.Round((p.Price * (1.0 - p.DiscountRate)) / 100.0, 2) : 0,
-                    specs = s != null ? new
-                    {
-                        fileSize      = s.FileSize,
-                        rating        = s.Rating,
-                        reviewCount   = s.ReviewCount,
-                        downloads     = s.Downloads,
-                        license       = s.License,
-                        downloadUrl   = s.DownloadUrl,
-                        purchaseCount = s.PurchaseCount,
-                        favoriteCount = s.FavoriteCount,
-                        viewCount     = s.ViewCount,
-                        lastUpdatedAt = s.LastUpdatedAt
-                    } : null
+                    priceYuan      = p != null ? Math.Round(p.Price / 100.0, 2) : 0.0
                 };
             }).ToList();
 
@@ -210,13 +221,13 @@ public partial class KaxHttp
     public static async Task<IActionResult> Get_AssetDetail(HttpRequest request)
     {
         if (!request.PathParameters.TryGetValue("id", out var idStr) || !int.TryParse(idStr, out var assetId) || assetId <= 0)
-            return new JsonResult(new { message = "id 参数必须是大于 0 的整数" }, 400);
+            return new JsonResult(new { code = 400, message = "id 参数必须是大于 0 的整数", data = (object?)null }, 400);
 
         try
         {
             var asset = await KaxGlobal.AssetDataBase.SelectByIdAsync(assetId);
             if (asset == null)
-                return new JsonResult(new { message = "资源不存在", id = assetId }, 404);
+                return new JsonResult(new { code = 404, message = "资源不存在", data = (object?)null }, 404);
 
             var specs = EnsureSpecs(asset);
 
@@ -232,18 +243,27 @@ public partial class KaxHttp
 
             var pricesList = asset.Prices?.Select(p => new
             {
-                id           = p.Id,
-                label        = p.Label ?? string.Empty,
-                price        = p.Price / 100.0,
-                originalPrice = p.OriginalPrice / 100.0,
-                unit         = p.Unit ?? "once",
-                duration     = p.Duration,
-                durationDays = p.DurationDays,
-                stock        = p.Stock
+                id                = p.Id,
+                name              = p.Label ?? string.Empty,
+                priceYuan         = Math.Round(p.Price / 100.0, 2),
+                originalPriceYuan = Math.Round(p.OriginalPrice / 100.0, 2),
+                unit              = p.Unit ?? "once",
+                duration          = p.Duration,
+                stock             = p.Stock
             }).ToList();
             // 截图与标签均以分隔符存储，输出时转为数组
             var screenshotList = (asset.Screenshots ?? string.Empty).Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
             var tagList        = (asset.Tags        ?? string.Empty).Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+            static string[] ParseStringArray(string? raw)
+            {
+                if (string.IsNullOrWhiteSpace(raw)) return Array.Empty<string>();
+                return raw
+                    .Split(new[] { ',', ';', '|', '\n' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                    .Where(x => !string.IsNullOrWhiteSpace(x))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+            }
 
             var specsDto = new
             {
@@ -269,17 +289,14 @@ public partial class KaxHttp
             {
                 id          = asset.Id,
                 name        = asset.Name,
-                version     = asset.Version,
-                authorId    = asset.AuthorId,
                 description = asset.Description,
                 category    = asset.Category,
-                isDeleted   = asset.IsDeleted,
                 coverImage   = asset.CoverImage,
                 iconImage = asset.IconImage,
                 screenshots    = screenshotList,
                 tags           = tagList,
-                badges         = badgesRaw,
-                features       = featuresRaw,
+                badges         = ParseStringArray(badgesRaw),
+                features       = ParseStringArray(featuresRaw),
                 prices         = pricesList,
                 specs          = specsDto
             };
@@ -289,7 +306,7 @@ public partial class KaxHttp
         catch (Exception ex)
         {
             Logger.Error($"Get_AssetDetail 失败: {ex.Message}");
-            return new JsonResult(new { message = "服务器错误" }, 500);
+            return new JsonResult(new { code = 500, message = "服务器错误", data = (object?)null }, 500);
         }
     }
 
@@ -301,7 +318,7 @@ public partial class KaxHttp
     public static async Task<IActionResult> Get_RelatedAssets(HttpRequest request)
     {
         if (!request.PathParameters.TryGetValue("id", out var idStr) || !int.TryParse(idStr, out var assetId) || assetId <= 0)
-            return new JsonResult(new { code = 400, message = "id 参数必须是大于 0 的整数" }, 400);
+            return new JsonResult(new { code = 400, message = "id 参数必须是大于 0 的整数", data = (object?)null }, 400);
 
         int top = 4;
         if (int.TryParse(request.Query[("top")], out var topParam) && topParam > 0 && topParam <= 20)
@@ -344,18 +361,8 @@ public partial class KaxHttp
                     id             = a.Id,
                     name           = a.Name,
                     category       = a.Category,
-                    authorId       = a.AuthorId,
-                    coverImage   = a.CoverImage,
-                    iconImage = a.IconImage,
-                    rating         = s?.Rating    ?? 0.0,
-                    downloads      = s?.Downloads ?? 0,
-                    price         = p != null ? p.Price         : 0,
-                    originalPrice = p != null ? p.OriginalPrice : 0,
-                    discountRate  = p != null ? p.DiscountRate  : 0.0,
-                    salePrice     = p != null ? (int)Math.Round(p.Price * (1.0 - p.DiscountRate)) : 0,
-                    priceYuan         = p != null ? p.Price / 100.0 : 0,
-                    originalPriceYuan = p != null ? p.OriginalPrice / 100.0 : 0,
-                    salePriceYuan     = p != null ? Math.Round((p.Price * (1.0 - p.DiscountRate)) / 100.0, 2) : 0
+                    coverImage     = a.CoverImage,
+                    priceYuan      = p != null ? Math.Round(p.Price / 100.0, 2) : 0.0
                 };
             }).ToList();
 
@@ -364,7 +371,7 @@ public partial class KaxHttp
         catch (Exception ex)
         {
             Logger.Error($"获取相关推荐失败: {ex.Message}");
-            return new JsonResult(new { code = 500, message = "服务器错误" }, 500);
+            return new JsonResult(new { code = 500, message = "服务器错误", data = (object?)null }, 500);
         }
     }
 

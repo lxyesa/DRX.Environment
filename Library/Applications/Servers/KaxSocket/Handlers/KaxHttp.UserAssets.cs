@@ -75,7 +75,7 @@ public partial class KaxHttp
 
         // 已收藏则直接返回成功
         if (user.FavoriteAssets != null && user.FavoriteAssets.Any(f => f.AssetId == assetId))
-            return new JsonResult(new { code = 0, message = "已收藏", favoriteCount = (asset.Specs?.FavoriteCount ?? 0) }, 200);
+            return new JsonResult(new { code = 0, message = "已收藏", data = new { assetId, favoriteCount = (asset.Specs?.FavoriteCount ?? 0) } }, 200);
 
         // 添加收藏子项
         var fav = new UserFavoriteAsset { ParentId = user.Id, AssetId = assetId };
@@ -89,7 +89,7 @@ public partial class KaxHttp
         await KaxGlobal.AssetDataBase.UpdateAsync(asset);
         await KaxGlobal.UserDatabase.UpdateAsync(user);
 
-        return new JsonResult(new { code = 0, message = "收藏成功", favoriteCount = specs.FavoriteCount }, 200);
+        return new JsonResult(new { code = 0, message = "收藏成功", data = new { assetId, favoriteCount = specs.FavoriteCount } }, 200);
     }
 
     [HttpHandle("/api/user/favorites/{assetId}", "DELETE", RateLimitMaxRequests = 60, RateLimitWindowSeconds = 60, RateLimitCallbackMethodName = nameof(RateLimitCallback))]
@@ -103,7 +103,7 @@ public partial class KaxHttp
             return new JsonResult(new { code = 400, message = "assetId 参数无效" }, 400);
 
         var existing = user.FavoriteAssets?.FirstOrDefault(f => f.AssetId == assetId);
-        if (existing == null) return new JsonResult(new { code = 0, message = "未收藏" }, 200);
+        if (existing == null) return new JsonResult(new { code = 0, message = "未收藏", data = new { assetId, favoriteCount = 0 } }, 200);
 
         // 移除
         if (user.FavoriteAssets != null) user.FavoriteAssets.Remove(existing);
@@ -118,7 +118,7 @@ public partial class KaxHttp
 
         await KaxGlobal.UserDatabase.UpdateAsync(user);
 
-        return new JsonResult(new { code = 0, message = "已取消收藏", favoriteCount = asset?.Specs?.FavoriteCount ?? 0 }, 200);
+        return new JsonResult(new { code = 0, message = "已取消收藏", data = new { assetId, favoriteCount = asset?.Specs?.FavoriteCount ?? 0 } }, 200);
     }
 
     // 用户购物车（仅记录 assetId）
@@ -129,7 +129,12 @@ public partial class KaxHttp
         if (authError != null) return authError;
         if (user == null) return new JsonResult(new { code = 401, message = "用户认证失败" }, 401);
 
-        var items = user.CartItems?.Select(c => c.AssetId).ToList() ?? new List<int>();
+        var items = user.CartItems?.Select(c => (object)new
+        {
+            assetId = c.AssetId,
+            priceId = string.Empty,
+            quantity = 1
+        }).ToList() ?? new List<object>();
         return new JsonResult(new { code = 0, message = "成功", data = items }, 200);
     }
 
@@ -146,6 +151,8 @@ public partial class KaxHttp
         if (!int.TryParse(body["assetId"]?.ToString(), out var assetId) || assetId <= 0)
             return new JsonResult(new { code = 400, message = "assetId 无效" }, 400);
 
+        var priceId = body["priceId"]?.ToString() ?? string.Empty;
+
         if (user.CartItems == null) user.CartItems = new Drx.Sdk.Network.DataBase.TableList<UserCartItem>();
         if (!user.CartItems.Any(c => c.AssetId == assetId))
         {
@@ -153,7 +160,12 @@ public partial class KaxHttp
             await KaxGlobal.UserDatabase.UpdateAsync(user);
         }
 
-        return new JsonResult(new { code = 0, message = "已加入购物车" }, 200);
+        return new JsonResult(new
+        {
+            code = 0,
+            message = "已加入购物车",
+            data = new { assetId, priceId, quantity = 1 }
+        }, 200);
     }
 
     [HttpHandle("/api/user/cart/{assetId}", "DELETE", RateLimitMaxRequests = 60, RateLimitWindowSeconds = 60, RateLimitCallbackMethodName = nameof(RateLimitCallback))]
@@ -173,7 +185,7 @@ public partial class KaxHttp
             await KaxGlobal.UserDatabase.UpdateAsync(user);
         }
 
-        return new JsonResult(new { code = 0, message = "已从购物车移除" }, 200);
+        return new JsonResult(new { code = 0, message = "已从购物车移除", data = new { assetId } }, 200);
     }
 
     #endregion

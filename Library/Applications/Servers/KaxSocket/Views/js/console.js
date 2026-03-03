@@ -70,7 +70,7 @@
             '      此页面仅对具有特权的系统账号开放，普通用户无权进入。',
             '    </p>',
             '    <div style="border-top:1px solid #330000;padding-top:20px;font-size:11px;color:#555;">',
-            '      PERMISSION GROUP &gt; 3 &nbsp;·&nbsp; CONSOLE ACCESS RESTRICTED',
+            '      PERMISSION GROUP NOT IN [0,2,3] &nbsp;·&nbsp; CONSOLE ACCESS RESTRICTED',
             '    </div>',
             '    <a href="/" style="',
             '      display:inline-block;margin-top:24px;padding:8px 28px;',
@@ -86,7 +86,7 @@
         ].join('');
     }
 
-    /** 验证用户令牌，并严格检查权限等级（permissionGroup > 3 的用户一律拒绝） */
+    /** 验证用户令牌，并严格检查权限等级（仅 0/2/3 可进入控制台） */
     async function verifyToken() {
         try {
             var token = localStorage.getItem('kax_login_token');
@@ -101,9 +101,9 @@
                 var data;
                 try { data = await resp.json(); } catch (_) { data = {}; }
 
-                // 风控：权限大于 3（如 User=100）的账号禁止进入控制台
+                // 风控：仅 System(0) / Console(2) / Admin(3) 可进入控制台
                 var pg = typeof data.permissionGroup !== 'undefined' ? Number(data.permissionGroup) : 999;
-                if (pg > 3) {
+                if (pg !== 0 && pg !== 2 && pg !== 3) {
                     showForbiddenPage(pg);
                     return;
                 }

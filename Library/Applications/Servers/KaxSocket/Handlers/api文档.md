@@ -85,6 +85,155 @@ Authorization: Bearer <token>
 
 ## API 端点
 
+### 商店域迁移冻结契约（2026-03）
+
+> 本节优先级高于历史示例，用于 `shop` / `shop_detail` 页面迁移。实现与联调以本节为准。
+
+#### 统一响应外壳
+
+成功：
+```json
+{ "code": 0, "message": "成功", "data": {} }
+```
+
+失败：
+```json
+{ "code": 4000, "message": "错误描述", "data": null }
+```
+
+#### 1) 商品列表
+
+```http
+GET /api/asset/list?q=&category=&minPrice=&maxPrice=&sort=updated&page=1&pageSize=24
+```
+
+`data` 结构：
+```json
+{
+  "items": [
+    {
+      "id": 1,
+      "name": "资源名",
+      "category": "工具",
+      "coverImage": "https://...",
+      "priceYuan": 9.9,
+      "authorName": "作者",
+      "purchaseCount": 300,
+      "favoriteCount": 150
+    }
+  ],
+  "total": 50,
+  "page": 1,
+  "pageSize": 24
+}
+```
+
+#### 2) 商品详情
+
+```http
+GET /api/asset/detail/{id}
+```
+
+`data` 结构：
+```json
+{
+  "id": 1,
+  "name": "资源名",
+  "description": "描述",
+  "category": "工具",
+  "coverImage": "https://...",
+  "iconImage": "https://...",
+  "screenshots": ["https://..."],
+  "badges": ["热门"],
+  "features": ["高性能"],
+  "prices": [
+    {
+      "id": "price-1",
+      "name": "月付",
+      "priceYuan": 9.9,
+      "originalPriceYuan": 19.9,
+      "unit": "month",
+      "duration": 1,
+      "stock": -1
+    }
+  ]
+}
+```
+
+#### 3) 相关推荐
+
+```http
+GET /api/asset/related/{id}?top=4
+```
+
+`data` 结构：
+```json
+[
+  {
+    "id": 2,
+    "name": "相关资源",
+    "category": "工具",
+    "coverImage": "https://...",
+    "priceYuan": 6.9
+  }
+]
+```
+
+#### 4) 收藏
+
+```http
+GET /api/user/favorites
+POST /api/user/favorites
+DELETE /api/user/favorites/{assetId}
+```
+
+`GET` 成功时 `data` 固定为：
+```json
+[101, 102, 103]
+```
+
+#### 5) 购物车
+
+```http
+GET /api/user/cart
+POST /api/user/cart
+DELETE /api/user/cart/{assetId}
+```
+
+`GET` 成功时 `data` 固定为：
+```json
+[
+  { "assetId": 101, "priceId": "price-1", "quantity": 1 }
+]
+```
+
+`POST` 请求体：
+```json
+{ "assetId": 101, "priceId": "price-1" }
+```
+
+#### 6) 购买
+
+```http
+POST /api/shop/purchase
+```
+
+请求体：
+```json
+{ "assetId": 101, "priceId": "price-1" }
+```
+
+成功时 `data`：
+```json
+{ "assetId": 101, "orderId": "order-abc", "remainingGold": 1200 }
+```
+
+#### 迁移约束
+
+1. 商店域价格语义统一为“元（decimal）”。
+2. 前端不再依赖 `id/assetId`、`data/items` 等历史多形态兼容路径。
+3. 详情页统一路由为 `/asset/detail/{id}`。
+
 ### 用户认证
 
 #### 1. 用户注册

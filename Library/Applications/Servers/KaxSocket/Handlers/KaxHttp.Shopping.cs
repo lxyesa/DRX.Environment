@@ -143,7 +143,7 @@ public partial class KaxHttp
             // 写入订单记录
             if (user.OrderRecords == null)
                 user.OrderRecords = new Drx.Sdk.Network.DataBase.TableList<UserOrderRecord>();
-            user.OrderRecords.Add(new UserOrderRecord
+            var orderRecord = new UserOrderRecord
             {
                 ParentId = user.Id,
                 OrderType = "purchase",
@@ -153,7 +153,8 @@ public partial class KaxHttp
                 GoldChange = -minimumGold,
                 GoldChangeReason = "purchase",
                 Description = $"{purchaseType}: {asset.Name} (priceId={priceId})"
-            });
+            };
+            user.OrderRecords.Add(orderRecord);
 
             EnsureSpecs(asset).PurchaseCount++;
             await KaxGlobal.AssetDataBase.UpdateAsync(asset);
@@ -173,6 +174,8 @@ public partial class KaxHttp
                 data = new 
                 {
                     assetId = assetId,
+                    orderId = orderRecord.Id,
+                    remainingGold = user.Gold,
                     activatedAt = finalAsset.ActivatedAt,
                     expiresAt = finalExpires,
                     permanent = finalExpires == 0,

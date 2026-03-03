@@ -70,6 +70,26 @@ public class Program
             server.AddRoute(HttpMethod.Get, "/profile/{uid}", req => new HtmlResultFromFile($"{AppDomain.CurrentDomain.BaseDirectory}Views/html/profile.html"));
             server.AddRoute(HttpMethod.Get, "/shop", req => new HtmlResultFromFile($"{AppDomain.CurrentDomain.BaseDirectory}Views/html/shop.html"));
             server.AddRoute(HttpMethod.Get, "/asset", req => new HtmlResultFromFile($"{AppDomain.CurrentDomain.BaseDirectory}Views/html/shop.html"));
+            server.AddRoute(HttpMethod.Get, "/shop/detail", req =>
+            {
+                var legacyIdRaw = req.Query["id"];
+                if (int.TryParse(legacyIdRaw, out var legacyId) && legacyId > 0)
+                {
+                    return new RedirectResult($"/asset/detail/{legacyId}");
+                }
+
+                return new RedirectResult("/asset");
+            });
+            server.AddRoute(HttpMethod.Get, "/shop/detail/{id}", req =>
+            {
+                var legacyIdRaw = req.PathParameters["id"];
+                if (int.TryParse(legacyIdRaw, out var legacyId) && legacyId > 0)
+                {
+                    return new RedirectResult($"/asset/detail/{legacyId}");
+                }
+
+                return new RedirectResult("/asset");
+            });
             server.AddRoute(HttpMethod.Get, "/asset/detail/{id}", req => new HtmlResultFromFile($"{AppDomain.CurrentDomain.BaseDirectory}Views/html/shop_detail.html"));
             server.AddRoute(HttpMethod.Get, "/user/verify-email", req => new HtmlResultFromFile($"{AppDomain.CurrentDomain.BaseDirectory}Views/html/verify-email.html"));
             server.AddRoute(HttpMethod.Get, "/forgot-password", req => new HtmlResultFromFile($"{AppDomain.CurrentDomain.BaseDirectory}Views/html/forgot-password.html"));
