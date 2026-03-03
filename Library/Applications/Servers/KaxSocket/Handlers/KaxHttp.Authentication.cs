@@ -7,6 +7,7 @@ using Drx.Sdk.Network.Http.Api;
 using Drx.Sdk.Network.Http.Protocol;
 using Drx.Sdk.Network.Http.Results;
 using Drx.Sdk.Network.Http.Configs;
+using Drx.Sdk.Network.Http.Auth;
 using Drx.Sdk.Shared;
 using Drx.Sdk.Shared.Utility;
 using KaxSocket;
@@ -19,6 +20,25 @@ namespace KaxSocket.Handlers;
 /// </summary>
 public partial class KaxHttp
 {
+    /// <summary>
+    /// 从当前请求提取 Bearer Token 并撤销，供敏感操作（如邮箱变更）成功后收口会话使用。
+    /// </summary>
+    private static void RevokeTokenFromRequest(HttpRequest request)
+    {
+        try
+        {
+            var token = ApiGuard.ExtractBearerToken(request);
+            if (!string.IsNullOrWhiteSpace(token))
+            {
+                JwtHelper.RevokeToken(token);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.Warn($"撤销当前请求令牌失败: {ex.Message}");
+        }
+    }
+
     #region 用户认证 (User Authentication)
 
     [HttpHandle("/api/user/register", "POST", RateLimitMaxRequests = 3, RateLimitWindowSeconds = 60)]

@@ -82,8 +82,8 @@
         justify-content: center !important;
         padding: 4px 10px !important;
         border-radius: 3px !important;
-        background: rgba(255,255,255,0.06) !important;
-        color: rgba(255,255,255,0.7) !important;
+        background: var(--button-bg, rgba(255,255,255,0.06)) !important;
+        color: var(--button-color, rgba(255,255,255,0.7)) !important;
         font-size: 0.82rem !important;
         font-weight: 600 !important;
         cursor: pointer !important;
@@ -92,10 +92,12 @@
         line-height: 1.4 !important;
         font-family: inherit !important;
         box-sizing: border-box !important;
+        height: var(--button-height, auto) !important;
+        width: var(--button-width, auto) !important;
       }
       ::slotted(*:hover){
-        background: rgba(59,130,246,0.15) !important;
-        color: #60a5fa !important;
+        background: var(--button-hover-bg, rgba(59,130,246,0.15)) !important;
+        color: var(--button-hover-color, #60a5fa) !important;
       }
     </style>
     <div class="field">
@@ -113,7 +115,7 @@
     `;
 
     class InputBox extends HTMLElement {
-        static get observedAttributes(){ return ['label','placeholder','type','value','readonly','disabled','minlength','maxlength','name','autocomplete','textarea','rows','show-action','size','icon']; }
+        static get observedAttributes(){ return ['label','placeholder','type','value','readonly','disabled','minlength','maxlength','name','autocomplete','textarea','rows','show-action','size','icon','button-height','button-width','button-color']; }
         constructor(){
             super();
             this._shadow = this.attachShadow({mode:'open'});
@@ -256,6 +258,35 @@
                 case 'icon':
                     // 图标名称使用 Material Icons 字体连字
                     if (this._iconEl) this._iconEl.textContent = val || '';
+                    break;
+                case 'button-height':
+                    // 按钮高度：支持任何 CSS 尺寸单位 (px, em, rem, etc.)
+                    if (val) {
+                        this._shadow.host.style.setProperty('--button-height', val);
+                    } else {
+                        this._shadow.host.style.removeProperty('--button-height');
+                    }
+                    break;
+                case 'button-width':
+                    // 按钮宽度：支持任何 CSS 尺寸单位 (px, em, rem, etc.)
+                    if (val) {
+                        this._shadow.host.style.setProperty('--button-width', val);
+                    } else {
+                        this._shadow.host.style.removeProperty('--button-width');
+                    }
+                    break;
+                case 'button-color':
+                    // 按钮颜色：支持 CSS 颜色值 (hex, rgb, color-name, etc.)
+                    if (val) {
+                        this._shadow.host.style.setProperty('--button-color', val);
+                        // 如果没有设置 hover 颜色，自动生成一个稍亮的版本
+                        if (!this.hasAttribute('button-hover-color')) {
+                            this._shadow.host.style.setProperty('--button-hover-color', val);
+                        }
+                    } else {
+                        this._shadow.host.style.removeProperty('--button-color');
+                        this._shadow.host.style.removeProperty('--button-hover-color');
+                    }
                     break;
             }
         }

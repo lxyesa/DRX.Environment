@@ -249,9 +249,15 @@
                             <input-box id="emailEditInput" label="新邮箱" placeholder="请输入新邮箱地址" type="email"
                                 name="newEmail" autocomplete="email" size="small"></input-box>
                         </div>
+                        <div class="security-field-group" style="margin-top:10px;">
+                            <input-box id="oldEmailCodeInput" label="旧邮箱验证码" placeholder="请输入旧邮箱验证码" button-width="78px" size="small" show-action button-height="28px" button-color="#3b82f6">
+                                <button id="sendOldEmailCodeBtn" slot="action" type="button">发送</button>
+                            </input-box>
+                        </div>
+                        <div id="emailVerifyMessage" class="cdk-message" style="display:none;margin-top:10px;"></div>
                         <div class="collapsible-actions">
-                            <span class="edit-hint">邮箱将单独更新，不会覆盖其它资料字段</span>
-                            <button class="btn" id="updateEmailBtn">更新邮箱</button>
+                            <span class="edit-hint">我们会先向你的保密邮箱发送一个验证码</span>
+                            <button class="btn" id="updateEmailBtn" type="button">确认更新邮箱</button>
                         </div>
                     </collapsible-card>
 

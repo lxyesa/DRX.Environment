@@ -72,6 +72,8 @@ public class Program
             server.AddRoute(HttpMethod.Get, "/asset", req => new HtmlResultFromFile($"{AppDomain.CurrentDomain.BaseDirectory}Views/html/shop.html"));
             server.AddRoute(HttpMethod.Get, "/asset/detail/{id}", req => new HtmlResultFromFile($"{AppDomain.CurrentDomain.BaseDirectory}Views/html/shop_detail.html"));
             server.AddRoute(HttpMethod.Get, "/user/verify-email", req => new HtmlResultFromFile($"{AppDomain.CurrentDomain.BaseDirectory}Views/html/verify-email.html"));
+            server.AddRoute(HttpMethod.Get, "/forgot-password", req => new HtmlResultFromFile($"{AppDomain.CurrentDomain.BaseDirectory}Views/html/forgot-password.html"));
+            server.AddRoute(HttpMethod.Get, "/reset-password", req => new HtmlResultFromFile($"{AppDomain.CurrentDomain.BaseDirectory}Views/html/reset-password.html"));
             server.AddRoute(HttpMethod.Get, "/console", req => new HtmlResultFromFile($"{AppDomain.CurrentDomain.BaseDirectory}Views/html/console.html"));
             server.AddRoute(HttpMethod.Get, "/developer", req => new HtmlResultFromFile($"{AppDomain.CurrentDomain.BaseDirectory}Views/html/developer.html"));
 
@@ -86,6 +88,7 @@ public class Program
             server.DoTicker(1000 * 60, async (s) =>
             {
                 await KaxGlobal.CleanUpAssets();
+                await KaxGlobal.CleanUpPasswordResetTokensAsync();
                 Logger.Info("已执行定时清理过期资源任务");
             });
 

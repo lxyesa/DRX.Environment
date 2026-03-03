@@ -56,7 +56,10 @@
     const avatarInitials = document.getElementById('avatarInitials');
     const avatarContainer = document.getElementById('avatarContainer');
     const emailEditInput = document.getElementById('emailEditInput');
+    const oldEmailCodeInput = document.getElementById('oldEmailCodeInput');
     const updateEmailBtn = document.getElementById('updateEmailBtn');
+    const sendOldEmailCodeBtn = document.getElementById('sendOldEmailCodeBtn');
+    const emailVerifyMessage = document.getElementById('emailVerifyMessage');
     const avatarCropModal = document.getElementById('avatarCropModal');
     const cropViewport = document.getElementById('cropViewport');
     const cropSourceImg = document.getElementById('cropSourceImg');
@@ -249,7 +252,6 @@
                 document.getElementById('role').textContent = roleText;
                 const emailEl = document.getElementById('currentEmailDisplay');
                 if (emailEl) emailEl.textContent = state.deps.maskEmail(email);
-                if (emailEditInput) emailEditInput.value = email;
                 const uidEl = document.getElementById('uid');
                 if (uidEl) uidEl.textContent = uid ? String(uid) : '-';
                 document.getElementById('joined').textContent = state.deps.formatUnix(registeredAt);
@@ -655,6 +657,60 @@
      * - DOM: pwOld/pw1/pw2/changePwBtn/emailEditInput/updateEmailBtn/currentEmailDisplay
      */
     function bindSecurityEvents() {
+        function startButtonCooldown(btn, seconds = 30) {
+            if (!btn) return;
+            const original = btn.dataset.originalText || btn.textContent;
+            btn.dataset.originalText = original;
+            let remain = Number(seconds) || 30;
+            btn.disabled = true;
+            btn.textContent = `${remain}s 后可重发`;
+            const timer = setInterval(() => {
+                remain -= 1;
+                if (remain <= 0) {
+                    clearInterval(timer);
+                    btn.disabled = false;
+                    btn.textContent = original;
+                    return;
+                }
+                btn.textContent = `${remain}s 后可重发`;
+            }, 1000);
+        }
+
+        async function sendOldEmailCode() {
+            if (state.isViewingOtherProfile) { alert('无法修改他人邮箱'); return; }
+            const token = checkToken();
+            if (!token) return;
+            if (!state.currentUserUid) { alert('用户信息尚未就绪，请稍后重试'); return; }
+
+            const btn = sendOldEmailCodeBtn;
+            await withButtonLoading(btn, '发送中...', async () => {
+                try {
+                    const payload = { targetUid: state.currentUserUid, channel: 'old' };
+
+                    const resp = await fetch('/api/user/email-change/send-code', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+                        body: JSON.stringify(payload)
+                    });
+                    const result = await resp.json().catch(() => ({}));
+
+                    if (resp.status === 200) {
+                        showErrorMsg(emailVerifyMessage, '旧邮箱验证码已发送', false);
+                        const cooldown = Number(result?.data?.cooldownSeconds || 30);
+                        startButtonCooldown(btn, cooldown);
+                    } else if (resp.status === 401) {
+                        localStorage.removeItem('kax_login_token');
+                        location.href = '/login';
+                    } else {
+                        showErrorMsg(emailVerifyMessage, result.message || `验证码发送失败：${resp.status}`, true);
+                    }
+                } catch (err) {
+                    console.error('发送邮箱验证码失败：', err);
+                    showErrorMsg(emailVerifyMessage, '无法连接到服务器', true);
+                }
+            });
+        }
+
         document.getElementById('changePwBtn')?.addEventListener('click', async () => {
             const pwOldEl = document.getElementById('pwOld');
             const pw1El = document.getElementById('pw1');
@@ -707,13 +763,15 @@
 
             const newEmail = (emailEditInput?.value || '').trim();
             if (!newEmail) { alert('请输入新邮箱'); return; }
+            const oldEmailCode = (oldEmailCodeInput?.value || '').trim();
+            if (!oldEmailCode) { alert('请先输入旧邮箱验证码'); return; }
 
-            await withButtonLoading(updateEmailBtn, '更新中...', async () => {
+            await withButtonLoading(updateEmailBtn, '验证并更新中...', async () => {
                 try {
-                    const resp = await fetch('/api/user/profile/update-field', {
+                    const resp = await fetch('/api/user/email-change/confirm', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
-                        body: JSON.stringify({ targetUid: state.currentUserUid, field: 'email', value: newEmail })
+                        body: JSON.stringify({ targetUid: state.currentUserUid, newEmail, oldEmailCode })
                     });
                     const result = await resp.json().catch(() => ({}));
 
@@ -721,19 +779,25 @@
                         state.originalProfile.email = newEmail;
                         const emailEl = document.getElementById('currentEmailDisplay');
                         if (emailEl) emailEl.textContent = state.deps.maskEmail(newEmail);
-                        alert(result.message || '邮箱已更新');
+                        showErrorMsg(emailVerifyMessage, result.message || '邮箱已更新', false);
+                        if (result?.data?.requireRelogin) {
+                            localStorage.removeItem('kax_login_token');
+                            setTimeout(() => { location.href = '/login'; }, 800);
+                        }
                     } else if (resp.status === 401) {
                         localStorage.removeItem('kax_login_token');
                         location.href = '/login';
                     } else {
-                        alert(result.message || ('邮箱更新失败：' + resp.status));
+                        showErrorMsg(emailVerifyMessage, result.message || ('邮箱更新失败：' + resp.status), true);
                     }
                 } catch (err) {
                     console.error('更新邮箱失败：', err);
-                    alert('无法连接到服务器');
+                    showErrorMsg(emailVerifyMessage, '无法连接到服务器', true);
                 }
             });
         });
+
+        sendOldEmailCodeBtn?.addEventListener('click', sendOldEmailCode);
     }
 
     /**

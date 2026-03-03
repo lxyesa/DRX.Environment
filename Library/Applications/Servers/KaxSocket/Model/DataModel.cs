@@ -61,6 +61,15 @@ namespace KaxSocket
 
         /// <summary>订单详细（子表，记录每次购买/兑换 CDK 的详细信息）</summary>
         public TableList<UserOrderRecord> OrderRecords { get; set; }
+
+        /// <summary>邮箱变更验证码记录（子表，用于双通道邮箱验证）</summary>
+        public TableList<EmailChangeVerification> EmailChangeVerifications { get; set; }
+
+        /// <summary>密码重置令牌记录（子表，用于忘记密码邮件重置流程）</summary>
+        public TableList<PasswordResetToken> PasswordResetTokens { get; set; }
+
+        /// <summary>会话失效基线时间戳（Unix 毫秒），该时刻之前签发的所有 Token 均视为失效</summary>
+        public long TokenInvalidBefore { get; set; } = 0;
         
         /// <summary>邮箱是否已验证</summary>
         public bool EmailVerified { get; set; } = false;
@@ -183,6 +192,139 @@ namespace KaxSocket
 
         /// <summary>表名</summary>
         public string TableName => nameof(UserOrderRecord);
+    }
+
+    /// <summary>
+    /// 用户邮箱变更验证码记录（子表项），用于旧邮箱/新邮箱双通道验证码状态管理。
+    /// </summary>
+    public class EmailChangeVerification : IDataTableV2
+    {
+        /// <summary>子表项唯一 Id（字符串）</summary>
+        public string Id { get; set; } = Guid.NewGuid().ToString();
+
+        /// <summary>父表主键（所属 UserData.Id）</summary>
+        public int ParentId { get; set; }
+
+        /// <summary>创建时间（Unix 毫秒）</summary>
+        public long CreatedAt { get; set; } = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+
+        /// <summary>更新时间（Unix 毫秒）</summary>
+        public long UpdatedAt { get; set; } = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+
+        /// <summary>验证码通道：old 或 new</summary>
+        public string Channel { get; set; } = "new";
+
+        /// <summary>目标新邮箱（old 通道可为空）</summary>
+        public string NewEmail { get; set; } = string.Empty;
+
+        /// <summary>验证码哈希值（不存明文）</summary>
+        public string CodeHash { get; set; } = string.Empty;
+
+        /// <summary>验证码哈希盐（可选）</summary>
+        public string CodeSalt { get; set; } = string.Empty;
+
+        /// <summary>状态：pending / used / expired / cancelled / locked</summary>
+        public string Status { get; set; } = "pending";
+
+        /// <summary>已尝试次数</summary>
+        public int Attempts { get; set; } = 0;
+
+        /// <summary>最大允许尝试次数</summary>
+        public int MaxAttempts { get; set; } = 5;
+
+        /// <summary>过期时间（Unix 毫秒）</summary>
+        public long ExpiresAt { get; set; }
+
+        /// <summary>实际消费时间（Unix 毫秒，0 表示未消费）</summary>
+        public long UsedAt { get; set; } = 0;
+
+        /// <summary>请求来源 IP</summary>
+        public string RequestIp { get; set; } = string.Empty;
+
+        /// <summary>请求来源 User-Agent</summary>
+        public string UserAgent { get; set; } = string.Empty;
+
+        /// <summary>最近一次发送时间（Unix 毫秒）</summary>
+        public long LastSendAt { get; set; } = 0;
+
+        /// <summary>当前小时窗口发送次数</summary>
+        public int HourlyCount { get; set; } = 0;
+
+        /// <summary>当前日窗口发送次数</summary>
+        public int DailyCount { get; set; } = 0;
+
+        /// <summary>小时窗口起点时间（Unix 毫秒）</summary>
+        public long WindowHourStartAt { get; set; } = 0;
+
+        /// <summary>日窗口起点时间（Unix 毫秒）</summary>
+        public long WindowDayStartAt { get; set; } = 0;
+
+        /// <summary>子表名称</summary>
+        public string TableName => nameof(EmailChangeVerification);
+    }
+
+    /// <summary>
+    /// 密码重置令牌记录（子表项），用于忘记密码邮件重置流程。
+    /// 明文 Token 仅在邮件中出现，数据库仅存储 hash/salt。
+    /// </summary>
+    public class PasswordResetToken : IDataTableV2
+    {
+        /// <summary>子表项唯一 Id（字符串）</summary>
+        public string Id { get; set; } = Guid.NewGuid().ToString();
+
+        /// <summary>父表主键（所属 UserData.Id）</summary>
+        public int ParentId { get; set; }
+
+        /// <summary>创建时间（Unix 毫秒）</summary>
+        public long CreatedAt { get; set; } = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+
+        /// <summary>更新时间（Unix 毫秒）</summary>
+        public long UpdatedAt { get; set; } = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+
+        /// <summary>令牌哈希值（不存明文令牌）</summary>
+        public string TokenHash { get; set; } = string.Empty;
+
+        /// <summary>令牌哈希盐</summary>
+        public string TokenSalt { get; set; } = string.Empty;
+
+        /// <summary>状态：pending / used / expired / locked</summary>
+        public string Status { get; set; } = "pending";
+
+        /// <summary>已尝试次数（用于防暴力枚举）</summary>
+        public int Attempts { get; set; } = 0;
+
+        /// <summary>最大允许尝试次数</summary>
+        public int MaxAttempts { get; set; } = 5;
+
+        /// <summary>过期时间（Unix 毫秒）</summary>
+        public long ExpiresAt { get; set; }
+
+        /// <summary>实际消费时间（Unix 毫秒，0 表示未消费）</summary>
+        public long UsedAt { get; set; } = 0;
+
+        /// <summary>申请来源 IP</summary>
+        public string RequestIp { get; set; } = string.Empty;
+
+        /// <summary>申请来源 User-Agent</summary>
+        public string UserAgent { get; set; } = string.Empty;
+
+        /// <summary>最近一次发送时间（Unix 毫秒，用于冷却判断）</summary>
+        public long LastSendAt { get; set; } = 0;
+
+        /// <summary>当前小时窗口发送次数</summary>
+        public int HourlyCount { get; set; } = 0;
+
+        /// <summary>当前日窗口发送次数</summary>
+        public int DailyCount { get; set; } = 0;
+
+        /// <summary>小时窗口起点时间（Unix 毫秒）</summary>
+        public long WindowHourStartAt { get; set; } = 0;
+
+        /// <summary>日窗口起点时间（Unix 毫秒）</summary>
+        public long WindowDayStartAt { get; set; } = 0;
+
+        /// <summary>子表名称</summary>
+        public string TableName => nameof(PasswordResetToken);
     }
 
     /// <summary>
