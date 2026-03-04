@@ -37,6 +37,10 @@
                 <span class="material-icons">add_circle</span>
                 提交资源
             </button>
+            <button class="dev-tab" data-tab="asset-management" role="tab" aria-selected="false" id="assetManagementTab" style="display:none;">
+                <span class="material-icons">inventory</span>
+                资产管理
+            </button>
             <button class="dev-tab" data-tab="review-panel" role="tab" aria-selected="false" id="reviewTab" style="display:none;">
                 <span class="material-icons">fact_check</span>
                 审核管理
@@ -237,6 +241,38 @@
             </div>
         </div>
 
+        <!-- Tab 内容：资产管理（仅 System） -->
+        <div class="dev-tab-content" id="tab-asset-management">
+            <div class="dev-toolbar system-asset-toolbar">
+                <div class="dev-toolbar-left system-asset-toolbar-left">
+                    <input id="systemAssetKeyword" class="dev-input system-asset-search-input" type="text" placeholder="搜索名称 / 版本 / 描述 / 作者ID">
+                    <input id="systemAssetAuthorId" class="dev-input system-asset-author-input" type="text" placeholder="开发者ID">
+                </div>
+                <div class="dev-toolbar-right system-asset-toolbar-right">
+                    <select id="systemAssetStatusFilter" data-custom-select aria-label="资产管理状态筛选" title="资产管理状态筛选">
+                        <option value="">全部状态</option>
+                        <option value="0">审核中</option>
+                        <option value="1">已拒绝</option>
+                        <option value="2">待发布</option>
+                        <option value="3">已上线</option>
+                        <option value="4">已下架</option>
+                    </select>
+                    <button class="btn ghost small" id="systemAssetSearchBtn" type="button">
+                        <span class="material-icons">search</span>检索
+                    </button>
+                </div>
+            </div>
+            <div class="dev-asset-list" id="systemAssetList">
+                <!-- System资产由 JS 动态生成 -->
+            </div>
+            <div class="dev-empty" id="systemAssetEmpty" style="display:none;">
+                <span class="material-icons">inventory_2</span>
+                <h3>暂无资产</h3>
+                <p>请调整筛选条件后重试</p>
+            </div>
+            <div class="dev-pagination" id="systemAssetPagination"></div>
+        </div>
+
         <!-- Tab 内容：审核管理（管理员专用） -->
         <div class="dev-tab-content" id="tab-review-panel">
             <div class="dev-toolbar">
@@ -344,6 +380,64 @@
             <div class="dev-modal-footer">
                 <button class="btn ghost" id="cancelRejectBtn" type="button">取消</button>
                 <button class="btn dev-btn-reject" id="confirmRejectBtn" type="button">确认拒绝</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- System 资产详情弹窗 -->
+    <div class="dev-modal-overlay" id="systemAssetModal" style="display:none;">
+        <div class="dev-modal rv-modal system-rv-modal">
+            <div class="rv-header">
+                <div class="rv-header-left">
+                    <div class="rv-header-icon" id="systemAssetModalThumb">
+                        <span class="material-icons">inventory_2</span>
+                    </div>
+                    <div class="rv-header-meta">
+                        <h2 id="systemAssetModalTitle">资产详情</h2>
+                        <div class="rv-header-sub">System Asset Control Panel</div>
+                    </div>
+                </div>
+                <div class="rv-header-right">
+                    <button class="dev-modal-close" id="closeSystemAssetModal" title="关闭">
+                        <span class="material-icons">close</span>
+                    </button>
+                </div>
+            </div>
+
+            <div class="rv-body system-rv-body">
+                <aside class="rv-sidebar system-rv-sidebar">
+                    <div id="systemAssetModalMeta" class="rv-info-list system-rv-meta"></div>
+                </aside>
+
+                <div class="rv-content system-rv-content">
+                    <div class="rv-panels system-rv-panels">
+                        <section class="system-rv-block">
+                            <h3>资源描述</h3>
+                            <div id="systemAssetModalDesc" class="system-rv-desc"></div>
+                        </section>
+
+                        <section class="system-rv-block">
+                            <h3>字段编辑（禁止修改 DeveloperId / AssetId）</h3>
+                            <p class="system-field-editor-hint">字段将以卡片形式展示，可直接编辑并单独保存。</p>
+                            <div id="systemFieldCards" class="system-field-cards" aria-live="polite"></div>
+                        </section>
+                    </div>
+                </div>
+            </div>
+
+            <div class="rv-footer system-rv-footer">
+                <input id="systemActionReason" class="system-rv-reason" type="text" placeholder="动作原因（退回必填）">
+                <div class="rv-footer-actions system-rv-actions">
+                    <button class="btn small system-rv-btn system-rv-btn-return" id="systemReturnBtn" type="button">
+                        <span class="material-icons">undo</span>退回
+                    </button>
+                    <button class="btn small system-rv-btn system-rv-btn-offshelf" id="systemOffShelfBtn" type="button">
+                        <span class="material-icons">visibility_off</span>下架
+                    </button>
+                    <button class="btn small system-rv-btn system-rv-btn-force" id="systemForceReviewBtn" type="button">
+                        <span class="material-icons">refresh</span>强制重审
+                    </button>
+                </div>
             </div>
         </div>
     </div>

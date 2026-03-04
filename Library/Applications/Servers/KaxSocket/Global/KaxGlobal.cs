@@ -20,6 +20,7 @@ public static partial class KaxGlobal
     public static readonly SqliteV2<UserData> UserDatabase = new SqliteV2<UserData>("kax_users.db", AppDomain.CurrentDomain.BaseDirectory);
     public static readonly SqliteV2<CdkModel> CdkDatabase = new SqliteV2<CdkModel>("cdk.db", AppDomain.CurrentDomain.BaseDirectory);
     public static readonly SqliteV2<AssetModel> AssetDataBase = new SqliteV2<AssetModel>("assets.db", AppDomain.CurrentDomain.BaseDirectory);
+    public static readonly SqliteV2<AssetAuditLog> AssetAuditDatabase = new SqliteV2<AssetAuditLog>("asset_audit.db", AppDomain.CurrentDomain.BaseDirectory);
 
     public static string GenerateLoginToken(UserData user)
     {

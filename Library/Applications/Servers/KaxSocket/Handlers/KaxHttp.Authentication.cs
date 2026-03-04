@@ -248,6 +248,8 @@ public partial class KaxHttp
         // 返回额外的权限信息，前端可据此决定是否显示管理员入口
         var permissionGroup = userModel.PermissionGroup;
         var isAdmin = permissionGroup == UserPermissionGroup.System || permissionGroup == UserPermissionGroup.Console || permissionGroup == UserPermissionGroup.Admin;
+        // 新增：精确标识 System 权限组，用于前端判断是否显示"资产管理"等仅系统管理员可见的功能
+        var isSystem = permissionGroup == UserPermissionGroup.System;
 
         // 如果服务器上存在已上传的头像文件，返回可访问的 avatarUrl（供前端直接使用）
         string avatarUrl = string.Empty;
@@ -268,6 +270,7 @@ public partial class KaxHttp
             user = userName,
             permissionGroup = (int)permissionGroup,
             isAdmin = isAdmin,
+            isSystem = isSystem, // 新增：用于前端判断是否显示"资产管理"等仅系统管理员可见的功能
             avatarUrl = avatarUrl,
             // 兼容：返回用户统计摘要，方便 topbar/前端统一使用
             resourceCount = userModel.ResourceCount,

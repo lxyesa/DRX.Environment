@@ -865,4 +865,838 @@ public partial class KaxHttp
     }
 
     #endregion
+
+    #region System-Only 资产管理 (仅权限组0)
+
+    /// <summary>
+    /// System-Only 资产列表（分页+筛选）
+    /// 仅权限组 0 (System) 可访问
+    /// 支持筛选：q(关键字)、status(状态)、authorId(开发者ID)、page、pageSize、includeDeleted
+    /// </summary>
+    [HttpHandle("/api/asset/system/list", "GET", RateLimitMaxRequests = 0, RateLimitWindowSeconds = 0, RateLimitCallbackMethodName = nameof(RateLimitCallback))]
+    public static async Task<IActionResult> Get_SystemAssetList(HttpRequest request)
+    {
+        var (_, authError) = await Api.RequireSystemNameAsync(request);
+        if (authError != null) return authError;
+
+        try
+        {
+            // 支持查询参数：q (搜索关键字), status (资产状态), authorId (开发者ID), page, pageSize, includeDeleted
+            var q = request.Query["q"] ?? string.Empty;
+            var statusFilter = request.Query["status"] ?? string.Empty;
+            var authorIdFilter = request.Query["authorId"] ?? string.Empty;
+            var includeDeleted = (request.Query["includeDeleted"] ?? "false").ToLower() == "true";
+            var (page, pageSize) = ApiPagination.Parse(request, defaultPageSize: 20);
+
+            var all = await KaxGlobal.AssetDataBase.SelectAllAsync();
+
+            var filtered = all.AsQueryable();
+
+            // 软删除筛选
+            if (!includeDeleted)
+            {
+                filtered = filtered.Where(a => !a.IsDeleted);
+            }
+
+            // 关键字搜索（名称、版本、作者ID）
+            if (!string.IsNullOrEmpty(q))
+            {
+                var qlow = q.ToLowerInvariant();
+                filtered = filtered.Where(a =>
+                    (a.Name ?? string.Empty).ToLowerInvariant().Contains(qlow)
+                    || a.AuthorId.ToString().Contains(qlow)
+                    || (a.Version ?? string.Empty).ToLowerInvariant().Contains(qlow)
+                    || (a.Description ?? string.Empty).ToLowerInvariant().Contains(qlow));
+            }
+
+            // 状态筛选
+            if (!string.IsNullOrEmpty(statusFilter) && int.TryParse(statusFilter, out var statusValue))
+            {
+                filtered = filtered.Where(a => (int)a.Status == statusValue);
+            }
+
+            // 开发者ID筛选
+            if (!string.IsNullOrEmpty(authorIdFilter) && int.TryParse(authorIdFilter, out var authorId))
+            {
+                filtered = filtered.Where(a => a.AuthorId == authorId);
+            }
+
+            var total = filtered.Count();
+            var items = filtered
+                .OrderByDescending(a => a.Specs != null ? a.Specs.LastUpdatedAt : 0)
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .Select(a => new
+                {
+                    id = a.Id,
+                    name = a.Name,
+                    version = a.Version,
+                    authorId = a.AuthorId,
+                    description = a.Description,
+                    status = (int)a.Status,
+                    statusName = a.Status.ToString(),
+                    category = a.Category,
+                    lastUpdatedAt = a.Specs != null ? a.Specs.LastUpdatedAt : 0,
+                    isDeleted = a.IsDeleted
+                })
+                .ToList<object>();
+
+            return new JsonResult(new { data = items, page, pageSize, total });
+        }
+        catch (Exception ex)
+        {
+            Logger.Error($"[System] 读取资源列表失败: {ex.Message}");
+            return new JsonResult(new { message = "无法读取资源列表" }, 500);
+        }
+    }
+
+    /// <summary>
+    /// System-Only 资产详情
+    /// 仅权限组 0 (System) 可访问
+    /// </summary>
+    [HttpHandle("/api/asset/system/{id}", "GET", RateLimitMaxRequests = 60, RateLimitWindowSeconds = 60, RateLimitCallbackMethodName = nameof(RateLimitCallback))]
+    public static async Task<IActionResult> Get_SystemAssetDetail(HttpRequest request)
+    {
+        var (_, authError) = await Api.RequireSystemNameAsync(request);
+        if (authError != null) return authError;
+
+        try
+        {
+            // 从路由模板提取 id
+            var idStr = request.PathParameters.GetValueOrDefault("id") ?? string.Empty;
+            if (!int.TryParse(idStr, out var id) || id <= 0)
+                return new JsonResult(new { message = "资源ID无效" }, 400);
+
+            var asset = await KaxGlobal.AssetDataBase.SelectByIdAsync(id);
+            if (asset == null)
+                return new JsonResult(new { message = "资源不存在" }, 404);
+
+            // 将价格方案列表转换为可序列化的格式，并从第一个方案派生兼容字段
+            var pricesList = asset.Prices?.ToList();
+            var primaryPrice = pricesList?.FirstOrDefault();
+            var specs = asset.Specs;
+
+            return new JsonResult(new
+            {
+                data = new
+                {
+                    id = asset.Id,
+                    name = asset.Name,
+                    version = asset.Version,
+                    authorId = asset.AuthorId,
+                    description = asset.Description,
+                    category = asset.Category,
+                    tags = asset.Tags,
+                    badges = asset.Badges,
+                    features = asset.Features,
+                    coverImage = asset.CoverImage,
+                    iconImage = asset.IconImage,
+                    screenshots = asset.Screenshots,
+                    status = (int)asset.Status,
+                    statusName = asset.Status.ToString(),
+                    rejectReason = asset.RejectReason,
+                    lastSubmittedAt = asset.LastSubmittedAt,
+                    // 价格信息（兼容字段）
+                    price = primaryPrice?.Price ?? 0,
+                    originalPrice = primaryPrice?.OriginalPrice ?? 0,
+                    discountRate = primaryPrice?.DiscountRate ?? 0.0,
+                    // 规格信息
+                    specs = specs != null ? new
+                    {
+                        fileSize = specs.FileSize,
+                        rating = specs.Rating,
+                        reviewCount = specs.ReviewCount,
+                        compatibility = specs.Compatibility,
+                        downloads = specs.Downloads,
+                        uploadDate = specs.UploadDate,
+                        license = specs.License,
+                        downloadUrl = specs.DownloadUrl,
+                        purchaseCount = specs.PurchaseCount,
+                        favoriteCount = specs.FavoriteCount,
+                        viewCount = specs.ViewCount,
+                        lastUpdatedAt = specs.LastUpdatedAt
+                    } : null,
+                    // 向后兼容：平铺规格字段
+                    fileSize = specs?.FileSize ?? 0,
+                    rating = specs?.Rating ?? 0.0,
+                    reviewCount = specs?.ReviewCount ?? 0,
+                    compatibility = specs?.Compatibility ?? string.Empty,
+                    downloads = specs?.Downloads ?? 0,
+                    uploadDate = specs?.UploadDate ?? 0,
+                    license = specs?.License ?? string.Empty,
+                    downloadUrl = specs?.DownloadUrl ?? string.Empty,
+                    purchaseCount = specs?.PurchaseCount ?? 0,
+                    favoriteCount = specs?.FavoriteCount ?? 0,
+                    viewCount = specs?.ViewCount ?? 0,
+                    lastUpdatedAt = specs?.LastUpdatedAt ?? 0,
+                    isDeleted = asset.IsDeleted,
+                    deletedAt = asset.DeletedAt,
+                    prices = pricesList
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            Logger.Error($"[System] 查询资源详情失败: {ex.Message}");
+            return new JsonResult(new { message = "服务器错误" }, 500);
+        }
+    }
+
+    /// <summary>
+    /// System-Only 资产字段黑名单（禁止通过此接口修改）
+    /// </summary>
+    private static readonly HashSet<string> SystemFieldBlacklist = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "id",
+        "assetid",
+        "authorid",
+        "developerid"  // 设计文档使用 DeveloperId，但模型字段为 AuthorId，两者都禁止
+    };
+
+    /// <summary>
+    /// System-Only 单字段更新
+    /// 仅权限组 0 (System) 可访问
+    /// 禁止修改 DeveloperId (AuthorId) 和 AssetId (Id)
+    /// </summary>
+    [HttpHandle("/api/asset/system/update-field", "POST", RateLimitMaxRequests = 20, RateLimitWindowSeconds = 60, RateLimitCallbackMethodName = nameof(RateLimitCallback))]
+    public static async Task<IActionResult> Post_SystemUpdateAssetField(HttpRequest request)
+    {
+        var (operatorUser, authError) = await Api.RequireSystemAsync(request);
+        if (authError != null) return authError;
+
+        var operatorName = operatorUser!.UserName;
+        var operatorId = operatorUser.Id;
+
+        if (!ApiBody.TryParse(request, out var body, out var parseError))
+            return parseError!;
+
+        var requestId = Guid.NewGuid().ToString();
+
+        try
+        {
+            if (!int.TryParse(body["id"]?.ToString(), out var id) || id <= 0)
+                return new JsonResult(new { message = "资源ID无效" }, 400);
+
+            var field = body["field"]?.ToString()?.Trim() ?? string.Empty;
+            if (string.IsNullOrEmpty(field))
+                return new JsonResult(new { message = "field 参数缺失" }, 400);
+
+            // 字段黑名单检查：禁止修改 AuthorId/DeveloperId 和 Id/AssetId
+            if (SystemFieldBlacklist.Contains(field))
+                return new JsonResult(new { message = $"字段 '{field}' 禁止修改", code = "FIELD_FORBIDDEN" }, 403);
+
+            var asset = await KaxGlobal.AssetDataBase.SelectByIdAsync(id);
+            if (asset == null)
+                return new JsonResult(new { message = "资源不存在" }, 404);
+
+            // 记录旧值（用于审计）
+            var oldValue = GetAssetFieldValue(asset, field);
+
+            if (!TryApplyAssetSingleField(asset, field, body["value"], out var fieldError))
+            {
+                await WriteAuditAsync(id, operatorId, operatorName, "update-field", false,
+                    fieldChangesJson: $"{{\"field\":\"{field}\",\"oldValue\":{System.Text.Json.JsonSerializer.Serialize(oldValue)},\"newValue\":{System.Text.Json.JsonSerializer.Serialize(body["value"]?.ToString())}}}",
+                    errorCode: "FIELD_APPLY_ERROR",
+                    errorMessage: fieldError ?? string.Empty,
+                    requestId: requestId);
+                return new JsonResult(new { message = fieldError }, 400);
+            }
+
+            // 记录新值（用于审计）
+            var newValue = GetAssetFieldValue(asset, field);
+
+            var specs = EnsureSpecs(asset);
+            specs.LastUpdatedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+            await KaxGlobal.AssetDataBase.UpdateAsync(asset);
+
+            // 写入字段变更审计
+            await WriteAuditAsync(id, operatorId, operatorName, "update-field", true,
+                fieldChangesJson: $"{{\"field\":\"{field}\",\"oldValue\":{System.Text.Json.JsonSerializer.Serialize(oldValue)},\"newValue\":{System.Text.Json.JsonSerializer.Serialize(newValue)}}}",
+                requestId: requestId);
+
+            Logger.Info($"[System] 用户 {operatorName} 单字段修改了资源: {asset.Name} (id={id}, field={field})");
+            return new JsonResult(new { message = "字段已更新", id, field });
+        }
+        catch (Exception ex)
+        {
+            Logger.Error($"[System] 单字段更新资源失败: {ex}");
+            _ = WriteAuditAsync(0, operatorId, operatorName, "update-field", false,
+                errorCode: "INTERNAL_ERROR",
+                errorMessage: ex.Message,
+                requestId: requestId);
+            return new JsonResult(new { message = "服务器错误" }, 500);
+        }
+    }
+
+    /// <summary>
+    /// 获取资产指定字段的当前值（用于审计记录旧值/新值）
+    /// </summary>
+    private static string GetAssetFieldValue(Model.AssetModel asset, string field)
+    {
+        if (asset == null || string.IsNullOrEmpty(field)) return string.Empty;
+        return field.ToLowerInvariant() switch
+        {
+            "name"          => asset.Name ?? string.Empty,
+            "version"       => asset.Version ?? string.Empty,
+            "description"   => asset.Description ?? string.Empty,
+            "category"      => asset.Category ?? string.Empty,
+            "tags"          => asset.Tags ?? string.Empty,
+            "badges"        => asset.Badges ?? string.Empty,
+            "features"      => asset.Features ?? string.Empty,
+            "coverimage"    => asset.CoverImage ?? string.Empty,
+            "iconimage"     => asset.IconImage ?? string.Empty,
+            "screenshots"   => asset.Screenshots ?? string.Empty,
+            "status"        => ((int)asset.Status).ToString(),
+            "rejectreason"  => asset.RejectReason ?? string.Empty,
+            "filesize"      => asset.Specs?.FileSize.ToString() ?? "0",
+            "downloadurl"   => asset.Specs?.DownloadUrl ?? string.Empty,
+            "license"       => asset.Specs?.License ?? string.Empty,
+            "compatibility" => asset.Specs?.Compatibility ?? string.Empty,
+            "prices"        => "[complex]",
+            _               => string.Empty
+        };
+    }
+
+
+    /// <summary>
+    /// 写入资产审计日志（fire-and-forget，内部异常不影响主流程）
+    /// </summary>
+    private static async Task WriteAuditAsync(
+        int assetId,
+        int operatorUserId,
+        string operatorUserName,
+        string actionType,
+        bool success,
+        int beforeStatus = -1,
+        int afterStatus = -1,
+        string reason = "",
+        string fieldChangesJson = "",
+        string errorCode = "",
+        string errorMessage = "",
+        string requestId = "")
+    {
+        try
+        {
+            var log = new AssetAuditLog
+            {
+                AssetId = assetId,
+                OperatorUserId = operatorUserId,
+                OperatorUserName = operatorUserName ?? string.Empty,
+                ActionType = actionType ?? string.Empty,
+                Reason = reason ?? string.Empty,
+                CreatedAt = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+                BeforeStatus = beforeStatus,
+                AfterStatus = afterStatus,
+                FieldChangesJson = fieldChangesJson ?? string.Empty,
+                Success = success,
+                ErrorCode = errorCode ?? string.Empty,
+                ErrorMessage = errorMessage ?? string.Empty,
+                RequestId = string.IsNullOrEmpty(requestId) ? Guid.NewGuid().ToString() : requestId
+            };
+            await KaxGlobal.AssetAuditDatabase.InsertAsync(log);
+        }
+        catch (Exception auditEx)
+        {
+            // 审计写入失败不影响主流程，仅记录日志
+            Logger.Warn($"[Audit] 审计日志写入失败(assetId={assetId}, action={actionType}): {auditEx.Message}");
+        }
+    }
+
+    private readonly struct StateTransitionResult
+    {
+        public bool IsValid { get; init; }
+        public string ErrorMessage { get; init; }
+        public string ErrorCode { get; init; }
+
+        public static StateTransitionResult Valid() => new() { IsValid = true };
+        public static StateTransitionResult Invalid(string code, string message) => new() { IsValid = false, ErrorCode = code, ErrorMessage = message };
+    }
+
+    /// <summary>
+    /// 校验状态流转是否合法
+    /// 
+    /// 状态流转规则（设计文档定义）：
+    /// - 退回（Return）：0/2/3/4 -> 1（受规则约束，需原因）
+    /// - 重审（ForceReview）：1/3/4 -> 0（强制更新=重审）
+    /// - 下架（OffShelf）：3 -> 4
+    /// - 恢复上架（Relist）：4 -> 3（可选能力，预留）
+    /// </summary>
+    private static StateTransitionResult ValidateStateTransition(AssetStatus currentStatus, string action)
+    {
+        // 根据动作类型定义合法的前置状态
+        var validTransitions = action.ToLowerInvariant() switch
+        {
+            "return" => new[] { AssetStatus.PendingReview, AssetStatus.ApprovedPendingPublish, AssetStatus.Active, AssetStatus.OffShelf },
+            "off-shelf" => new[] { AssetStatus.Active },
+            "force-review" => new[] { AssetStatus.Rejected, AssetStatus.Active, AssetStatus.OffShelf },
+            "relist" => new[] { AssetStatus.OffShelf },  // 预留：恢复上架
+            _ => Array.Empty<AssetStatus>()
+        };
+
+        if (validTransitions.Length == 0)
+            return StateTransitionResult.Invalid("INVALID_ACTION", $"未知的动作类型: {action}");
+
+        if (!validTransitions.Contains(currentStatus))
+        {
+            var allowedStates = string.Join(", ", validTransitions.Select(s => $"{(int)s}({s})"));
+            return StateTransitionResult.Invalid(
+                "INVALID_STATE_TRANSITION",
+                $"当前状态 {(int)currentStatus}({currentStatus}) 不允许执行 {action} 操作。允许的前置状态: {allowedStates}"
+            );
+        }
+
+        return StateTransitionResult.Valid();
+    }
+
+    /// <summary>
+    /// System-Only 退回资产
+    /// 仅权限组 0 (System) 可访问
+    /// 
+    /// 状态流转：PendingReview(0)/ApprovedPendingPublish(2)/Active(3)/OffShelf(4) -> Rejected(1)
+    /// 必填：assetId, reason
+    /// </summary>
+    [HttpHandle("/api/asset/system/return", "POST", RateLimitMaxRequests = 20, RateLimitWindowSeconds = 60, RateLimitCallbackMethodName = nameof(RateLimitCallback))]
+    public static async Task<IActionResult> Post_SystemReturnAsset(HttpRequest request)
+    {
+        var (operatorUser, authError) = await Api.RequireSystemAsync(request);
+        if (authError != null) return authError;
+
+        var operatorName = operatorUser!.UserName;
+        var operatorId = operatorUser.Id;
+
+        if (!ApiBody.TryParse(request, out var body, out var parseError))
+            return parseError!;
+
+        var requestId = Guid.NewGuid().ToString();
+
+        try
+        {
+            // 参数校验
+            if (!int.TryParse(body["assetId"]?.ToString() ?? body["id"]?.ToString(), out var assetId) || assetId <= 0)
+                return new JsonResult(new { message = "资源ID无效", code = "INVALID_ASSET_ID" }, 400);
+
+            var reason = body["reason"]?.ToString()?.Trim();
+            if (string.IsNullOrEmpty(reason))
+                return new JsonResult(new { message = "退回原因不能为空", code = "REASON_REQUIRED" }, 400);
+
+            if (reason.Length > 500)
+                return new JsonResult(new { message = "退回原因过长（最多500字符）", code = "REASON_TOO_LONG" }, 400);
+
+            // 获取资产
+            var asset = await KaxGlobal.AssetDataBase.SelectByIdAsync(assetId);
+            if (asset == null)
+                return new JsonResult(new { message = "资源不存在", code = "ASSET_NOT_FOUND" }, 404);
+
+            // 状态流转校验
+            var transition = ValidateStateTransition(asset.Status, "return");
+            if (!transition.IsValid)
+            {
+                await WriteAuditAsync(assetId, operatorId, operatorName, "return", false,
+                    beforeStatus: (int)asset.Status,
+                    reason: reason,
+                    errorCode: transition.ErrorCode,
+                    errorMessage: transition.ErrorMessage,
+                    requestId: requestId);
+                return new JsonResult(new { message = transition.ErrorMessage, code = transition.ErrorCode }, 400);
+            }
+
+            // 记录原状态用于日志
+            var previousStatus = asset.Status;
+
+            // 执行状态变更
+            asset.Status = AssetStatus.Rejected;
+            asset.RejectReason = reason;
+            var specs = EnsureSpecs(asset);
+            specs.LastUpdatedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+            await KaxGlobal.AssetDataBase.UpdateAsync(asset);
+
+            // 写入成功审计
+            await WriteAuditAsync(assetId, operatorId, operatorName, "return", true,
+                beforeStatus: (int)previousStatus,
+                afterStatus: (int)AssetStatus.Rejected,
+                reason: reason,
+                requestId: requestId);
+
+            Logger.Info($"[System] 用户 {operatorName} 退回了资源: {asset.Name} (id={assetId})，状态: {previousStatus} -> Rejected，原因: {reason}");
+            return new JsonResult(new
+            {
+                code = 0,
+                message = "资源已退回",
+                data = new
+                {
+                    assetId,
+                    previousStatus = (int)previousStatus,
+                    currentStatus = (int)AssetStatus.Rejected,
+                    reason
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            Logger.Error($"[System] 退回资源失败: {ex}");
+            // 尽力写入失败审计（assetId 可能为 0 如果解析失败，仍记录以便排查）
+            _ = WriteAuditAsync(0, operatorId, operatorName, "return", false,
+                errorCode: "INTERNAL_ERROR",
+                errorMessage: ex.Message,
+                requestId: requestId);
+            return new JsonResult(new { message = "服务器错误", code = "INTERNAL_ERROR" }, 500);
+        }
+    }
+
+    /// <summary>
+    /// System-Only 下架资产
+    /// 仅权限组 0 (System) 可访问
+    /// 
+    /// 状态流转：Active(3) -> OffShelf(4)
+    /// 注意：下架是独立状态，不等同于软删除（IsDeleted）
+    /// </summary>
+    [HttpHandle("/api/asset/system/off-shelf", "POST", RateLimitMaxRequests = 20, RateLimitWindowSeconds = 60, RateLimitCallbackMethodName = nameof(RateLimitCallback))]
+    public static async Task<IActionResult> Post_SystemOffShelfAsset(HttpRequest request)
+    {
+        var (operatorUser, authError) = await Api.RequireSystemAsync(request);
+        if (authError != null) return authError;
+
+        var operatorName = operatorUser!.UserName;
+        var operatorId = operatorUser.Id;
+
+        if (!ApiBody.TryParse(request, out var body, out var parseError))
+            return parseError!;
+
+        var requestId = Guid.NewGuid().ToString();
+
+        try
+        {
+            // 参数校验
+            if (!int.TryParse(body["assetId"]?.ToString() ?? body["id"]?.ToString(), out var assetId) || assetId <= 0)
+                return new JsonResult(new { message = "资源ID无效", code = "INVALID_ASSET_ID" }, 400);
+
+            var reason = body["reason"]?.ToString()?.Trim() ?? string.Empty;
+            // 下架原因可选，但建议填写
+            if (reason.Length > 500)
+                return new JsonResult(new { message = "下架原因过长（最多500字符）", code = "REASON_TOO_LONG" }, 400);
+
+            // 获取资产
+            var asset = await KaxGlobal.AssetDataBase.SelectByIdAsync(assetId);
+            if (asset == null)
+                return new JsonResult(new { message = "资源不存在", code = "ASSET_NOT_FOUND" }, 404);
+
+            // 状态流转校验
+            var transition = ValidateStateTransition(asset.Status, "off-shelf");
+            if (!transition.IsValid)
+            {
+                await WriteAuditAsync(assetId, operatorId, operatorName, "off-shelf", false,
+                    beforeStatus: (int)asset.Status,
+                    reason: reason,
+                    errorCode: transition.ErrorCode,
+                    errorMessage: transition.ErrorMessage,
+                    requestId: requestId);
+                return new JsonResult(new { message = transition.ErrorMessage, code = transition.ErrorCode }, 400);
+            }
+
+            // 记录原状态
+            var previousStatus = asset.Status;
+
+            // 执行下架：注意不修改 IsDeleted（下架独立于软删除）
+            asset.Status = AssetStatus.OffShelf;
+            // 将下架原因记录到 RejectReason 字段（复用）
+            if (!string.IsNullOrEmpty(reason))
+                asset.RejectReason = $"[下架] {reason}";
+            var specs = EnsureSpecs(asset);
+            specs.LastUpdatedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+            await KaxGlobal.AssetDataBase.UpdateAsync(asset);
+
+            // 写入成功审计
+            await WriteAuditAsync(assetId, operatorId, operatorName, "off-shelf", true,
+                beforeStatus: (int)previousStatus,
+                afterStatus: (int)AssetStatus.OffShelf,
+                reason: reason,
+                requestId: requestId);
+
+            Logger.Info($"[System] 用户 {operatorName} 下架了资源: {asset.Name} (id={assetId})，状态: {previousStatus} -> OffShelf" + (string.IsNullOrEmpty(reason) ? "" : $"，原因: {reason}"));
+            return new JsonResult(new
+            {
+                code = 0,
+                message = "资源已下架",
+                data = new
+                {
+                    assetId,
+                    previousStatus = (int)previousStatus,
+                    currentStatus = (int)AssetStatus.OffShelf,
+                    reason = string.IsNullOrEmpty(reason) ? null : reason
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            Logger.Error($"[System] 下架资源失败: {ex}");
+            _ = WriteAuditAsync(0, operatorId, operatorName, "off-shelf", false,
+                errorCode: "INTERNAL_ERROR",
+                errorMessage: ex.Message,
+                requestId: requestId);
+            return new JsonResult(new { message = "服务器错误", code = "INTERNAL_ERROR" }, 500);
+        }
+    }
+
+    /// <summary>
+    /// System-Only 强制重审资产（强制更新）
+    /// 仅权限组 0 (System) 可访问
+    /// 
+    /// 状态流转：Rejected(1)/Active(3)/OffShelf(4) -> PendingReview(0)
+    /// 本期"强制更新"定义为"强制资产重审"
+    /// </summary>
+    [HttpHandle("/api/asset/system/review/force", "POST", RateLimitMaxRequests = 20, RateLimitWindowSeconds = 60, RateLimitCallbackMethodName = nameof(RateLimitCallback))]
+    public static async Task<IActionResult> Post_SystemForceReviewAsset(HttpRequest request)
+    {
+        var (operatorUser, authError) = await Api.RequireSystemAsync(request);
+        if (authError != null) return authError;
+
+        var operatorName = operatorUser!.UserName;
+        var operatorId = operatorUser.Id;
+
+        if (!ApiBody.TryParse(request, out var body, out var parseError))
+            return parseError!;
+
+        var requestId = Guid.NewGuid().ToString();
+
+        try
+        {
+            // 参数校验
+            if (!int.TryParse(body["assetId"]?.ToString() ?? body["id"]?.ToString(), out var assetId) || assetId <= 0)
+                return new JsonResult(new { message = "资源ID无效", code = "INVALID_ASSET_ID" }, 400);
+
+            var reason = body["reason"]?.ToString()?.Trim() ?? string.Empty;
+            if (reason.Length > 500)
+                return new JsonResult(new { message = "原因过长（最多500字符）", code = "REASON_TOO_LONG" }, 400);
+
+            // force 参数（可选，默认 true）
+            var forceStr = body["force"]?.ToString()?.ToLowerInvariant();
+            var force = string.IsNullOrEmpty(forceStr) || forceStr == "true" || forceStr == "1";
+
+            if (!force)
+                return new JsonResult(new { message = "force 参数必须为 true", code = "FORCE_REQUIRED" }, 400);
+
+            // 获取资产
+            var asset = await KaxGlobal.AssetDataBase.SelectByIdAsync(assetId);
+            if (asset == null)
+                return new JsonResult(new { message = "资源不存在", code = "ASSET_NOT_FOUND" }, 404);
+
+            // 状态流转校验
+            var transition = ValidateStateTransition(asset.Status, "force-review");
+            if (!transition.IsValid)
+            {
+                await WriteAuditAsync(assetId, operatorId, operatorName, "force-review", false,
+                    beforeStatus: (int)asset.Status,
+                    reason: reason,
+                    errorCode: transition.ErrorCode,
+                    errorMessage: transition.ErrorMessage,
+                    requestId: requestId);
+                return new JsonResult(new { message = transition.ErrorMessage, code = transition.ErrorCode }, 400);
+            }
+
+            // 记录原状态
+            var previousStatus = asset.Status;
+
+            // 执行强制重审：将资产置入审核流程
+            asset.Status = AssetStatus.PendingReview;
+            asset.LastSubmittedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+            asset.RejectReason = string.Empty;  // 清除之前的拒绝原因
+            var specs = EnsureSpecs(asset);
+            specs.LastUpdatedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+            await KaxGlobal.AssetDataBase.UpdateAsync(asset);
+
+            // 写入成功审计
+            await WriteAuditAsync(assetId, operatorId, operatorName, "force-review", true,
+                beforeStatus: (int)previousStatus,
+                afterStatus: (int)AssetStatus.PendingReview,
+                reason: reason,
+                requestId: requestId);
+
+            Logger.Info($"[System] 用户 {operatorName} 强制重审了资源: {asset.Name} (id={assetId})，状态: {previousStatus} -> PendingReview" + (string.IsNullOrEmpty(reason) ? "" : $"，原因: {reason}"));
+            return new JsonResult(new
+            {
+                code = 0,
+                message = "资源已进入重审流程",
+                data = new
+                {
+                    assetId,
+                    previousStatus = (int)previousStatus,
+                    currentStatus = (int)AssetStatus.PendingReview,
+                    reason = string.IsNullOrEmpty(reason) ? null : reason
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            Logger.Error($"[System] 强制重审资源失败: {ex}");
+            _ = WriteAuditAsync(0, operatorId, operatorName, "force-review", false,
+                errorCode: "INTERNAL_ERROR",
+                errorMessage: ex.Message,
+                requestId: requestId);
+            return new JsonResult(new { message = "服务器错误", code = "INTERNAL_ERROR" }, 500);
+        }
+    }
+
+    /// <summary>
+    /// System-Only 恢复上架资产（预留能力）
+    /// 仅权限组 0 (System) 可访问
+    /// 
+    /// 状态流转：OffShelf(4) -> Active(3)
+    /// </summary>
+    [HttpHandle("/api/asset/system/relist", "POST", RateLimitMaxRequests = 20, RateLimitWindowSeconds = 60, RateLimitCallbackMethodName = nameof(RateLimitCallback))]
+    public static async Task<IActionResult> Post_SystemRelistAsset(HttpRequest request)
+    {
+        var (operatorUser, authError) = await Api.RequireSystemAsync(request);
+        if (authError != null) return authError;
+
+        var operatorName = operatorUser!.UserName;
+        var operatorId = operatorUser.Id;
+
+        if (!ApiBody.TryParse(request, out var body, out var parseError))
+            return parseError!;
+
+        var requestId = Guid.NewGuid().ToString();
+
+        try
+        {
+            // 参数校验
+            if (!int.TryParse(body["assetId"]?.ToString() ?? body["id"]?.ToString(), out var assetId) || assetId <= 0)
+                return new JsonResult(new { message = "资源ID无效", code = "INVALID_ASSET_ID" }, 400);
+
+            var reason = body["reason"]?.ToString()?.Trim() ?? string.Empty;
+            if (reason.Length > 500)
+                return new JsonResult(new { message = "原因过长（最多500字符）", code = "REASON_TOO_LONG" }, 400);
+
+            // 获取资产
+            var asset = await KaxGlobal.AssetDataBase.SelectByIdAsync(assetId);
+            if (asset == null)
+                return new JsonResult(new { message = "资源不存在", code = "ASSET_NOT_FOUND" }, 404);
+
+            // 状态流转校验
+            var transition = ValidateStateTransition(asset.Status, "relist");
+            if (!transition.IsValid)
+            {
+                await WriteAuditAsync(assetId, operatorId, operatorName, "relist", false,
+                    beforeStatus: (int)asset.Status,
+                    reason: reason,
+                    errorCode: transition.ErrorCode,
+                    errorMessage: transition.ErrorMessage,
+                    requestId: requestId);
+                return new JsonResult(new { message = transition.ErrorMessage, code = transition.ErrorCode }, 400);
+            }
+
+            // 记录原状态
+            var previousStatus = asset.Status;
+
+            // 执行恢复上架
+            asset.Status = AssetStatus.Active;
+            asset.RejectReason = string.Empty;
+            var specs = EnsureSpecs(asset);
+            specs.LastUpdatedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+            await KaxGlobal.AssetDataBase.UpdateAsync(asset);
+
+            // 写入成功审计
+            await WriteAuditAsync(assetId, operatorId, operatorName, "relist", true,
+                beforeStatus: (int)previousStatus,
+                afterStatus: (int)AssetStatus.Active,
+                reason: reason,
+                requestId: requestId);
+
+            Logger.Info($"[System] 用户 {operatorName} 恢复上架了资源: {asset.Name} (id={assetId})，状态: {previousStatus} -> Active" + (string.IsNullOrEmpty(reason) ? "" : $"，原因: {reason}"));
+            return new JsonResult(new
+            {
+                code = 0,
+                message = "资源已恢复上架",
+                data = new
+                {
+                    assetId,
+                    previousStatus = (int)previousStatus,
+                    currentStatus = (int)AssetStatus.Active,
+                    reason = string.IsNullOrEmpty(reason) ? null : reason
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            Logger.Error($"[System] 恢复上架资源失败: {ex}");
+            _ = WriteAuditAsync(0, operatorId, operatorName, "relist", false,
+                errorCode: "INTERNAL_ERROR",
+                errorMessage: ex.Message,
+                requestId: requestId);
+            return new JsonResult(new { message = "服务器错误", code = "INTERNAL_ERROR" }, 500);
+        }
+    }
+
+    #endregion
+
+    #region System-Only 审计查询接口
+
+    /// <summary>
+    /// System-Only 查询资产审计记录
+    /// 仅权限组 0 (System) 可访问
+    /// 
+    /// 返回指定资产的所有审计日志，按时间倒序排列，支持分页。
+    /// </summary>
+    [HttpHandle("/api/asset/system/audit/{assetId}", "GET", RateLimitMaxRequests = 60, RateLimitWindowSeconds = 60, RateLimitCallbackMethodName = nameof(RateLimitCallback))]
+    public static async Task<IActionResult> Get_SystemAssetAuditLog(HttpRequest request)
+    {
+        var (_, authError) = await Api.RequireSystemNameAsync(request);
+        if (authError != null) return authError;
+
+        try
+        {
+            var assetIdStr = request.PathParameters.GetValueOrDefault("assetId") ?? string.Empty;
+            if (!int.TryParse(assetIdStr, out var assetId) || assetId <= 0)
+                return new JsonResult(new { message = "资源ID无效", code = "INVALID_ASSET_ID" }, 400);
+
+            // 分页参数（可选）
+            var (page, pageSize) = ApiPagination.Parse(request, defaultPageSize: 50);
+
+            // action 类型过滤（可选）
+            var actionFilter = request.Query["action"] ?? string.Empty;
+
+            // 查询该资产的所有审计记录
+            var all = await KaxGlobal.AssetAuditDatabase.SelectWhereAsync("AssetId", assetId);
+
+            var filtered = all.AsQueryable();
+            if (!string.IsNullOrEmpty(actionFilter))
+            {
+                var af = actionFilter.ToLowerInvariant();
+                filtered = filtered.Where(l => l.ActionType.ToLowerInvariant() == af);
+            }
+
+            var total = filtered.Count();
+            var items = filtered
+                .OrderByDescending(l => l.CreatedAt)
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .Select(l => new
+                {
+                    id = l.Id,
+                    assetId = l.AssetId,
+                    operatorUserId = l.OperatorUserId,
+                    operatorUserName = l.OperatorUserName,
+                    actionType = l.ActionType,
+                    reason = l.Reason,
+                    createdAt = l.CreatedAt,
+                    beforeStatus = l.BeforeStatus,
+                    afterStatus = l.AfterStatus,
+                    fieldChangesJson = l.FieldChangesJson,
+                    success = l.Success,
+                    errorCode = l.ErrorCode,
+                    errorMessage = l.ErrorMessage,
+                    requestId = l.RequestId
+                })
+                .ToList<object>();
+
+            return new JsonResult(new { data = items, page, pageSize, total, assetId });
+        }
+        catch (Exception ex)
+        {
+            Logger.Error($"[System] 查询资产审计记录失败: {ex.Message}");
+            return new JsonResult(new { message = "服务器错误", code = "INTERNAL_ERROR" }, 500);
+        }
+    }
+
+    #endregion
+
 }

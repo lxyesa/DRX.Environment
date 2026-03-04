@@ -30,6 +30,7 @@ public partial class KaxHttp
         AssetStatus.Rejected => "审核拒绝",
         AssetStatus.ApprovedPendingPublish => "待发布",
         AssetStatus.Active => "已上线",
+        AssetStatus.OffShelf => "已下架",
         _ => "未知"
     };
 
@@ -623,7 +624,8 @@ public partial class KaxHttp
     }
 
     /// <summary>
-    /// 审核通过（管理员将资产状态设为"审核通过待发布"，资产自动变为Active显示在商店）
+    /// 审核通过（管理员将资产状态设为"审核通过待发布"，等待开发者发布）
+    /// 状态流转：PendingReview(0) -> ApprovedPendingPublish(2)
     /// </summary>
     [HttpHandle("/api/review/approve", "POST", RateLimitMaxRequests = 20, RateLimitWindowSeconds = 60)]
     public static async Task<IActionResult> Post_ReviewApprove(HttpRequest request)
@@ -645,15 +647,15 @@ public partial class KaxHttp
             if (asset.Status != AssetStatus.PendingReview)
                 return new JsonResult(new { message = "仅审核中的资源可执行通过操作" }, 400);
 
-            // 审核通过后直接设为 Active（自动显示在商店）
-            asset.Status = AssetStatus.Active;
+            // 审核通过后设为待发布状态，需开发者手动发布才上线
+            asset.Status = AssetStatus.ApprovedPendingPublish;
             asset.RejectReason = string.Empty;
             var specs = EnsureSpecs(asset);
             specs.LastUpdatedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
             await KaxGlobal.AssetDataBase.UpdateAsync(asset);
 
-            Logger.Info($"管理员 {operatorName} 通过了资源审核: {asset.Name} (id={id})");
-            return new JsonResult(new { code = 0, message = "审核通过，资源已上线" }, 200);
+            Logger.Info($"管理员 {operatorName} 通过了资源审核: {asset.Name} (id={id})，状态变更为待发布");
+            return new JsonResult(new { code = 0, message = "审核通过，等待开发者发布" }, 200);
         }
         catch (Exception ex)
         {

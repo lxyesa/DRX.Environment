@@ -5,6 +5,18 @@ namespace KaxSocket.Model;
 
 /// <summary>
 /// 资产审核状态枚举
+/// 
+/// 状态说明：
+/// - PendingReview (0): 审核中，新提交或重新提交审核的资产
+/// - Rejected (1): 审核拒绝，需开发者修改后重新提交
+/// - ApprovedPendingPublish (2): 审核通过，等待开发者发布到商店
+/// - Active (3): 已上线，正常运行在商店中
+/// - OffShelf (4): 已下架，由管理员主动下架（独立于软删除）
+/// 
+/// 重要：OffShelf 与 IsDeleted 的职责边界
+/// - OffShelf: 表示资产被管理员下架，可恢复上架，状态流转：Active(3) -> OffShelf(4) -> Active(3)
+/// - IsDeleted: 表示资产被软删除，通常不可恢复，与状态枚举无关
+/// 下架操作不应修改 IsDeleted 字段，两者语义独立
 /// </summary>
 public enum AssetStatus
 {
@@ -18,7 +30,17 @@ public enum AssetStatus
     ApprovedPendingPublish = 2,
 
     /// <summary>正常运行（已发布到商店）</summary>
-    Active = 3
+    Active = 3,
+
+    /// <summary>
+    /// 已下架（管理员主动下架）
+    /// 
+    /// 注意：此状态独立于 IsDeleted 软删除语义
+    /// - 下架后可通过管理员操作恢复上架
+    /// - 不会触发 IsDeleted = true
+    /// 状态流转：通常从 Active(3) 进入，可恢复到 Active(3)
+    /// </summary>
+    OffShelf = 4
 }
 
 /// <summary>
@@ -244,4 +266,64 @@ public class AssetModel : IDataBase
     }
 
     #endregion
+}
+
+/// <summary>
+/// 资产管理审计日志
+/// 
+/// 记录系统管理员对资产执行的每一次操作（动作或字段更新），便于追踪与回溯。
+/// 
+/// ActionType 取值：
+/// - "return"：退回资产
+/// - "off-shelf"：下架资产
+/// - "force-review"：强制重审（强制更新）
+/// - "relist"：恢复上架
+/// - "update-field"：字段更新
+/// </summary>
+public class AssetAuditLog : IDataBase
+{
+    /// <summary>审计记录主键 ID（自增）</summary>
+    public int Id { get; set; }
+
+    /// <summary>操作的资产 ID</summary>
+    public int AssetId { get; set; }
+
+    /// <summary>操作者用户 ID</summary>
+    public int OperatorUserId { get; set; }
+
+    /// <summary>操作者用户名</summary>
+    public string OperatorUserName { get; set; } = string.Empty;
+
+    /// <summary>动作类型（return / off-shelf / force-review / relist / update-field）</summary>
+    public string ActionType { get; set; } = string.Empty;
+
+    /// <summary>操作原因（退回、下架等附带的说明）</summary>
+    public string Reason { get; set; } = string.Empty;
+
+    /// <summary>操作时间（Unix 毫秒）</summary>
+    public long CreatedAt { get; set; } = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+
+    /// <summary>操作前资产状态（仅动作类操作有意义；字段更新时为 -1）</summary>
+    public int BeforeStatus { get; set; } = -1;
+
+    /// <summary>操作后资产状态（仅动作类操作有意义；字段更新时为 -1）</summary>
+    public int AfterStatus { get; set; } = -1;
+
+    /// <summary>
+    /// 字段变更记录（JSON 格式，仅 update-field 时有值）
+    /// 格式：{ "field": "xxx", "oldValue": "...", "newValue": "..." }
+    /// </summary>
+    public string FieldChangesJson { get; set; } = string.Empty;
+
+    /// <summary>本次操作是否成功</summary>
+    public bool Success { get; set; } = true;
+
+    /// <summary>失败时的错误码（成功时为空）</summary>
+    public string ErrorCode { get; set; } = string.Empty;
+
+    /// <summary>失败时的错误消息（成功时为空）</summary>
+    public string ErrorMessage { get; set; } = string.Empty;
+
+    /// <summary>请求 ID（用于跨日志关联，格式为 GUID）</summary>
+    public string RequestId { get; set; } = string.Empty;
 }

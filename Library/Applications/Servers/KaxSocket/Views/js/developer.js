@@ -13,12 +13,28 @@ const DevApp = (() => {
     const TOKEN_KEY  = 'kax_login_token';
     const PAGE_SIZE  = 20;
 
-    const STATUS_TEXT = { 0: '审核中', 1: '已拒绝', 2: '待发布', 3: '已上线' };
+    const STATUS_TEXT = { 0: '审核中', 1: '已拒绝', 2: '待发布', 3: '已上线', 4: '已下架' };
+    const SYSTEM_FIELD_CONFIG = [
+        { key: 'name', label: '名称', multiline: false },
+        { key: 'version', label: '版本', multiline: false },
+        { key: 'description', label: '描述', multiline: true },
+        { key: 'category', label: '分类', multiline: false },
+        { key: 'tags', label: '标签（分号分隔）', multiline: true },
+        { key: 'badges', label: '徽章（分号分隔）', multiline: true },
+        { key: 'features', label: '特性（分号分隔）', multiline: true },
+        { key: 'coverImage', label: '封面图 URL', multiline: false },
+        { key: 'iconImage', label: '图标 URL', multiline: false },
+        { key: 'screenshots', label: '截图 URL（分号分隔）', multiline: true },
+        { key: 'downloadUrl', label: '下载地址', multiline: false },
+        { key: 'license', label: '许可证', multiline: false },
+        { key: 'compatibility', label: '兼容性', multiline: true }
+    ];
 
     // #region State
     const state = {
         // user
         isAdmin: false,
+        isSystem: false,
         permissionGroup: 999,
         userName: '',
 
@@ -34,6 +50,16 @@ const DevApp = (() => {
         reviewTotal: 0,
         reviewPage: 1,
         reviewStatusFilter: '0',
+
+        // system asset management
+        systemAssets: [],
+        systemTotal: 0,
+        systemPage: 1,
+        systemStatusFilter: '',
+        systemKeyword: '',
+        systemAuthorId: '',
+        currentSystemAssetId: 0,
+        currentSystemAssetDetail: null,
 
         // editing
         editingId: 0, // 0 = create mode
@@ -77,11 +103,18 @@ const DevApp = (() => {
             state.userName = body.user || '';
             state.permissionGroup = body.permissionGroup ?? 999;
             state.isAdmin = body.isAdmin === true;
+            state.isSystem = body.isSystem === true || state.permissionGroup === 0;
 
             // 如果是管理员则显示审核 Tab
             if (state.isAdmin) {
                 const tab = document.getElementById('reviewTab');
                 if (tab) tab.style.display = '';
+            }
+
+            // 仅 system 用户显示资产管理 Tab
+            if (state.isSystem) {
+                const systemTab = document.getElementById('assetManagementTab');
+                if (systemTab) systemTab.style.display = '';
             }
             return true;
         } catch (e) {
@@ -136,6 +169,26 @@ const DevApp = (() => {
                 .filter(Boolean);
         }
         return [];
+    }
+
+    function getSystemFieldRawValue(detail, field) {
+        if (!detail || !field) return '';
+        if (Object.prototype.hasOwnProperty.call(detail, field)) return detail[field];
+        if (detail.specs && Object.prototype.hasOwnProperty.call(detail.specs, field)) return detail.specs[field];
+        return '';
+    }
+
+    function normalizeSystemFieldValue(value) {
+        if (Array.isArray(value)) return value.join(';');
+        if (typeof value === 'object' && value !== null) return JSON.stringify(value);
+        return value == null ? '' : String(value);
+    }
+
+    function formatSystemFieldPreview(value) {
+        const text = normalizeSystemFieldValue(value).trim();
+        if (!text) return '当前值：空';
+        const clipped = text.length > 42 ? `${text.slice(0, 42)}...` : text;
+        return `当前值：${clipped}`;
     }
     // #endregion
 
@@ -207,6 +260,58 @@ const DevApp = (() => {
     async function apiReject(id, reason) {
         const resp = await fetch('/api/review/reject', {
             method: 'POST', headers: authHeaders(), body: JSON.stringify({ id, reason })
+        });
+        return resp.json();
+    }
+
+    async function apiGetSystemAssetList(page, status, q, authorId) {
+        const params = new URLSearchParams({ page, pageSize: PAGE_SIZE });
+        if (status !== '' && status != null) params.set('status', status);
+        if (q) params.set('q', q);
+        if (authorId) params.set('authorId', authorId);
+        const resp = await fetch('/api/asset/system/list?' + params, { headers: authHeaders(false) });
+        if (!resp.ok) throw new Error('获取系统资产列表失败');
+        return resp.json();
+    }
+
+    async function apiGetSystemAssetDetail(id) {
+        const resp = await fetch(`/api/asset/system/${id}`, { headers: authHeaders(false) });
+        if (!resp.ok) throw new Error('获取系统资产详情失败');
+        return resp.json();
+    }
+
+    async function apiSystemUpdateField(id, field, value) {
+        const resp = await fetch('/api/asset/system/update-field', {
+            method: 'POST',
+            headers: authHeaders(),
+            body: JSON.stringify({ id, field, value })
+        });
+        return resp.json();
+    }
+
+    async function apiSystemReturn(id, reason) {
+        const resp = await fetch('/api/asset/system/return', {
+            method: 'POST',
+            headers: authHeaders(),
+            body: JSON.stringify({ assetId: id, reason })
+        });
+        return resp.json();
+    }
+
+    async function apiSystemOffShelf(id, reason) {
+        const resp = await fetch('/api/asset/system/off-shelf', {
+            method: 'POST',
+            headers: authHeaders(),
+            body: JSON.stringify({ assetId: id, reason })
+        });
+        return resp.json();
+    }
+
+    async function apiSystemForceReview(id, reason) {
+        const resp = await fetch('/api/asset/system/review/force', {
+            method: 'POST',
+            headers: authHeaders(),
+            body: JSON.stringify({ assetId: id, reason, force: true })
         });
         return resp.json();
     }
@@ -559,6 +664,108 @@ const DevApp = (() => {
             console.error('加载审核列表失败', e);
         }
     }
+
+    function renderSystemAssetList() {
+        const container = document.getElementById('systemAssetList');
+        const empty = document.getElementById('systemAssetEmpty');
+        const pag = document.getElementById('systemAssetPagination');
+        if (!container || !empty || !pag) return;
+
+        if (state.systemAssets.length === 0) {
+            container.innerHTML = '';
+            empty.style.display = '';
+            pag.innerHTML = '';
+            return;
+        }
+        empty.style.display = 'none';
+
+        container.innerHTML = state.systemAssets.map(a => {
+            const title = escapeHtml(a.name || '未命名资源');
+            const version = escapeHtml(a.version || '—');
+            const category = escapeHtml(a.category || '未分类');
+            const descRaw = (a.description || '').trim();
+            const desc = escapeHtml(descRaw.length > 120 ? `${descRaw.slice(0, 120)}...` : (descRaw || '暂无描述'));
+            const thumb = a.coverImage || a.iconImage || '';
+            const thumbHtml = thumb
+                ? `<img class="dev-asset-thumb" src="${escapeHtml(thumb)}" alt="" loading="lazy">`
+                : `<div class="dev-asset-thumb dev-asset-thumb-fallback"><span class="material-icons">inventory_2</span></div>`;
+            const authorId = escapeHtml(String(a.authorId ?? '—'));
+            const statusText = STATUS_TEXT[a.status] || '未知';
+            const updatedText = formatDate(a.lastUpdatedAt);
+
+            return `
+                <div class="dev-asset-card dev-system-asset-card">
+                    <div class="dev-asset-visual dev-system-asset-visual">
+                        ${thumbHtml}
+                        <div class="dev-asset-status-overlay">${statusBadge(a.status)}</div>
+                        <div class="dev-asset-visual-meta">
+                            <span class="dev-asset-visual-chip">v${version}</span>
+                            <span class="dev-asset-visual-chip">${category}</span>
+                        </div>
+                    </div>
+
+                    <div class="dev-asset-main">
+                        <div class="dev-asset-head">
+                            <div class="dev-asset-title-wrap">
+                                <div class="dev-asset-name">${title}</div>
+                                <div class="dev-asset-subline">
+                                    <span class="dev-asset-version">版本 v${version}</span>
+                                    <span class="dev-asset-dot">•</span>
+                                    <span class="dev-asset-category">${category}</span>
+                                </div>
+                            </div>
+                            <div class="dev-asset-actions">
+                                <button class="btn ghost small dev-asset-btn" onclick="DevApp.openSystemAssetModal(${a.id})" type="button">
+                                    <span class="material-icons">visibility</span><span>详情 / 编辑</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="dev-asset-desc">${desc}</div>
+
+                        <div class="dev-asset-meta-row">
+                            <span class="dev-asset-chip"><span class="material-icons">person</span>开发者ID: ${authorId}</span>
+                            <span class="dev-asset-chip"><span class="material-icons">schedule</span>更新于 ${updatedText}</span>
+                            <span class="dev-asset-chip"><span class="material-icons">category</span>${category}</span>
+                        </div>
+
+                        <div class="dev-asset-metrics" aria-label="系统资产数据">
+                            <div class="dev-metric"><span class="material-icons">tag</span><b>#${a.id}</b><em>资产ID</em></div>
+                            <div class="dev-metric"><span class="material-icons">person</span><b>${authorId}</b><em>开发者ID</em></div>
+                            <div class="dev-metric"><span class="material-icons">fact_check</span><b>${statusText}</b><em>当前状态</em></div>
+                        </div>
+                    </div>
+                </div>`;
+        }).join('');
+
+        renderPagination(pag, state.systemTotal, state.systemPage, (p) => {
+            state.systemPage = p;
+            loadSystemAssetList();
+        });
+    }
+
+    async function loadSystemAssetList() {
+        if (!state.isSystem) return;
+        try {
+            const body = await apiGetSystemAssetList(
+                state.systemPage,
+                state.systemStatusFilter,
+                state.systemKeyword,
+                state.systemAuthorId
+            );
+
+            const list = Array.isArray(body.data)
+                ? body.data
+                : (body.data?.items ?? []);
+
+            state.systemAssets = list;
+            state.systemTotal = body.total ?? body.data?.total ?? list.length;
+            renderSystemAssetList();
+        } catch (e) {
+            console.error('加载 system 资产列表失败', e);
+            alert('加载资产管理列表失败');
+        }
+    }
     // #endregion
 
     // #region Renderer —— 审核弹窗
@@ -745,6 +952,200 @@ const DevApp = (() => {
         document.getElementById('reviewModal').style.display = 'none';
         state.currentReviewAssetId = 0;
     }
+
+    async function openSystemAssetModal(assetId) {
+        state.currentSystemAssetId = assetId;
+        state.currentSystemAssetDetail = null;
+        const modal = document.getElementById('systemAssetModal');
+        if (!modal) return;
+
+        document.getElementById('systemAssetModalTitle').textContent = `资产 #${assetId}`;
+        document.getElementById('systemAssetModalMeta').innerHTML = '<div class="rv-info-item"><span class="rv-info-label">状态</span><span class="rv-info-value">加载中...</span></div>';
+        document.getElementById('systemAssetModalDesc').textContent = '';
+        const fieldCards = document.getElementById('systemFieldCards');
+        if (fieldCards) {
+            fieldCards.innerHTML = '<div class="system-field-loading">字段卡片加载中...</div>';
+        }
+        const thumbBox = document.getElementById('systemAssetModalThumb');
+        if (thumbBox) thumbBox.innerHTML = '<span class="material-icons">inventory_2</span>';
+        document.getElementById('systemActionReason').value = '';
+        modal.style.display = '';
+
+        try {
+            const resp = await apiGetSystemAssetDetail(assetId);
+            if (!resp?.data) {
+                alert(resp?.message || '加载详情失败');
+                return;
+            }
+
+            const a = resp.data;
+            state.currentSystemAssetDetail = a;
+            document.getElementById('systemAssetModalTitle').textContent = `${a.name || '未命名资源'}（#${a.id}）`;
+
+            const thumb = a.coverImage || a.iconImage || '';
+            if (thumbBox) {
+                thumbBox.innerHTML = thumb
+                    ? `<img src="${escapeHtml(thumb)}" alt="">`
+                    : '<span class="material-icons">inventory_2</span>';
+            }
+
+            document.getElementById('systemAssetModalMeta').innerHTML = `
+                <div class="rv-info-item">
+                    <span class="rv-info-label">状态</span>
+                    <span class="rv-info-value">${statusBadge(a.status)}</span>
+                </div>
+                <div class="rv-info-item">
+                    <span class="rv-info-label">开发者ID</span>
+                    <span class="rv-info-value">${escapeHtml(String(a.authorId ?? '—'))}</span>
+                </div>
+                <div class="rv-info-item">
+                    <span class="rv-info-label">版本</span>
+                    <span class="rv-info-value">${escapeHtml(a.version || '—')}</span>
+                </div>
+                <div class="rv-info-item">
+                    <span class="rv-info-label">分类</span>
+                    <span class="rv-info-value">${escapeHtml(a.category || '未分类')}</span>
+                </div>
+                <div class="rv-info-item">
+                    <span class="rv-info-label">软删除</span>
+                    <span class="rv-info-value">${a.isDeleted ? '是' : '否'}</span>
+                </div>`;
+            document.getElementById('systemAssetModalDesc').textContent = a.description || '暂无描述';
+            renderSystemFieldCards();
+        } catch (e) {
+            alert('加载详情失败: ' + e.message);
+        }
+    }
+
+    function closeSystemAssetModal() {
+        const modal = document.getElementById('systemAssetModal');
+        if (modal) modal.style.display = 'none';
+        state.currentSystemAssetId = 0;
+        state.currentSystemAssetDetail = null;
+    }
+
+    function renderSystemFieldCards() {
+        const detail = state.currentSystemAssetDetail;
+        const container = document.getElementById('systemFieldCards');
+        if (!container) return;
+
+        if (!detail) {
+            container.innerHTML = '<div class="system-field-loading">暂无可编辑字段</div>';
+            return;
+        }
+
+        container.innerHTML = SYSTEM_FIELD_CONFIG.map(field => {
+            const raw = getSystemFieldRawValue(detail, field.key);
+            const value = normalizeSystemFieldValue(raw);
+            const preview = formatSystemFieldPreview(raw);
+
+            const input = field.multiline
+                ? `<textarea class="system-field-input system-field-input-multiline" id="systemFieldInput-${field.key}" data-field="${field.key}" rows="3" placeholder="请输入 ${escapeHtml(field.label)}">${escapeHtml(value)}</textarea>`
+                : `<input class="system-field-input" id="systemFieldInput-${field.key}" data-field="${field.key}" type="text" value="${escapeHtml(value)}" placeholder="请输入 ${escapeHtml(field.label)}">`;
+
+            return `
+                <article class="system-field-card" data-field-card="${field.key}">
+                    <div class="system-field-card-head">
+                        <span class="system-field-card-name">${escapeHtml(field.label)}</span>
+                    </div>
+                    <p class="system-field-card-current" title="${escapeHtml(value)}">${escapeHtml(preview)}</p>
+                    ${input}
+                    <div class="system-field-card-actions">
+                        <button class="btn small system-rv-save-btn" type="button" data-system-save-field="${field.key}">
+                            <span class="material-icons">save</span>保存
+                        </button>
+                    </div>
+                </article>`;
+        }).join('');
+
+        container.querySelectorAll('[data-system-save-field]').forEach(btn => {
+            btn.addEventListener('click', () => saveSystemField(btn.dataset.systemSaveField));
+        });
+    }
+
+    async function saveSystemField(field) {
+        const detail = state.currentSystemAssetDetail;
+        const id = state.currentSystemAssetId;
+        if (!id) return;
+        if (!field) { alert('字段无效'); return; }
+        const input = document.getElementById(`systemFieldInput-${field}`);
+        const value = input?.value ?? '';
+
+        if (!detail) {
+            alert('资产详情未加载，请稍后重试');
+            return;
+        }
+
+        try {
+            const resp = await apiSystemUpdateField(id, field, value);
+            if (resp.code === 0 || /已更新/.test(resp.message || '')) {
+                alert(resp.message || '字段已更新');
+                await Promise.all([loadSystemAssetList(), openSystemAssetModal(id)]);
+            } else {
+                alert(resp.message || '字段更新失败');
+            }
+        } catch (e) {
+            alert('字段更新失败: ' + e.message);
+        }
+    }
+
+    async function returnSystemAsset() {
+        const id = state.currentSystemAssetId;
+        if (!id) return;
+        const reason = document.getElementById('systemActionReason')?.value.trim() || '';
+        if (!reason) { alert('退回原因必填'); return; }
+        if (!confirm('确认退回该资产？')) return;
+
+        try {
+            const resp = await apiSystemReturn(id, reason);
+            if (resp.code === 0) {
+                alert(resp.message || '已退回');
+                await Promise.all([loadSystemAssetList(), openSystemAssetModal(id)]);
+            } else {
+                alert(resp.message || '退回失败');
+            }
+        } catch (e) {
+            alert('退回失败: ' + e.message);
+        }
+    }
+
+    async function offShelfSystemAsset() {
+        const id = state.currentSystemAssetId;
+        if (!id) return;
+        const reason = document.getElementById('systemActionReason')?.value.trim() || '';
+        if (!confirm('确认将该资产下架？')) return;
+
+        try {
+            const resp = await apiSystemOffShelf(id, reason);
+            if (resp.code === 0) {
+                alert(resp.message || '已下架');
+                await Promise.all([loadSystemAssetList(), openSystemAssetModal(id)]);
+            } else {
+                alert(resp.message || '下架失败');
+            }
+        } catch (e) {
+            alert('下架失败: ' + e.message);
+        }
+    }
+
+    async function forceReviewSystemAsset() {
+        const id = state.currentSystemAssetId;
+        if (!id) return;
+        const reason = document.getElementById('systemActionReason')?.value.trim() || '';
+        if (!confirm('确认强制重审该资产？')) return;
+
+        try {
+            const resp = await apiSystemForceReview(id, reason);
+            if (resp.code === 0) {
+                alert(resp.message || '已进入重审流程');
+                await Promise.all([loadSystemAssetList(), openSystemAssetModal(id)]);
+            } else {
+                alert(resp.message || '强制重审失败');
+            }
+        } catch (e) {
+            alert('强制重审失败: ' + e.message);
+        }
+    }
     // #endregion
 
     // #region Actions —— Tab 切换
@@ -761,6 +1162,10 @@ const DevApp = (() => {
         // 切换到 review-panel 时加载审核列表
         if (tabName === 'review-panel' && state.isAdmin) {
             loadReviewList();
+        }
+        // 切换到 asset-management 时加载 system 资产列表
+        if (tabName === 'asset-management' && state.isSystem) {
+            loadSystemAssetList();
         }
         // 切换到 create-asset 时如果不在编辑模式则重置
         if (tabName === 'create-asset' && !state.editingId) {
@@ -941,6 +1346,29 @@ const DevApp = (() => {
             });
         }
 
+        // system 资产管理筛选
+        const systemStatusFilter = document.getElementById('systemAssetStatusFilter');
+        if (systemStatusFilter) {
+            systemStatusFilter.addEventListener('change', () => {
+                state.systemStatusFilter = systemStatusFilter.value;
+                state.systemPage = 1;
+                loadSystemAssetList();
+            });
+        }
+
+        const systemKeyword = document.getElementById('systemAssetKeyword');
+        const systemAuthorId = document.getElementById('systemAssetAuthorId');
+        const systemSearchBtn = document.getElementById('systemAssetSearchBtn');
+        const doSearch = () => {
+            state.systemKeyword = systemKeyword?.value.trim() || '';
+            state.systemAuthorId = systemAuthorId?.value.trim() || '';
+            state.systemPage = 1;
+            loadSystemAssetList();
+        };
+        if (systemSearchBtn) systemSearchBtn.addEventListener('click', doSearch);
+        if (systemKeyword) systemKeyword.addEventListener('keydown', (e) => { if (e.key === 'Enter') doSearch(); });
+        if (systemAuthorId) systemAuthorId.addEventListener('keydown', (e) => { if (e.key === 'Enter') doSearch(); });
+
         // 添加价格方案
         const addPriceBtn = document.getElementById('addPriceBtn');
         if (addPriceBtn) addPriceBtn.addEventListener('click', () => addPriceRow());
@@ -963,12 +1391,21 @@ const DevApp = (() => {
         document.getElementById('cancelRejectBtn')?.addEventListener('click', closeRejectModal);
         document.getElementById('confirmRejectBtn')?.addEventListener('click', confirmReject);
 
+        // system 资产详情弹窗
+        document.getElementById('closeSystemAssetModal')?.addEventListener('click', closeSystemAssetModal);
+        document.getElementById('systemReturnBtn')?.addEventListener('click', returnSystemAsset);
+        document.getElementById('systemOffShelfBtn')?.addEventListener('click', offShelfSystemAsset);
+        document.getElementById('systemForceReviewBtn')?.addEventListener('click', forceReviewSystemAsset);
+
         // 点击 overlay 关闭弹窗
         document.getElementById('reviewModal')?.addEventListener('click', (e) => {
             if (e.target.id === 'reviewModal') closeReviewModal();
         });
         document.getElementById('rejectModal')?.addEventListener('click', (e) => {
             if (e.target.id === 'rejectModal') closeRejectModal();
+        });
+        document.getElementById('systemAssetModal')?.addEventListener('click', (e) => {
+            if (e.target.id === 'systemAssetModal') closeSystemAssetModal();
         });
     }
 
@@ -996,6 +1433,7 @@ const DevApp = (() => {
         submitReview,
         publishAsset,
         openReviewModal,
+        openSystemAssetModal,
         switchTab
     };
 })();

@@ -102,6 +102,18 @@
                 stock: p.stock ?? -1
             })) : [];
 
+            // 作者显示名：兼容多版本字段命名（authorName / authorDisplayName / author / developerDisplayName）
+            const resolvedAuthorName = String(
+                dto.authorName
+                ?? dto.authorDisplayName
+                ?? dto.displayAuthorName
+                ?? dto.developerDisplayName
+                ?? dto.developerName
+                ?? dto.author
+                ?? dto.authorInfo?.displayName
+                ?? '--'
+            );
+
             return {
                 // 主键（页面内统一使用 assetId）
                 assetId: Number(dto.id ?? 0),
@@ -119,11 +131,11 @@
                 version: String(dto.version ?? '--'),
                 compatibility: String(dto.compatibility ?? '--'),
                 fileSize: String(dto.fileSize ?? '--'),
-                uploadDate: dto.uploadDate ?? dto.createdAt ?? '--',
+                uploadDate: dto.uploadDate ?? '--',
                 license: String(dto.license ?? '--'),
                 // 统计
-                authorName: String(dto.authorName ?? '--'),
-                downloadCount: Number(dto.downloads ?? dto.downloadCount ?? 0),
+                authorName: resolvedAuthorName,
+                downloadCount: Number(dto.downloadCount ?? 0),
                 purchaseCount: Number(dto.purchaseCount ?? 0),
                 favoriteCount: Number(dto.favoriteCount ?? 0),
                 viewCount: Number(dto.viewCount ?? 0),
@@ -524,9 +536,9 @@
                     priceBadgeEl.classList.remove('no-discount');
                     priceBadgeEl.removeAttribute('hidden');
                 } else {
-                    priceBadgeEl.textContent = '无折扣';
-                    priceBadgeEl.classList.add('no-discount');
-                    priceBadgeEl.removeAttribute('hidden');
+                    priceBadgeEl.textContent = '';
+                    priceBadgeEl.classList.remove('no-discount');
+                    priceBadgeEl.setAttribute('hidden', '');
                 }
             }
         }

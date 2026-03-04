@@ -208,6 +208,15 @@ namespace KaxSocket.Handlers.Helpers
         }
 
         /// <summary>
+        /// 检查用户是否为系统管理员（仅 System/权限组0）。
+        /// 用于需要最高权限控制的功能（如资产管理）。
+        /// </summary>
+        private static bool IsSystem(UserPermissionGroup group)
+        {
+            return group == UserPermissionGroup.System;
+        }
+
+        /// <summary>
         /// 认证用户并验证管理员权限。
         /// 验证步骤：Bearer Token → JWT 验证 → 提取用户名 → 封禁检查 → 查询 UserData → 权限验证
         /// </summary>
@@ -232,6 +241,40 @@ namespace KaxSocket.Handlers.Helpers
         public static async Task<(string? userName, IActionResult? error)> RequireAdminNameAsync(HttpRequest request)
         {
             var (user, error) = await RequireAdminAsync(request);
+            if (error != null) return (null, error);
+            return (user!.UserName, null);
+        }
+
+        #endregion
+
+        #region 系统管理员验证（仅权限组0）
+
+        /// <summary>
+        /// 认证用户并验证系统管理员权限（仅 permissionGroup=0）。
+        /// 用于需要最高权限控制的功能，如资产管理。
+        /// 验证步骤：Bearer Token → JWT 验证 → 提取用户名 → 封禁检查 → 查询 UserData → System权限验证
+        /// </summary>
+        /// <param name="request">HTTP 请求</param>
+        /// <returns>(user, error) — 成功时 error 为 null，user 保证非 null 且是系统管理员</returns>
+        public static async Task<(UserData? user, IActionResult? error)> RequireSystemAsync(HttpRequest request)
+        {
+            var (user, error) = await GetUserAsync(request);
+            if (error != null) return (null, error);
+
+            if (!IsSystem(user!.PermissionGroup))
+                return (null, ApiResult.Forbidden("权限不足：需要 System 权限"));
+
+            return (user, null);
+        }
+
+        /// <summary>
+        /// 仅做认证 + 封禁 + 系统管理员检查，不返回用户对象（用于不需要 user 的系统管理接口）。
+        /// </summary>
+        /// <param name="request">HTTP 请求</param>
+        /// <returns>(userName, error) — 成功时 error 为 null</returns>
+        public static async Task<(string? userName, IActionResult? error)> RequireSystemNameAsync(HttpRequest request)
+        {
+            var (user, error) = await RequireSystemAsync(request);
             if (error != null) return (null, error);
             return (user!.UserName, null);
         }

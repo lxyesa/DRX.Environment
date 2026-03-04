@@ -285,10 +285,29 @@ public partial class KaxHttp
             var badgesRaw = asset.Badges ?? string.Empty;
             var featuresRaw = asset.Features ?? string.Empty;
 
+            // 作者显示名：优先 DisplayName，其次 UserName，兜底“未知”
+            var authorName = "未知";
+            if (asset.AuthorId > 0)
+            {
+                try
+                {
+                    var author = await KaxGlobal.UserDatabase.SelectByIdAsync(asset.AuthorId);
+                    authorName = !string.IsNullOrWhiteSpace(author?.DisplayName)
+                        ? author.DisplayName
+                        : (author?.UserName ?? "未知");
+                }
+                catch
+                {
+                    authorName = "未知";
+                }
+            }
+
             var result = new
             {
                 id          = asset.Id,
                 name        = asset.Name,
+                authorId    = asset.AuthorId,
+                authorName  = authorName,
                 description = asset.Description,
                 category    = asset.Category,
                 coverImage   = asset.CoverImage,

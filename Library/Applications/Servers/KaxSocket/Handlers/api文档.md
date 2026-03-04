@@ -234,6 +234,21 @@ POST /api/shop/purchase
 2. 前端不再依赖 `id/assetId`、`data/items` 等历史多形态兼容路径。
 3. 详情页统一路由为 `/asset/detail/{id}`。
 
+#### 迁移完成状态（2026-03）
+
+> 商店域迁移（spec: shop-and-shop-detail-api-contract-migration）已于 2026-03-04 全部完成。
+
+**前端完成事项：**
+- `shop.js`：请求/映射/渲染三层分离，单一契约主路径，历史兼容分支已全部清除。
+- `shop_detail.js`：映射层 `mapDetailToVM` 仅依赖文档契约字段；历史双字段猜测（`dto.createdAt` 兜底、`dto.downloads` 兜底）已清理；折扣徽标显示逻辑已统一（无折扣时隐藏）。
+- 详情跳转链接统一为 `/asset/detail/{id}`，旧 query 写法已移除。
+- 错误码映射与用户提示在商店域两页保持一致。
+
+**后端完成事项：**
+- `KaxHttp.AssetQueries.cs`：list/detail/related 响应结构与本节契约对齐，价格字段统一输出元（decimal）。
+- `KaxHttp.UserAssets.cs`：favorites GET 返回 `number[]`，cart GET/POST/DELETE 结构对齐。
+- `KaxHttp.Shopping.cs`：purchase 请求/响应与本节契约对齐（assetId + priceId）。
+
 ### 用户认证
 
 #### 1. 用户注册
