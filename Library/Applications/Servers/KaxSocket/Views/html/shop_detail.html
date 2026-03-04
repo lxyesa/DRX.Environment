@@ -30,6 +30,10 @@
 
             <!-- 产品主标题行 -->
             <div class="hero-product-row">
+                <span class="hero-panel-ambient" aria-hidden="true">
+                    <img class="hero-panel-ambient-copy" id="heroPanelAmbientCopy" alt="" loading="lazy">
+                    <span class="hero-panel-ambient-fill"></span>
+                </span>
                 <!-- 产品图标 -->
                 <div class="hero-icon-wrap" id="heroIconWrap">
                     <div class="hero-icon-placeholder" id="heroIcon" aria-hidden="true">🎮</div>
@@ -127,6 +131,10 @@
                                 <span class="spec-value" id="specDate">—</span>
                             </div>
                             <div class="spec-row">
+                                <span class="spec-label">最后更新</span>
+                                <span class="spec-value" id="specLastUpdated">—</span>
+                            </div>
+                            <div class="spec-row">
                                 <span class="spec-label">作者</span>
                                 <span class="spec-value" id="specAuthor">—</span>
                             </div>
@@ -202,6 +210,10 @@
                             <span class="material-icons">shopping_bag</span>
                             立即购买
                         </button>
+                        <a class="btn-download" id="downloadBtn" hidden>
+                            <span class="material-icons">download</span>
+                            下载资源
+                        </a>
                         <div class="purchase-secondary-btns">
                             <button class="btn-icon-action" id="favBtn" aria-label="收藏" title="收藏">
                                 <span class="material-icons">favorite_border</span>

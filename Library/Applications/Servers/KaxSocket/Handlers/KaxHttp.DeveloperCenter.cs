@@ -653,6 +653,7 @@ public partial class KaxHttp
             var specs = EnsureSpecs(asset);
             specs.LastUpdatedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
             await KaxGlobal.AssetDataBase.UpdateAsync(asset);
+            await NotifyAssetActionEmailAsync(asset, "审核通过", null, operatorName ?? "系统");
 
             Logger.Info($"管理员 {operatorName} 通过了资源审核: {asset.Name} (id={id})，状态变更为待发布");
             return new JsonResult(new { code = 0, message = "审核通过，等待开发者发布" }, 200);
@@ -681,7 +682,11 @@ public partial class KaxHttp
             if (!int.TryParse(body?["id"]?.ToString(), out var id) || id <= 0)
                 return new JsonResult(new { message = "资源ID无效" }, 400);
 
-            var reason = body?["reason"]?.ToString() ?? "未说明原因";
+            var reason = body?["reason"]?.ToString()?.Trim() ?? string.Empty;
+            if (string.IsNullOrEmpty(reason))
+                return new JsonResult(new { message = "拒绝原因不能为空" }, 400);
+            if (reason.Length > 500)
+                return new JsonResult(new { message = "拒绝原因过长（最多500字符）" }, 400);
 
             var asset = await KaxGlobal.AssetDataBase.SelectByIdAsync(id);
             if (asset == null) return new JsonResult(new { message = "资源不存在" }, 404);
@@ -694,6 +699,7 @@ public partial class KaxHttp
             var specs = EnsureSpecs(asset);
             specs.LastUpdatedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
             await KaxGlobal.AssetDataBase.UpdateAsync(asset);
+            await NotifyAssetActionEmailAsync(asset, "拒绝", reason, operatorName ?? "系统");
 
             Logger.Info($"管理员 {operatorName} 拒绝了资源审核: {asset.Name} (id={id})，原因: {reason}");
             return new JsonResult(new { code = 0, message = "已拒绝" }, 200);

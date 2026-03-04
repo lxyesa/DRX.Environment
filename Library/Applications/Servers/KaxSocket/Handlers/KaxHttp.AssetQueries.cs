@@ -118,14 +118,17 @@ public partial class KaxHttp
                 var s = a.Specs;
                 return new
                 {
-                    id           = a.Id,
-                    name         = a.Name,
-                    category     = a.Category,
+                    id            = a.Id,
+                    name          = a.Name,
+                    category      = a.Category,
+                    description   = a.Description,
                     coverImage    = a.CoverImage,
+                    iconImage     = a.IconImage,
                     authorName    = authorNameMap.TryGetValue(a.AuthorId, out var n) ? n : "未知",
-                    purchaseCount  = s?.PurchaseCount ?? 0,
-                    favoriteCount  = s?.FavoriteCount ?? 0,
-                    priceYuan      = p != null ? Math.Round(p.Price / 100.0, 2) : 0.0
+                    purchaseCount = s?.PurchaseCount ?? 0,
+                    favoriteCount = s?.FavoriteCount ?? 0,
+                    priceYuan     = p != null ? Math.Round(p.Price / 100.0, 2) : 0.0,
+                    lastUpdatedAt = s?.LastUpdatedAt ?? 0
                 };
             }).ToList();
 
@@ -272,7 +275,7 @@ public partial class KaxHttp
                 reviewCount   = specs.ReviewCount,
                 compatibility = specs.Compatibility,
                 downloads     = specs.Downloads,
-                uploadDate    = specs.UploadDate,
+                uploadDate    = asset.LastSubmittedAt,
                 license       = specs.License,
                 downloadUrl   = specs.DownloadUrl,
                 purchaseCount = specs.PurchaseCount,
@@ -306,12 +309,13 @@ public partial class KaxHttp
             {
                 id          = asset.Id,
                 name        = asset.Name,
+                version     = asset.Version ?? string.Empty,
                 authorId    = asset.AuthorId,
                 authorName  = authorName,
                 description = asset.Description,
                 category    = asset.Category,
-                coverImage   = asset.CoverImage,
-                iconImage = asset.IconImage,
+                coverImage  = asset.CoverImage,
+                iconImage   = asset.IconImage,
                 screenshots    = screenshotList,
                 tags           = tagList,
                 badges         = ParseStringArray(badgesRaw),

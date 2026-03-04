@@ -194,16 +194,18 @@
              * @returns {ShopAssetCardVM}
              */
             function mapListItem(a) {
+                const normalizedDescription = String(a.description ?? '').replace(/\s+/g, ' ').trim();
                 return {
                     assetId: Number(a.id),
                     displayName: a.name || '',
                     category: a.category || '',
                     coverImage: a.coverImage || '',
+                    iconImage: a.iconImage || '',
                     priceYuan: typeof a.priceYuan === 'number' ? a.priceYuan : 0,
                     authorName: a.authorName || '',
                     purchaseCount: a.purchaseCount || 0,
                     favoriteCount: a.favoriteCount || 0,
-                    description: a.description || '',
+                    description: normalizedDescription,
                     lastUpdatedAt: a.lastUpdatedAt || 0
                 };
             }
@@ -431,35 +433,59 @@
                 const cartTitle = inCart ? '已在购物车中，点击可移除' : '加入购物车';
                 const authorText = escapeHtml(vm.authorName || '未知作者');
                 const imageUrl = vm.coverImage || '';
-                const imageHtml = imageUrl
-                    ? `<img src="${escapeHtml(imageUrl)}" alt="${escapeHtml(vm.displayName)}" loading="lazy" style="width:100%;height:100%;object-fit:cover;">`
-                    : '📦';
+                const iconUrl = vm.iconImage || vm.coverImage || '';
+                const descText = escapeHtml(vm.description || '暂无描述');
+                const ctaLabel = vm.priceYuan === 0 ? '免费获取' : `¥${vm.priceYuan.toFixed(2)}`;
+
+                const iconHtml = iconUrl
+                    ? `
+                        <span class="pc-icon-backdrop" aria-hidden="true">
+                            <img class="pc-icon-copy" src="${escapeHtml(iconUrl)}" alt="" loading="lazy">
+                        </span>
+                        <span class="pc-icon-fill" aria-hidden="true"></span>
+                        <img class="pc-icon" src="${escapeHtml(iconUrl)}" alt="" aria-hidden="true" loading="lazy">
+                    `
+                    : `<span class="pc-icon-placeholder">📦</span>`;
+
+                const cardAmbientHtml = iconUrl
+                    ? `
+                        <span class="pc-card-ambient" aria-hidden="true">
+                            <img class="pc-card-ambient-copy" src="${escapeHtml(iconUrl)}" alt="" loading="lazy">
+                            <span class="pc-card-ambient-fill"></span>
+                        </span>
+                    `
+                    : '';
+
+                const coverHtml = imageUrl
+                    ? `<img class="product-cover" src="${escapeHtml(imageUrl)}" alt="${escapeHtml(vm.displayName)}" loading="lazy">`
+                    : `<span class="pc-cover-empty">📦</span>`;
+
+                const tagHtml = vm.category
+                    ? `<span class="pc-tag">${escapeHtml(vm.category)}</span>`
+                    : '';
 
                 return `
-                <div class="product-card">
-                    <div class="product-image">${imageHtml}</div>
-                    <div class="product-content">
-                        ${vm.category ? `<span class="product-category-tag">${escapeHtml(vm.category)}</span>` : ''}
-                        <div class="product-name">${escapeHtml(vm.displayName)}</div>
-                        <div class="product-desc">${escapeHtml(vm.description)}</div>
-                        <div class="product-meta">
-                            <div class="product-price">💰${vm.priceYuan.toFixed(2)}</div>
-                            <div class="product-meta-row">
-                                <span class="meta-item"><span class="meta-label">作者</span> ${authorText}</span>
-                                <span class="meta-item"><span class="meta-label">销量</span> ${vm.purchaseCount}</span>
-                                <span class="meta-item"><span class="meta-label">更新</span> ${formatDate(vm.lastUpdatedAt)}</span>
-                            </div>
+                <div class="product-card" role="button" tabindex="0" onclick="ShopApp.viewDetail(${vm.assetId})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();ShopApp.viewDetail(${vm.assetId});}">
+                    ${cardAmbientHtml}
+                    <div class="pc-header">
+                        <div class="pc-icon-wrap">${iconHtml}</div>
+                        <div class="pc-title-block">
+                            <div class="pc-name">${escapeHtml(vm.displayName)}</div>
+                            <div class="pc-author">${authorText}</div>
                         </div>
-                        <div class="product-actions">
-                            <button class="btn" onclick="ShopApp.viewDetail(${vm.assetId})">查看详细</button>
-                            <button class="btn icon cart-icon${cartClass}" onclick="ShopApp.toggleCart(${vm.assetId})" title="${cartTitle}" data-asset-id="${vm.assetId}">
-                                <span class="material-icons">${cartIcon}</span>
-                            </button>
-                            <button class="btn icon${favClass}" onclick="ShopApp.toggleFavorite(this, ${vm.assetId})" title="收藏" data-asset-id="${vm.assetId}"${favAria}>
+                        <div class="pc-header-actions">
+                            <button class="btn icon${favClass}" onclick="event.stopPropagation();ShopApp.toggleFavorite(this, ${vm.assetId})" title="收藏" data-asset-id="${vm.assetId}"${favAria}>
                                 <span class="material-icons">${favIcon}</span>
                             </button>
+                            <button class="btn icon cart-icon${cartClass}" onclick="event.stopPropagation();ShopApp.toggleCart(${vm.assetId})" title="${cartTitle}" data-asset-id="${vm.assetId}">
+                                <span class="material-icons">${cartIcon}</span>
+                            </button>
+                            <span class="pc-price-badge">${ctaLabel}</span>
                         </div>
                     </div>
+                    ${tagHtml ? `<div class="pc-tags">${tagHtml}</div>` : ''}
+                    <div class="pc-desc">${descText}</div>
+                    <div class="pc-cover-wrap">${coverHtml}</div>
                 </div>`;
             }
 
@@ -601,6 +627,28 @@
             function goToCart() {
                 alert('购物车功能开发中...');
             }
+
+            /** 切换卡片抽屉展开（移动端点击展开，桌面端 hover 仍可触发） */
+            function toggleExpand(event, assetId) {
+                event.preventDefault();
+                event.stopPropagation();
+
+                const toggle = event.currentTarget;
+                const card = toggle?.closest('.product-card');
+                if (!card) return;
+
+                const shouldExpand = !card.classList.contains('is-expanded');
+
+                document.querySelectorAll('.product-card.is-expanded').forEach(openCard => {
+                    if (openCard === card) return;
+                    openCard.classList.remove('is-expanded');
+                    const openToggle = openCard.querySelector('.card-drawer-toggle');
+                    if (openToggle) openToggle.setAttribute('aria-expanded', 'false');
+                });
+
+                card.classList.toggle('is-expanded', shouldExpand);
+                toggle.setAttribute('aria-expanded', shouldExpand ? 'true' : 'false');
+            }
             // #endregion
 
             // #region Init —— 初始化入口
@@ -614,6 +662,25 @@
                 document.getElementById('searchInput').addEventListener('input', filterProducts);
                 document.getElementById('categorySelect').addEventListener('change', filterProducts);
                 document.getElementById('sortSelect').addEventListener('change', filterProducts);
+
+                document.addEventListener('click', (event) => {
+                    if (event.target.closest('.product-card')) return;
+
+                    document.querySelectorAll('.product-card.is-expanded').forEach(card => {
+                        card.classList.remove('is-expanded');
+                        const toggle = card.querySelector('.card-drawer-toggle');
+                        if (toggle) toggle.setAttribute('aria-expanded', 'false');
+                    });
+                });
+
+                document.addEventListener('keydown', (event) => {
+                    if (event.key !== 'Escape') return;
+                    document.querySelectorAll('.product-card.is-expanded').forEach(card => {
+                        card.classList.remove('is-expanded');
+                        const toggle = card.querySelector('.card-drawer-toggle');
+                        if (toggle) toggle.setAttribute('aria-expanded', 'false');
+                    });
+                });
 
                 const cartBtn = document.getElementById('cartButton');
                 if (cartBtn) cartBtn.addEventListener('click', goToCart);
@@ -640,7 +707,7 @@
             // #endregion
 
             // 暴露给 HTML onclick 使用的公共接口
-            return { init, goToPage, toggleCart, toggleFavorite, viewDetail, goToCart, retryLoad };
+            return { init, goToPage, toggleCart, toggleFavorite, viewDetail, goToCart, toggleExpand, retryLoad };
         })();
 
         // 页面加载时启动应用

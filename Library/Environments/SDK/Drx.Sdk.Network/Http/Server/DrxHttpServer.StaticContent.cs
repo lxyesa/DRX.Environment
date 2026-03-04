@@ -9,6 +9,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Drx.Sdk.Shared;
 using Drx.Sdk.Network.Http.Protocol;
+using Drx.Sdk.Network.Http.Performance;
 
 namespace Drx.Sdk.Network.Http
 {
@@ -103,6 +104,8 @@ namespace Drx.Sdk.Network.Http
                     if (string.Equals(clientETag, serverETag, StringComparison.Ordinal))
                     {
                         Logger.Info($"[静态资源缓存命中] 路径: {request.Path} | ETag: {serverETag} | 大小: {cacheEntry.FileSize} 字节");
+                        // [任务 4.3] 统一记录服务端 304 命中（ETag 路径）
+                        HttpMetrics.Instance.RecordConditionalRequest(isConditional: true, is304: true);
                         return Build304Response(cacheEntry);
                     }
                 }
@@ -120,12 +123,17 @@ namespace Drx.Sdk.Network.Http
                         if (clientDate >= serverDate)
                         {
                             Logger.Info($"[静态资源缓存命中] 路径: {request.Path} | 修改时间: {serverDate:O} | 大小: {cacheEntry.FileSize} 字节");
+                            // [任务 4.3] 统一记录服务端 304 命中（Last-Modified 路径）
+                            HttpMetrics.Instance.RecordConditionalRequest(isConditional: true, is304: true);
                             return Build304Response(cacheEntry);
                         }
                     }
                 }
 
                 Logger.Info($"[静态资源缓存未命中] 路径: {request.Path} | ETag: {cacheEntry.ETag} | 大小: {cacheEntry.FileSize} 字节");
+                // [任务 4.3] 条件请求但未命中（资源已更新）
+                if (!string.IsNullOrEmpty(ifNoneMatch) || !string.IsNullOrEmpty(ifModifiedSince))
+                    HttpMetrics.Instance.RecordConditionalRequest(isConditional: true, is304: false);
                 return BuildStaticFileResponse(filePath, cacheEntry);
             }
             catch (Exception ex)

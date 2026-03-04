@@ -16,6 +16,12 @@
     --text-muted:     rgba(255, 255, 255, 0.42);
     --hero-height:    280px;
     --radius:         6px;
+    --hero-panel-ambient-scale: 2.15;
+    --hero-panel-ambient-blur: 34px;
+    --hero-panel-ambient-opacity: 0.44;
+    --hero-panel-ambient-fill-opacity: 0.72;
+    --hero-panel-ambient-sheen: rgba(99, 140, 255, 0.18);
+    --hero-panel-ambient-vignette: rgba(0, 0, 0, 0.44);
 }
 
 /* ================================================================
@@ -110,6 +116,48 @@
     isolation: isolate;
 }
 
+.hero-panel-ambient {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    overflow: hidden;
+    border-radius: inherit;
+    opacity: 0;
+    transition: opacity .2s ease;
+}
+
+.hero-product-row.has-ambient-media .hero-panel-ambient {
+    opacity: 1;
+}
+
+.hero-panel-ambient-copy {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    transform: scale(var(--hero-panel-ambient-scale));
+    transform-origin: center;
+    filter: blur(var(--hero-panel-ambient-blur)) saturate(1.28) brightness(0.9);
+    opacity: var(--hero-panel-ambient-opacity);
+}
+
+.hero-panel-ambient-fill {
+    position: absolute;
+    inset: 0;
+    -webkit-backdrop-filter: blur(14px);
+    backdrop-filter: blur(14px);
+    background:
+        radial-gradient(circle at 22% 24%, var(--hero-panel-ambient-sheen) 0%, transparent 58%),
+        linear-gradient(180deg, transparent 0%, var(--hero-panel-ambient-vignette) 100%),
+        rgba(10, 10, 16, var(--hero-panel-ambient-fill-opacity));
+}
+
+.hero-product-row > :not(.hero-panel-ambient) {
+    position: relative;
+    z-index: 1;
+}
+
 /* 占位符 */
 .hero-row-ph {
     display: block;
@@ -142,7 +190,7 @@
 }
 
 /* ================================================================
-   Docked 状态 — position: fixed + 连续 --t 驱动
+   Docked 状态 — position: fixed
    ================================================================ */
 .hero-product-row.is-docked {
     position: fixed;
@@ -151,89 +199,71 @@
     transform: translateX(-50%);
     z-index: 1300;
 
-    /* 连续驱动的几何属性 */
     width: min(940px, calc(100vw - 24px));
     max-width: calc(100vw - 24px);
     align-items: center;
-    gap: calc(20px - var(--t) * 10px);
-    padding:
-        calc(18px - var(--t) * 8px)
-        calc(22px - var(--t) * 9px);
-    border-radius: calc(14px + var(--t) * 28px);
+    gap: 10px;
+    padding: 10px 13px;
+    border-radius: 42px;
 
-    /* 连续驱动的背景与光效 */
     background:
         radial-gradient(
-            ellipse 80% 100% at calc(20% + var(--t) * 10%) 40%,
-            rgba(99, 140, 255, calc(0.04 + var(--t) * 0.12)),
-            transparent 58%
+            ellipse 70% 90% at 30% 40%,
+            rgba(99, 140, 255, 0.16),
+            transparent 60%
         ),
-        radial-gradient(
-            ellipse 60% 90% at calc(80% - var(--t) * 10%) 60%,
-            rgba(160, 118, 255, calc(0.03 + var(--t) * 0.10)),
-            transparent 50%
-        ),
-        rgba(8, 8, 14, calc(0.62 + var(--t) * 0.18));
-    border-color: rgba(140, 170, 255, calc(0.10 + var(--t) * 0.14));
+        rgba(8, 8, 14, 0.80);
+    border-color: rgba(140, 170, 255, 0.24);
     box-shadow:
-        0 calc(12px + var(--t) * 6px) calc(28px + var(--t) * 12px) rgba(0, 0, 0, calc(0.30 + var(--t) * 0.14)),
-        0 0 0 1px rgba(99, 140, 255, calc(0.06 + var(--t) * 0.10)),
-        0 0 calc(var(--t) * 48px) rgba(99, 140, 255, calc(var(--t) * 0.18)),
-        inset 0 1px 0 rgba(255, 255, 255, calc(0.06 + var(--t) * 0.04));
-    -webkit-backdrop-filter: blur(calc(24px + var(--t) * 8px)) saturate(calc(1.3 + var(--t) * 0.2));
-    backdrop-filter: blur(calc(24px + var(--t) * 8px)) saturate(calc(1.3 + var(--t) * 0.2));
+        0 16px 40px rgba(0, 0, 0, 0.44),
+        0 0 0 1px rgba(99, 140, 255, 0.18);
+    -webkit-backdrop-filter: blur(28px) saturate(1.4);
+    backdrop-filter: blur(28px) saturate(1.4);
 
-    /* 入场弹跳 */
-    animation: dockIn .44s cubic-bezier(.16, 1, .3, 1) both;
+    animation: dockIn .28s ease-out both;
 }
 
-/* 扫光层 — 只在 docked 时显示 */
+.hero-product-row.is-docked .hero-panel-ambient-copy {
+    transform: scale(2.45);
+    filter: blur(36px) saturate(1.34) brightness(0.9);
+    opacity: 0.52;
+}
+
+.hero-product-row.is-docked .hero-panel-ambient-fill {
+    -webkit-backdrop-filter: blur(16px);
+    backdrop-filter: blur(16px);
+}
+
+/* 顶部高光边框 */
 .hero-product-row.is-docked::before {
-    content: '';
-    position: absolute;
-    inset: -1px;
-    border-radius: inherit;
-    background: linear-gradient(
-        105deg,
-        transparent 0%,
-        rgba(99, 140, 255, 0.08) 25%,
-        rgba(160, 118, 255, 0.18) 50%,
-        rgba(99, 140, 255, 0.08) 75%,
-        transparent 100%
-    );
-    background-size: 250% 100%;
-    opacity: calc(0.3 + var(--t) * 0.5);
-    z-index: -1;
-    pointer-events: none;
-    animation: shimmerSweep 3s ease-in-out infinite;
-}
-
-/* 顶部高光 */
-.hero-product-row.is-docked::after {
     content: '';
     position: absolute;
     inset: 0;
     border-radius: inherit;
     background: linear-gradient(
-        165deg,
-        rgba(255, 255, 255, calc(0.10 - var(--t) * 0.04)),
+        160deg,
+        rgba(255, 255, 255, 0.06) 0%,
         transparent 40%
     );
-    mix-blend-mode: screen;
     pointer-events: none;
+    z-index: -1;
 }
 
-/* ── 子元素连续变形 ── */
+.hero-product-row.is-docked::after {
+    display: none;
+}
+
+/* ── 子元素 bar 状态定态 ── */
 .hero-product-row.is-docked .hero-icon-placeholder {
-    width: calc(62px - var(--t) * 18px);
-    height: calc(62px - var(--t) * 18px);
-    border-radius: calc(10px + var(--t) * 40px);
+    width: 44px;
+    height: 44px;
+    border-radius: 50px;
     box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.06);
 }
 
 .hero-product-row.is-docked .hero-product-name {
     margin: 0;
-    font-size: calc(1.32rem - var(--t) * 0.24rem);
+    font-size: 1.08rem;
     line-height: 1.2;
     white-space: nowrap;
     overflow: hidden;
@@ -241,112 +271,38 @@
 }
 
 .hero-product-row.is-docked .hero-product-meta {
-    margin-top: calc(4px - var(--t) * 2px);
+    margin-top: 2px;
     margin-bottom: 0;
     gap: 6px;
-    font-size: calc(0.84rem - var(--t) * 0.06rem);
+    font-size: 0.78rem;
 }
 
 .hero-product-row.is-docked .hero-meta-author,
 .hero-product-row.is-docked .hero-meta-dot {
-    opacity: calc(1 - var(--t) * 1.2);
-    max-width: calc((1 - var(--t)) * 120px);
+    opacity: 0;
+    max-width: 0;
     overflow: hidden;
-    transition: none;
 }
 
 .hero-product-row.is-docked .hero-product-desc,
 .hero-product-row.is-docked .hero-tags {
-    opacity: calc(1 - var(--t) * 1.5);
-    max-height: calc((1 - min(1, var(--t) * 1.8)) * 60px);
-    margin-bottom: calc((1 - min(1, var(--t) * 1.5)) * 12px);
+    opacity: 0;
+    max-height: 0;
+    margin-bottom: 0;
     overflow: hidden;
     pointer-events: none;
-    transition: none;
 }
 
 /* ── 动画关键帧 ── */
 @keyframes dockIn {
-    0% {
+    from {
         opacity: 0;
-        transform: translateX(-50%) translateY(16px) scale(0.96);
-        filter: brightness(0.9);
+        transform: translateX(-50%) translateY(-10px);
     }
-    60% {
+    to {
         opacity: 1;
-        transform: translateX(-50%) translateY(-3px) scale(1.008);
-        filter: brightness(1.08);
+        transform: translateX(-50%) translateY(0);
     }
-    100% {
-        opacity: 1;
-        transform: translateX(-50%) translateY(0) scale(1);
-        filter: brightness(1);
-    }
-}
-
-@keyframes shimmerSweep {
-    0%   { background-position: 150% center; }
-    100% { background-position: -50% center; }
-}
-
-/* ── bar 内嵌迷你购买槽 ── */
-.bar-purchase-slot {
-    display: none;                          /* 非 docked 时隐藏 */
-    align-items: center;
-    gap: 10px;
-    margin-left: auto;                      /* 推到 flex 行末尾 */
-    flex-shrink: 0;
-    white-space: nowrap;
-    overflow: hidden;
-}
-
-.hero-product-row.is-docked .bar-purchase-slot {
-    display: flex;
-    /* t < 0.4 不可见；t = 1 完全可见 */
-    opacity: clamp(0, calc((var(--t) - 0.4) / 0.35), 1);
-    max-width: calc(clamp(0, var(--t) - 0.35, 1) * 220px);
-    pointer-events: auto;
-    transition: opacity .18s ease, max-width .22s ease;
-}
-
-.bar-price {
-    font-size: 0.92rem;
-    font-weight: 700;
-    color: var(--accent);
-    letter-spacing: 0.01em;
-}
-
-.bar-buy-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    padding: 5px 14px;
-    border: none;
-    border-radius: 20px;
-    background: linear-gradient(135deg, var(--accent) 0%, rgba(139, 92, 246, 0.95) 100%);
-    color: #fff;
-    font-size: 0.78rem;
-    font-weight: 600;
-    font-family: 'Poppins', sans-serif;
-    cursor: pointer;
-    white-space: nowrap;
-    box-shadow: 0 2px 10px rgba(99, 140, 255, 0.35);
-    transition: transform .14s ease, box-shadow .14s ease, filter .14s ease;
-}
-
-.bar-buy-btn .material-icons {
-    font-size: 15px;
-}
-
-.bar-buy-btn:hover {
-    transform: translateY(-1px) scale(1.04);
-    box-shadow: 0 4px 16px rgba(99, 140, 255, 0.5);
-    filter: brightness(1.1);
-}
-
-.bar-buy-btn:active {
-    transform: scale(0.97);
-    box-shadow: 0 1px 6px rgba(99, 140, 255, 0.3);
 }
 
 .hero-icon-wrap { flex-shrink: 0; }
@@ -368,6 +324,14 @@
     width: 100%;
     height: 100%;
     object-fit: cover;
+}
+
+.hero-icon-media {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: inherit;
+    display: block;
 }
 
 .hero-product-info {
@@ -437,6 +401,7 @@
     margin-bottom: 16px;
     display: -webkit-box;
     -webkit-line-clamp: 2;
+    line-clamp: 2;
     -webkit-box-orient: vertical;
     overflow: hidden;
 }
@@ -503,6 +468,7 @@
 
 .gallery-viewport {
     position: relative;
+    z-index: 0;
     width: 100%;
     border-radius: 6px;
     overflow: hidden;
@@ -981,6 +947,45 @@
     cursor: not-allowed;
 }
 
+.btn-download {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    width: 100%;
+    padding: 0 20px;
+    height: 42px;
+    background: transparent;
+    color: var(--accent, #638cff);
+    border: 1px solid var(--accent, #638cff);
+    border-radius: 4px;
+    font-family: 'Poppins', sans-serif;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    text-decoration: none;
+    transition: background .14s ease, color .14s ease, border-color .14s ease;
+}
+
+.btn-download:hover {
+    background: rgba(99, 140, 255, 0.12);
+    border-color: var(--accent-hover, #7aa4ff);
+    color: var(--accent-hover, #7aa4ff);
+}
+
+.btn-download:active {
+    transform: scale(var(--btn-press-scale, 0.985));
+    transition: transform var(--btn-press-duration, 120ms) var(--btn-press-ease, cubic-bezier(.2,.9,.2,1));
+}
+
+.btn-download.is-disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    pointer-events: none;
+    border-color: rgba(99, 140, 255, 0.3);
+    color: rgba(99, 140, 255, 0.4);
+}
+
 .purchase-secondary-btns {
     display: flex;
     gap: 10px;
@@ -1208,6 +1213,17 @@
     }
 
     .hero-product-row { gap: 14px; }
+
+    .hero-panel-ambient-copy {
+        transform: scale(1.85);
+        filter: blur(22px) saturate(1.2) brightness(0.92);
+        opacity: 0.36;
+    }
+
+    .hero-panel-ambient-fill {
+        -webkit-backdrop-filter: blur(9px);
+        backdrop-filter: blur(9px);
+    }
 
     .hero-icon-placeholder {
         width: 58px;

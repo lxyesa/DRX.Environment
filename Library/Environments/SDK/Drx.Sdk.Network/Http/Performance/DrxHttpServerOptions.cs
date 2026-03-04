@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using Drx.Sdk.Network.Http.Configs;
 using Drx.Sdk.Shared;
@@ -99,6 +100,93 @@ namespace Drx.Sdk.Network.Http.Performance
         /// </summary>
         public int SessionTimeoutMinutes { get; set; } = 30;
 
+        // ── 新增：并发队列联动参数 ─────────────────────────────────────────────
+
+        /// <summary>
+        /// 队列满时的背压警告水位线（百分比，0~100）。
+        /// 当排队中的请求数超过 ChannelCapacity × (WatermarkPercent/100) 时，
+        /// 自适应控制器将提前触发减速（MD 步长加倍），阻止拥塞持续放大。
+        /// 默认值：80（即队列 80% 满时触发）。
+        /// </summary>
+        public int QueueWatermarkPercent { get; set; } = 80;
+
+        /// <summary>
+        /// 是否在队列深度超过水位线时记录告警日志。
+        /// 默认值：true。
+        /// </summary>
+        public bool LogQueueWatermarkWarnings { get; set; } = true;
+
+        /// <summary>
+        /// 并发窗口自适应调整的采样窗口大小（请求数）。
+        /// 每处理此数量的请求后重新评估并发阈值。
+        /// 默认值：50（与 AdaptiveConcurrencyLimiter 内部 SampleWindowSize 联动）。
+        /// 0 表示使用内部默认。
+        /// </summary>
+        public int AdaptiveSampleWindowSize { get; set; } = 0;
+
+        // ── 压缩策略 ──────────────────────────────────────────────────────────────
+
+        /// <summary>
+        /// 是否启用响应压缩（Gzip / Brotli 自动协商）。
+        /// 启用后按内容类型与体积阈值决定是否压缩，降低出站流量。
+        /// 默认值：true。
+        /// </summary>
+        public bool EnableCompression { get; set; } = true;
+
+        /// <summary>
+        /// 触发压缩的最小响应体积（字节）。
+        /// 小于此阈值的响应不压缩（压缩收益低且 CPU 开销相对较大）。
+        /// 默认值：1024（1 KB）。
+        /// </summary>
+        public int CompressionMinSizeBytes { get; set; } = 1024;
+
+        /// <summary>
+        /// 压缩级别（0=最快/最低压缩；9=最慢/最高压缩；推荐 1~2 控制 CPU 增幅）。
+        /// 默认值：1（最快档，CPU 增幅最小）。
+        /// </summary>
+        public int CompressionLevel { get; set; } = 1;
+
+        /// <summary>
+        /// 允许压缩的内容类型列表（ContentType 前缀匹配）。
+        /// 已压缩格式（image/png, video/*, application/zip 等）不在此列表中。
+        /// 修改此列表可精细控制哪些类型参与压缩。
+        /// </summary>
+        public HashSet<string> CompressibleContentTypes { get; set; } = new(StringComparer.OrdinalIgnoreCase)
+        {
+            "text/",
+            "application/json",
+            "application/javascript",
+            "application/xml",
+            "application/xhtml",
+            "application/atom",
+            "application/rss",
+            "application/ld+json",
+            "application/manifest",
+            "image/svg+xml",
+        };
+
+        /// <summary>
+        /// CPU 占用率守护阈值（百分比，0~100）。
+        /// 采样 CPU % 增幅超过此值时自动将 EnableCompression 暂时置为 false（降级）。
+        /// 默认值：3（对应 R2 的 CPU ≤ 3% 增幅约束）。
+        /// </summary>
+        public double CompressionCpuGuardPercent { get; set; } = 3.0;
+
+        /// <summary>
+        /// CPU 守护采样间隔（秒）。
+        /// 默认值：10。
+        /// </summary>
+        public int CompressionCpuSampleIntervalSeconds { get; set; } = 10;
+
+        /// <summary>
+        /// CPU 守护冷却时间（秒）。
+        /// 触发降级后至少等待此时长再尝试恢复压缩。
+        /// 默认值：60。
+        /// </summary>
+        public int CompressionCpuCooldownSeconds { get; set; } = 60;
+
+        // ── 开发态运行时 ─────────────────────────────────────────────────────────
+
         /// <summary>
         /// 开发态前端运行时配置。
         /// 默认关闭，避免生产环境暴露调试能力。
@@ -125,6 +213,16 @@ namespace Drx.Sdk.Network.Http.Performance
             if (AdaptiveMinConcurrency <= 0) AdaptiveMinConcurrency = Environment.ProcessorCount;
             if (AdaptiveMaxConcurrency < AdaptiveMinConcurrency) AdaptiveMaxConcurrency = AdaptiveMinConcurrency * 4;
             if (AdaptiveTargetQueueLatencyMs <= 0) AdaptiveTargetQueueLatencyMs = 50.0;
+            if (QueueWatermarkPercent < 0 || QueueWatermarkPercent > 100) QueueWatermarkPercent = 80;
+
+            // 压缩参数校验
+            if (CompressionMinSizeBytes < 0) CompressionMinSizeBytes = 0;
+            if (CompressionLevel < 0) CompressionLevel = 0;
+            if (CompressionLevel > 9) CompressionLevel = 9;
+            if (CompressionCpuGuardPercent <= 0 || CompressionCpuGuardPercent > 100) CompressionCpuGuardPercent = 3.0;
+            if (CompressionCpuSampleIntervalSeconds <= 0) CompressionCpuSampleIntervalSeconds = 10;
+            if (CompressionCpuCooldownSeconds <= 0) CompressionCpuCooldownSeconds = 60;
+            CompressibleContentTypes ??= new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
             DevRuntime ??= DevRuntimeOptions.CreateDefault();
             DevRuntime.Validate();
@@ -134,6 +232,76 @@ namespace Drx.Sdk.Network.Http.Performance
         /// 创建默认配置
         /// </summary>
         public static DrxHttpServerOptions Default => new();
+
+        /// <summary>
+        /// 创建高吞吐优化预设（适合高并发请求处理）。
+        /// 扩大 ChannelCapacity 与并发范围，降低自适应目标延迟阈值以更敏感地响应负载。
+        /// </summary>
+        public static DrxHttpServerOptions HighThroughput()
+        {
+            var cores = Environment.ProcessorCount;
+            return new DrxHttpServerOptions
+            {
+                MaxConcurrentRequests = Math.Max(128, cores * 32),
+                ChannelCapacity = 4000,
+                PerCoreQueueCapacity = 512,
+                OverflowQueueCapacity = 4096,
+                EnableAdaptiveConcurrency = true,
+                AdaptiveTargetQueueLatencyMs = 30.0,
+                AdaptiveMinConcurrency = Math.Max(cores, 16),
+                AdaptiveMaxConcurrency = Math.Max(512, cores * 64),
+                QueueWatermarkPercent = 75,
+            };
+        }
+
+        /// <summary>
+        /// 创建低延迟优化预设（适合小包高并发，保护尾延迟）。
+        /// 更小的并发上限与更严格的水位线，防止队列积压放大 P99。
+        /// </summary>
+        public static DrxHttpServerOptions LowLatency()
+        {
+            var cores = Environment.ProcessorCount;
+            return new DrxHttpServerOptions
+            {
+                MaxConcurrentRequests = Math.Max(64, cores * 8),
+                ChannelCapacity = 2000,
+                PerCoreQueueCapacity = 256,
+                OverflowQueueCapacity = 2048,
+                EnableAdaptiveConcurrency = true,
+                AdaptiveTargetQueueLatencyMs = 20.0,
+                AdaptiveMinConcurrency = Math.Max(cores / 2, 4),
+                AdaptiveMaxConcurrency = Math.Max(128, cores * 16),
+                QueueWatermarkPercent = 60,
+            };
+        }
+
+        /// <summary>
+        /// 根据客户端配置推导出联动的服务端配置建议，
+        /// 确保客户端并发上限与服务端队列容量匹配，避免"连接池饱和 + 队列堆积"双重放大。
+        /// </summary>
+        /// <param name="clientOptions">客户端连接池配置</param>
+        /// <returns>调整后的服务端选项（对当前实例的副本）</returns>
+        public DrxHttpServerOptions WithClientOptionsAligned(DrxHttpClientOptions clientOptions)
+        {
+            if (clientOptions == null || !clientOptions.Enabled) return this;
+
+            // 服务端 ChannelCapacity 应不低于客户端 MaxConcurrentRequests × 安全系数 (3)
+            var minChannelCapacity = clientOptions.MaxConcurrentRequests * 3;
+            if (ChannelCapacity < minChannelCapacity)
+            {
+                ChannelCapacity = minChannelCapacity;
+                Logger.Info($"[ConnectionStrategy] 服务端 ChannelCapacity 联动调整为 {ChannelCapacity}（客户端 MaxConcurrentRequests={clientOptions.MaxConcurrentRequests}）");
+            }
+
+            // 服务端并发上限应 ≥ 客户端最大并发数
+            if (MaxConcurrentRequests < clientOptions.MaxConcurrentRequests)
+            {
+                MaxConcurrentRequests = clientOptions.MaxConcurrentRequests * 2;
+                Logger.Info($"[ConnectionStrategy] 服务端 MaxConcurrentRequests 联动调整为 {MaxConcurrentRequests}");
+            }
+
+            return this;
+        }
     }
 
     /// <summary>

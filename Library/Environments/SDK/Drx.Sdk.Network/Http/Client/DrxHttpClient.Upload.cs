@@ -59,8 +59,13 @@ namespace Drx.Sdk.Network.Http
             var requestUrl = BuildUrl(url, query);
             using var content = new MultipartFormDataContent();
 
-            var progressContent = new ProgressableStreamContent(fileStream, 81920, progress, cancellationToken);
-            var streamContent = new StreamContent(progressContent, 81920);
+            // [任务 6.1] 分片窗口自适应：已知流大小时选用较大缓冲区，降低系统调用次数
+            long streamLength = -1;
+            try { if (fileStream.CanSeek) streamLength = fileStream.Length; } catch { }
+            int uploadBufferSize = HttpObjectPool.ChooseTransferBufferSize(streamLength);
+
+            var progressContent = new ProgressableStreamContent(fileStream, uploadBufferSize, progress, cancellationToken);
+            var streamContent = new StreamContent(progressContent, uploadBufferSize);
             streamContent.Headers.ContentDisposition = new ContentDispositionHeaderValue("form-data") { Name = $"\"{fieldName}\"", FileName = $"\"{fileName}\"" };
             streamContent.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
 
@@ -89,6 +94,11 @@ namespace Drx.Sdk.Network.Http
 
                 var httpResponse = new HttpResponse((int)response.StatusCode, responseBody, response.ReasonPhrase);
                 httpResponse.BodyBytes = responseBytes;
+
+                // [任务 6.2] 大文件上传指标
+                if (streamLength >= HttpObjectPool.LargeFileThresholdBytes)
+                    HttpMetrics.Instance.RecordLargeFileUpload(streamLength);
+
                 try
                 {
                     httpResponse.BodyObject = System.Text.Json.JsonSerializer.Deserialize<object>(responseBody);

@@ -4,6 +4,7 @@ using System.Net;
 using System.Net.Http;
 using System.Text;
 using System.Threading.Tasks;
+using Drx.Sdk.Network.Http.Performance;
 
 namespace Drx.Sdk.Network.Http
 {
@@ -111,6 +112,32 @@ namespace Drx.Sdk.Network.Http
             }
         }
 
+        // ── 压缩策略灰度 / 回滚控制（任务 3.3 / R7）────────────────────────────
+
+        /// <summary>
+        /// 检查当前响应压缩是否处于活跃状态。
+        /// CPU 守护触发降级后此值为 false。
+        /// </summary>
+        public bool IsCompressionActive => _compressionStrategy?.IsCompressionActive ?? false;
+
+        /// <summary>
+        /// 获取当前压缩统计摘要（灰度验证用）。
+        /// </summary>
+        public CompressionStats GetCompressionStats() => _compressionStrategy?.GetStats()
+            ?? new CompressionStats { IsActive = false };
+
+        /// <summary>
+        /// 强制禁用响应压缩（灰度回滚场景）。
+        /// 覆盖 CPU 守护状态，立即生效；调用 <see cref="ResumeCompression"/> 可重新启用。
+        /// </summary>
+        public void DisableCompression() => _compressionStrategy?.ForceDisable();
+
+        /// <summary>
+        /// 恢复响应压缩（在 <see cref="DisableCompression"/> 或 CPU 降级后手动恢复）。
+        /// 需确保 <see cref="DrxHttpServerOptions.EnableCompression"/> 为 true。
+        /// </summary>
+        public void ResumeCompression() => _compressionStrategy?.ForceEnable();
+
         public ValueTask DisposeAsync()
         {
             Stop();
@@ -121,6 +148,7 @@ namespace Drx.Sdk.Network.Http
             try { _tickerWake?.Dispose(); } catch { }
             try { ((IDisposable)_listener)?.Dispose(); } catch { }
             try { if (_dataPersistentManager is IDisposable dpDisposable) dpDisposable.Dispose(); } catch { }
+            try { _compressionStrategy?.Dispose(); } catch { }
 
             _ipRequestHistory.Clear();
             _ipRouteRequestHistory.Clear();

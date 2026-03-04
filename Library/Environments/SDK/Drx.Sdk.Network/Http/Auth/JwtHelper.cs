@@ -23,7 +23,7 @@ namespace Drx.Sdk.Network.Http.Auth
             public string SecretKey { get; set; } = "A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6"; // 生产环境应使用强密钥
             public string Issuer { get; set; } = "DrxHttpServer";
             public string Audience { get; set; } = "DrxUsers";
-            public TimeSpan Expiration { get; set; } = TimeSpan.FromHours(1);
+            public TimeSpan Expiration { get; set; } = TimeSpan.FromDays(7);
         }
 
         private static JwtConfig _config = new();

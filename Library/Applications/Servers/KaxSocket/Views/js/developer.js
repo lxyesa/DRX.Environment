@@ -190,6 +190,32 @@ const DevApp = (() => {
         const clipped = text.length > 42 ? `${text.slice(0, 42)}...` : text;
         return `当前值：${clipped}`;
     }
+
+    function setButtonLoading(button, loadingText) {
+        if (!button) return () => {};
+        if (button.dataset.loading === '1') return () => {};
+
+        button.dataset.loading = '1';
+        button.dataset.originalHtml = button.innerHTML;
+        button.dataset.originalDisabled = button.disabled ? '1' : '0';
+
+        button.disabled = true;
+        button.classList.add('is-loading');
+        if (loadingText) {
+            button.textContent = loadingText;
+        }
+
+        return () => {
+            button.classList.remove('is-loading');
+            if (button.dataset.originalHtml != null) {
+                button.innerHTML = button.dataset.originalHtml;
+            }
+            button.disabled = button.dataset.originalDisabled === '1';
+            delete button.dataset.loading;
+            delete button.dataset.originalHtml;
+            delete button.dataset.originalDisabled;
+        };
+    }
     // #endregion
 
     // #region Api —— 后端接口
@@ -312,6 +338,15 @@ const DevApp = (() => {
             method: 'POST',
             headers: authHeaders(),
             body: JSON.stringify({ assetId: id, reason, force: true })
+        });
+        return resp.json();
+    }
+
+    async function apiSystemHardDelete(id, reason) {
+        const resp = await fetch('/api/asset/system/hard-delete', {
+            method: 'POST',
+            headers: authHeaders(),
+            body: JSON.stringify({ assetId: id, reason, confirm: true })
         });
         return resp.json();
     }
@@ -1059,15 +1094,16 @@ const DevApp = (() => {
         }).join('');
 
         container.querySelectorAll('[data-system-save-field]').forEach(btn => {
-            btn.addEventListener('click', () => saveSystemField(btn.dataset.systemSaveField));
+            btn.addEventListener('click', () => saveSystemField(btn.dataset.systemSaveField, btn));
         });
     }
 
-    async function saveSystemField(field) {
+    async function saveSystemField(field, triggerBtn = null) {
         const detail = state.currentSystemAssetDetail;
         const id = state.currentSystemAssetId;
         if (!id) return;
         if (!field) { alert('字段无效'); return; }
+        if (triggerBtn?.dataset.loading === '1') return;
         const input = document.getElementById(`systemFieldInput-${field}`);
         const value = input?.value ?? '';
 
@@ -1075,6 +1111,8 @@ const DevApp = (() => {
             alert('资产详情未加载，请稍后重试');
             return;
         }
+
+        const stopLoading = setButtonLoading(triggerBtn, '保存中...');
 
         try {
             const resp = await apiSystemUpdateField(id, field, value);
@@ -1086,16 +1124,21 @@ const DevApp = (() => {
             }
         } catch (e) {
             alert('字段更新失败: ' + e.message);
+        } finally {
+            stopLoading();
         }
     }
 
     async function returnSystemAsset() {
         const id = state.currentSystemAssetId;
         if (!id) return;
+        const actionBtn = document.getElementById('systemReturnBtn');
+        if (actionBtn?.dataset.loading === '1') return;
         const reason = document.getElementById('systemActionReason')?.value.trim() || '';
         if (!reason) { alert('退回原因必填'); return; }
         if (!confirm('确认退回该资产？')) return;
 
+        const stopLoading = setButtonLoading(actionBtn, '退回中...');
         try {
             const resp = await apiSystemReturn(id, reason);
             if (resp.code === 0) {
@@ -1106,15 +1149,21 @@ const DevApp = (() => {
             }
         } catch (e) {
             alert('退回失败: ' + e.message);
+        } finally {
+            stopLoading();
         }
     }
 
     async function offShelfSystemAsset() {
         const id = state.currentSystemAssetId;
         if (!id) return;
+        const actionBtn = document.getElementById('systemOffShelfBtn');
+        if (actionBtn?.dataset.loading === '1') return;
         const reason = document.getElementById('systemActionReason')?.value.trim() || '';
+        if (!reason) { alert('下架原因必填'); return; }
         if (!confirm('确认将该资产下架？')) return;
 
+        const stopLoading = setButtonLoading(actionBtn, '下架中...');
         try {
             const resp = await apiSystemOffShelf(id, reason);
             if (resp.code === 0) {
@@ -1125,15 +1174,21 @@ const DevApp = (() => {
             }
         } catch (e) {
             alert('下架失败: ' + e.message);
+        } finally {
+            stopLoading();
         }
     }
 
     async function forceReviewSystemAsset() {
         const id = state.currentSystemAssetId;
         if (!id) return;
+        const actionBtn = document.getElementById('systemForceReviewBtn');
+        if (actionBtn?.dataset.loading === '1') return;
         const reason = document.getElementById('systemActionReason')?.value.trim() || '';
+        if (!reason) { alert('重审原因必填'); return; }
         if (!confirm('确认强制重审该资产？')) return;
 
+        const stopLoading = setButtonLoading(actionBtn, '重审中...');
         try {
             const resp = await apiSystemForceReview(id, reason);
             if (resp.code === 0) {
@@ -1144,6 +1199,34 @@ const DevApp = (() => {
             }
         } catch (e) {
             alert('强制重审失败: ' + e.message);
+        } finally {
+            stopLoading();
+        }
+    }
+
+    async function hardDeleteSystemAsset() {
+        const id = state.currentSystemAssetId;
+        if (!id) return;
+        const actionBtn = document.getElementById('systemHardDeleteBtn');
+        if (actionBtn?.dataset.loading === '1') return;
+        const reason = document.getElementById('systemActionReason')?.value.trim() || '';
+        if (!reason) { alert('彻底删除原因必填'); return; }
+        if (!confirm('确认彻底删除该资产？该操作不可恢复。')) return;
+
+        const stopLoading = setButtonLoading(actionBtn, '删除中...');
+        try {
+            const resp = await apiSystemHardDelete(id, reason);
+            if (resp.code === 0) {
+                alert(resp.message || '已彻底删除');
+                closeSystemAssetModal();
+                await loadSystemAssetList();
+            } else {
+                alert(resp.message || '彻底删除失败');
+            }
+        } catch (e) {
+            alert('彻底删除失败: ' + e.message);
+        } finally {
+            stopLoading();
         }
     }
     // #endregion
@@ -1270,7 +1353,11 @@ const DevApp = (() => {
     async function approveAsset() {
         const id = state.currentReviewAssetId;
         if (!id) return;
+        const actionBtn = document.getElementById('modalApproveBtn');
+        if (actionBtn?.dataset.loading === '1') return;
         if (!confirm('确认通过此资源审核？')) return;
+
+        const stopLoading = setButtonLoading(actionBtn, '通过中...');
         try {
             const resp = await apiApprove(id);
             if (resp.code === 0) {
@@ -1282,6 +1369,8 @@ const DevApp = (() => {
             }
         } catch (e) {
             alert('请求失败');
+        } finally {
+            stopLoading();
         }
     }
 
@@ -1300,8 +1389,12 @@ const DevApp = (() => {
     async function confirmReject() {
         const id = state.currentReviewAssetId;
         if (!id) return;
+        const actionBtn = document.getElementById('confirmRejectBtn');
+        if (actionBtn?.dataset.loading === '1') return;
         const reason = document.getElementById('rejectReason').value.trim();
         if (!reason) { alert('请填写拒绝原因'); return; }
+
+        const stopLoading = setButtonLoading(actionBtn, '拒绝中...');
         try {
             const resp = await apiReject(id, reason);
             if (resp.code === 0) {
@@ -1314,6 +1407,8 @@ const DevApp = (() => {
             }
         } catch (e) {
             alert('请求失败');
+        } finally {
+            stopLoading();
         }
     }
     // #endregion
@@ -1396,6 +1491,7 @@ const DevApp = (() => {
         document.getElementById('systemReturnBtn')?.addEventListener('click', returnSystemAsset);
         document.getElementById('systemOffShelfBtn')?.addEventListener('click', offShelfSystemAsset);
         document.getElementById('systemForceReviewBtn')?.addEventListener('click', forceReviewSystemAsset);
+        document.getElementById('systemHardDeleteBtn')?.addEventListener('click', hardDeleteSystemAsset);
 
         // 点击 overlay 关闭弹窗
         document.getElementById('reviewModal')?.addEventListener('click', (e) => {

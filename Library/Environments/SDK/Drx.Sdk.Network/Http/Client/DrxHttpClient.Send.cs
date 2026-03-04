@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Specialized;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
@@ -203,6 +204,108 @@ namespace Drx.Sdk.Network.Http
         }
 
         private async Task<HttpResponse> SendAsyncInternal(System.Net.Http.HttpMethod method, string url, string? body, byte[]? bodyBytes, object? bodyObject, NameValueCollection? headers, NameValueCollection? query, HttpRequest.UploadFileDescriptor? uploadFile)
+        {
+            // ── 重试策略准备 ──────────────────────────────────────────────────────
+            var retryPolicy = _clientOptions?.RetryPolicy ?? HttpRetryPolicy.Default;
+            bool retryEnabled = retryPolicy.Enabled
+                && retryPolicy.MaxRetries != 0
+                && retryPolicy.IsMethodRetryable(method)
+                && uploadFile == null; // 上传流不支持重试（流不可重放）
+
+            // 超时预算：若策略设置了 TimeoutBudgetMs > 0 则受限，否则不设预算（依赖 HttpClient.Timeout）
+            int budgetMs = (retryPolicy.TimeoutBudgetMs > 0)
+                ? retryPolicy.TimeoutBudgetMs
+                : (_clientOptions != null ? _clientOptions.RequestTimeoutSeconds * 1000 * (retryPolicy.MaxRetries + 1) : 0);
+
+            var budgetSw = retryEnabled ? Stopwatch.StartNew() : null;
+
+            int attempt = 0;
+            int maxAttempts = retryEnabled ? (retryPolicy.MaxRetries < 0 ? int.MaxValue : retryPolicy.MaxRetries + 1) : 1;
+            Exception? lastException = null;
+
+            while (attempt < maxAttempts)
+            {
+                // 检查超时预算（仅首次之后才检查，避免 overhead）
+                if (attempt > 0 && budgetSw != null && budgetMs > 0 && budgetSw.ElapsedMilliseconds >= budgetMs)
+                {
+                    Logger.Warn($"重试预算耗尽（已用 {budgetSw.ElapsedMilliseconds}ms / {budgetMs}ms），放弃重试: {method} {url}");
+                    break;
+                }
+
+                // 退避等待（首次不等待）
+                if (attempt > 0 && retryPolicy != null)
+                {
+                    int delayMs = retryPolicy.CalculateDelay(attempt - 1);
+
+                    // 若延迟会超出剩余预算，截断延迟或直接放弃
+                    if (budgetSw != null && budgetMs > 0)
+                    {
+                        int remaining = (int)(budgetMs - budgetSw.ElapsedMilliseconds);
+                        if (remaining <= 0)
+                        {
+                            Logger.Warn($"重试 #{attempt} 前无剩余预算，放弃: {method} {url}");
+                            break;
+                        }
+                        delayMs = Math.Min(delayMs, remaining);
+                    }
+
+                    if (delayMs > 0)
+                    {
+                        Logger.Info($"重试 #{attempt}/{retryPolicy.MaxRetries} 前等待 {delayMs}ms: {method} {url}");
+                        await Task.Delay(delayMs).ConfigureAwait(false);
+                    }
+                }
+
+                try
+                {
+                    HttpResponse result = await ExecuteSendOnceAsync(method, url, body, bodyBytes, bodyObject, headers, query, uploadFile).ConfigureAwait(false);
+
+                    // 检查是否需要基于状态码重试
+                    if (attempt < maxAttempts - 1
+                        && retryEnabled
+                        && retryPolicy != null
+                        && retryPolicy.IsRetryableStatusCode(result.StatusCode))
+                    {
+                        Logger.Warn($"收到可重试状态码 {result.StatusCode}，将重试 #{attempt + 1}: {method} {url}");
+                        HttpMetrics.Instance.RecordRetry(method.Method, url, attempt + 1, null);
+                        attempt++;
+                        continue;
+                    }
+
+                    // 成功：若有过重试，记录指标
+                    if (attempt > 0)
+                    {
+                        Logger.Info($"重试后成功（第 {attempt} 次重试）: {method} {url}，状态码 {result.StatusCode}");
+                        HttpMetrics.Instance.RecordRetry(method.Method, url, attempt, null);
+                    }
+
+                    return result;
+                }
+                catch (Exception ex) when (retryEnabled && retryPolicy != null && retryPolicy.IsTransientException(ex) && attempt < maxAttempts - 1)
+                {
+                    lastException = ex;
+                    Logger.Warn($"捕获瞬时异常，将重试 #{attempt + 1}/{retryPolicy.MaxRetries}: {method} {url}，异常: {ex.GetType().Name}: {ex.Message}");
+                    HttpMetrics.Instance.RecordRetry(method.Method, url, attempt + 1, ex.Message);
+                    attempt++;
+                }
+            }
+
+            // 所有重试耗尽，抛出最后一次异常
+            if (lastException != null)
+            {
+                Logger.Error($"所有重试均失败（共 {attempt} 次尝试）: {method} {url}，最后异常: {lastException.Message}");
+                throw lastException;
+            }
+
+            // 正常情况不会走到这里（循环内必然 return 或 throw），保险兜底
+            throw new InvalidOperationException($"重试逻辑异常：未能完成请求 {method} {url}");
+        }
+
+        /// <summary>
+        /// 单次 HTTP 请求执行（不含重试逻辑）。
+        /// 由 <see cref="SendAsyncInternal"/> 在重试循环内调用。
+        /// </summary>
+        private async Task<HttpResponse> ExecuteSendOnceAsync(System.Net.Http.HttpMethod method, string url, string? body, byte[]? bodyBytes, object? bodyObject, NameValueCollection? headers, NameValueCollection? query, HttpRequest.UploadFileDescriptor? uploadFile)
         {
             try
             {

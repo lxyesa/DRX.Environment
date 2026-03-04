@@ -233,6 +233,11 @@ namespace Drx.Sdk.Network.Http
 
         private RouteMatchCache? _routeMatchCache;
 
+        /// <summary>
+        /// 响应压缩策略引擎（任务 3：按内容类型+体积阈值压缩，CPU 守护降级）。
+        /// </summary>
+        private readonly HttpCompressionStrategy _compressionStrategy;
+
 
         /// <summary>
         /// 构造函数
@@ -299,6 +304,8 @@ namespace Drx.Sdk.Network.Http
             _tokenBucketManager = new TokenBucketManager();
 
             _routeMatchCache = new RouteMatchCache(_options.RouteCacheMaxSize);
+
+            _compressionStrategy = new HttpCompressionStrategy(_options);
 
             DrxJsonSerializerManager.ConfigureChainedMode();
 

@@ -6,6 +6,7 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using Drx.Sdk.Shared;
 using Drx.Sdk.Network.Http.Protocol;
+using Drx.Sdk.Network.Http.Performance;
 
 namespace Drx.Sdk.Network.Http
 {
@@ -54,8 +55,24 @@ namespace Drx.Sdk.Network.Http
 
                 ApplySessionToRequest(request);
 
+                // [任务 4.2] 自动注入条件请求头（If-None-Match / If-Modified-Since）
+                InjectConditionalHeaders(request, url);
+
                 var response = await _httpClient.SendAsync(request, System.Net.Http.HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
+
+                // [任务 4.2] 处理 304 Not Modified：本地文件仍有效，直接返回
+                if (response.StatusCode == System.Net.HttpStatusCode.NotModified)
+                {
+                    HttpMetrics.Instance.RecordConditionalRequest(hit: true);
+                    Logger.Info($"[条件请求命中304] 文件未变更，跳过下载: {url} -> {destPath}");
+                    return;
+                }
+
+                HttpMetrics.Instance.RecordConditionalRequest(hit: false);
                 response.EnsureSuccessStatusCode();
+
+                // [任务 4.1] 存储本次响应的 ETag/Last-Modified 用于下次条件请求
+                StoreConditionalMetadata(url, response);
 
                 var total = response.Content.Headers.ContentLength ?? -1L;
                 var tempFile = destPath + ".download" + Guid.NewGuid().ToString("N");
@@ -63,18 +80,30 @@ namespace Drx.Sdk.Network.Http
                 var destDir = Path.GetDirectoryName(destPath);
                 if (!string.IsNullOrEmpty(destDir) && !Directory.Exists(destDir)) Directory.CreateDirectory(destDir);
 
-                using (var contentStream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false))
-                using (var fileStream = new FileStream(tempFile, FileMode.Create, FileAccess.Write, FileShare.None, 81920, true))
+                // [任务 6.1] 根据文件大小自动选择分片窗口，并持用 ArrayPool 缓冲区避免 LOH 分配
+                var buffer = HttpObjectPool.RentTransferBuffer(total);
+                HttpMetrics.Instance.RecordPooledBufferRent();
+                try
                 {
-                    var buffer = new byte[81920];
-                    long totalRead = 0;
-                    int read;
-                    while ((read = await contentStream.ReadAsync(buffer.AsMemory(0, buffer.Length), cancellationToken).ConfigureAwait(false)) > 0)
+                    using (var contentStream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false))
+                    using (var fileStream = new FileStream(tempFile, FileMode.Create, FileAccess.Write, FileShare.None, buffer.Length, true))
                     {
-                        await fileStream.WriteAsync(buffer.AsMemory(0, read), cancellationToken).ConfigureAwait(false);
-                        totalRead += read;
-                        progress?.Report(totalRead);
+                        long totalRead = 0;
+                        int read;
+                        while ((read = await contentStream.ReadAsync(buffer.AsMemory(0, buffer.Length), cancellationToken).ConfigureAwait(false)) > 0)
+                        {
+                            await fileStream.WriteAsync(buffer.AsMemory(0, read), cancellationToken).ConfigureAwait(false);
+                            totalRead += read;
+                            progress?.Report(totalRead);
+                        }
+                        // [任务 6.2] 大文件下载指标
+                        if (totalRead >= HttpObjectPool.LargeFileThresholdBytes)
+                            HttpMetrics.Instance.RecordLargeFileDownload(totalRead);
                     }
+                }
+                finally
+                {
+                    HttpObjectPool.ReturnTransferBuffer(buffer);
                 }
 
                 AtomicFileReplace(tempFile, destPath);
@@ -136,22 +165,34 @@ namespace Drx.Sdk.Network.Http
                 if (!string.IsNullOrEmpty(destDir) && !Directory.Exists(destDir)) Directory.CreateDirectory(destDir);
 
                 string fileHash;
-                using (var contentStream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false))
-                using (var fileStream = new FileStream(tempFile, FileMode.Create, FileAccess.Write, FileShare.None, 81920, true))
-                using (var sha256 = SHA256.Create())
+                // [任务 6.1] 持用 ArrayPool 缓冲区（含哈希校验）
+                var bufferWithHash = HttpObjectPool.RentTransferBuffer(total);
+                HttpMetrics.Instance.RecordPooledBufferRent();
+                try
                 {
-                    var buffer = new byte[81920];
-                    long totalRead = 0;
-                    int read;
-                    while ((read = await contentStream.ReadAsync(buffer.AsMemory(0, buffer.Length), cancellationToken).ConfigureAwait(false)) > 0)
+                    using (var contentStream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false))
+                    using (var fileStream = new FileStream(tempFile, FileMode.Create, FileAccess.Write, FileShare.None, bufferWithHash.Length, true))
+                    using (var sha256 = SHA256.Create())
                     {
-                        await fileStream.WriteAsync(buffer.AsMemory(0, read), cancellationToken).ConfigureAwait(false);
-                        sha256.TransformBlock(buffer, 0, read, null, 0);
-                        totalRead += read;
-                        progress?.Report(totalRead);
+                        long totalRead = 0;
+                        int read;
+                        while ((read = await contentStream.ReadAsync(bufferWithHash.AsMemory(0, bufferWithHash.Length), cancellationToken).ConfigureAwait(false)) > 0)
+                        {
+                            await fileStream.WriteAsync(bufferWithHash.AsMemory(0, read), cancellationToken).ConfigureAwait(false);
+                            sha256.TransformBlock(bufferWithHash, 0, read, null, 0);
+                            totalRead += read;
+                            progress?.Report(totalRead);
+                        }
+                        sha256.TransformFinalBlock(Array.Empty<byte>(), 0, 0);
+                        fileHash = BitConverter.ToString(sha256.Hash!).Replace("-", "").ToLowerInvariant();
+                        // [任务 6.2] 大文件下载指标
+                        if (totalRead >= HttpObjectPool.LargeFileThresholdBytes)
+                            HttpMetrics.Instance.RecordLargeFileDownload(totalRead);
                     }
-                    sha256.TransformFinalBlock(Array.Empty<byte>(), 0, 0);
-                    fileHash = BitConverter.ToString(sha256.Hash!).Replace("-", "").ToLowerInvariant();
+                }
+                finally
+                {
+                    HttpObjectPool.ReturnTransferBuffer(bufferWithHash);
                 }
 
                 if (!string.IsNullOrEmpty(expectedHash) &&
@@ -212,7 +253,25 @@ namespace Drx.Sdk.Network.Http
 
                 ApplySessionToRequest(request);
 
+                // [任务 4.2] 自动注入条件请求头
+                InjectConditionalHeaders(request, url);
+
                 var response = await _httpClient.SendAsync(request, System.Net.Http.HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
+
+                // [任务 4.2] 处理 304 Not Modified：构造轻量返回结果，不重新下载
+                if (response.StatusCode == System.Net.HttpStatusCode.NotModified)
+                {
+                    HttpMetrics.Instance.RecordConditionalRequest(hit: true);
+                    Logger.Info($"[条件请求命中304] 元数据下载，文件未变更: {url}");
+                    return new DownloadResult
+                    {
+                        StatusCode = 304,
+                        SavedFilePath = destPath,
+                        FileName = Path.GetFileName(destPath)
+                    };
+                }
+
+                HttpMetrics.Instance.RecordConditionalRequest(hit: false);
                 response.EnsureSuccessStatusCode();
 
                 var result = new DownloadResult
@@ -229,6 +288,9 @@ namespace Drx.Sdk.Network.Http
                 if (response.Content.Headers.LastModified.HasValue)
                     result.LastModified = response.Content.Headers.LastModified.Value;
 
+                // [任务 4.1] 存储本次响应的 ETag/Last-Modified
+                StoreConditionalMetadata(url, response);
+
                 var fileName = ParseFileNameFromResponse(response) ?? Path.GetFileName(destPath);
                 result.FileName = fileName;
 
@@ -236,22 +298,34 @@ namespace Drx.Sdk.Network.Http
                 var destDir = Path.GetDirectoryName(destPath);
                 if (!string.IsNullOrEmpty(destDir) && !Directory.Exists(destDir)) Directory.CreateDirectory(destDir);
 
-                using (var contentStream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false))
-                using (var fileStream = new FileStream(tempFile, FileMode.Create, FileAccess.Write, FileShare.None, 81920, true))
-                using (var sha256 = SHA256.Create())
+                // [任务 6.1] 持用 ArrayPool 缓冲区（含哈希校验 + 元数据）
+                var bufferMeta = HttpObjectPool.RentTransferBuffer();
+                HttpMetrics.Instance.RecordPooledBufferRent();
+                try
                 {
-                    var buffer = new byte[81920];
-                    long totalRead = 0;
-                    int read;
-                    while ((read = await contentStream.ReadAsync(buffer.AsMemory(0, buffer.Length), cancellationToken).ConfigureAwait(false)) > 0)
+                    using (var contentStream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false))
+                    using (var fileStream = new FileStream(tempFile, FileMode.Create, FileAccess.Write, FileShare.None, bufferMeta.Length, true))
+                    using (var sha256 = SHA256.Create())
                     {
-                        await fileStream.WriteAsync(buffer.AsMemory(0, read), cancellationToken).ConfigureAwait(false);
-                        sha256.TransformBlock(buffer, 0, read, null, 0);
-                        totalRead += read;
-                        progress?.Report(totalRead);
+                        long totalRead = 0;
+                        int read;
+                        while ((read = await contentStream.ReadAsync(bufferMeta.AsMemory(0, bufferMeta.Length), cancellationToken).ConfigureAwait(false)) > 0)
+                        {
+                            await fileStream.WriteAsync(bufferMeta.AsMemory(0, read), cancellationToken).ConfigureAwait(false);
+                            sha256.TransformBlock(bufferMeta, 0, read, null, 0);
+                            totalRead += read;
+                            progress?.Report(totalRead);
+                        }
+                        sha256.TransformFinalBlock(Array.Empty<byte>(), 0, 0);
+                        result.FileHash = BitConverter.ToString(sha256.Hash!).Replace("-", "").ToLowerInvariant();
+                        // [任务 6.2] 大文件下载指标
+                        if (totalRead >= HttpObjectPool.LargeFileThresholdBytes)
+                            HttpMetrics.Instance.RecordLargeFileDownload(totalRead);
                     }
-                    sha256.TransformFinalBlock(Array.Empty<byte>(), 0, 0);
-                    result.FileHash = BitConverter.ToString(sha256.Hash!).Replace("-", "").ToLowerInvariant();
+                }
+                finally
+                {
+                    HttpObjectPool.ReturnTransferBuffer(bufferMeta);
                 }
 
                 result.DownloadedBytes = new FileInfo(tempFile).Length;
@@ -329,15 +403,27 @@ namespace Drx.Sdk.Network.Http
 
                 var total = response.Content.Headers.ContentLength ?? -1L;
 
-                using var contentStream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
-                var buffer = new byte[81920];
-                long totalRead = 0;
-                int read;
-                while ((read = await contentStream.ReadAsync(buffer.AsMemory(0, buffer.Length), cancellationToken).ConfigureAwait(false)) > 0)
+                // [任务 6.1] DownloadToStream 也使用 ArrayPool 缓冲区
+                var bufferStream = HttpObjectPool.RentTransferBuffer();
+                HttpMetrics.Instance.RecordPooledBufferRent();
+                try
                 {
-                    await destination.WriteAsync(buffer.AsMemory(0, read), cancellationToken).ConfigureAwait(false);
-                    totalRead += read;
-                    progress?.Report(totalRead);
+                    using var contentStream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+                    long totalRead = 0;
+                    int read;
+                    while ((read = await contentStream.ReadAsync(bufferStream.AsMemory(0, bufferStream.Length), cancellationToken).ConfigureAwait(false)) > 0)
+                    {
+                        await destination.WriteAsync(bufferStream.AsMemory(0, read), cancellationToken).ConfigureAwait(false);
+                        totalRead += read;
+                        progress?.Report(totalRead);
+                    }
+                    // [任务 6.2] 大文件下载指标
+                    if (totalRead >= HttpObjectPool.LargeFileThresholdBytes)
+                        HttpMetrics.Instance.RecordLargeFileDownload(totalRead);
+                }
+                finally
+                {
+                    HttpObjectPool.ReturnTransferBuffer(bufferStream);
                 }
 
                 Logger.Info($"DownloadToStreamAsync 完成: {url} (总字节: {total})");
@@ -352,6 +438,58 @@ namespace Drx.Sdk.Network.Http
                 Logger.Error($"下载流式文件失败: {url}, 错误: {ex.Message}");
                 throw;
             }
+        }
+
+        #endregion
+
+        #region 条件请求工具方法（任务 4.1 / 4.2）
+
+        /// <summary>
+        /// 向请求注入 If-None-Match / If-Modified-Since 条件请求头。
+        /// 若本地缓存存有对应 URL 的 ETag/Last-Modified，则自动附带，
+        /// 令服务端可返回 304 而非完整响应体，从而节省带宽。
+        /// </summary>
+        private static void InjectConditionalHeaders(System.Net.Http.HttpRequestMessage request, string url)
+        {
+            var cache = HttpConditionalRequestCache.Instance;
+            if (!cache.Enabled) return;
+            if (!cache.TryGet(url, out var entry) || entry == null) return;
+
+            // 优先使用 ETag（更精确）
+            if (!string.IsNullOrEmpty(entry.ETag))
+            {
+                try
+                {
+                    // If-None-Match 允许多个值，这里只设单值
+                    request.Headers.TryAddWithoutValidation("If-None-Match", entry.ETag);
+                }
+                catch { /* 忽略无法添加的情况 */ }
+            }
+            else if (entry.LastModified.HasValue)
+            {
+                // 无 ETag 时回退到 If-Modified-Since
+                try
+                {
+                    request.Headers.IfModifiedSince = entry.LastModified;
+                }
+                catch { /* 忽略 */ }
+            }
+        }
+
+        /// <summary>
+        /// 从成功响应中提取并存储 ETag/Last-Modified 到条件请求缓存，
+        /// 为下次请求注入条件头做准备。
+        /// </summary>
+        private static void StoreConditionalMetadata(string url, System.Net.Http.HttpResponseMessage response)
+        {
+            try
+            {
+                string? etag = response.Headers.ETag?.Tag;
+                DateTimeOffset? lastModified = response.Content.Headers.LastModified;
+
+                HttpConditionalRequestCache.Instance.Store(url, etag, lastModified);
+            }
+            catch { /* 存储失败不影响主流程 */ }
         }
 
         #endregion

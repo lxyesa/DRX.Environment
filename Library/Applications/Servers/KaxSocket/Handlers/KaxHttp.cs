@@ -12,6 +12,7 @@ using Drx.Sdk.Network.Http.Results;
 using KaxSocket;
 using KaxSocket.Cache;
 using Drx.Sdk.Shared;
+using Drx.Sdk.Network.Http.Api;
 
 namespace KaxSocket.Handlers;
 
@@ -48,14 +49,16 @@ public partial class KaxHttp
         // 配置 JWT
         JwtHelper.Configure(new JwtHelper.JwtConfig
         {
-            SecretKey = "A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6", // 建议使用环境变量
+            SecretKey = "A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6",
             Issuer = "KaxSocket",
             Audience = "KaxUsers",
-            Expiration = TimeSpan.FromHours(1)
+            Expiration = TimeSpan.FromDays(7) // 7 天过期
         });
 
-        // 配置 API 守卫的 Token 验证器（供 Api / ApiGuard 使用）
-        Drx.Sdk.Network.Http.Api.ApiGuard.Configure(token => KaxGlobal.ValidateToken(token));
+        ApiGuard.Configure((token) =>
+        {
+            return JwtHelper.ValidateToken(token);
+        });
     }
 
     #region Rate Limit Callback

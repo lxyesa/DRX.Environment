@@ -1604,6 +1604,15 @@ body {
     font-size: 17px;
 }
 
+.rv-btn-reject[disabled],
+.rv-btn-approve[disabled],
+.rv-btn-reject.is-loading,
+.rv-btn-approve.is-loading {
+    opacity: 0.62;
+    cursor: not-allowed;
+    transform: none !important;
+}
+
 /* ── 弃用兼容：preserve old btn classes for reject modal ── */
 .dev-btn-approve {
     background: var(--dev-status-active) !important;
@@ -2283,6 +2292,15 @@ body {
 
 .system-rv-btn .material-icons {
     font-size: 17px;
+}
+
+.system-rv-btn[disabled],
+.system-rv-btn.is-loading,
+.system-rv-save-btn[disabled],
+.system-rv-save-btn.is-loading {
+    opacity: 0.62;
+    cursor: not-allowed;
+    transform: none !important;
 }
 
 .system-rv-btn-return {

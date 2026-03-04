@@ -127,21 +127,23 @@
                 features: dto.features ?? '',
                 // 价格方案
                 priceOptions,
-                // 规格信息
+                // 规格信息（服务端嵌套于 dto.specs）
                 version: String(dto.version ?? '--'),
-                compatibility: String(dto.compatibility ?? '--'),
-                fileSize: String(dto.fileSize ?? '--'),
-                uploadDate: dto.uploadDate ?? '--',
-                license: String(dto.license ?? '--'),
+                compatibility: String(dto.specs?.compatibility ?? '--'),
+                fileSize: String(dto.specs?.fileSize ?? '--'),
+                uploadDate: dto.specs?.uploadDate ?? '--',
+                license: String(dto.specs?.license ?? '--'),
+                lastUpdatedAt: Number(dto.specs?.lastUpdatedAt ?? 0),
                 // 统计
                 authorName: resolvedAuthorName,
-                downloadCount: Number(dto.downloadCount ?? 0),
-                purchaseCount: Number(dto.purchaseCount ?? 0),
-                favoriteCount: Number(dto.favoriteCount ?? 0),
-                viewCount: Number(dto.viewCount ?? 0),
-                rating: Number(dto.rating ?? 0),
-                reviewCount: Number(dto.reviewCount ?? 0),
-                isDeleted: Boolean(dto.isDeleted)
+                downloadCount: Number(dto.specs?.downloads ?? 0),
+                purchaseCount: Number(dto.specs?.purchaseCount ?? 0),
+                favoriteCount: Number(dto.specs?.favoriteCount ?? 0),
+                viewCount: Number(dto.specs?.viewCount ?? 0),
+                rating: Number(dto.specs?.rating ?? 0),
+                reviewCount: Number(dto.specs?.reviewCount ?? 0),
+                isDeleted: Boolean(dto.isDeleted),
+                downloadUrl: String(dto.specs?.downloadUrl ?? '')
             };
         }
 
@@ -372,8 +374,24 @@
 
             // ── 英雄区图标（显示 iconImage）──
             const heroIconEl = document.getElementById('heroIcon');
-            if (heroIconEl && vm.iconImage) {
-                heroIconEl.innerHTML = `<img src="${vm.iconImage}" alt="${vm.displayName || ''}" style="width:100%;height:100%;object-fit:cover;border-radius:inherit;">`;
+            const heroRowEl = document.querySelector('.hero-product-row');
+            const heroPanelAmbientCopyEl = document.getElementById('heroPanelAmbientCopy');
+            const heroVisualImage = vm.iconImage || vm.coverImage || '';
+            if (heroIconEl && heroVisualImage) {
+                heroIconEl.innerHTML = `<img class="hero-icon-media" src="${heroVisualImage}" alt="${vm.displayName || ''}">`;
+                if (heroPanelAmbientCopyEl) {
+                    heroPanelAmbientCopyEl.src = heroVisualImage;
+                }
+                if (heroRowEl) {
+                    heroRowEl.classList.add('has-ambient-media');
+                }
+            } else {
+                if (heroPanelAmbientCopyEl) {
+                    heroPanelAmbientCopyEl.removeAttribute('src');
+                }
+                if (heroRowEl) {
+                    heroRowEl.classList.remove('has-ambient-media');
+                }
             }
 
             // ── 英雄区背景（显示 coverImage 封面）──
@@ -481,6 +499,7 @@
             setText('specSize',             vm.fileSize);
             setText('productVersion',       vm.version);
             setText('specDate',             showDate(vm.uploadDate));
+            setText('specLastUpdated',      showDate(vm.lastUpdatedAt));
             setText('specAuthor',           vm.authorName);
             setText('productCompatibility', vm.compatibility);
             setText('specLicense',          vm.license);
@@ -493,6 +512,23 @@
 
             // 挂载给事件监听器使用
             window.currentProduct = vm;
+
+            // ── 下载按钮 ──
+            const _dlBtn = document.getElementById('downloadBtn');
+            if (_dlBtn) {
+                _dlBtn.removeAttribute('hidden');
+                if (vm.downloadUrl) {
+                    _dlBtn.href = vm.downloadUrl;
+                    _dlBtn.target = '_blank';
+                    _dlBtn.rel = 'noopener noreferrer';
+                    _dlBtn.removeAttribute('aria-disabled');
+                    _dlBtn.classList.remove('is-disabled');
+                } else {
+                    _dlBtn.removeAttribute('href');
+                    _dlBtn.setAttribute('aria-disabled', 'true');
+                    _dlBtn.classList.add('is-disabled');
+                }
+            }
         }
 
         /** 根据选中的价格方案对象（PriceOptionVM）更新顶部价格显示 */
@@ -565,6 +601,7 @@
 
             // ── 购买面板元素 ──
             const purchaseBtn = document.getElementById('purchaseBtn');
+            const downloadBtn = document.getElementById('downloadBtn');
             const plansGrid = document.getElementById('plansGrid');
             const favBtn = document.getElementById('favBtn');
             const shareBtn = document.getElementById('shareBtn');
@@ -928,39 +965,6 @@
             const heroInner = document.querySelector('.product-hero-inner');
             if (!panel || !heroInner) return;
 
-            /* ── 迷你购买槽：docked 时右侧显示价格 + 购买按钮 ── */
-            const barSlot = document.createElement('div');
-            barSlot.className = 'bar-purchase-slot';
-            barSlot.innerHTML =
-                '<span class="bar-price"></span>' +
-                '<button class="bar-buy-btn" type="button">' +
-                '<span class="material-icons">shopping_bag</span>购买</button>';
-            panel.appendChild(barSlot);
-
-            const barPriceEl = barSlot.querySelector('.bar-price');
-            const barBuyBtn = barSlot.querySelector('.bar-buy-btn');
-
-            // 同步价格文本
-            const syncBarPrice = () => {
-                const src = document.getElementById('priceCurrent');
-                if (src && barPriceEl) barPriceEl.textContent = src.textContent;
-            };
-            syncBarPrice();
-
-            // 监听价格变化（套餐切换时自动同步）
-            const priceTarget = document.getElementById('priceCurrent');
-            if (priceTarget) {
-                new MutationObserver(syncBarPrice)
-                    .observe(priceTarget, { childList: true, characterData: true, subtree: true });
-            }
-
-            // 迷你购买按钮 → 代理到真正的购买按钮
-            barBuyBtn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                const realBtn = document.getElementById('purchaseBtn');
-                if (realBtn) realBtn.click();
-            });
-
             let placeholder = null;
             let docked = false;
             let ticking = false;
@@ -1004,14 +1008,12 @@
                 docked = false;
                 panel.classList.remove('is-docked');
                 heroInner.classList.remove('panel-docked');
-                panel.style.setProperty('--t', '0');
                 removePlaceholder();
             };
 
             /* ── 常量 ── */
-            const DOCK_OFFSET = 8;                // 面板顶部距 hero 顶部多少 px 时触发
+            const DOCK_OFFSET = 8;                // 面板顶部距 topbar 多少 px 时触发进坞
             const UNDOCK_MARGIN = 6;               // 回弹容差
-            const MORPH_DISTANCE = 220;            // --t 从 0→1 需要滚过的像素
 
             /* ── 核心更新 ── */
             const update = () => {
@@ -1032,11 +1034,6 @@
                 } else if (docked && sy < triggerY - UNDOCK_MARGIN) {
                     undock();
                     measureAnchor();              // 脱坞后重新测量
-                }
-
-                if (docked) {
-                    const t = Math.min(1, Math.max(0, (sy - triggerY) / MORPH_DISTANCE));
-                    panel.style.setProperty('--t', t.toFixed(3));
                 }
             };
 

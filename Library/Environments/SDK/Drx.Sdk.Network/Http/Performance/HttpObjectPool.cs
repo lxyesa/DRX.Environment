@@ -37,6 +37,19 @@ namespace Drx.Sdk.Network.Http.Performance
         /// </summary>
         public const int LargeBufferSize = 65536;
 
+        /// <summary>
+        /// 超大缓冲区大小（用于大文件传输场景），256KB。
+        /// 大文件分片窗口越大，单次系统调用代价越低，可提升吞吐。
+        /// 256KB 对 Gen2 GC 和 LOH 的影响在 ArrayPool 下可规避。
+        /// </summary>
+        public const int XLargeBufferSize = 262144;
+
+        /// <summary>
+        /// 大文件阈值（字节）：超过此大小的传输自动选用 XLargeBufferSize。
+        /// 默认 4MB。
+        /// </summary>
+        public const long LargeFileThresholdBytes = 4 * 1024 * 1024;
+
         #region Dictionary 对象池（两层池化）
 
         // L1: ThreadLocal 层（每线程独享栈，零竞争）
@@ -185,6 +198,46 @@ namespace Drx.Sdk.Network.Http.Performance
         public static PooledMemoryStream CreatePooledMemoryStream(int initialCapacity = DefaultBufferSize)
         {
             return new PooledMemoryStream(initialCapacity);
+        }
+
+        #endregion
+
+        #region 大文件传输缓冲区工具
+
+        /// <summary>
+        /// 根据已知传输大小（-1 表示未知），自动选择适合的分片缓冲区大小。
+        /// 大文件（>= LargeFileThresholdBytes）使用 XLargeBufferSize，减少 Read/Write 次数。
+        /// 普通文件使用 LargeBufferSize，平衡内存压力与 IO 效率。
+        /// </summary>
+        /// <param name="totalBytes">已知文件总字节数，-1 表示未知。</param>
+        /// <returns>建议的缓冲区大小。</returns>
+        public static int ChooseTransferBufferSize(long totalBytes)
+        {
+            if (totalBytes < 0 || totalBytes >= LargeFileThresholdBytes)
+                return XLargeBufferSize;
+            return LargeBufferSize;
+        }
+
+        /// <summary>
+        /// 从 ArrayPool 租借适合大文件传输的缓冲区。
+        /// 调用方 <b>必须</b> 在使用完毕后调用 <see cref="ReturnTransferBuffer"/> 归还缓冲区。
+        /// </summary>
+        /// <param name="totalBytes">已知文件总字节数，-1 表示未知。</param>
+        /// <returns>已租借的字节数组（实际长度可能大于请求长度）。</returns>
+        public static byte[] RentTransferBuffer(long totalBytes = -1)
+        {
+            int size = ChooseTransferBufferSize(totalBytes);
+            return BytePool.Rent(size);
+        }
+
+        /// <summary>
+        /// 将大文件传输缓冲区归还到 ArrayPool。
+        /// </summary>
+        /// <param name="buffer">由 <see cref="RentTransferBuffer"/> 租借的缓冲区。</param>
+        public static void ReturnTransferBuffer(byte[] buffer)
+        {
+            if (buffer != null)
+                BytePool.Return(buffer);
         }
 
         #endregion

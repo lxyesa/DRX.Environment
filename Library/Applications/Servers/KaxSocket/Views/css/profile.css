@@ -16,6 +16,27 @@
     --profile-accent-dim: rgba(59, 130, 246, 0.10);
     --profile-success: #22c55e;
     --profile-danger: #ef4444;
+    --profile-warning: #fbbf24;
+    --profile-accent-soft: rgba(59, 130, 246, 0.12);
+    --profile-accent-border-soft: rgba(59, 130, 246, 0.38);
+    --profile-accent-outline-soft: rgba(59, 130, 246, 0.30);
+    --profile-accent-soft-text: #c7dbff;
+    --profile-danger-soft-bg: rgba(239, 68, 68, 0.06);
+    --profile-danger-soft-bg-hover: rgba(239, 68, 68, 0.14);
+    --profile-danger-soft-border: rgba(239, 68, 68, 0.32);
+    --profile-danger-soft-border-hover: rgba(239, 68, 68, 0.52);
+    --profile-danger-soft-text: #ff8d8d;
+    --profile-danger-soft-text-hover: #ffd2d2;
+    --profile-warning-soft-bg: rgba(251, 191, 36, 0.06);
+    --profile-warning-soft-bg-hover: rgba(251, 191, 36, 0.14);
+    --profile-warning-soft-border: rgba(251, 191, 36, 0.34);
+    --profile-warning-soft-border-hover: rgba(251, 191, 36, 0.54);
+    --profile-warning-soft-text: #ffd77a;
+    --profile-warning-soft-text-hover: #ffe6a8;
+    --profile-empty-surface: rgba(255, 255, 255, 0.015);
+    --profile-empty-border: rgba(255, 255, 255, 0.08);
+    --profile-empty-border-strong: rgba(59, 130, 246, 0.16);
+    --profile-empty-icon-bg: rgba(255, 255, 255, 0.04);
     --profile-radius: 6px;
     --profile-transition: 0.18s ease;
     --profile-sidebar-width: 296px;
@@ -600,6 +621,55 @@
 .assets-state-icon {
     font-size: 32px;
     opacity: 0.35;
+}
+
+/* 仅空状态：增强视觉层次（不影响 loading 状态） */
+#adminAssetEmpty,
+#cdkAdminEmpty,
+#ordersEmpty,
+#assetsEmpty {
+    position: relative;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    margin: 10px 0;
+    padding: 26px 16px;
+    border: 1px dashed var(--profile-empty-border);
+    border-radius: 10px;
+    background: var(--profile-empty-surface);
+}
+
+#adminAssetEmpty .assets-state-icon,
+#cdkAdminEmpty .assets-state-icon,
+#ordersEmpty .assets-state-icon,
+#assetsEmpty .assets-state-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 999px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--profile-empty-border-strong);
+    background: var(--profile-empty-icon-bg);
+    color: var(--profile-muted-mid);
+    font-size: 23px;
+    line-height: 1;
+    opacity: 0.92;
+}
+
+#adminAssetEmpty span:last-child,
+#cdkAdminEmpty span:last-child,
+#ordersEmpty span:last-child,
+#assetsEmpty span:last-child {
+    display: inline-flex;
+    align-items: center;
+    color: var(--profile-muted-mid);
+    font-size: 0.84rem;
+    font-weight: 600;
+    line-height: 1;
+    letter-spacing: 0.04em;
 }
 
 @keyframes spin {
@@ -1741,6 +1811,52 @@
     align-items: center;
     gap: 6px;
     flex-wrap: wrap;
+    padding: 3px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.02);
+}
+
+.cdk-batch-bar-right .btn.small {
+    height: 32px;
+    padding: 0 11px;
+    border-radius: 6px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    border: 1px solid var(--profile-border);
+    background: rgba(255, 255, 255, 0.02);
+    color: var(--profile-muted-mid);
+    font-size: 0.81rem;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    transition: background var(--profile-transition), border-color var(--profile-transition), color var(--profile-transition), box-shadow var(--profile-transition), transform var(--profile-transition);
+}
+
+.cdk-batch-bar-right .btn.small .material-icons {
+    font-size: 15px;
+    opacity: 0.9;
+}
+
+.cdk-batch-bar-right .btn.small:hover {
+    background: var(--profile-accent-soft);
+    border-color: var(--profile-accent-border-soft);
+    color: var(--profile-accent-soft-text);
+}
+
+.cdk-batch-bar-right .btn.small:focus-visible {
+    outline: 2px solid var(--profile-accent-outline-soft);
+    outline-offset: 1px;
+}
+
+.cdk-batch-bar-right .btn.small:active {
+    transform: scale(0.98);
+}
+
+.cdk-batch-bar-right .btn.small[disabled] {
+    opacity: 0.48;
+    cursor: not-allowed;
+    filter: grayscale(0.2);
 }
 
 .cdk-select-all-label {
@@ -1799,19 +1915,25 @@
 
 /* 按钮颜色变体 */
 .cdk-btn-danger {
-    color: var(--profile-danger, #ef4444) !important;
-    border-color: rgba(239, 68, 68, 0.3) !important;
+    color: var(--profile-danger-soft-text) !important;
+    border-color: var(--profile-danger-soft-border) !important;
+    background: var(--profile-danger-soft-bg) !important;
 }
 .cdk-btn-danger:hover {
-    background: rgba(239, 68, 68, 0.08) !important;
+    background: var(--profile-danger-soft-bg-hover) !important;
+    border-color: var(--profile-danger-soft-border-hover) !important;
+    color: var(--profile-danger-soft-text-hover) !important;
 }
 
 .cdk-btn-warning {
-    color: #fbbf24 !important;
-    border-color: rgba(251, 191, 36, 0.3) !important;
+    color: var(--profile-warning-soft-text) !important;
+    border-color: var(--profile-warning-soft-border) !important;
+    background: var(--profile-warning-soft-bg) !important;
 }
 .cdk-btn-warning:hover {
-    background: rgba(251, 191, 36, 0.08) !important;
+    background: var(--profile-warning-soft-bg-hover) !important;
+    border-color: var(--profile-warning-soft-border-hover) !important;
+    color: var(--profile-warning-soft-text-hover) !important;
 }
 
 /* 规则删除表单 */

@@ -43,7 +43,7 @@ namespace Drx.Sdk.Network.Http
 
             var fileInfo = new FileInfo(filePath);
             using var fileStream = new FileStream(filePath, FileMode.Open, FileAccess.Read,
-                FileShare.Read, 81920, FileOptions.Asynchronous | FileOptions.SequentialScan);
+                FileShare.Read, HttpObjectPool.LargeBufferSize, FileOptions.Asynchronous | FileOptions.SequentialScan);
 
             await UploadFileInternalAsync(url, fileStream, fileInfo.Name, fileInfo.Length,
                 callback, metadata, cancellationToken).ConfigureAwait(false);
@@ -154,6 +154,9 @@ namespace Drx.Sdk.Network.Http
             var requestUrl = BuildUrl(url, null);
             using var content = new MultipartFormDataContent();
 
+            // [任务 6.1] 上传分片窗口自适应
+            int uploadBufferSize = HttpObjectPool.ChooseTransferBufferSize(totalBytes);
+
             var callbackProgress = callback != null
                 ? new Progress<long>(uploaded =>
                 {
@@ -171,8 +174,8 @@ namespace Drx.Sdk.Network.Http
                 })
                 : null;
 
-            var progressContent = new ProgressableStreamContent(dataStream, 81920, callbackProgress, cancellationToken);
-            var streamContent = new StreamContent(progressContent, 81920);
+            var progressContent = new ProgressableStreamContent(dataStream, uploadBufferSize, callbackProgress, cancellationToken);
+            var streamContent = new StreamContent(progressContent, uploadBufferSize);
             streamContent.Headers.ContentDisposition = new ContentDispositionHeaderValue("form-data")
             {
                 Name = "\"file\"",
@@ -233,6 +236,9 @@ namespace Drx.Sdk.Network.Http
                 else
                 {
                     Logger.Info("ResourceUpload", $"上传完成: {fileName}, 大小: {context.UploadedBytes} 字节");
+                    // [任务 6.2] 大文件上传指标
+                    if (context.UploadedBytes >= HttpObjectPool.LargeFileThresholdBytes)
+                        HttpMetrics.Instance.RecordLargeFileUpload(context.UploadedBytes);
                 }
             }
             catch (OperationCanceledException)

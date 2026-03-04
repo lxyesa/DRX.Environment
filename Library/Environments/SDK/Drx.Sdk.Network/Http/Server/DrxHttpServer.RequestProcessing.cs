@@ -113,6 +113,10 @@ namespace Drx.Sdk.Network.Http
 
         private async Task ListenAsync(CancellationToken token)
         {
+            // 水位线阈值：当队列深度超过此值时触发告警
+            var watermarkThreshold = (int)(_options.ChannelCapacity * (_options.QueueWatermarkPercent / 100.0));
+            long lastWatermarkLogTick = 0; // 限制告警频率（至多每秒一次）
+
             while (!token.IsCancellationRequested)
             {
                 try
@@ -120,6 +124,23 @@ namespace Drx.Sdk.Network.Http
                     var context = await _listener.GetContextAsync();
                     var contextKey = RuntimeHelpers.GetHashCode(context);
                     _requestEnqueueTimestamps[contextKey] = Stopwatch.GetTimestamp();
+
+                    // 队列水位监控：超过水位线时记录警告（限频：1 次/秒）
+                    if (_options.LogQueueWatermarkWarnings)
+                    {
+                        var queueDepth = _options.ChannelCapacity - _requestChannel.Reader.Count;
+                        // _requestChannel.Reader.Count 在 BoundedChannel 中返回当前元素数
+                        var currentCount = _requestChannel.Reader.Count;
+                        if (currentCount >= watermarkThreshold)
+                        {
+                            var now = Stopwatch.GetTimestamp();
+                            if (now - lastWatermarkLogTick > Stopwatch.Frequency) // 距上次告警 > 1 秒
+                            {
+                                lastWatermarkLogTick = now;
+                                Logger.Warn($"[ConnectionStrategy] 请求队列深度 {currentCount}/{_options.ChannelCapacity} 已超过水位线 {watermarkThreshold}（{_options.QueueWatermarkPercent}%），可能存在拥塞放大风险");
+                            }
+                        }
+                    }
 
                     try
                     {
@@ -391,7 +412,9 @@ namespace Drx.Sdk.Network.Http
                 }
 
                 responseStatusCode = response.StatusCode;
-                SendResponse(context.Response, response);
+                var acceptEncoding = listenerRequest.Headers["Accept-Encoding"]
+                    ?? listenerRequest.Headers["accept-encoding"];
+                SendResponse(context.Response, response, acceptEncoding);
             }
             catch (Exception ex)
             {
@@ -512,7 +535,7 @@ namespace Drx.Sdk.Network.Http
             }
         }
 
-        private void SendResponse(HttpListenerResponse response, HttpResponse httpResponse)
+        private void SendResponse(HttpListenerResponse response, HttpResponse httpResponse, string? acceptEncoding = null)
         {
             try
             {
@@ -687,6 +710,36 @@ namespace Drx.Sdk.Network.Http
 
                 if (responseBytes != null)
                 {
+                    // ── 压缩策略（任务 3.1）：按内容类型+体积阈值尝试压缩 ──────────────
+                    // 只对非 FileStream 路径的字节响应压缩；FileStream 路径（上面 return 分支）暂不压缩。
+                    // 304 / 204 不应有响应体，不参与压缩。
+                    var statusCode = response.StatusCode;
+                    if (statusCode != 304 && statusCode != 204)
+                    {
+                        var contentTypeForCompression = response.ContentType;
+                        var compressed = _compressionStrategy.TryCompress(
+                            responseBytes,
+                            contentTypeForCompression,
+                            acceptEncoding,
+                            out var appliedEncoding);
+
+                        if (appliedEncoding != null && compressed != responseBytes)
+                        {
+                            // 压缩成功：添加 Content-Encoding 头，更新 bytes
+                            try { response.AddHeader("Content-Encoding", appliedEncoding); } catch { }
+                            try { response.AddHeader("Vary", "Accept-Encoding"); } catch { }
+                            var savedBytes = responseBytes.Length - compressed.Length;
+                            HttpMetrics.Instance.RecordCompressionApplied(savedBytes);
+                            HttpMetrics.Instance.RecordTraffic(0, compressed.Length, responseBytes.Length);
+                            responseBytes = compressed;
+                        }
+                        else
+                        {
+                            HttpMetrics.Instance.RecordTraffic(0, responseBytes.Length, responseBytes.Length);
+                        }
+                    }
+                    // ─────────────────────────────────────────────────────────────────
+
                     try
                     {
                         response.ContentLength64 = responseBytes.Length;

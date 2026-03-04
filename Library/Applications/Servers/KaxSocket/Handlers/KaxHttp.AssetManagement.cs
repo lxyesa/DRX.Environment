@@ -1249,6 +1249,80 @@ public partial class KaxHttp
     }
 
     /// <summary>
+    /// System-Only 彻底删除资产（物理删除）
+    /// 仅权限组 0 (System) 可访问
+    ///
+    /// 与软删除不同：该操作会从主表中移除记录，不可恢复。
+    /// 必填：assetId, reason, confirm=true
+    /// </summary>
+    [HttpHandle("/api/asset/system/hard-delete", "POST", RateLimitMaxRequests = 10, RateLimitWindowSeconds = 60, RateLimitCallbackMethodName = nameof(RateLimitCallback))]
+    public static async Task<IActionResult> Post_SystemHardDeleteAsset(HttpRequest request)
+    {
+        var (operatorUser, authError) = await Api.RequireSystemAsync(request);
+        if (authError != null) return authError;
+
+        var operatorName = operatorUser!.UserName;
+        var operatorId = operatorUser.Id;
+
+        if (!ApiBody.TryParse(request, out var body, out var parseError))
+            return parseError!;
+
+        var requestId = Guid.NewGuid().ToString();
+
+        try
+        {
+            if (!int.TryParse(body["assetId"]?.ToString() ?? body["id"]?.ToString(), out var assetId) || assetId <= 0)
+                return new JsonResult(new { message = "资源ID无效", code = "INVALID_ASSET_ID" }, 400);
+
+            var reason = body["reason"]?.ToString()?.Trim() ?? string.Empty;
+            if (string.IsNullOrEmpty(reason))
+                return new JsonResult(new { message = "彻底删除原因不能为空", code = "REASON_REQUIRED" }, 400);
+            if (reason.Length > 500)
+                return new JsonResult(new { message = "彻底删除原因过长（最多500字符）", code = "REASON_TOO_LONG" }, 400);
+
+            var confirmStr = body["confirm"]?.ToString()?.ToLowerInvariant();
+            var confirm = confirmStr == "true" || confirmStr == "1";
+            if (!confirm)
+                return new JsonResult(new { message = "confirm 参数必须为 true", code = "CONFIRM_REQUIRED" }, 400);
+
+            var asset = await KaxGlobal.AssetDataBase.SelectByIdAsync(assetId);
+            if (asset == null)
+                return new JsonResult(new { message = "资源不存在", code = "ASSET_NOT_FOUND" }, 404);
+
+            await NotifyAssetActionEmailAsync(asset, "彻底删除", reason, operatorName);
+            await KaxGlobal.AssetDataBase.DeleteByIdAsync(assetId);
+
+            await WriteAuditAsync(assetId, operatorId, operatorName, "hard-delete", true,
+                beforeStatus: (int)asset.Status,
+                afterStatus: -1,
+                reason: reason,
+                requestId: requestId);
+
+            Logger.Info($"[System] 用户 {operatorName} 彻底删除了资源: {asset.Name} (id={assetId})，原因: {reason}");
+            return new JsonResult(new
+            {
+                code = 0,
+                message = "资源已彻底删除",
+                data = new
+                {
+                    assetId,
+                    deleted = true,
+                    reason
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            Logger.Error($"[System] 彻底删除资源失败: {ex}");
+            _ = WriteAuditAsync(0, operatorId, operatorName, "hard-delete", false,
+                errorCode: "INTERNAL_ERROR",
+                errorMessage: ex.Message,
+                requestId: requestId);
+            return new JsonResult(new { message = "服务器错误", code = "INTERNAL_ERROR" }, 500);
+        }
+    }
+
+    /// <summary>
     /// System-Only 退回资产
     /// 仅权限组 0 (System) 可访问
     /// 
@@ -1309,6 +1383,7 @@ public partial class KaxHttp
             var specs = EnsureSpecs(asset);
             specs.LastUpdatedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
             await KaxGlobal.AssetDataBase.UpdateAsync(asset);
+            await NotifyAssetActionEmailAsync(asset, "退回", reason, operatorName);
 
             // 写入成功审计
             await WriteAuditAsync(assetId, operatorId, operatorName, "return", true,
@@ -1371,7 +1446,8 @@ public partial class KaxHttp
                 return new JsonResult(new { message = "资源ID无效", code = "INVALID_ASSET_ID" }, 400);
 
             var reason = body["reason"]?.ToString()?.Trim() ?? string.Empty;
-            // 下架原因可选，但建议填写
+            if (string.IsNullOrEmpty(reason))
+                return new JsonResult(new { message = "下架原因不能为空", code = "REASON_REQUIRED" }, 400);
             if (reason.Length > 500)
                 return new JsonResult(new { message = "下架原因过长（最多500字符）", code = "REASON_TOO_LONG" }, 400);
 
@@ -1404,6 +1480,7 @@ public partial class KaxHttp
             var specs = EnsureSpecs(asset);
             specs.LastUpdatedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
             await KaxGlobal.AssetDataBase.UpdateAsync(asset);
+            await NotifyAssetActionEmailAsync(asset, "下架", reason, operatorName);
 
             // 写入成功审计
             await WriteAuditAsync(assetId, operatorId, operatorName, "off-shelf", true,
@@ -1465,6 +1542,8 @@ public partial class KaxHttp
                 return new JsonResult(new { message = "资源ID无效", code = "INVALID_ASSET_ID" }, 400);
 
             var reason = body["reason"]?.ToString()?.Trim() ?? string.Empty;
+            if (string.IsNullOrEmpty(reason))
+                return new JsonResult(new { message = "重审原因不能为空", code = "REASON_REQUIRED" }, 400);
             if (reason.Length > 500)
                 return new JsonResult(new { message = "原因过长（最多500字符）", code = "REASON_TOO_LONG" }, 400);
 
@@ -1503,6 +1582,7 @@ public partial class KaxHttp
             var specs = EnsureSpecs(asset);
             specs.LastUpdatedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
             await KaxGlobal.AssetDataBase.UpdateAsync(asset);
+            await NotifyAssetActionEmailAsync(asset, "重新审核", reason, operatorName);
 
             // 写入成功审计
             await WriteAuditAsync(assetId, operatorId, operatorName, "force-review", true,

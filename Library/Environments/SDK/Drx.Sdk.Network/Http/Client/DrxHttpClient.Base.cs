@@ -2,6 +2,7 @@ using Drx.Sdk.Shared;
 using System.Collections.Specialized;
 using System.Threading.Channels;
 using Drx.Sdk.Network.Http.Protocol;
+using Drx.Sdk.Network.Http.Performance;
 
 namespace Drx.Sdk.Network.Http
 {
@@ -11,57 +12,89 @@ namespace Drx.Sdk.Network.Http
     public partial class DrxHttpClient
     {
         private readonly System.Net.Http.HttpClient _httpClient;
-        private readonly System.Net.Http.HttpClientHandler _httpHandler;
+        // _httpHandler 保留以维持与使用 HttpClientHandler 的旧代码兼容；
+        // 新路径使用 SocketsHttpHandler（存储在 _socketsHandler）以支持连接池参数化。
+        private readonly System.Net.Http.HttpClientHandler? _httpHandler;
+        private readonly System.Net.Http.SocketsHttpHandler? _socketsHandler;
         private System.Net.CookieContainer _cookieContainer;
         private readonly Channel<HttpRequestTask> _requestChannel;
         private readonly SemaphoreSlim _semaphore;
         private readonly CancellationTokenSource _cts;
-        private const int MaxConcurrentRequests = 10;
         private Task _processingTask;
 
         /// <summary>
-        /// 默认构造函数，使用内部 HttpClient 并启动请求处理通道。
+        /// 客户端连接池与并发配置（只读，构造后不可更改）。
         /// </summary>
-        public DrxHttpClient()
-        {
-            _cookieContainer = new System.Net.CookieContainer();
-            _httpHandler = new System.Net.Http.HttpClientHandler { CookieContainer = _cookieContainer, UseCookies = true };
-            _httpClient = new System.Net.Http.HttpClient(_httpHandler);
-            AutoManageCookies = true;
-            _requestChannel = Channel.CreateBounded<HttpRequestTask>(new BoundedChannelOptions(100)
-            {
-                FullMode = BoundedChannelFullMode.Wait
-            });
-            _semaphore = new SemaphoreSlim(MaxConcurrentRequests);
-            _cts = new CancellationTokenSource();
-            _processingTask = Task.Run(() => ProcessRequestsAsync(_cts.Token));
-        }
+        internal readonly DrxHttpClientOptions _clientOptions;
 
         /// <summary>
-        /// 指定基础地址的构造函数。
+        /// 默认构造函数，使用内部 HttpClient 并启动请求处理通道。
+        /// 行为与历史版本完全兼容（MaxConcurrentRequests=10，队列容量=100）。
+        /// </summary>
+        public DrxHttpClient() : this(null as string, DrxHttpClientOptions.Default) { }
+
+        /// <summary>
+        /// 指定基础地址的构造函数，使用默认连接池配置。
         /// </summary>
         /// <param name="baseAddress">用于初始化内部 HttpClient 的基地址。</param>
         /// <exception cref="System.ArgumentException">当 baseAddress 不是有效的 URI 时抛出。</exception>
         /// <exception cref="System.Exception">初始化 HttpClient 发生其它错误时抛出并向上传播。</exception>
-        public DrxHttpClient(string baseAddress)
+        public DrxHttpClient(string baseAddress) : this(baseAddress, DrxHttpClientOptions.Default) { }
+
+        /// <summary>
+        /// 带完整连接池配置选项的构造函数。
+        /// </summary>
+        /// <param name="baseAddress">基础地址（可为 null）。</param>
+        /// <param name="options">连接池与并发配置，null 则使用默认值。</param>
+        public DrxHttpClient(string? baseAddress, DrxHttpClientOptions? options)
         {
+            _clientOptions = options ?? DrxHttpClientOptions.Default;
+            _clientOptions.Validate();
+
             try
             {
                 _cookieContainer = new System.Net.CookieContainer();
-                _httpHandler = new System.Net.Http.HttpClientHandler { CookieContainer = _cookieContainer, UseCookies = true };
-                _httpClient = new System.Net.Http.HttpClient(_httpHandler)
+
+                if (_clientOptions.Enabled && _clientOptions.MaxConnectionsPerServer != int.MaxValue)
                 {
-                    BaseAddress = new Uri(baseAddress)
-                };
+                    // 使用 SocketsHttpHandler 以支持连接池参数化（MaxConnectionsPerServer 等）
+                    _socketsHandler = _clientOptions.BuildSocketsHttpHandler(_cookieContainer);
+                    var innerClient = new System.Net.Http.HttpClient(_socketsHandler)
+                    {
+                        Timeout = TimeSpan.FromSeconds(_clientOptions.RequestTimeoutSeconds)
+                    };
+                    if (!string.IsNullOrEmpty(baseAddress))
+                        innerClient.BaseAddress = new Uri(baseAddress);
+                    _httpClient = innerClient;
+                }
+                else
+                {
+                    // 默认路径：保持与原始行为完全一致
+                    _httpHandler = new System.Net.Http.HttpClientHandler
+                    {
+                        CookieContainer = _cookieContainer,
+                        UseCookies = true
+                    };
+                    var innerClient = new System.Net.Http.HttpClient(_httpHandler);
+                    if (!string.IsNullOrEmpty(baseAddress))
+                        innerClient.BaseAddress = new Uri(baseAddress);
+                    _httpClient = innerClient;
+                }
+
                 AutoManageCookies = true;
-                _requestChannel = Channel.CreateBounded<HttpRequestTask>(new BoundedChannelOptions(100)
-                {
-                    FullMode = BoundedChannelFullMode.Wait
-                });
-                _semaphore = new SemaphoreSlim(MaxConcurrentRequests);
+
+                _requestChannel = Channel.CreateBounded<HttpRequestTask>(
+                    new BoundedChannelOptions(_clientOptions.RequestQueueCapacity)
+                    {
+                        FullMode = BoundedChannelFullMode.Wait
+                    });
+
+                _semaphore = new SemaphoreSlim(_clientOptions.MaxConcurrentRequests);
                 _cts = new CancellationTokenSource();
                 _processingTask = Task.Run(() => ProcessRequestsAsync(_cts.Token));
-                Logger.Info($"HttpClient 初始化，基础地址: {baseAddress}");
+
+                if (!string.IsNullOrEmpty(baseAddress))
+                    Logger.Info($"HttpClient 初始化，基础地址: {baseAddress}, 连接池: maxConn={_clientOptions.MaxConnectionsPerServer}, maxConcurrent={_clientOptions.MaxConcurrentRequests}");
             }
             catch (Exception ex)
             {
