@@ -3,6 +3,9 @@
    布局：英雄头部 + 两栏主内容（截图画廊+Tabs | 购买面板）+ 底部相关推荐
    ================================================================ */
 
+/* 确保 hidden 属性始终生效（防止 display:flex 等规则覆盖） */
+[hidden] { display: none !important; }
+
 /* ── 变量覆盖 ── */
 :root {
     --accent:         #638cff;
@@ -20,7 +23,7 @@
     --hero-panel-ambient-blur: 34px;
     --hero-panel-ambient-opacity: 0.44;
     --hero-panel-ambient-fill-opacity: 0.72;
-    --hero-panel-ambient-sheen: rgba(99, 140, 255, 0.18);
+    --hero-panel-ambient-sheen: transparent;
     --hero-panel-ambient-vignette: rgba(0, 0, 0, 0.44);
 }
 
@@ -206,17 +209,10 @@
     padding: 10px 13px;
     border-radius: 42px;
 
-    background:
-        radial-gradient(
-            ellipse 70% 90% at 30% 40%,
-            rgba(99, 140, 255, 0.16),
-            transparent 60%
-        ),
-        rgba(8, 8, 14, 0.80);
-    border-color: rgba(140, 170, 255, 0.24);
+    background: rgba(8, 8, 14, 0.80);
+    border-color: rgba(255, 255, 255, 0.10);
     box-shadow:
-        0 16px 40px rgba(0, 0, 0, 0.44),
-        0 0 0 1px rgba(99, 140, 255, 0.18);
+        0 16px 40px rgba(0, 0, 0, 0.44);
     -webkit-backdrop-filter: blur(28px) saturate(1.4);
     backdrop-filter: blur(28px) saturate(1.4);
 

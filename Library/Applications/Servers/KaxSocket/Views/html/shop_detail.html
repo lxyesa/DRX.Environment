@@ -184,20 +184,20 @@
                     <!-- 价格区 -->
                     <div class="purchase-price-area">
                         <div class="purchase-price-row">
-                            <span class="price-current" id="priceCurrent">—</span>
+                            <span class="price-current" id="priceCurrent">免费</span>
                             <span class="price-badge" id="priceBadge" hidden></span>
                         </div>
                         <div class="price-original" id="priceOriginal" hidden></div>
                     </div>
 
                     <!-- 库存状态 -->
-                    <div class="stock-status" id="stockInfo">
+                    <div class="stock-status" id="stockInfo" hidden>
                         <span class="material-icons stock-icon">check_circle</span>
                         <span class="stock-text">库存充足</span>
                     </div>
 
                     <!-- 套餐选择 -->
-                    <div class="plans-section" id="pricePlansCard">
+                    <div class="plans-section" id="pricePlansCard" hidden>
                         <div class="plans-label">选择套餐</div>
                         <div class="plans-list" id="plansGrid">
                             <!-- 动态生成 -->
@@ -206,7 +206,7 @@
 
                     <!-- 操作按钮组 -->
                     <div class="purchase-btn-group">
-                        <button class="btn-purchase" id="purchaseBtn" disabled aria-disabled="true">
+                        <button class="btn-purchase" id="purchaseBtn" disabled aria-disabled="true" hidden>
                             <span class="material-icons">shopping_bag</span>
                             立即购买
                         </button>

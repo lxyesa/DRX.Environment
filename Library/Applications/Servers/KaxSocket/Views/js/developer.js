@@ -19,15 +19,15 @@ const DevApp = (() => {
         { key: 'version', label: '版本', multiline: false },
         { key: 'description', label: '描述', multiline: true },
         { key: 'category', label: '分类', multiline: false },
-        { key: 'tags', label: '标签（分号分隔）', multiline: true },
-        { key: 'badges', label: '徽章（分号分隔）', multiline: true },
-        { key: 'features', label: '特性（分号分隔）', multiline: true },
+        { key: 'tags', label: '标签', multiline: true, visualType: 'chips' },
+        { key: 'badges', label: '徽章', multiline: true, visualType: 'chips' },
+        { key: 'features', label: '特性', multiline: true, visualType: 'chips' },
         { key: 'coverImage', label: '封面图 URL', multiline: false },
         { key: 'iconImage', label: '图标 URL', multiline: false },
-        { key: 'screenshots', label: '截图 URL（分号分隔）', multiline: true },
+        { key: 'screenshots', label: '截图', multiline: true, visualType: 'image-list' },
         { key: 'downloadUrl', label: '下载地址', multiline: false },
         { key: 'license', label: '许可证', multiline: false },
-        { key: 'compatibility', label: '兼容性', multiline: true }
+        { key: 'compatibility', label: '兼容性', multiline: true, visualType: 'chips' }
     ];
 
     // #region State
@@ -169,6 +169,109 @@ const DevApp = (() => {
                 .filter(Boolean);
         }
         return [];
+    }
+
+    function tryParseJsonArray(raw) {
+        if (!raw || typeof raw !== 'string') return [];
+        try {
+            const parsed = JSON.parse(raw);
+            return Array.isArray(parsed) ? parsed : [];
+        } catch {
+            return [];
+        }
+    }
+
+    function formatBadgesForEditor(raw) {
+        const list = tryParseJsonArray(raw);
+        if (!list.length) return '';
+        return list
+            .map(item => {
+                const icon = String(item?.icon ?? '').trim();
+                const text = String(item?.text ?? '').trim();
+                if (!text) return '';
+                return `${icon}|${text}`;
+            })
+            .filter(Boolean)
+            .join('\n');
+    }
+
+    function formatFeaturesForEditor(raw) {
+        const list = tryParseJsonArray(raw);
+        if (!list.length) return '';
+        return list
+            .map(item => {
+                const icon = String(item?.icon ?? '').trim();
+                const title = String(item?.title ?? '').trim();
+                const desc = String(item?.desc ?? '').trim();
+                if (!title) return '';
+                return `${icon}|${title}|${desc}`;
+            })
+            .filter(Boolean)
+            .join('\n');
+    }
+
+    function serializeBadgesFromEditor(raw) {
+        const text = String(raw ?? '').trim();
+        if (!text) return '';
+
+        // 兼容用户直接粘贴 JSON
+        const parsedJson = tryParseJsonArray(text);
+        if (parsedJson.length) {
+            const normalized = parsedJson
+                .map(item => ({
+                    icon: String(item?.icon ?? '').trim() || 'info',
+                    text: String(item?.text ?? '').trim()
+                }))
+                .filter(item => item.text);
+            return normalized.length ? JSON.stringify(normalized) : '';
+        }
+
+        const list = text
+            .split(/\r?\n/)
+            .map(line => line.trim())
+            .filter(Boolean)
+            .map(line => {
+                const [iconRaw = '', ...rest] = line.split('|');
+                const icon = iconRaw.trim() || 'info';
+                const value = rest.join('|').trim();
+                return { icon, text: value };
+            })
+            .filter(item => item.text);
+
+        return list.length ? JSON.stringify(list) : '';
+    }
+
+    function serializeFeaturesFromEditor(raw) {
+        const text = String(raw ?? '').trim();
+        if (!text) return '';
+
+        // 兼容用户直接粘贴 JSON
+        const parsedJson = tryParseJsonArray(text);
+        if (parsedJson.length) {
+            const normalized = parsedJson
+                .map(item => ({
+                    icon: String(item?.icon ?? '').trim() || 'star',
+                    title: String(item?.title ?? '').trim(),
+                    desc: String(item?.desc ?? '').trim()
+                }))
+                .filter(item => item.title);
+            return normalized.length ? JSON.stringify(normalized) : '';
+        }
+
+        const list = text
+            .split(/\r?\n/)
+            .map(line => line.trim())
+            .filter(Boolean)
+            .map(line => {
+                const [iconRaw = '', titleRaw = '', ...descParts] = line.split('|');
+                const icon = iconRaw.trim() || 'star';
+                const title = titleRaw.trim();
+                const desc = descParts.join('|').trim();
+                return { icon, title, desc };
+            })
+            .filter(item => item.title);
+
+        return list.length ? JSON.stringify(list) : '';
     }
 
     function getSystemFieldRawValue(detail, field) {
@@ -575,6 +678,10 @@ const DevApp = (() => {
         document.getElementById('assetCoverImage').value = '';
         document.getElementById('assetIconImage').value = '';
         document.getElementById('assetScreenshots').value = '';
+        const badgesInput = document.getElementById('assetBadges');
+        if (badgesInput) badgesInput.value = '';
+        const featuresInput = document.getElementById('assetFeatures');
+        if (featuresInput) featuresInput.value = '';
         document.getElementById('pricesList').innerHTML = '';
         document.getElementById('cancelEditBtn').style.display = 'none';
         document.getElementById('submitAssetBtn').textContent = '提交资源';
@@ -598,13 +705,17 @@ const DevApp = (() => {
         document.getElementById('assetCoverImage').value = asset.coverImage || '';
         document.getElementById('assetIconImage').value = asset.iconImage || '';
         document.getElementById('assetScreenshots').value = Array.isArray(asset.screenshots) ? asset.screenshots.join(';') : (asset.screenshots || '');
+        const badgesInput = document.getElementById('assetBadges');
+        if (badgesInput) badgesInput.value = formatBadgesForEditor(asset.badges || '');
+        const featuresInput = document.getElementById('assetFeatures');
+        if (featuresInput) featuresInput.value = formatFeaturesForEditor(asset.features || '');
         document.getElementById('cancelEditBtn').style.display = '';
-        document.getElementById('submitAssetBtn').textContent = '保存修改';
+        document.getElementById('submitAssetBtn').textContent = '保存并重审';
         // 同步侧边栏辅助按钮
         const aside = document.getElementById('cancelEditBtnAside');
         if (aside) aside.style.display = '';
         const submitAside = document.getElementById('submitAssetBtnAside');
-        if (submitAside) submitAside.querySelector('span.material-icons').nextSibling.textContent = '保存修改';
+        if (submitAside) submitAside.querySelector('span.material-icons').nextSibling.textContent = '保存并重审';
 
         // 填充价格
         const list = document.getElementById('pricesList');
@@ -624,6 +735,10 @@ const DevApp = (() => {
         const coverImage = document.getElementById('assetCoverImage').value.trim();
         const iconImage = document.getElementById('assetIconImage').value.trim();
         const screenshots = document.getElementById('assetScreenshots').value.trim();
+        const badgesEditorText = document.getElementById('assetBadges')?.value?.trim() || '';
+        const featuresEditorText = document.getElementById('assetFeatures')?.value?.trim() || '';
+        const badges = serializeBadgesFromEditor(badgesEditorText);
+        const features = serializeFeaturesFromEditor(featuresEditorText);
 
         // 收集价格方案
         const priceItems = document.querySelectorAll('#pricesList .dev-price-item');
@@ -645,7 +760,7 @@ const DevApp = (() => {
             prices.push({ label, price, originalPrice, unit, duration, durationDays });
         });
 
-        return { name, version, description, category, tags, coverImage, iconImage, screenshots, prices };
+        return { name, version, description, category, tags, coverImage, iconImage, screenshots, badges, features, prices };
     }
     // #endregion
 
@@ -1059,6 +1174,190 @@ const DevApp = (() => {
         state.currentSystemAssetDetail = null;
     }
 
+    // ---------- 可视化编辑器辅助函数 ----------
+
+    /**
+     * 将分号分隔字符串解析为条目数组（过滤空项）
+     */
+    function parseSemicolon(raw) {
+        if (!raw) return [];
+        return String(raw).split(';').map(s => s.trim()).filter(Boolean);
+    }
+
+    /**
+     * 从可视化编辑器容器收集当前条目，返回分号分隔字符串
+     */
+    function collectVisualValue(fieldKey) {
+        const card = document.querySelector(`[data-field-card="${fieldKey}"]`);
+        if (!card) return '';
+        const items = card.querySelectorAll('[data-visual-item]');
+        return Array.from(items).map(el => el.dataset.visualItem).join(';');
+    }
+
+    /**
+     * 渲染 chips 编辑器（标签/徽章/特性/兼容性）
+     */
+    function renderChipsEditor(fieldKey, items) {
+        const chipsHtml = items.map((item, idx) =>
+            `<span class="sfc-chip" data-visual-item="${escapeAttr(item)}">
+                <span class="sfc-chip-text">${escapeHtml(item)}</span>
+                <button class="sfc-chip-del" type="button" data-del-idx="${idx}" title="移除">
+                    <span class="material-icons">close</span>
+                </button>
+            </span>`
+        ).join('');
+
+        return `<div class="sfc-chips-editor" id="sfc-editor-${fieldKey}">
+            <div class="sfc-chips-list" id="sfc-chips-${fieldKey}">${chipsHtml}</div>
+            <div class="sfc-add-row">
+                <input class="sfc-add-input system-field-input" type="text"
+                    placeholder="输入后按 Enter 或点击 ＋ 添加"
+                    id="sfc-addinput-${fieldKey}">
+                <button class="sfc-add-btn" type="button" data-add-chips="${fieldKey}" title="添加">
+                    <span class="material-icons">add</span>
+                </button>
+            </div>
+        </div>`;
+    }
+
+    /**
+     * 渲染图片列表编辑器（screenshots）
+     */
+    function renderImageListEditor(fieldKey, items) {
+        const itemsHtml = items.map((url, idx) =>
+            `<div class="sfc-imgitem" data-visual-item="${escapeAttr(url)}">
+                <img class="sfc-imgitem-thumb" src="${escapeAttr(url)}" alt="" loading="lazy"
+                    onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+                <div class="sfc-imgitem-fallback" style="display:none">
+                    <span class="material-icons">broken_image</span>
+                </div>
+                <div class="sfc-imgitem-url" title="${escapeHtml(url)}">${escapeHtml(url)}</div>
+                <button class="sfc-imgitem-del" type="button" data-del-idx="${idx}" title="移除">
+                    <span class="material-icons">delete_outline</span>
+                </button>
+            </div>`
+        ).join('');
+
+        return `<div class="sfc-imglist-editor" id="sfc-editor-${fieldKey}">
+            <div class="sfc-imglist" id="sfc-imglist-${fieldKey}">${itemsHtml}</div>
+            <div class="sfc-add-row">
+                <input class="sfc-add-input system-field-input" type="text"
+                    placeholder="粘贴图片 URL 后按 Enter 或点击 ＋"
+                    id="sfc-addinput-${fieldKey}">
+                <button class="sfc-add-btn" type="button" data-add-imglist="${fieldKey}" title="添加">
+                    <span class="material-icons">add_photo_alternate</span>
+                </button>
+            </div>
+        </div>`;
+    }
+
+    /**
+     * 绑定 chips 编辑器事件（添加 / 删除）
+     */
+    function bindChipsEditorEvents(card, fieldKey, items) {
+        const list = card.querySelector(`#sfc-chips-${fieldKey}`);
+        const addInput = card.querySelector(`#sfc-addinput-${fieldKey}`);
+        const addBtn = card.querySelector(`[data-add-chips="${fieldKey}"]`);
+
+        function refreshChips() {
+            list.querySelectorAll('[data-del-idx]').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const idx = parseInt(btn.dataset.delIdx, 10);
+                    const chip = btn.closest('.sfc-chip');
+                    if (chip) chip.remove();
+                    // 重新建立 idx（删除后刷新 data-del-idx）
+                    rebuildDelIdx(list, '.sfc-chip');
+                });
+            });
+        }
+
+        function addItem() {
+            const val = addInput.value.trim();
+            if (!val) return;
+            const chip = document.createElement('span');
+            chip.className = 'sfc-chip';
+            chip.dataset.visualItem = val;
+            chip.innerHTML = `<span class="sfc-chip-text">${escapeHtml(val)}</span>
+                <button class="sfc-chip-del" type="button" title="移除">
+                    <span class="material-icons">close</span>
+                </button>`;
+            chip.querySelector('.sfc-chip-del').addEventListener('click', () => {
+                chip.remove();
+                rebuildDelIdx(list, '.sfc-chip');
+            });
+            list.appendChild(chip);
+            addInput.value = '';
+        }
+
+        addBtn.addEventListener('click', addItem);
+        addInput.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); addItem(); } });
+        refreshChips();
+    }
+
+    /**
+     * 绑定图片列表编辑器事件
+     */
+    function bindImageListEditorEvents(card, fieldKey) {
+        const list = card.querySelector(`#sfc-imglist-${fieldKey}`);
+        const addInput = card.querySelector(`#sfc-addinput-${fieldKey}`);
+        const addBtn = card.querySelector(`[data-add-imglist="${fieldKey}"]`);
+
+        function refreshDelBtns() {
+            list.querySelectorAll('[data-del-idx]').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    btn.closest('.sfc-imgitem').remove();
+                    rebuildDelIdx(list, '.sfc-imgitem');
+                });
+            });
+        }
+
+        function addItem() {
+            const val = addInput.value.trim();
+            if (!val) return;
+            const item = document.createElement('div');
+            item.className = 'sfc-imgitem';
+            item.dataset.visualItem = val;
+            item.innerHTML = `<img class="sfc-imgitem-thumb" src="${escapeAttr(val)}" alt="" loading="lazy"
+                    onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+                <div class="sfc-imgitem-fallback" style="display:none">
+                    <span class="material-icons">broken_image</span>
+                </div>
+                <div class="sfc-imgitem-url" title="${escapeHtml(val)}">${escapeHtml(val)}</div>
+                <button class="sfc-imgitem-del" type="button" title="移除" data-del-idx="0">
+                    <span class="material-icons">delete_outline</span>
+                </button>`;
+            item.querySelector('.sfc-imgitem-del').addEventListener('click', () => {
+                item.remove();
+                rebuildDelIdx(list, '.sfc-imgitem');
+            });
+            list.appendChild(item);
+            addInput.value = '';
+        }
+
+        addBtn.addEventListener('click', addItem);
+        addInput.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); addItem(); } });
+        refreshDelBtns();
+    }
+
+    /**
+     * 重新为列表中的条目分配 data-del-idx（用于保证删除索引正确）
+     */
+    function rebuildDelIdx(container, itemSelector) {
+        container.querySelectorAll(itemSelector).forEach((el, i) => {
+            const btn = el.querySelector('[data-del-idx]');
+            if (btn) btn.dataset.delIdx = i;
+        });
+    }
+
+    /**
+     * 对 HTML 属性值做最小转义
+     */
+    function escapeAttr(str) {
+        return String(str ?? '').replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+    }
+
+    // ---------- 主渲染函数 ----------
+
     function renderSystemFieldCards() {
         const detail = state.currentSystemAssetDetail;
         const container = document.getElementById('systemFieldCards');
@@ -1074,17 +1373,24 @@ const DevApp = (() => {
             const value = normalizeSystemFieldValue(raw);
             const preview = formatSystemFieldPreview(raw);
 
-            const input = field.multiline
-                ? `<textarea class="system-field-input system-field-input-multiline" id="systemFieldInput-${field.key}" data-field="${field.key}" rows="3" placeholder="请输入 ${escapeHtml(field.label)}">${escapeHtml(value)}</textarea>`
-                : `<input class="system-field-input" id="systemFieldInput-${field.key}" data-field="${field.key}" type="text" value="${escapeHtml(value)}" placeholder="请输入 ${escapeHtml(field.label)}">`;
+            let editorHtml;
+            if (field.visualType === 'chips') {
+                editorHtml = renderChipsEditor(field.key, parseSemicolon(value));
+            } else if (field.visualType === 'image-list') {
+                editorHtml = renderImageListEditor(field.key, parseSemicolon(value));
+            } else if (field.multiline) {
+                editorHtml = `<textarea class="system-field-input system-field-input-multiline" id="systemFieldInput-${field.key}" data-field="${field.key}" rows="3" placeholder="请输入 ${escapeHtml(field.label)}">${escapeHtml(value)}</textarea>`;
+            } else {
+                editorHtml = `<input class="system-field-input" id="systemFieldInput-${field.key}" data-field="${field.key}" type="text" value="${escapeHtml(value)}" placeholder="请输入 ${escapeHtml(field.label)}">`;
+            }
 
             return `
-                <article class="system-field-card" data-field-card="${field.key}">
+                <article class="system-field-card${field.visualType ? ' system-field-card--visual' : ''}" data-field-card="${field.key}">
                     <div class="system-field-card-head">
                         <span class="system-field-card-name">${escapeHtml(field.label)}</span>
                     </div>
                     <p class="system-field-card-current" title="${escapeHtml(value)}">${escapeHtml(preview)}</p>
-                    ${input}
+                    ${editorHtml}
                     <div class="system-field-card-actions">
                         <button class="btn small system-rv-save-btn" type="button" data-system-save-field="${field.key}">
                             <span class="material-icons">save</span>保存
@@ -1092,6 +1398,19 @@ const DevApp = (() => {
                     </div>
                 </article>`;
         }).join('');
+
+        // 绑定可视化编辑器事件
+        SYSTEM_FIELD_CONFIG.forEach(field => {
+            const card = container.querySelector(`[data-field-card="${field.key}"]`);
+            if (!card) return;
+            const raw = getSystemFieldRawValue(detail, field.key);
+            const value = normalizeSystemFieldValue(raw);
+            if (field.visualType === 'chips') {
+                bindChipsEditorEvents(card, field.key, parseSemicolon(value));
+            } else if (field.visualType === 'image-list') {
+                bindImageListEditorEvents(card, field.key);
+            }
+        });
 
         container.querySelectorAll('[data-system-save-field]').forEach(btn => {
             btn.addEventListener('click', () => saveSystemField(btn.dataset.systemSaveField, btn));
@@ -1104,8 +1423,16 @@ const DevApp = (() => {
         if (!id) return;
         if (!field) { alert('字段无效'); return; }
         if (triggerBtn?.dataset.loading === '1') return;
-        const input = document.getElementById(`systemFieldInput-${field}`);
-        const value = input?.value ?? '';
+
+        // 可视化字段从 DOM 条目收集，普通字段从 input/textarea 读取
+        const fieldCfg = SYSTEM_FIELD_CONFIG.find(f => f.key === field);
+        let value;
+        if (fieldCfg?.visualType) {
+            value = collectVisualValue(field);
+        } else {
+            const input = document.getElementById(`systemFieldInput-${field}`);
+            value = input?.value ?? '';
+        }
 
         if (!detail) {
             alert('资产详情未加载，请稍后重试');
@@ -1280,24 +1607,36 @@ const DevApp = (() => {
         if (!data.version) { alert('请填写版本号'); return; }
 
         try {
-            let resp;
             if (state.editingId) {
-                // 更新模式
-                resp = await apiUpdateAsset({ id: state.editingId, ...data });
+                // 编辑模式：先保存再强制提交重审
+                const updateResp = await apiUpdateAsset({ id: state.editingId, ...data });
+                if (updateResp.code !== 0) {
+                    alert(updateResp.message || '保存失败');
+                    return;
+                }
+                // 保存成功后自动提交审核，进入重审流程
+                const submitResp = await apiSubmitReview(state.editingId);
+                if (submitResp.code === 0) {
+                    alert('资源已保存并提交重审，等待审核结果');
+                } else if (submitResp.cooldownRemaining) {
+                    alert(`资源已保存，但提交冷却中，请在 ${formatCooldown(submitResp.cooldownRemaining)} 后手动重新提交`);
+                } else {
+                    alert(`资源已保存，但提交审核失败：${submitResp.message || '未知错误'}`);
+                }
             } else {
                 // 新建模式
-                resp = await apiCreateAsset(data);
+                const resp = await apiCreateAsset(data);
+                if (resp.code !== 0) {
+                    alert(resp.message || '创建失败');
+                    return;
+                }
+                alert(resp.message || '操作成功');
             }
 
-            if (resp.code === 0) {
-                alert(resp.message || '操作成功');
-                resetForm();
-                switchTab('my-assets');
-                loadMyAssets();
-                loadMyStats();
-            } else {
-                alert(resp.message || '操作失败');
-            }
+            resetForm();
+            switchTab('my-assets');
+            loadMyAssets();
+            loadMyStats();
         } catch (e) {
             alert('请求失败: ' + e.message);
         }

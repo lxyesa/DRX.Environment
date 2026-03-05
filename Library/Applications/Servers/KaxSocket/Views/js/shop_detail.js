@@ -436,8 +436,9 @@
             }
 
             // 当前价
+            const isFree = !vm.priceOptions || vm.priceOptions.length === 0;
             const priceCurrentEl = document.getElementById('priceCurrent');
-            if (priceCurrentEl) priceCurrentEl.textContent = displayCurrent != null ? showCurrency(displayCurrent) : '--';
+            if (priceCurrentEl) priceCurrentEl.textContent = isFree ? '免费' : (displayCurrent != null ? showCurrency(displayCurrent) : '--');
 
             // 原价（用 hidden 属性控制）
             const priceOriginalEl = document.getElementById('priceOriginal');
@@ -455,7 +456,7 @@
             const priceBadgeEl = document.getElementById('priceBadge');
             if (priceBadgeEl) {
                 let discountPercent = null;
-                if (displayOriginal != null && displayCurrent != null && Number(displayOriginal) > 0) {
+                if (!isFree && displayOriginal != null && displayCurrent != null && Number(displayOriginal) > 0) {
                     const d = Math.round(((Number(displayOriginal) - Number(displayCurrent)) / Number(displayOriginal)) * 100);
                     if (d > 0) discountPercent = d;
                 }
@@ -468,9 +469,13 @@
                 }
             }
 
-            // ── 库存状态（根据 priceOptions 汇总） ──
+            // ── 库存状态（根据 priceOptions 汇总，无方案时隐藏） ──
             const stockInfoEl = document.getElementById('stockInfo');
             if (stockInfoEl) {
+                if (isFree) {
+                    stockInfoEl.setAttribute('hidden', '');
+                } else {
+                stockInfoEl.removeAttribute('hidden');
                 let stockText = '库存：--';
                 let isLow = false;
                 const opts = vm.priceOptions || [];
@@ -493,6 +498,7 @@
                 if (stockTextEl) stockTextEl.textContent = stockText;
                 else stockInfoEl.textContent = stockText;
                 stockInfoEl.classList.toggle('low', isLow);
+                } // end else (not free)
             }
 
             // ── 规格 Tab ──
@@ -624,11 +630,15 @@
                 const vm = window.currentProduct;
                 const opts = (vm && Array.isArray(vm.priceOptions) && vm.priceOptions.length > 0) ? vm.priceOptions : null;
 
+                const pricePlansCard = document.getElementById('pricePlansCard');
                 if (!opts || opts.length === 0) {
-                    plansGrid.innerHTML = '<div style="color: var(--text-muted); padding: 12px;">暂无价格方案</div>';
+                    if (pricePlansCard) pricePlansCard.setAttribute('hidden', '');
                     setPurchaseBtnEnabled(false);
+                    if (purchaseBtn) purchaseBtn.setAttribute('hidden', '');
                     return;
                 }
+                if (pricePlansCard) pricePlansCard.removeAttribute('hidden');
+                if (purchaseBtn) purchaseBtn.removeAttribute('hidden');
 
                 plansGrid.innerHTML = '';
                 opts.forEach((opt, index) => {

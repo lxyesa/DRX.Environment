@@ -2216,20 +2216,22 @@ body {
 }
 
 .system-rv-save-btn {
-    min-width: 108px;
-    height: 34px;
-    padding: 0 14px;
+    min-width: 88px;
+    height: 32px;
+    padding: 0 12px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 6px;
-    background: var(--dev-accent);
-    color: var(--dev-text-primary);
-    border: 1px solid rgba(99, 140, 255, 0.5);
+    gap: 5px;
+    background: rgba(99, 140, 255, 0.08);
+    color: var(--dev-accent);
+    border: 1px solid rgba(99, 140, 255, 0.2);
 }
 
 .system-rv-save-btn:hover {
-    background: #5b81ea;
+    background: rgba(99, 140, 255, 0.15);
+    border-color: rgba(99, 140, 255, 0.35);
+    color: #a8c0ff;
 }
 
 .system-rv-save-btn .material-icons {
@@ -2247,6 +2249,207 @@ body {
     font-size: 0.82rem;
 }
 
+/* ---- 可视化编辑器：通用布局 ---- */
+.system-field-card--visual {
+    grid-column: span 2;
+}
+
+.sfc-add-row {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+}
+
+.sfc-add-row .sfc-add-input {
+    flex: 1;
+}
+
+.sfc-add-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    flex-shrink: 0;
+    border: 1px solid var(--dev-line-soft);
+    border-radius: 6px;
+    background: var(--dev-surface-strong);
+    color: var(--dev-text-secondary);
+    cursor: pointer;
+    transition: background .15s ease, border-color .15s ease, color .15s ease;
+}
+
+.sfc-add-btn:hover {
+    background: var(--dev-accent-dim);
+    border-color: var(--dev-accent);
+    color: var(--dev-accent);
+}
+
+.sfc-add-btn .material-icons {
+    font-size: 18px;
+}
+
+/* ---- Chips 编辑器 ---- */
+.sfc-chips-editor {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.sfc-chips-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    min-height: 32px;
+    padding: 6px 8px;
+    border: 1px solid var(--dev-line-soft);
+    border-radius: 6px;
+    background: var(--dev-surface-soft);
+}
+
+.sfc-chips-list:empty::after {
+    content: '暂无条目';
+    color: var(--dev-text-subtle);
+    font-size: 0.76rem;
+    align-self: center;
+}
+
+.sfc-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 8px 3px 10px;
+    border-radius: 20px;
+    background: var(--dev-accent-dim);
+    border: 1px solid rgba(99, 140, 255, 0.2);
+    font-size: 0.78rem;
+    color: var(--dev-text-strong);
+    max-width: 240px;
+}
+
+.sfc-chip-text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.sfc-chip-del {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: transparent;
+    border: none;
+    color: var(--dev-text-muted);
+    cursor: pointer;
+    padding: 0;
+    flex-shrink: 0;
+    transition: background .12s ease, color .12s ease;
+}
+
+.sfc-chip-del:hover {
+    background: rgba(239, 68, 68, 0.18);
+    color: #ef4444;
+}
+
+.sfc-chip-del .material-icons {
+    font-size: 12px;
+}
+
+/* ---- 图片列表编辑器 ---- */
+.sfc-imglist-editor {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.sfc-imglist {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-height: 240px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding-right: 2px;
+}
+
+.sfc-imgitem {
+    display: grid;
+    grid-template-columns: 52px 1fr 30px;
+    grid-template-rows: auto;
+    align-items: center;
+    gap: 10px;
+    padding: 8px;
+    border: 1px solid var(--dev-line-soft);
+    border-radius: 6px;
+    background: var(--dev-surface-soft);
+    transition: border-color .14s ease, background .14s ease;
+}
+
+.sfc-imgitem:hover {
+    border-color: var(--dev-line-strong);
+    background: var(--dev-surface-strong);
+}
+
+.sfc-imgitem-thumb {
+    width: 52px;
+    height: 36px;
+    object-fit: cover;
+    border-radius: 4px;
+    background: var(--dev-surface-strong);
+    display: block;
+}
+
+.sfc-imgitem-fallback {
+    width: 52px;
+    height: 36px;
+    border-radius: 4px;
+    background: var(--dev-surface-strong);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--dev-text-subtle);
+}
+
+.sfc-imgitem-fallback .material-icons {
+    font-size: 18px;
+}
+
+.sfc-imgitem-url {
+    font-size: 0.76rem;
+    color: var(--dev-text-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.sfc-imgitem-del {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    border-radius: 4px;
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--dev-text-subtle);
+    cursor: pointer;
+    padding: 0;
+    transition: background .12s ease, color .12s ease, border-color .12s ease;
+}
+
+.sfc-imgitem-del:hover {
+    background: rgba(239, 68, 68, 0.16);
+    border-color: rgba(239, 68, 68, 0.3);
+    color: #ef4444;
+}
+
+.sfc-imgitem-del .material-icons {
+    font-size: 16px;
+}
+
 .system-rv-footer {
     align-items: center;
 }
@@ -2258,7 +2461,7 @@ body {
     box-sizing: border-box;
     padding: 10px 12px;
     border: 1px solid var(--dev-line-soft);
-    border-radius: 6px;
+    border-radius: 6px; 
     background: var(--dev-surface-soft);
     color: var(--dev-text-strong);
     font-size: 0.86rem;
@@ -2337,6 +2540,18 @@ body {
     border-color: rgba(99, 140, 255, 0.5);
     background: rgba(99, 140, 255, 0.18);
     color: #bfd0ff;
+}
+
+.system-rv-btn-delete {
+    border-color: rgba(239, 68, 68, 0.34);
+    background: rgba(239, 68, 68, 0.1);
+    color: #f38d8d;
+}
+
+.system-rv-btn-delete:hover {
+    border-color: rgba(239, 68, 68, 0.5);
+    background: rgba(239, 68, 68, 0.17);
+    color: #ffaaaa;
 }
 
 /* ================================================================
