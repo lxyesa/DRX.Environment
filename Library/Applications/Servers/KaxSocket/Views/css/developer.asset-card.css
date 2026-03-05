@@ -1,0 +1,354 @@
+/* ================================================================
+   KaxHub — 资产卡片列表样式
+   包含：dev-asset-list、dev-asset-card、dev-asset-visual、
+         dev-asset-main、dev-asset-metrics、dev-asset-actions、
+         dev-review-list、dev-review-card
+   ================================================================ */
+
+/* ================================================================
+   Asset List (My Assets)
+   ================================================================ */
+.dev-asset-list {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.dev-asset-card {
+    display: grid;
+    grid-template-columns: 220px minmax(0, 1fr);
+    gap: 18px;
+    align-items: stretch;
+    padding: 16px;
+    /* 卡片样式约束：保持纯静态纯色，禁止渐变背景 */
+    background: var(--dev-card-bg);
+    border: 1px solid var(--dev-card-border);
+    border-radius: 6px;
+    transition: none;
+    position: relative;
+    overflow: hidden;
+}
+
+.dev-asset-visual {
+    position: relative;
+    border-radius: 6px;
+    overflow: hidden;
+    border: 1px solid var(--dev-line-soft);
+    background: var(--dev-surface-soft);
+    min-height: 140px;
+}
+
+.dev-asset-status-overlay {
+    position: absolute;
+    left: 8px;
+    top: 8px;
+    z-index: 2;
+}
+
+.dev-asset-thumb {
+    width: 100%;
+    height: 100%;
+    min-height: 140px;
+    border-radius: 0;
+    object-fit: cover;
+    background: var(--dev-surface-soft);
+}
+
+.dev-asset-visual::after {
+    content: '';
+    position: absolute;
+    inset: auto 0 0 0;
+    height: 58px;
+    background: rgba(8, 8, 11, 0.56);
+    pointer-events: none;
+}
+
+.dev-asset-visual-meta {
+    position: absolute;
+    left: 8px;
+    right: 8px;
+    bottom: 8px;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.dev-asset-visual-chip {
+    display: inline-flex;
+    align-items: center;
+    height: 20px;
+    padding: 0 7px;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    background: rgba(10, 10, 12, 0.45);
+    color: rgba(255, 255, 255, 0.8);
+    font-size: 0.68rem;
+    font-weight: 600;
+}
+
+.dev-asset-main {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.dev-asset-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 14px;
+}
+
+.dev-asset-title-wrap {
+    min-width: 0;
+}
+
+.dev-asset-name {
+    font-size: 1.02rem;
+    font-weight: 700;
+    color: var(--dev-text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-bottom: 4px;
+}
+
+.dev-asset-subline {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    color: var(--dev-text-muted);
+    font-size: 0.76rem;
+}
+
+.dev-asset-version {
+    padding: 2px 8px;
+    border-radius: 999px;
+    border: 1px solid var(--dev-line-soft);
+    background: var(--dev-surface-soft);
+    color: var(--dev-text-secondary);
+    font-size: 0.72rem;
+    font-weight: 600;
+}
+
+.dev-asset-dot {
+    color: var(--dev-text-subtle);
+}
+
+.dev-asset-category {
+    color: var(--dev-text-secondary);
+    font-weight: 500;
+}
+
+.dev-asset-desc {
+    font-size: 0.82rem;
+    line-height: 1.75;
+    color: var(--dev-text-secondary);
+    background: var(--dev-surface-soft);
+    border: 1px solid var(--dev-line-soft);
+    border-radius: 6px;
+    padding: 9px 11px;
+}
+
+.dev-asset-meta-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.dev-asset-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    height: 25px;
+    padding: 0 9px;
+    border-radius: 999px;
+    background: var(--dev-surface-soft);
+    border: 1px solid var(--dev-line-soft);
+    color: var(--dev-text-secondary);
+    font-size: 0.74rem;
+    font-weight: 500;
+}
+
+.dev-asset-chip .material-icons {
+    font-size: 14px;
+    opacity: 0.82;
+}
+
+.dev-asset-tag {
+    display: inline-flex;
+    align-items: center;
+    height: 24px;
+    padding: 0 8px;
+    border-radius: 999px;
+    border: 1px solid rgba(99, 140, 255, 0.28);
+    background: rgba(99, 140, 255, 0.11);
+    color: #9bb7ff;
+    font-size: 0.72rem;
+    font-weight: 600;
+}
+
+.dev-asset-metrics {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+}
+
+.dev-metric {
+    display: grid;
+    grid-template-columns: 14px 1fr;
+    grid-template-rows: auto auto;
+    column-gap: 6px;
+    row-gap: 1px;
+    align-items: center;
+    padding: 6px 8px;
+    border-radius: 6px;
+    background: var(--dev-surface-soft);
+    border: 1px solid var(--dev-line-soft);
+}
+
+.dev-metric .material-icons {
+    grid-row: 1 / 3;
+    font-size: 14px;
+    color: var(--dev-text-muted);
+}
+
+.dev-metric b {
+    font-size: 0.84rem;
+    font-weight: 700;
+    color: var(--dev-text-primary);
+    line-height: 1.25;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.dev-metric em {
+    font-style: normal;
+    font-size: 0.68rem;
+    color: var(--dev-text-muted);
+    line-height: 1.2;
+}
+
+.dev-asset-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    min-height: 32px;
+}
+
+.dev-asset-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 0.78rem;
+}
+
+.dev-asset-btn .material-icons {
+    font-size: 15px;
+}
+
+.dev-asset-waiting {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    color: var(--dev-text-muted);
+    font-size: 0.76rem;
+    border: 1px dashed var(--dev-line-soft);
+    border-radius: 999px;
+    padding: 6px 10px;
+}
+
+.dev-asset-waiting .material-icons {
+    font-size: 14px;
+}
+
+.dev-action-publish {
+    color: var(--dev-accent) !important;
+    border-color: rgba(99, 140, 255, 0.28) !important;
+    background: rgba(99, 140, 255, 0.08) !important;
+}
+
+.dev-action-publish:hover {
+    background: rgba(99, 140, 255, 0.16) !important;
+    border-color: rgba(99, 140, 255, 0.4) !important;
+}
+
+/* ================================================================
+   Review List
+   ================================================================ */
+.dev-review-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.dev-review-card {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 16px;
+    background: var(--dev-card-bg);
+    border: 1px solid var(--dev-card-border);
+    border-radius: var(--dev-radius);
+    cursor: pointer;
+    transition: background .16s ease, border-color .16s ease;
+}
+
+.dev-review-card:hover {
+    background: var(--dev-card-hover-bg);
+    border-color: var(--dev-card-hover-border);
+}
+
+.dev-review-thumb {
+    width: 100px;
+    height: 60px;
+    border-radius: 4px;
+    object-fit: cover;
+    background: var(--dev-surface-soft);
+    flex-shrink: 0;
+}
+
+.dev-review-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.dev-review-title {
+    font-size: 0.92rem;
+    font-weight: 600;
+    color: var(--dev-text-primary);
+    margin-bottom: 4px;
+}
+
+.dev-review-meta {
+    display: flex;
+    gap: 12px;
+    color: var(--dev-text-muted);
+    font-size: 0.76rem;
+    flex-wrap: wrap;
+}
+
+.dev-review-meta > span {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+}
+
+/* Reject reason inline */
+.dev-reject-reason {
+    margin-top: 6px;
+    padding: 8px 12px;
+    background: rgba(239, 68, 68, 0.08);
+    border: 1px solid rgba(239, 68, 68, 0.15);
+    border-radius: 6px;
+    color: rgba(239, 68, 68, 0.9);
+    font-size: 0.82rem;
+}

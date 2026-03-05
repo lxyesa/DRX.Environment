@@ -11,7 +11,13 @@
     <script src="/js/global.js"></script>
     <script src="/js/topbar.js" defer></script>
     <script src="/components/inputbox.js?v=3" defer></script>
-    <link href="/css/developer.css" rel="stylesheet">
+    <link href="/css/developer.base.css" rel="stylesheet">
+    <link href="/css/developer.asset-card.css" rel="stylesheet">
+    <link href="/css/developer.form.css" rel="stylesheet">
+    <link href="/css/developer.modal.css" rel="stylesheet">
+    <link href="/css/developer.review-modal.css" rel="stylesheet">
+    <link href="/css/developer.system.css" rel="stylesheet">
+    <link href="/css/developer.responsive.css" rel="stylesheet">
 </head>
 
 <body class="has-global-topbar">
@@ -410,7 +416,9 @@
     </div>
 
     <!-- System 资产详情弹窗 -->
-    <div class="dev-modal-overlay" id="systemAssetModal" style="display:none;">
+    <div class="dev-modal-overlay" id="systemAssetModal" style="display:none;"
+         role="dialog" aria-modal="true"
+         aria-labelledby="systemAssetModalTitle" aria-describedby="systemAssetModalDesc">
         <div class="dev-modal rv-modal system-rv-modal">
             <div class="rv-header">
                 <div class="rv-header-left">
@@ -435,34 +443,35 @@
                 </aside>
 
                 <div class="rv-content system-rv-content">
-                    <div class="rv-panels system-rv-panels">
-                        <section class="system-rv-block">
-                            <h3>资源描述</h3>
-                            <div id="systemAssetModalDesc" class="system-rv-desc"></div>
-                        </section>
-
-                        <section class="system-rv-block">
-                            <h3>字段编辑（禁止修改 DeveloperId / AssetId）</h3>
-                            <p class="system-field-editor-hint">字段将以卡片形式展示，可直接编辑并单独保存。</p>
+                    <div class="rv-tabs" id="systemModalTabs">
+                        <button class="rv-tab active" data-panel="overview">概要</button>
+                        <button class="rv-tab" data-panel="fields">字段编辑</button>
+                    </div>
+                    <div class="rv-panels system-rv-panels" id="systemModalPanels">
+                        <div class="rv-panel active" data-panel="overview">
+                            <div class="rv-overview-desc" id="systemAssetModalDesc"></div>
+                        </div>
+                        <div class="rv-panel" data-panel="fields">
+                            <p class="system-field-editor-hint">字段将以卡片形式展示，可直接编辑并单独保存。禁止修改 DeveloperId / AssetId。</p>
                             <div id="systemFieldCards" class="system-field-cards" aria-live="polite"></div>
-                        </section>
+                        </div>
                     </div>
                 </div>
             </div>
 
             <div class="rv-footer system-rv-footer">
-                <input id="systemActionReason" class="system-rv-reason" type="text" placeholder="动作原因（除审核通过外必填）">
+                <input-box id="systemActionReason" placeholder="动作原因（除审核通过外必填）" size="small"></input-box>
                 <div class="rv-footer-actions system-rv-actions">
-                    <button class="btn small system-rv-btn system-rv-btn-return" id="systemReturnBtn" type="button">
+                    <button class="btn ghost small" id="systemReturnBtn" type="button">
                         <span class="material-icons">undo</span>退回
                     </button>
-                    <button class="btn small system-rv-btn system-rv-btn-offshelf" id="systemOffShelfBtn" type="button">
+                    <button class="btn danger small" id="systemOffShelfBtn" type="button">
                         <span class="material-icons">visibility_off</span>下架
                     </button>
-                    <button class="btn small system-rv-btn system-rv-btn-force" id="systemForceReviewBtn" type="button">
+                    <button class="btn small" id="systemForceReviewBtn" type="button">
                         <span class="material-icons">refresh</span>强制重审
                     </button>
-                    <button class="btn small system-rv-btn system-rv-btn-delete" id="systemHardDeleteBtn" type="button">
+                    <button class="btn danger small" id="systemHardDeleteBtn" type="button">
                         <span class="material-icons">delete_forever</span>彻底删除
                     </button>
                 </div>
@@ -470,7 +479,11 @@
         </div>
     </div>
 
-    <script src="/js/developer.js"></script>
+    <script src="/js/developer.utils.js" defer></script>
+    <script src="/js/developer.renderer.js" defer></script>
+    <script src="/js/developer.api.js" defer></script>
+    <script src="/js/developer.actions.js" defer></script>
+    <script src="/js/developer.js" defer></script>
     <script src="/components/collapsible-section.js"></script>
 </body>
 
