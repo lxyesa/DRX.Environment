@@ -34,6 +34,10 @@ public partial class KaxHttp
         _ => "未知"
     };
 
+    /// <summary>用于前端“提交日期”展示：始终优先首次提交时间</summary>
+    private static long DisplaySubmittedAt(Model.AssetModel asset)
+        => asset.FirstSubmittedAt > 0 ? asset.FirstSubmittedAt : asset.LastSubmittedAt;
+
     #region 开发者中心 — 用户端
 
     /// <summary>
@@ -77,7 +81,7 @@ public partial class KaxHttp
                         status = (int)a.Status,
                         statusText = AssetStatusText(a.Status),
                         rejectReason = a.RejectReason ?? string.Empty,
-                        lastSubmittedAt = a.LastSubmittedAt,
+                        lastSubmittedAt = DisplaySubmittedAt(a),
                         coverImage = a.CoverImage,
                         iconImage = a.IconImage,
                         price = p?.Price ?? 0,
@@ -131,7 +135,8 @@ public partial class KaxHttp
                 AuthorId = user.Id,
                 Description = description,
                 Status = AssetStatus.PendingReview,
-                LastSubmittedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds()
+                LastSubmittedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
+                FirstSubmittedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds()
             };
 
             // 可选字段
@@ -145,16 +150,13 @@ public partial class KaxHttp
                 asset.IconImage = body["iconImage"]?.ToString() ?? string.Empty;
             if (body["screenshots"] != null)
                 asset.Screenshots = body["screenshots"]?.ToString() ?? string.Empty;
-            if (body["badges"] != null)
-                asset.Badges = body["badges"]?.ToString() ?? string.Empty;
-            if (body["features"] != null)
-                asset.Features = body["features"]?.ToString() ?? string.Empty;
 
             KaxGlobal.AssetDataBase.Insert(asset);
 
             // 创建后再写入子表，确保价格/规格子表 ParentId 使用真实资产 ID
             ApplyPriceInfoToAsset(asset, body);
             ApplySpecsInfoToAsset(asset, body);
+            ApplyLanguageSupportsToAsset(asset, body);
             await KaxGlobal.AssetDataBase.UpdateAsync(asset);
 
             Logger.Info($"开发者 {userName} (id={user.Id}) 创建了资源: {name} (v{version})，状态：审核中");
@@ -226,13 +228,10 @@ public partial class KaxHttp
                 asset.IconImage = body["iconImage"]?.ToString() ?? string.Empty;
             if (body["screenshots"] != null)
                 asset.Screenshots = body["screenshots"]?.ToString() ?? string.Empty;
-            if (body["badges"] != null)
-                asset.Badges = body["badges"]?.ToString() ?? string.Empty;
-            if (body["features"] != null)
-                asset.Features = body["features"]?.ToString() ?? string.Empty;
 
             ApplyPriceInfoToAsset(asset, body);
             ApplySpecsInfoToAsset(asset, body);
+            ApplyLanguageSupportsToAsset(asset, body);
 
             await KaxGlobal.AssetDataBase.UpdateAsync(asset);
 
@@ -278,6 +277,11 @@ public partial class KaxHttp
                 durationDays = p.DurationDays,
                 stock        = p.Stock
             }).ToList();
+            var languageSupports = GetLanguageSupports(asset).Select(x => new
+            {
+                name = x.Name,
+                isSupported = x.IsSupported
+            }).ToList();
             var screenshotList = (asset.Screenshots ?? string.Empty).Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
             var tagList = (asset.Tags ?? string.Empty).Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
@@ -296,13 +300,13 @@ public partial class KaxHttp
                     status = (int)asset.Status,
                     statusText = AssetStatusText(asset.Status),
                     rejectReason = asset.RejectReason ?? string.Empty,
-                    lastSubmittedAt = asset.LastSubmittedAt,
+                    lastSubmittedAt = DisplaySubmittedAt(asset),
                     coverImage = asset.CoverImage,
                     iconImage = asset.IconImage,
                     screenshots = screenshotList,
                     tags = tagList,
-                    badges = asset.Badges ?? string.Empty,
-                    features = asset.Features ?? string.Empty,
+                    languageSupportsJson = asset.LanguageSupportsJson,
+                    languageSupports = languageSupports,
                     prices = pricesList,
                     specs = new
                     {
@@ -353,16 +357,19 @@ public partial class KaxHttp
             if (asset.AuthorId != user.Id)
                 return new JsonResult(new { message = "无权操作此资源" }, 403);
 
-            // 检查当前状态，仅允许被拒绝或待发布的资产重新提交
+            // 检查当前状态：
+            // - PendingReview：已在审核中，不可重复提交
+            // - Active：允许开发者发起重审（将自动下架并进入审核中）
+            // - Rejected / ApprovedPendingPublish / OffShelf：允许提交
             if (asset.Status == AssetStatus.PendingReview)
                 return new JsonResult(new { message = "资源已在审核中" }, 400);
-            if (asset.Status == AssetStatus.Active)
-                return new JsonResult(new { message = "资源已上线，无需提交审核" }, 400);
+
+            var wasActive = asset.Status == AssetStatus.Active;
 
             // 检查4小时冷却时间
             var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
             var elapsed = now - asset.LastSubmittedAt;
-            if (elapsed < REVIEW_COOLDOWN_SECONDS)
+            if (!wasActive && elapsed < REVIEW_COOLDOWN_SECONDS)
             {
                 var remaining = REVIEW_COOLDOWN_SECONDS - elapsed;
                 var hours = remaining / 3600;
@@ -402,21 +409,31 @@ public partial class KaxHttp
             if (body["coverImage"] != null) asset.CoverImage = body["coverImage"]?.ToString() ?? string.Empty;
             if (body["iconImage"] != null) asset.IconImage = body["iconImage"]?.ToString() ?? string.Empty;
             if (body["screenshots"] != null) asset.Screenshots = body["screenshots"]?.ToString() ?? string.Empty;
-            if (body["badges"] != null) asset.Badges = body["badges"]?.ToString() ?? string.Empty;
-            if (body["features"] != null) asset.Features = body["features"]?.ToString() ?? string.Empty;
 
             ApplyPriceInfoToAsset(asset, body);
             ApplySpecsInfoToAsset(asset, body);
+            ApplyLanguageSupportsToAsset(asset, body);
 
             asset.Status = AssetStatus.PendingReview;
             asset.LastSubmittedAt = now;
+            if (asset.FirstSubmittedAt <= 0)
+                asset.FirstSubmittedAt = now;
             asset.RejectReason = string.Empty;
             var specs = EnsureSpecs(asset);
             specs.LastUpdatedAt = now;
             await KaxGlobal.AssetDataBase.UpdateAsync(asset);
 
-            Logger.Info($"开发者 {userName} 提交资源 {asset.Name} (id={id}) 进入审核");
-            return new JsonResult(new { code = 0, message = "已提交审核" }, 200);
+            Logger.Info($"开发者 {userName} 提交资源 {asset.Name} (id={id}) 进入审核" + (wasActive ? "（由已上线状态发起，已自动下架）" : string.Empty));
+            return new JsonResult(new
+            {
+                code = 0,
+                message = wasActive ? "资源已下架并提交重审" : "已提交审核",
+                data = new
+                {
+                    wasActive,
+                    currentStatus = (int)AssetStatus.PendingReview
+                }
+            }, 200);
         }
         catch (Exception ex)
         {
@@ -516,7 +533,7 @@ public partial class KaxHttp
                         description = a.Description,
                         category = a.Category,
                         status = (int)a.Status,
-                        lastSubmittedAt = a.LastSubmittedAt,
+                        lastSubmittedAt = DisplaySubmittedAt(a),
                         coverImage = a.CoverImage,
                         iconImage = a.IconImage,
                         downloads = s?.Downloads ?? 0,
@@ -590,13 +607,11 @@ public partial class KaxHttp
                     category = asset.Category,
                     status = (int)asset.Status,
                     rejectReason = asset.RejectReason ?? string.Empty,
-                    lastSubmittedAt = asset.LastSubmittedAt,
+                    lastSubmittedAt = DisplaySubmittedAt(asset),
                     coverImage = asset.CoverImage,
                     iconImage = asset.IconImage,
                     screenshots = screenshotList,
                     tags = tagList,
-                    badges = asset.Badges ?? string.Empty,
-                    features = asset.Features ?? string.Empty,
                     prices = pricesList,
                     specs = new
                     {

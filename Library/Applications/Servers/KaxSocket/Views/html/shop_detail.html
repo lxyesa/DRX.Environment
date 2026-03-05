@@ -105,11 +105,10 @@
                     <div class="overview-section">
                         <h2 class="section-heading">关于此产品</h2>
                         <p class="overview-description" id="productDescription">加载中…</p>
-                    </div>
-
-                    <!-- 亮点特性（由 JS 动态渲染，支持 System 用户编辑） -->
-                    <div class="features-grid" id="featuresGrid">
-                        <!-- 由 shop_detail.js 动态生成 -->
+                        <div class="overview-tags-group" id="overviewTagsGroup" hidden>
+                            <h3 class="section-heading overview-tags-title">标签</h3>
+                            <div class="overview-tags-list" id="overviewTagsList"></div>
+                        </div>
                     </div>
                 </div>
 
@@ -223,10 +222,15 @@
                             </button>
                         </div>
                     </div>
+                </div>
 
-                    <!-- 快速信息徽章（由 JS 动态渲染，支持 System 用户编辑） -->
-                    <div class="panel-quick-info" id="panelBadges">
-                        <!-- 由 shop_detail.js 动态生成 -->
+                <!-- 语言支持表（独立卡片） -->
+                <div class="language-support-card" id="languageSupportCard" hidden>
+                    <div class="language-support-section">
+                        <div class="plans-label">语言支持</div>
+                        <div class="language-support-list" id="languageSupportGrid">
+                            <!-- 动态生成 -->
+                        </div>
                     </div>
                 </div>
             </aside>
@@ -315,25 +319,6 @@
             <div class="edit-popup-footer">
                 <button class="edit-popup-confirm" id="editPopupConfirm">确认</button>
                 <button class="edit-popup-cancel" id="editPopupCancel">取消</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- 列表编辑弹窗（徽章/特性编辑器） -->
-    <div class="edit-overlay" id="listEditOverlay" style="display:none;">
-        <div class="edit-popup edit-popup-wide" id="listEditPopup">
-            <div class="edit-popup-header">
-                <span class="edit-popup-title" id="listEditTitle">编辑列表</span>
-                <button class="edit-popup-close" id="listEditClose"><span class="material-icons">close</span></button>
-            </div>
-            <div class="edit-popup-body" id="listEditBody">
-                <!-- 动态内容 -->
-            </div>
-            <div class="edit-popup-footer">
-                <button class="edit-popup-add" id="listEditAdd"><span class="material-icons">add</span> 新增条目</button>
-                <div style="flex:1;"></div>
-                <button class="edit-popup-confirm" id="listEditConfirm">确认</button>
-                <button class="edit-popup-cancel" id="listEditCancel">取消</button>
             </div>
         </div>
     </div>

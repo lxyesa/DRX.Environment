@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Threading.Tasks;
 using Drx.Sdk.Network.Http;
@@ -31,6 +32,136 @@ public partial class KaxHttp
         if (asset.Specs == null)
             asset.Specs = new AssetSpecs { ParentId = asset.Id };
         return asset.Specs;
+    }
+
+    /// <summary>
+    /// 解析资产语言支持配置（languageSupports 或 languageSupportsJson）并写入模型。
+    /// </summary>
+    private static void ApplyLanguageSupportsToAsset(Model.AssetModel asset, JsonNode body)
+    {
+        if (body == null) return;
+
+        List<AssetLanguageSupport> parsed = new();
+
+        static string ReadName(JsonObject obj)
+        {
+            var name = obj["name"]?.ToString()
+                ?? obj["Name"]?.ToString()
+                ?? string.Empty;
+            return name.Trim();
+        }
+
+        static bool ReadSupported(JsonObject obj)
+        {
+            var rawSupported = obj["isSupported"]?.ToString() ?? obj["IsSupported"]?.ToString();
+            if (bool.TryParse(rawSupported, out var b)) return b;
+            if (int.TryParse(rawSupported, out var n)) return n != 0;
+            return false;
+        }
+
+        static List<AssetLanguageSupport> NormalizeList(IEnumerable<AssetLanguageSupport> source)
+        {
+            return source
+                .Where(x => !string.IsNullOrWhiteSpace(x?.Name))
+                .Select(x => new AssetLanguageSupport
+                {
+                    Name = x.Name.Trim(),
+                    IsSupported = x.IsSupported
+                })
+                .ToList();
+        }
+
+        if (body["languageSupports"] is JsonArray arr)
+        {
+            foreach (var item in arr)
+            {
+                if (item is not JsonObject obj) continue;
+                var name = ReadName(obj);
+                if (string.IsNullOrWhiteSpace(name)) continue;
+
+                var isSupported = ReadSupported(obj);
+
+                parsed.Add(new AssetLanguageSupport { Name = name, IsSupported = isSupported });
+            }
+        }
+        else if (body["languageSupportsJson"] != null)
+        {
+            try
+            {
+                var node = body["languageSupportsJson"];
+                if (node is JsonArray jsonArr)
+                {
+                    foreach (var item in jsonArr)
+                    {
+                        if (item is not JsonObject obj) continue;
+                        var name = ReadName(obj);
+                        if (string.IsNullOrWhiteSpace(name)) continue;
+                        parsed.Add(new AssetLanguageSupport
+                        {
+                            Name = name,
+                            IsSupported = ReadSupported(obj)
+                        });
+                    }
+                }
+                else
+                {
+                    var raw = node?.ToString() ?? string.Empty;
+                    if (!string.IsNullOrWhiteSpace(raw))
+                    {
+                        // 兼容 value 被作为字符串包裹的情况："[{\"name\":...}]"
+                        if (raw.Length >= 2 && raw[0] == '"' && raw[^1] == '"')
+                        {
+                            try
+                            {
+                                raw = JsonSerializer.Deserialize<string>(raw) ?? string.Empty;
+                            }
+                            catch { }
+                        }
+
+                        var list = JsonSerializer.Deserialize<List<AssetLanguageSupport>>(raw) ?? new List<AssetLanguageSupport>();
+                        parsed = NormalizeList(list);
+                    }
+                }
+            }
+            catch
+            {
+                parsed = new List<AssetLanguageSupport>();
+            }
+        }
+        else
+        {
+            return;
+        }
+
+        asset.LanguageSupportsJson = parsed.Count > 0
+            ? JsonSerializer.Serialize(parsed)
+            : string.Empty;
+    }
+
+    /// <summary>
+    /// 从资产中读取语言支持表。
+    /// </summary>
+    private static List<AssetLanguageSupport> GetLanguageSupports(Model.AssetModel asset)
+    {
+        if (asset == null || string.IsNullOrWhiteSpace(asset.LanguageSupportsJson))
+            return new List<AssetLanguageSupport>();
+
+        try
+        {
+            var list = JsonSerializer.Deserialize<List<AssetLanguageSupport>>(asset.LanguageSupportsJson) ?? new List<AssetLanguageSupport>();
+            return list
+                .Where(x => !string.IsNullOrWhiteSpace(x?.Name))
+                .Select(x => new AssetLanguageSupport
+                {
+                    Name = x.Name.Trim(),
+                    IsSupported = x.IsSupported
+                })
+                .ToList();
+        }
+        catch
+        {
+            return new List<AssetLanguageSupport>();
+        }
     }
 
     /// <summary>
@@ -348,6 +479,7 @@ public partial class KaxHttp
             // 创建后再写入子表，确保 ParentId 使用真实资产 ID
             ApplyPriceInfoToAsset(asset, body);
             ApplySpecsInfoToAsset(asset, body);
+            ApplyLanguageSupportsToAsset(asset, body);
             await KaxGlobal.AssetDataBase.UpdateAsync(asset);
 
             Logger.Info($"用户 {operatorName} 创建了资源: {name} (v{version})");
@@ -445,24 +577,6 @@ public partial class KaxHttp
                 asset.Screenshots = screenshots;
             }
 
-            // 可选更新：徽章列表（JSON 字符串）
-            if (body["badges"] != null)
-            {
-                var badges = body["badges"]?.ToString() ?? string.Empty;
-                if (badges.Length > 2000)
-                    return new JsonResult(new { message = "徽章数据过长（最多2000字符）" }, 400);
-                asset.Badges = badges;
-            }
-
-            // 可选更新：特性列表（JSON 字符串）
-            if (body["features"] != null)
-            {
-                var features = body["features"]?.ToString() ?? string.Empty;
-                if (features.Length > 2000)
-                    return new JsonResult(new { message = "特性数据过长（最多2000字符）" }, 400);
-                asset.Features = features;
-            }
-
             // 应用价格信息（支持向后兼容的参数）
             ApplyPriceInfoToAsset(asset, body);
 
@@ -474,6 +588,9 @@ public partial class KaxHttp
 
             // 应用规格信息
             ApplySpecsInfoToAsset(asset, body);
+
+            // 应用语言支持配置
+            ApplyLanguageSupportsToAsset(asset, body);
 
             await KaxGlobal.AssetDataBase.UpdateAsync(asset);
 
@@ -554,23 +671,30 @@ public partial class KaxHttp
                 asset.Screenshots = value;
                 return true;
 
-            case "badges":
-                if (value.Length > 2000)
+            case "languagesupportsjson":
                 {
-                    error = "徽章数据过长（最多2000字符）";
-                    return false;
+                    var patchBody = new JsonObject
+                    {
+                        ["languageSupportsJson"] = valueNode?.DeepClone() ?? JsonValue.Create(value)
+                    };
+                    ApplyLanguageSupportsToAsset(asset, patchBody);
+                    return true;
                 }
-                asset.Badges = value;
-                return true;
 
-            case "features":
-                if (value.Length > 2000)
+            case "languagesupports":
                 {
-                    error = "特性数据过长（最多2000字符）";
-                    return false;
+                    if (valueNode is not JsonArray arr)
+                    {
+                        error = "languageSupports 字段必须是数组";
+                        return false;
+                    }
+                    var patchBody = new JsonObject
+                    {
+                        ["languageSupports"] = arr.DeepClone()
+                    };
+                    ApplyLanguageSupportsToAsset(asset, patchBody);
+                    return true;
                 }
-                asset.Features = value;
-                return true;
 
             case "filesize":
             case "rating":
@@ -987,8 +1111,8 @@ public partial class KaxHttp
                     description = asset.Description,
                     category = asset.Category,
                     tags = asset.Tags,
-                    badges = asset.Badges,
-                    features = asset.Features,
+                    languageSupportsJson = asset.LanguageSupportsJson,
+                    languageSupports = GetLanguageSupports(asset),
                     coverImage = asset.CoverImage,
                     iconImage = asset.IconImage,
                     screenshots = asset.Screenshots,
@@ -1141,11 +1265,11 @@ public partial class KaxHttp
             "description"   => asset.Description ?? string.Empty,
             "category"      => asset.Category ?? string.Empty,
             "tags"          => asset.Tags ?? string.Empty,
-            "badges"        => asset.Badges ?? string.Empty,
-            "features"      => asset.Features ?? string.Empty,
             "coverimage"    => asset.CoverImage ?? string.Empty,
             "iconimage"     => asset.IconImage ?? string.Empty,
             "screenshots"   => asset.Screenshots ?? string.Empty,
+            "languagesupportsjson" => asset.LanguageSupportsJson ?? string.Empty,
+            "languagesupports" => asset.LanguageSupportsJson ?? string.Empty,
             "status"        => ((int)asset.Status).ToString(),
             "rejectreason"  => asset.RejectReason ?? string.Empty,
             "filesize"      => asset.Specs?.FileSize.ToString() ?? "0",

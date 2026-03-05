@@ -5,9 +5,11 @@
     template.innerHTML = `
     <style>
       :host{display:block;} 
-      .field{ border-radius:4px; border:1px solid rgba(255,255,255,0.06); padding:10px 12px; background: rgba(255,255,255,0.01); box-sizing:border-box; }
+    .field{ border-radius:4px; border:1px solid rgba(255,255,255,0.06); padding:10px 12px; background: rgba(255,255,255,0.01); box-sizing:border-box; min-height: var(--field-min-height, auto); }
       .label{ display:block; font-size:0.82rem; color:rgba(255,255,255,0.72); margin-bottom:6px; }
       .label-divider{ height:1px; background:rgba(255,255,255,0.03); margin:6px 0 8px; border-radius:1px; }
+    :host(:not([label])) .label,
+    :host(:not([label])) .label-divider{ display:none; }
       .input-row{ display:flex; align-items:center; gap:8px; }
       input, textarea{ flex:1; min-width:0; border:none; background:transparent; color:var(--muted-strong, rgba(255,255,255,0.92)); font-size:0.95rem; padding:6px 0; outline:none; font-family:inherit; }
       input:disabled, textarea:disabled{ opacity:0.6; }
@@ -44,6 +46,13 @@
       :host([size="headerless"]) .label-divider{ display:none; }
       :host([size="headerless"]) .field{ padding:6px 10px; }
 
+      /* size 档位：small-headerless — small模式的无header */
+      :host([size="small-headerless"]) .label,
+      :host([size="small-headerless"]) .label-divider{ display:none; }
+      :host([size="small-headerless"]) .field{ padding:6px 8px; }
+      :host([size="small-headerless"]) input,
+      :host([size="small-headerless"]) textarea{ font-size:0.85rem; padding:4px 0; }
+
       /* 图标：默认隐藏，有 icon 属性时显示 */
             .field-icon{
                 display:none;
@@ -68,7 +77,8 @@
             }
       :host([icon]) .field-icon{ display:flex; }
       :host([size="large"]) .field-icon{ font-size:22px; }
-      :host([size="small"]) .field-icon{ font-size:15px; margin-right:6px; }
+      :host([size="small"]) .field-icon,
+      :host([size="small-headerless"]) .field-icon{ font-size:15px; margin-right:6px; }
 
       /* 操作按钮槽位：默认隐藏，show-action 时显示 */
       .action-slot{ flex-shrink:0; display:none; }

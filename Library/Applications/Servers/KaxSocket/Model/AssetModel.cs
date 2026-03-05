@@ -78,18 +78,6 @@ public class AssetModel : IDataBase
     /// <summary>标签列表（逗号分隔，如 "高性能,安全,稳定"）</summary>
     public string Tags { get; set; } = string.Empty;
 
-    /// <summary>
-    /// 购买面板徽章列表（JSON 数组格式，如 [{"icon":"verified_user","text":"安全认证资源"},...]）
-    /// 为空时前端使用默认硬编码值，保持向后兼容
-    /// </summary>
-    public string Badges { get; set; } = string.Empty;
-
-    /// <summary>
-    /// 概述 Tab 亮点特性列表（JSON 数组格式，如 [{"icon":"bolt","title":"高性能","desc":"优化的运行效率..."},...]）
-    /// 为空时前端使用默认硬编码值，保持向后兼容
-    /// </summary>
-    public string Features { get; set; } = string.Empty;
-
     #endregion
 
     #region 媒体资源
@@ -119,6 +107,21 @@ public class AssetModel : IDataBase
 
     #endregion
 
+    #region 语言支持
+
+    /// <summary>
+    /// 语言支持表（JSON 字符串）
+    /// 
+    /// 结构示例：
+    /// [
+    ///   { "name": "中文", "isSupported": true },
+    ///   { "name": "English", "isSupported": false }
+    /// ]
+    /// </summary>
+    public string LanguageSupportsJson { get; set; } = string.Empty;
+
+    #endregion
+
     #region 软删除
 
     /// <summary>是否已删除</summary>
@@ -136,6 +139,9 @@ public class AssetModel : IDataBase
 
     /// <summary>最后一次提交审核时间戳（Unix 秒），用于4小时冷却检测</summary>
     public long LastSubmittedAt { get; set; }
+
+    /// <summary>首次提交审核时间戳（Unix 秒），用于前端展示“提交日期”</summary>
+    public long FirstSubmittedAt { get; set; }
 
     /// <summary>审核拒绝原因（仅在 Status == Rejected 时有值）</summary>
     public string RejectReason { get; set; } = string.Empty;
@@ -263,6 +269,18 @@ public class AssetModel : IDataBase
         #endregion
 
         public string TableName => nameof(AssetSpecs);
+    }
+
+    /// <summary>
+    /// 语言支持条目（用于前后端 JSON 传输）
+    /// </summary>
+    public class AssetLanguageSupport
+    {
+        /// <summary>语言显示名（例如：中文、English、日本語）</summary>
+        public string Name { get; set; } = string.Empty;
+
+        /// <summary>是否支持该语言</summary>
+        public bool IsSupported { get; set; }
     }
 
     #endregion

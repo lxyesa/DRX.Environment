@@ -10,7 +10,7 @@
          *
          *  ViewModel 字段（ShopAssetCardVM）：
          *    assetId, displayName, category, coverImage, priceYuan,
-         *    authorName, purchaseCount, favoriteCount, description, lastUpdatedAt
+         *    authorName, purchaseCount, favoriteCount, description, lastUpdatedAt, tags
          * ================================================================ */
         const ShopApp = (() => {
             const ITEMS_PER_PAGE = 12;
@@ -195,6 +195,8 @@
              */
             function mapListItem(a) {
                 const normalizedDescription = String(a.description ?? '').replace(/\s+/g, ' ').trim();
+                const rawTags = String(a.tags ?? '');
+                const parsedTags = rawTags ? rawTags.split(/[,;，；]/).map(t => t.trim()).filter(Boolean) : [];
                 return {
                     assetId: Number(a.id),
                     displayName: a.name || '',
@@ -206,7 +208,8 @@
                     purchaseCount: a.purchaseCount || 0,
                     favoriteCount: a.favoriteCount || 0,
                     description: normalizedDescription,
-                    lastUpdatedAt: a.lastUpdatedAt || 0
+                    lastUpdatedAt: a.lastUpdatedAt || 0,
+                    tags: parsedTags
                 };
             }
             // #endregion
@@ -464,6 +467,18 @@
                     ? `<span class="pc-tag">${escapeHtml(vm.category)}</span>`
                     : '';
 
+                const MAX_VISIBLE_TAGS = 6;
+                let cardTagBadgesHtml = '';
+                if (vm.tags && vm.tags.length > 0) {
+                    const visible = vm.tags.slice(0, MAX_VISIBLE_TAGS);
+                    const extra = vm.tags.length - MAX_VISIBLE_TAGS;
+                    const badgesHtml = visible.map(t => `<span class="pc-tag-badge">${escapeHtml(t)}</span>`).join('');
+                    const moreHtml = extra > 0
+                        ? `<span class="pc-tag-more" onclick="event.stopPropagation();ShopApp.expandTags(this, ${vm.assetId})">更多${extra}个</span>`
+                        : '';
+                    cardTagBadgesHtml = `<div class="pc-card-tag-row"><div class="pc-tag-badges" data-collapsed="true" data-all='${escapeHtml(JSON.stringify(vm.tags))}'>${badgesHtml}${moreHtml}</div></div>`;
+                }
+
                 return `
                 <div class="product-card" role="button" tabindex="0" onclick="ShopApp.viewDetail(${vm.assetId})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();ShopApp.viewDetail(${vm.assetId});}">
                     ${cardAmbientHtml}
@@ -485,6 +500,7 @@
                     </div>
                     ${tagHtml ? `<div class="pc-tags">${tagHtml}</div>` : ''}
                     <div class="pc-desc">${descText}</div>
+                    ${cardTagBadgesHtml}
                     <div class="pc-cover-wrap">${coverHtml}</div>
                 </div>`;
             }
@@ -706,8 +722,19 @@
             }
             // #endregion
 
+            /** 展开卡片上被折叠的标签 */
+            function expandTags(moreEl, assetId) {
+                const container = moreEl.parentElement;
+                if (!container) return;
+                const vm = state.products.find(p => p.assetId === assetId);
+                if (!vm || !vm.tags) return;
+                container.innerHTML = vm.tags.map(t => `<span class="pc-tag-badge">${escapeHtml(t)}</span>`).join('');
+                container.dataset.collapsed = 'false';
+                container.classList.add('pc-tag-badges-expanded');
+            }
+
             // 暴露给 HTML onclick 使用的公共接口
-            return { init, goToPage, toggleCart, toggleFavorite, viewDetail, goToCart, toggleExpand, retryLoad };
+            return { init, goToPage, toggleCart, toggleFavorite, viewDetail, goToCart, toggleExpand, retryLoad, expandTags };
         })();
 
         // 页面加载时启动应用

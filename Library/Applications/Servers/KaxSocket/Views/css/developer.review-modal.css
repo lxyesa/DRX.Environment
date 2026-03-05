@@ -188,7 +188,6 @@
     display: flex;
     flex-direction: column;
     min-width: 0;
-    overflow: hidden;
 }
 
 .rv-tabs {
@@ -197,7 +196,6 @@
     border-bottom: 1px solid var(--dev-line-soft);
     padding: 0 18px;
     flex-shrink: 0;
-    overflow-x: auto;
 }
 
 .rv-tab {
@@ -226,7 +224,6 @@
 
 .rv-panels {
     flex: 1;
-    overflow-y: auto;
     padding: 18px;
 }
 

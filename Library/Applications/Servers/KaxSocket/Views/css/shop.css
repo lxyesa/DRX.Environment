@@ -429,6 +429,64 @@ body {
     letter-spacing: 0.01em;
 }
 
+/* ── 卡片标签徽章行 ── */
+.pc-card-tag-row {
+    padding: 0 var(--shop-card-pad) 12px;
+}
+
+.pc-tag-badges {
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 4px;
+    margin-top: 0;
+    overflow: hidden;
+    max-height: 22px;
+}
+
+.pc-tag-badges.pc-tag-badges-expanded {
+    flex-wrap: wrap;
+    max-height: none;
+    overflow: visible;
+}
+
+.pc-tag-badge {
+    display: inline-flex;
+    align-items: center;
+    height: 18px;
+    padding: 0 7px;
+    border-radius: 999px;
+    background: rgba(99, 140, 255, 0.12);
+    color: rgba(99, 140, 255, 0.88);
+    font-size: 0.65rem;
+    font-weight: 600;
+    white-space: nowrap;
+    flex-shrink: 0;
+    line-height: 1;
+}
+
+.pc-tag-more {
+    display: inline-flex;
+    align-items: center;
+    height: 18px;
+    padding: 0 7px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--shop-text-muted);
+    font-size: 0.65rem;
+    font-weight: 500;
+    white-space: nowrap;
+    flex-shrink: 0;
+    cursor: pointer;
+    transition: background 0.14s ease, color 0.14s ease;
+    line-height: 1;
+}
+
+.pc-tag-more:hover {
+    background: rgba(99, 140, 255, 0.15);
+    color: rgba(99, 140, 255, 0.9);
+}
+
 .pc-header-actions {
     display: flex;
     align-items: center;
@@ -913,6 +971,10 @@ body {
 
     .pc-tags {
         padding: 0 var(--shop-card-pad-mobile) 8px;
+    }
+
+    .pc-card-tag-row {
+        padding: 0 var(--shop-card-pad-mobile) 10px;
     }
 
     .pc-tag {

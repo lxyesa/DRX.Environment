@@ -78,20 +78,103 @@
    System Asset Detail Modal
    ================================================================ */
 .system-rv-modal {
-    max-width: 980px !important;
+    width: min(1120px, 96vw) !important;
+    max-width: 1120px !important;
+    max-height: 90vh !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    background:
+        radial-gradient(circle at 0% 0%, rgba(99, 140, 255, 0.09), transparent 34%),
+        radial-gradient(circle at 100% 100%, rgba(76, 108, 255, 0.07), transparent 40%),
+        rgba(14, 14, 16, 0.97) !important;
+    box-shadow:
+        0 26px 70px rgba(0, 0, 0, 0.58),
+        inset 0 1px 0 rgba(255, 255, 255, 0.04) !important;
+}
+
+.system-rv-modal .rv-header {
+    background: rgba(255, 255, 255, 0.012);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    padding: 20px 24px 16px;
+}
+
+.system-rv-modal .rv-header-sub {
+    letter-spacing: 0.03em;
+}
+
+.system-rv-modal #systemAssetModalThumb {
+    position: relative;
+    isolation: isolate;
+    background: rgba(255, 255, 255, 0.03);
+}
+
+.system-rv-modal #systemAssetModalThumb .sys-thumb-copy-wrap {
+    position: absolute;
+    inset: -18%;
+    z-index: 0;
+    pointer-events: none;
+}
+
+.system-rv-modal #systemAssetModalThumb .sys-thumb-copy {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transform: scale(1.08);
+    filter: blur(10px) saturate(1.08);
+    opacity: 0.62;
+}
+
+.system-rv-modal #systemAssetModalThumb .sys-thumb-blur-panel {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    pointer-events: none;
+    -webkit-backdrop-filter: blur(8px) saturate(1.05);
+    backdrop-filter: blur(8px) saturate(1.05);
+    background: rgba(6, 7, 10, 0.22);
+}
+
+.system-rv-modal #systemAssetModalThumb .sys-thumb-main {
+    position: relative;
+    z-index: 2;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.system-rv-modal #systemAssetModalThumb > .material-icons {
+    position: relative;
+    z-index: 2;
+}
+
+.system-rv-body {
+    display: grid;
+    grid-template-columns: 300px minmax(0, 1fr);
+    min-height: 0;
 }
 
 .system-rv-sidebar {
-    width: 270px;
+    width: auto;
+    border-right: 1px solid rgba(255, 255, 255, 0.07);
+    background: rgba(255, 255, 255, 0.012);
+}
+
+.system-rv-sidebar .rv-info-list {
+    padding: 18px 16px 14px;
 }
 
 .system-rv-meta {
-    gap: 12px;
+    gap: 14px;
 }
 
 .system-rv-meta .rv-info-item {
-    padding-bottom: 10px;
-    border-bottom: 1px dashed var(--dev-line-soft);
+    gap: 4px;
+    padding: 0 0 11px;
+    border-bottom: 1px dashed rgba(255, 255, 255, 0.1);
+}
+
+.system-rv-meta .rv-info-value {
+    color: var(--dev-text-strong);
+    font-size: 0.85rem;
 }
 
 .system-rv-meta .rv-info-item:last-child {
@@ -100,13 +183,41 @@
 }
 
 .system-rv-content {
-    background: rgba(255, 255, 255, 0.01);
+    background: transparent;
+    min-height: 0;
+}
+
+.system-rv-content .rv-tabs {
+    padding: 0 20px;
+    border-bottom-color: rgba(255, 255, 255, 0.08);
+}
+
+.system-rv-content .rv-tab {
+    padding-top: 12px;
+    padding-bottom: 14px;
 }
 
 .system-rv-panels {
     display: flex;
     flex-direction: column;
     gap: 14px;
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    overscroll-behavior: contain;
+    padding: 16px 20px 18px;
+}
+
+.system-rv-panels .rv-panel {
+    padding: 0;
+}
+
+.system-rv-panels .rv-overview-desc {
+    min-height: 180px;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.02);
+    border-color: rgba(255, 255, 255, 0.08);
 }
 
 .system-rv-block {
@@ -136,26 +247,27 @@
 }
 
 .system-field-editor-hint {
-    margin: 0;
+    margin: 0 0 4px;
     color: var(--dev-text-muted);
-    font-size: 0.78rem;
+    font-size: 0.8rem;
     line-height: 1.5;
 }
 
 .system-field-cards {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 10px;
+    gap: 12px;
 }
 
 .system-field-card {
-    border: 1px solid var(--dev-line-soft);
+    border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: 6px;
-    background: rgba(255, 255, 255, 0.015);
-    padding: 11px;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0.012));
+    padding: 12px;
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 10px;
+    min-height: 166px;
 }
 
 .system-field-card-head {
@@ -166,20 +278,25 @@
 }
 
 .system-field-card-name {
-    font-size: 0.78rem;
+    font-size: 0.8rem;
     font-weight: 700;
-    color: var(--dev-text-secondary);
-    letter-spacing: 0.03em;
+    color: var(--dev-text-strong);
+    letter-spacing: 0.04em;
 }
 
 .system-field-card-current {
     margin: 0;
     color: var(--dev-text-muted);
-    font-size: 0.74rem;
+    font-size: 0.76rem;
     line-height: 1.4;
-    white-space: nowrap;
+    white-space: normal;
     overflow: hidden;
     text-overflow: ellipsis;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    min-height: 2.8em;
 }
 
 .system-field-input {
@@ -188,17 +305,18 @@
     padding: 9px 10px;
     border: 1px solid var(--dev-line-soft);
     border-radius: 6px;
-    background: var(--dev-surface-soft);
+    background: rgba(255, 255, 255, 0.015);
     color: var(--dev-text-strong);
     font-size: 0.84rem;
     font-family: inherit;
     outline: none;
-    transition: border-color .16s ease, background .16s ease;
+    transition: border-color .16s ease, background .16s ease, box-shadow .16s ease;
 }
 
 .system-field-input:focus {
-    border-color: rgba(99, 140, 255, 0.36);
-    background: var(--dev-surface-strong);
+    border-color: rgba(99, 140, 255, 0.45);
+    background: rgba(255, 255, 255, 0.03);
+    box-shadow: 0 0 0 3px rgba(99, 140, 255, 0.14);
 }
 
 .system-field-input.system-field-input-multiline {
@@ -236,7 +354,7 @@
 }
 
 .system-field-loading {
-    border: 1px dashed var(--dev-line-soft);
+    border: 1px dashed rgba(255, 255, 255, 0.12);
     border-radius: 6px;
     min-height: 76px;
     display: flex;
@@ -249,41 +367,6 @@
 /* ---- 可视化编辑器：通用布局 ---- */
 .system-field-card--visual {
     grid-column: span 2;
-}
-
-.sfc-add-row {
-    display: flex;
-    gap: 6px;
-    align-items: center;
-}
-
-.sfc-add-row .sfc-add-input {
-    flex: 1;
-}
-
-.sfc-add-btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 34px;
-    height: 34px;
-    flex-shrink: 0;
-    border: 1px solid var(--dev-line-soft);
-    border-radius: 6px;
-    background: var(--dev-surface-strong);
-    color: var(--dev-text-secondary);
-    cursor: pointer;
-    transition: background .15s ease, border-color .15s ease, color .15s ease;
-}
-
-.sfc-add-btn:hover {
-    background: var(--dev-accent-dim);
-    border-color: var(--dev-accent);
-    color: var(--dev-accent);
-}
-
-.sfc-add-btn .material-icons {
-    font-size: 18px;
 }
 
 /* ---- Chips 编辑器 ---- */
@@ -300,7 +383,7 @@
     min-height: 32px;
     padding: 6px 8px;
     border: 1px solid var(--dev-line-soft);
-    border-radius: 6px;
+    border-radius: 4px;
     background: var(--dev-surface-soft);
 }
 
@@ -380,7 +463,7 @@
     gap: 10px;
     padding: 8px;
     border: 1px solid var(--dev-line-soft);
-    border-radius: 6px;
+    border-radius: 4px;
     background: var(--dev-surface-soft);
     transition: border-color .14s ease, background .14s ease;
 }
@@ -447,9 +530,107 @@
     font-size: 16px;
 }
 
+/* ---- 语言支持编辑器 ---- */
+.sfc-lang-editor {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.sfc-lang-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-height: 40px;
+}
+
+.sfc-lang-list:empty::after {
+    content: '暂无语言条目';
+    color: var(--dev-text-subtle);
+    font-size: 0.76rem;
+    padding: 8px 10px;
+    border: 1px dashed var(--dev-line-soft);
+    border-radius: 4px;
+}
+
+.sfc-lang-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto 30px;
+    align-items: center;
+    gap: 8px;
+    padding: 8px;
+    border: 1px solid var(--dev-line-soft);
+    border-radius: 4px;
+    background: var(--dev-surface-soft);
+}
+
+.sfc-lang-name {
+    width: 100%;
+    min-width: 0;
+    padding: 8px 10px;
+    border: 1px solid var(--dev-line-soft);
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.02);
+    color: var(--dev-text-strong);
+    font-size: 0.82rem;
+    outline: none;
+}
+
+.sfc-lang-name:focus {
+    border-color: rgba(99, 140, 255, 0.45);
+    box-shadow: 0 0 0 3px rgba(99, 140, 255, 0.14);
+}
+
+.sfc-lang-check {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    color: var(--dev-text-secondary);
+    font-size: 0.78rem;
+    white-space: nowrap;
+}
+
+.sfc-lang-check input {
+    accent-color: var(--dev-accent);
+}
+
+.sfc-lang-del {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    border-radius: 4px;
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--dev-text-subtle);
+    cursor: pointer;
+}
+
+.sfc-lang-del:hover {
+    border-color: rgba(239, 68, 68, 0.3);
+    background: rgba(239, 68, 68, 0.15);
+    color: #ef4444;
+}
+
+.sfc-lang-del .material-icons {
+    font-size: 16px;
+}
+
 /* ---- 系统操作按钮 ---- */
 .system-rv-footer {
     align-items: center;
+    gap: 12px;
+    padding: 14px 20px 16px;
+    border-top-color: rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.012);
+}
+
+.system-rv-footer input-box#systemActionReason {
+    display: block;
+    flex: 1;
+    min-width: 220px;
+    --field-min-height: 36px;
 }
 
 .system-rv-reason {
@@ -474,6 +655,87 @@
 
 .system-rv-actions {
     flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.system-rv-actions .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    border-radius: 4px;
+    min-height: 36px;
+    letter-spacing: 0.01em;
+    line-height: 1;
+    font-family: inherit;
+    white-space: nowrap;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--dev-text-strong);
+    transition: background .16s ease, border-color .16s ease, color .16s ease, box-shadow .16s ease;
+}
+
+.system-rv-actions .btn:hover {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.22);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.system-rv-actions .btn .material-icons {
+    font-size: 17px;
+    display: block;
+    line-height: 1;
+}
+
+.system-rv-actions .btn .js-sheen,
+.system-rv-actions .btn .js-ripple {
+    display: none !important;
+}
+
+#systemReturnBtn {
+    background: rgba(245, 158, 11, 0.08);
+    border-color: rgba(245, 158, 11, 0.3);
+    color: #f8c36b;
+}
+
+#systemReturnBtn:hover {
+    background: rgba(245, 158, 11, 0.14);
+    border-color: rgba(245, 158, 11, 0.45);
+}
+
+#systemOffShelfBtn {
+    background: rgba(239, 68, 68, 0.08);
+    border-color: rgba(239, 68, 68, 0.3);
+    color: #f7a0a0;
+}
+
+#systemOffShelfBtn:hover {
+    background: rgba(239, 68, 68, 0.15);
+    border-color: rgba(239, 68, 68, 0.48);
+}
+
+#systemForceReviewBtn {
+    background: rgba(99, 140, 255, 0.1);
+    border-color: rgba(99, 140, 255, 0.34);
+    color: #c7d6ff;
+}
+
+#systemForceReviewBtn:hover {
+    background: rgba(99, 140, 255, 0.18);
+    border-color: rgba(99, 140, 255, 0.5);
+}
+
+#systemHardDeleteBtn {
+    background: rgba(190, 24, 93, 0.12);
+    border-color: rgba(190, 24, 93, 0.3);
+    color: #ffb0d2;
+}
+
+#systemHardDeleteBtn:hover {
+    background: rgba(190, 24, 93, 0.2);
+    border-color: rgba(190, 24, 93, 0.46);
 }
 
 .system-rv-btn {

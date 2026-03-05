@@ -11,6 +11,7 @@
     <script src="/js/global.js"></script>
     <script src="/js/topbar.js" defer></script>
     <script src="/components/inputbox.js?v=3" defer></script>
+    <script src="/components/action-btn.js" defer></script>
     <link href="/css/developer.base.css" rel="stylesheet">
     <link href="/css/developer.asset-card.css" rel="stylesheet">
     <link href="/css/developer.form.css" rel="stylesheet">
@@ -191,31 +192,6 @@
                         </div>
                     </div>
 
-                    <!-- 分区：商店展示信息 -->
-                    <div class="create-section" data-section>
-                        <button class="create-section-header" type="button" aria-expanded="true">
-                            <span class="material-icons">dashboard_customize</span>
-                            <span>商店展示信息</span>
-                            <span class="create-section-chevron" aria-hidden="true">
-                                <svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4 6l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                            </span>
-                        </button>
-                        <div class="create-section-body">
-                            <div class="create-section-body-inner">
-                                <div class="create-fields-stack">
-                                    <div class="dev-field">
-                                        <input-box id="assetBadges" label="右侧徽章（每行：图标|文案）" textarea rows="4" placeholder="verified_user|安全认证资源&#10;support_agent|官方技术支持&#10;history|版本更新保障"></input-box>
-                                        <span class="create-field-hint">用于详情页右侧「权益说明」区域，图标使用 Material Icons 名称。</span>
-                                    </div>
-                                    <div class="dev-field">
-                                        <input-box id="assetFeatures" label="亮点特性（每行：图标|标题|描述）" textarea rows="5" placeholder="bolt|高性能|优化的运行效率，流畅无卡顿&#10;shield|安全可靠|通过安全扫描，保护你的游戏环境"></input-box>
-                                        <span class="create-field-hint">用于详情页「亮点特性」网格区域，建议填写 2-6 条。</span>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
                 </div>
 
                 <!-- 右侧面板：价格与操作 -->
@@ -241,6 +217,26 @@
                             <button class="btn ghost small" id="addPriceBtn" type="button">
                                 <span class="material-icons" style="font-size:16px;vertical-align:middle;">add</span>
                                 添加价格方案
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- 语言支持表面板 -->
+                    <div class="dev-lang-panel" aria-label="语言支持表编辑面板">
+                        <div class="dev-lang-top">
+                            <div class="dev-lang-top-title">
+                                <span class="material-icons">translate</span>
+                                <strong>语言支持表</strong>
+                            </div>
+                            <p>可新增多个语言条目，每行可修改显示名，并勾选是否支持该语言。</p>
+                        </div>
+                        <div class="dev-lang-list" id="languageSupportList">
+                            <!-- 动态生成 -->
+                        </div>
+                        <div class="dev-lang-actions">
+                            <button class="btn ghost small" id="addLanguageSupportBtn" type="button">
+                                <span class="material-icons" style="font-size:16px;vertical-align:middle;">add</span>
+                                添加语言条目
                             </button>
                         </div>
                     </div>

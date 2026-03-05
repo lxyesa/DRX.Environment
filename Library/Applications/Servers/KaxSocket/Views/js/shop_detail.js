@@ -91,6 +91,55 @@
                 return [];
             };
 
+            const splitTagText = (text) => String(text ?? '')
+                .split(/[;,，；\n\r]+/)
+                .map(v => v.trim())
+                .filter(Boolean);
+
+            const parseTags = (raw) => {
+                if (Array.isArray(raw)) {
+                    return raw
+                        .flatMap(v => {
+                            if (Array.isArray(v)) {
+                                return v.map(x => String(x ?? '').trim()).filter(Boolean);
+                            }
+                            if (typeof v === 'string') {
+                                const t = v.trim();
+                                if (!t) return [];
+                                try {
+                                    const parsed = JSON.parse(t);
+                                    if (Array.isArray(parsed)) {
+                                        return parsed.map(x => String(x ?? '').trim()).filter(Boolean);
+                                    }
+                                } catch {
+                                    // noop
+                                }
+                                return splitTagText(t);
+                            }
+                            return String(v ?? '').trim() ? [String(v).trim()] : [];
+                        })
+                        .filter(Boolean);
+                }
+
+                if (typeof raw === 'string') {
+                    const t = raw.trim();
+                    if (!t) return [];
+                    try {
+                        const parsed = JSON.parse(t);
+                        if (Array.isArray(parsed)) {
+                            return parsed
+                                .flatMap(v => splitTagText(v))
+                                .filter(Boolean);
+                        }
+                    } catch {
+                        // noop
+                    }
+                    return splitTagText(t);
+                }
+
+                return [];
+            };
+
             // 价格方案：PriceOption[]，直接映射（priceYuan 已是元）
             const priceOptions = Array.isArray(dto.prices) ? dto.prices.map(p => ({
                 id: String(p.id ?? ''),
@@ -101,6 +150,35 @@
                 unit: p.unit ?? null,
                 stock: p.stock ?? -1
             })) : [];
+
+            const parseLanguageSupports = () => {
+                if (Array.isArray(dto.languageSupports)) {
+                    return dto.languageSupports
+                        .map(item => ({
+                            name: String(item?.name ?? '').trim(),
+                            isSupported: item?.isSupported === true || item?.isSupported === 1 || item?.isSupported === 'true'
+                        }))
+                        .filter(item => item.name);
+                }
+
+                if (typeof dto.languageSupportsJson === 'string' && dto.languageSupportsJson.trim()) {
+                    try {
+                        const parsed = JSON.parse(dto.languageSupportsJson);
+                        if (Array.isArray(parsed)) {
+                            return parsed
+                                .map(item => ({
+                                    name: String(item?.name ?? '').trim(),
+                                    isSupported: item?.isSupported === true || item?.isSupported === 1 || item?.isSupported === 'true'
+                                }))
+                                .filter(item => item.name);
+                        }
+                    } catch {
+                        return [];
+                    }
+                }
+
+                return [];
+            };
 
             // 作者显示名：兼容多版本字段命名（authorName / authorDisplayName / author / developerDisplayName）
             const resolvedAuthorName = String(
@@ -119,12 +197,12 @@
                 assetId: Number(dto.id ?? 0),
                 displayName: String(dto.name ?? '--'),
                 description: String(dto.description ?? '--'),
+                tags: parseTags(dto.tags),
                 category: String(dto.category ?? '--'),
                 coverImage: String(dto.coverImage ?? ''),
                 iconImage: String(dto.iconImage ?? ''),
                 screenshots: parseMediaArray(dto.screenshots),
-                badges: dto.badges ?? '',
-                features: dto.features ?? '',
+                languageSupports: parseLanguageSupports(),
                 // 价格方案
                 priceOptions,
                 // 规格信息（服务端嵌套于 dto.specs）
@@ -309,8 +387,6 @@
             // ── 视图层：渲染 ─────────────────────────────────────────────────
             try {
                 loadProductData(vm);
-                renderBadges(vm);
-                renderFeatures(vm);
                 renderGallery(vm);
                 setupEventListeners();
                 initHeroScrollMorph();
@@ -501,6 +577,27 @@
                 } // end else (not free)
             }
 
+            // ── 语言支持表 ──
+            const languageSupportCard = document.getElementById('languageSupportCard');
+            const languageSupportGrid = document.getElementById('languageSupportGrid');
+            if (languageSupportCard && languageSupportGrid) {
+                const supports = Array.isArray(vm.languageSupports) ? vm.languageSupports : [];
+                if (!supports.length) {
+                    languageSupportCard.setAttribute('hidden', '');
+                    languageSupportGrid.innerHTML = '';
+                } else {
+                    languageSupportCard.removeAttribute('hidden');
+                    languageSupportGrid.innerHTML = supports.map(item => {
+                        const ok = item.isSupported === true;
+                        return `
+                            <div class="language-support-item ${ok ? 'is-supported' : 'is-unsupported'}">
+                                <span class="material-icons">${ok ? 'check_circle' : 'cancel'}</span>
+                                <span class="language-support-name">${escHtml(item.name || '未命名语言')}</span>
+                            </div>`;
+                    }).join('');
+                }
+            }
+
             // ── 规格 Tab ──
             setText('specSize',             vm.fileSize);
             setText('productVersion',       vm.version);
@@ -515,6 +612,22 @@
 
             // ── 概述 Tab 描述 ──
             setText('productDescription', vm.description);
+
+            // ── 概述 Tab 标签徽章 ──
+            const overviewTagsGroup = document.getElementById('overviewTagsGroup');
+            const overviewTagsList = document.getElementById('overviewTagsList');
+            if (overviewTagsGroup && overviewTagsList) {
+                const tags = Array.isArray(vm.tags) ? vm.tags : [];
+                if (tags.length === 0) {
+                    overviewTagsGroup.setAttribute('hidden', '');
+                    overviewTagsList.innerHTML = '';
+                } else {
+                    overviewTagsGroup.removeAttribute('hidden');
+                    overviewTagsList.innerHTML = tags
+                        .map(tag => `<span class="overview-tag-badge">${escHtml(tag)}</span>`)
+                        .join('');
+                }
+            }
 
             // 挂载给事件监听器使用
             window.currentProduct = vm;
@@ -1125,67 +1238,10 @@
             initPage();
         }
 
-        // ================================================================
-        // 默认徽章与特性数据（向后兼容）
-        // ================================================================
-        const DEFAULT_BADGES = [
-            { icon: 'verified_user', text: '安全认证资源' },
-            { icon: 'support_agent', text: '官方技术支持' },
-            { icon: 'history', text: '版本更新保障' }
-        ];
-
-        const DEFAULT_FEATURES = [
-            { icon: 'bolt', title: '高性能', desc: '优化的运行效率，流畅无卡顿' },
-            { icon: 'shield', title: '安全可靠', desc: '通过安全扫描，保护你的游戏环境' },
-            { icon: 'update', title: '持续更新', desc: '定期维护，跟进游戏版本' },
-            { icon: 'people', title: '社区支持', desc: '活跃社区，问题快速响应' }
-        ];
-
         /** 解析 JSON 字符串，失败返回 null */
         function tryParseJson(str) {
             if (!str || typeof str !== 'string') return null;
             try { return JSON.parse(str); } catch { return null; }
-        }
-
-        /** 渲染右侧购买面板的徽章列表 */
-        function renderBadges(product) {
-            const container = document.getElementById('panelBadges');
-            if (!container) return;
-
-            let badges = tryParseJson(product.badges);
-            if (!Array.isArray(badges) || badges.length === 0) badges = DEFAULT_BADGES;
-
-            // 保存到 product 对象供编辑模式使用
-            product._parsedBadges = badges;
-
-            container.innerHTML = badges.map(b =>
-                `<div class="pqi-item">
-                    <span class="material-icons pqi-icon">${escHtml(b.icon || 'info')}</span>
-                    <span>${escHtml(b.text || '')}</span>
-                </div>`
-            ).join('');
-        }
-
-        /** 渲染概述 Tab 的亮点特性卡片 */
-        function renderFeatures(product) {
-            const container = document.getElementById('featuresGrid');
-            if (!container) return;
-
-            let features = tryParseJson(product.features);
-            if (!Array.isArray(features) || features.length === 0) features = DEFAULT_FEATURES;
-
-            // 保存到 product 对象供编辑模式使用
-            product._parsedFeatures = features;
-
-            container.innerHTML = features.map(f =>
-                `<div class="feature-item">
-                    <span class="feature-icon material-icons">${escHtml(f.icon || 'star')}</span>
-                    <div>
-                        <div class="feature-title">${escHtml(f.title || '')}</div>
-                        <div class="feature-desc">${escHtml(f.desc || '')}</div>
-                    </div>
-                </div>`
-            ).join('');
         }
 
         /** HTML 转义 */
@@ -1327,28 +1383,6 @@
                 el.addEventListener('click', handler);
                 _editHandlers.set(cfg.elementId, handler);
             }
-
-            // 徽章列表
-            const badgesEl = document.getElementById('panelBadges');
-            if (badgesEl) {
-                const handler = (e) => {
-                    e.stopPropagation();
-                    openBadgesEditor();
-                };
-                badgesEl.addEventListener('click', handler);
-                _editHandlers.set('panelBadges', handler);
-            }
-
-            // 特性列表
-            const featuresEl = document.getElementById('featuresGrid');
-            if (featuresEl) {
-                const handler = (e) => {
-                    e.stopPropagation();
-                    openFeaturesEditor();
-                };
-                featuresEl.addEventListener('click', handler);
-                _editHandlers.set('featuresGrid', handler);
-            }
         }
 
         /** 移除所有可编辑事件和 editable 类 */
@@ -1359,20 +1393,6 @@
                 el.classList.remove('editable');
                 const handler = _editHandlers.get(cfg.elementId);
                 if (handler) el.removeEventListener('click', handler);
-            }
-
-            // 徽章
-            const badgesEl = document.getElementById('panelBadges');
-            if (badgesEl) {
-                const handler = _editHandlers.get('panelBadges');
-                if (handler) badgesEl.removeEventListener('click', handler);
-            }
-
-            // 特性
-            const featuresEl = document.getElementById('featuresGrid');
-            if (featuresEl) {
-                const handler = _editHandlers.get('featuresGrid');
-                if (handler) featuresEl.removeEventListener('click', handler);
             }
 
             _editHandlers.clear();
@@ -1504,178 +1524,6 @@
         }
 
         // ================================================================
-        // 徽章编辑器
-        // ================================================================
-
-        function openBadgesEditor() {
-            const overlay = document.getElementById('listEditOverlay');
-            const titleEl = document.getElementById('listEditTitle');
-            const bodyEl = document.getElementById('listEditBody');
-            const addBtn = document.getElementById('listEditAdd');
-            const confirmBtn = document.getElementById('listEditConfirm');
-            const cancelBtn = document.getElementById('listEditCancel');
-            const closeBtn = document.getElementById('listEditClose');
-
-            titleEl.textContent = '编辑徽章列表';
-
-            const product = window.currentProduct;
-            let badges = (product && product._parsedBadges) ? JSON.parse(JSON.stringify(product._parsedBadges)) : JSON.parse(JSON.stringify(DEFAULT_BADGES));
-
-            function renderItems() {
-                bodyEl.innerHTML = badges.map((b, i) =>
-                    `<div class="list-edit-item" data-index="${i}">
-                        <div class="list-edit-fields">
-                            <input type="text" value="${escHtml(b.icon || '')}" placeholder="Material Icon 名称（如 verified_user）" data-field="icon" data-index="${i}">
-                            <input type="text" value="${escHtml(b.text || '')}" placeholder="徽章文字（如 安全认证资源）" data-field="text" data-index="${i}">
-                        </div>
-                        <button class="list-edit-remove" data-index="${i}" title="删除此条"><span class="material-icons">delete</span></button>
-                    </div>`
-                ).join('');
-
-                // 绑定输入事件
-                bodyEl.querySelectorAll('input').forEach(input => {
-                    input.addEventListener('input', () => {
-                        const idx = Number(input.dataset.index);
-                        const field = input.dataset.field;
-                        if (badges[idx]) badges[idx][field] = input.value;
-                    });
-                });
-
-                // 绑定删除事件
-                bodyEl.querySelectorAll('.list-edit-remove').forEach(btn => {
-                    btn.addEventListener('click', () => {
-                        const idx = Number(btn.dataset.index);
-                        badges.splice(idx, 1);
-                        renderItems();
-                    });
-                });
-            }
-
-            renderItems();
-            overlay.style.display = 'flex';
-
-            // 清除旧事件（用 clone 方式）
-            const newAdd = addBtn.cloneNode(true);
-            addBtn.parentNode.replaceChild(newAdd, addBtn);
-            const newConfirm = confirmBtn.cloneNode(true);
-            confirmBtn.parentNode.replaceChild(newConfirm, confirmBtn);
-            const newCancel = cancelBtn.cloneNode(true);
-            cancelBtn.parentNode.replaceChild(newCancel, cancelBtn);
-            const newClose = closeBtn.cloneNode(true);
-            closeBtn.parentNode.replaceChild(newClose, closeBtn);
-
-            const dismiss = () => { overlay.style.display = 'none'; };
-
-            newAdd.addEventListener('click', () => {
-                badges.push({ icon: 'info', text: '新徽章' });
-                renderItems();
-            });
-
-            newConfirm.addEventListener('click', () => {
-                // 过滤空条目
-                const cleaned = badges.filter(b => b.text && b.text.trim());
-                if (product) product._parsedBadges = cleaned;
-
-                // 保存为 JSON 字符串
-                window._editedFields['badges'] = JSON.stringify(cleaned);
-
-                // 重新渲染 DOM
-                renderBadges(Object.assign({}, product, { badges: JSON.stringify(cleaned) }));
-
-                updateSaveBtnState();
-                dismiss();
-            });
-
-            newCancel.addEventListener('click', dismiss);
-            newClose.addEventListener('click', dismiss);
-            overlay.addEventListener('click', (e) => { if (e.target === overlay) dismiss(); }, { once: true });
-        }
-
-        // ================================================================
-        // 特性编辑器
-        // ================================================================
-
-        function openFeaturesEditor() {
-            const overlay = document.getElementById('listEditOverlay');
-            const titleEl = document.getElementById('listEditTitle');
-            const bodyEl = document.getElementById('listEditBody');
-            const addBtn = document.getElementById('listEditAdd');
-            const confirmBtn = document.getElementById('listEditConfirm');
-            const cancelBtn = document.getElementById('listEditCancel');
-            const closeBtn = document.getElementById('listEditClose');
-
-            titleEl.textContent = '编辑亮点特性';
-
-            const product = window.currentProduct;
-            let features = (product && product._parsedFeatures) ? JSON.parse(JSON.stringify(product._parsedFeatures)) : JSON.parse(JSON.stringify(DEFAULT_FEATURES));
-
-            function renderItems() {
-                bodyEl.innerHTML = features.map((f, i) =>
-                    `<div class="list-edit-item" data-index="${i}">
-                        <div class="list-edit-fields">
-                            <input type="text" value="${escHtml(f.icon || '')}" placeholder="Material Icon 名称（如 bolt）" data-field="icon" data-index="${i}">
-                            <input type="text" value="${escHtml(f.title || '')}" placeholder="特性标题（如 高性能）" data-field="title" data-index="${i}">
-                            <input type="text" value="${escHtml(f.desc || '')}" placeholder="特性描述（如 优化的运行效率...）" data-field="desc" data-index="${i}">
-                        </div>
-                        <button class="list-edit-remove" data-index="${i}" title="删除此条"><span class="material-icons">delete</span></button>
-                    </div>`
-                ).join('');
-
-                bodyEl.querySelectorAll('input').forEach(input => {
-                    input.addEventListener('input', () => {
-                        const idx = Number(input.dataset.index);
-                        const field = input.dataset.field;
-                        if (features[idx]) features[idx][field] = input.value;
-                    });
-                });
-
-                bodyEl.querySelectorAll('.list-edit-remove').forEach(btn => {
-                    btn.addEventListener('click', () => {
-                        const idx = Number(btn.dataset.index);
-                        features.splice(idx, 1);
-                        renderItems();
-                    });
-                });
-            }
-
-            renderItems();
-            overlay.style.display = 'flex';
-
-            // 清除旧事件
-            const newAdd = addBtn.cloneNode(true);
-            addBtn.parentNode.replaceChild(newAdd, addBtn);
-            const newConfirm = confirmBtn.cloneNode(true);
-            confirmBtn.parentNode.replaceChild(newConfirm, confirmBtn);
-            const newCancel = cancelBtn.cloneNode(true);
-            cancelBtn.parentNode.replaceChild(newCancel, cancelBtn);
-            const newClose = closeBtn.cloneNode(true);
-            closeBtn.parentNode.replaceChild(newClose, closeBtn);
-
-            const dismiss = () => { overlay.style.display = 'none'; };
-
-            newAdd.addEventListener('click', () => {
-                features.push({ icon: 'star', title: '新特性', desc: '特性描述' });
-                renderItems();
-            });
-
-            newConfirm.addEventListener('click', () => {
-                const cleaned = features.filter(f => f.title && f.title.trim());
-                if (product) product._parsedFeatures = cleaned;
-
-                window._editedFields['features'] = JSON.stringify(cleaned);
-
-                renderFeatures(Object.assign({}, product, { features: JSON.stringify(cleaned) }));
-
-                updateSaveBtnState();
-                dismiss();
-            });
-
-            newCancel.addEventListener('click', dismiss);
-            newClose.addEventListener('click', dismiss);
-            overlay.addEventListener('click', (e) => { if (e.target === overlay) dismiss(); }, { once: true });
-        }
-
-        // ================================================================
         // 保存更改到后端
         // ================================================================
 
@@ -1708,9 +1556,7 @@
                     category:      'category',
                     version:       'version',
                     license:       'license',
-                    compatibility: 'compatibility',
-                    badges:        'badges',
-                    features:      'features',
+                    compatibility: 'compatibility'
                 };
 
                 for (const [key, val] of Object.entries(edited)) {

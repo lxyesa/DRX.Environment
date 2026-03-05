@@ -243,6 +243,60 @@ function addPriceRow(data) {
     list.appendChild(div);
 }
 
+function normalizeLanguageSupports(rawList, rawJson) {
+    const toBool = (v) => v === true || v === 1 || v === '1' || String(v).toLowerCase() === 'true';
+    const normalizeItem = (item) => {
+        const name = String(item?.name ?? item?.Name ?? '').trim();
+        const isSupported = toBool(item?.isSupported ?? item?.IsSupported);
+        return { name, isSupported };
+    };
+
+    if (Array.isArray(rawList)) {
+        return rawList
+            .map(normalizeItem)
+            .filter(item => item.name);
+    }
+
+    if (typeof rawJson === 'string' && rawJson.trim()) {
+        try {
+            const parsed = JSON.parse(rawJson);
+            if (Array.isArray(parsed)) {
+                return parsed
+                    .map(normalizeItem)
+                    .filter(item => item.name);
+            }
+        } catch (e) {
+            console.warn('languageSupportsJson 解析失败', e);
+        }
+    }
+
+    return [];
+}
+
+function addLanguageSupportRow(data) {
+    const list = document.getElementById('languageSupportList');
+    if (!list) return;
+
+    const div = document.createElement('div');
+    div.className = 'dev-lang-item';
+    div.innerHTML = `
+        <div class="dev-lang-item-main">
+            <span class="material-icons dev-lang-icon">language</span>
+            <input type="text" class="dev-lang-name" maxlength="40" placeholder="例如：简体中文 / English" value="${escapeHtml(data?.name || '')}">
+            <label class="dev-lang-check">
+                <input type="checkbox" class="dev-lang-supported" ${data?.isSupported ? 'checked' : ''}>
+                <span>支持</span>
+            </label>
+        </div>
+        <button class="dev-lang-remove" type="button" title="删除此语言条目" aria-label="删除此语言条目">
+            <span class="material-icons">delete</span>
+        </button>
+    `;
+
+    div.querySelector('.dev-lang-remove')?.addEventListener('click', () => div.remove());
+    list.appendChild(div);
+}
+
 function resetForm() {
     state.editingId = 0;
     document.getElementById('formTitle').textContent = '提交新资源';
@@ -255,11 +309,10 @@ function resetForm() {
     document.getElementById('assetCoverImage').value = '';
     document.getElementById('assetIconImage').value = '';
     document.getElementById('assetScreenshots').value = '';
-    const badgesInput = document.getElementById('assetBadges');
-    if (badgesInput) badgesInput.value = '';
-    const featuresInput = document.getElementById('assetFeatures');
-    if (featuresInput) featuresInput.value = '';
     document.getElementById('pricesList').innerHTML = '';
+    const langList = document.getElementById('languageSupportList');
+    if (langList) langList.innerHTML = '';
+    addLanguageSupportRow({ name: '简体中文', isSupported: true });
     document.getElementById('cancelEditBtn').style.display = 'none';
     document.getElementById('submitAssetBtn').textContent = '提交资源';
     const aside = document.getElementById('cancelEditBtnAside');
@@ -280,10 +333,6 @@ function fillForm(asset) {
     document.getElementById('assetCoverImage').value = asset.coverImage || '';
     document.getElementById('assetIconImage').value = asset.iconImage || '';
     document.getElementById('assetScreenshots').value = Array.isArray(asset.screenshots) ? asset.screenshots.join(';') : (asset.screenshots || '');
-    const badgesInput = document.getElementById('assetBadges');
-    if (badgesInput) badgesInput.value = formatBadgesForEditor(asset.badges || '');
-    const featuresInput = document.getElementById('assetFeatures');
-    if (featuresInput) featuresInput.value = formatFeaturesForEditor(asset.features || '');
     document.getElementById('cancelEditBtn').style.display = '';
     document.getElementById('submitAssetBtn').textContent = '保存并重审';
     const aside = document.getElementById('cancelEditBtnAside');
@@ -296,6 +345,15 @@ function fillForm(asset) {
     if (asset.prices && asset.prices.length > 0) {
         asset.prices.forEach(p => addPriceRow(p));
     }
+
+    const langList = document.getElementById('languageSupportList');
+    if (langList) langList.innerHTML = '';
+    const supports = normalizeLanguageSupports(asset.languageSupports, asset.languageSupportsJson);
+    if (supports.length > 0) {
+        supports.forEach(item => addLanguageSupportRow(item));
+    } else {
+        addLanguageSupportRow({ name: '简体中文', isSupported: true });
+    }
 }
 
 function collectFormData() {
@@ -307,10 +365,6 @@ function collectFormData() {
     const coverImage = document.getElementById('assetCoverImage').value.trim();
     const iconImage = document.getElementById('assetIconImage').value.trim();
     const screenshots = document.getElementById('assetScreenshots').value.trim();
-    const badgesEditorText = document.getElementById('assetBadges')?.value?.trim() || '';
-    const featuresEditorText = document.getElementById('assetFeatures')?.value?.trim() || '';
-    const badges = serializeBadgesFromEditor(badgesEditorText);
-    const features = serializeFeaturesFromEditor(featuresEditorText);
 
     const priceItems = document.querySelectorAll('#pricesList .dev-price-item');
     const prices = [];
@@ -331,7 +385,16 @@ function collectFormData() {
         prices.push({ label, price, originalPrice, unit, duration, durationDays });
     });
 
-    return { name, version, description, category, tags, coverImage, iconImage, screenshots, badges, features, prices };
+    const langItems = document.querySelectorAll('#languageSupportList .dev-lang-item');
+    const languageSupports = [];
+    langItems.forEach(item => {
+        const name = item.querySelector('.dev-lang-name')?.value?.trim() || '';
+        const isSupported = item.querySelector('.dev-lang-supported')?.checked === true;
+        if (!name) return;
+        languageSupports.push({ name, isSupported });
+    });
+
+    return { name, version, description, category, tags, coverImage, iconImage, screenshots, prices, languageSupports };
 }
 
 /* ----------------------------------------------------------------
@@ -498,6 +561,20 @@ function initModalTabs() {
     });
 }
 
+function initSystemModalTabs() {
+    const tabs = document.querySelectorAll('#systemModalTabs .rv-tab');
+    const panels = document.querySelectorAll('#systemModalPanels .rv-panel');
+    if (!tabs.length || !panels.length) return;
+
+    tabs.forEach(tab => {
+        tab.addEventListener('click', () => {
+            const target = tab.dataset.panel;
+            tabs.forEach(t => t.classList.toggle('active', t === tab));
+            panels.forEach(p => p.classList.toggle('active', p.dataset.panel === target));
+        });
+    });
+}
+
 async function openReviewModal(assetId) {
     state.currentReviewAssetId = assetId;
     const modal = document.getElementById('reviewModal');
@@ -650,6 +727,20 @@ function closeReviewModal() {
     state.currentReviewAssetId = 0;
 }
 
+function renderSystemModalThumb(url) {
+    if (!url) {
+        return '<span class="material-icons">inventory_2</span>';
+    }
+
+    const safeUrl = escapeAttr(url);
+    return `
+        <span class="sys-thumb-copy-wrap" aria-hidden="true">
+            <img class="sys-thumb-copy" src="${safeUrl}" alt="" loading="lazy">
+        </span>
+        <span class="sys-thumb-blur-panel" aria-hidden="true"></span>
+        <img class="sys-thumb-main" src="${safeUrl}" alt="" loading="lazy">`;
+}
+
 /* ----------------------------------------------------------------
    系统资产详情弹窗
    ---------------------------------------------------------------- */
@@ -665,9 +756,18 @@ async function openSystemAssetModal(assetId) {
     const fieldCards = document.getElementById('systemFieldCards');
     if (fieldCards) fieldCards.innerHTML = '<div class="system-field-loading">字段卡片加载中...</div>';
     const thumbBox = document.getElementById('systemAssetModalThumb');
-    if (thumbBox) thumbBox.innerHTML = '<span class="material-icons">inventory_2</span>';
+    if (thumbBox) thumbBox.innerHTML = renderSystemModalThumb('');
     document.getElementById('systemActionReason').value = '';
+
+    document.querySelectorAll('#systemModalTabs .rv-tab').forEach((tab, i) => {
+        tab.classList.toggle('active', i === 0);
+    });
+    document.querySelectorAll('#systemModalPanels .rv-panel').forEach((panel, i) => {
+        panel.classList.toggle('active', i === 0);
+    });
+
     modal.style.display = '';
+    initSystemModalTabs();
 
     try {
         const resp = await apiGetSystemAssetDetail(assetId);
@@ -680,11 +780,9 @@ async function openSystemAssetModal(assetId) {
         state.currentSystemAssetDetail = a;
         document.getElementById('systemAssetModalTitle').textContent = `${a.name || '未命名资源'}（#${a.id}）`;
 
-        const thumb = a.coverImage || a.iconImage || '';
+        const thumb = a.iconImage || a.coverImage || '';
         if (thumbBox) {
-            thumbBox.innerHTML = thumb
-                ? `<img src="${escapeHtml(thumb)}" alt="">`
-                : '<span class="material-icons">inventory_2</span>';
+            thumbBox.innerHTML = renderSystemModalThumb(thumb);
         }
 
         document.getElementById('systemAssetModalMeta').innerHTML = `
@@ -732,6 +830,120 @@ function collectVisualValue(fieldKey) {
     return Array.from(items).map(el => el.dataset.visualItem).join(';');
 }
 
+function parseLanguageSupportItems(raw) {
+    const toBool = (v) => v === true || v === 1 || v === '1' || String(v).toLowerCase() === 'true';
+    const normalizeItem = (item) => ({
+        name: String(item?.name ?? item?.Name ?? '').trim(),
+        isSupported: toBool(item?.isSupported ?? item?.IsSupported)
+    });
+
+    if (!raw) return [];
+    if (Array.isArray(raw)) {
+        return raw
+            .map(normalizeItem)
+            .filter(item => item.name);
+    }
+
+    if (typeof raw === 'string') {
+        const t = raw.trim();
+        if (!t) return [];
+        try {
+            const parsed = JSON.parse(t);
+            if (Array.isArray(parsed)) {
+                return parsed
+                    .map(normalizeItem)
+                    .filter(item => item.name);
+            }
+        } catch {
+            return [];
+        }
+    }
+
+    return [];
+}
+
+function renderLanguageSupportEditor(fieldKey, items) {
+    const rowsHtml = items.map((item, idx) => {
+        const safeName = escapeHtml(item.name || '');
+        return `<div class="sfc-lang-row" data-lang-row>
+            <input type="text" class="sfc-lang-name" data-lang-name value="${safeName}" maxlength="40" placeholder="语言名称（如：简体中文 / English）">
+            <label class="sfc-lang-check">
+                <input type="checkbox" data-lang-supported ${item.isSupported ? 'checked' : ''}>
+                <span>支持</span>
+            </label>
+            <button class="sfc-lang-del" type="button" data-del-idx="${idx}" title="移除">
+                <span class="material-icons">delete_outline</span>
+            </button>
+        </div>`;
+    }).join('');
+
+    return `<div class="sfc-lang-editor" id="sfc-editor-${fieldKey}">
+        <div class="sfc-lang-list" id="sfc-lang-list-${fieldKey}">${rowsHtml}</div>
+        <input-box size="small-headerless" show-action id="sfc-addinput-${fieldKey}"
+            placeholder="输入语言名称后按 Enter 或点击 ＋ 添加">
+            <button slot="action" class="sfc-add-btn" type="button" data-add-lang="${fieldKey}" title="添加">
+                <span class="material-icons" style="font-size:16px;">add</span>
+            </button>
+        </input-box>
+    </div>`;
+}
+
+function bindLanguageSupportEditorEvents(card, fieldKey) {
+    const list = card.querySelector(`#sfc-lang-list-${fieldKey}`);
+    const addInput = card.querySelector(`#sfc-addinput-${fieldKey}`);
+    const addBtn = card.querySelector(`[data-add-lang="${fieldKey}"]`);
+    if (!list || !addInput || !addBtn) return;
+
+    function bindDelete() {
+        list.querySelectorAll('[data-del-idx]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                btn.closest('[data-lang-row]')?.remove();
+                rebuildDelIdx(list, '[data-lang-row]');
+            });
+        });
+    }
+
+    function addRow() {
+        const name = addInput.value.trim();
+        if (!name) return;
+        const row = document.createElement('div');
+        row.className = 'sfc-lang-row';
+        row.setAttribute('data-lang-row', '1');
+        row.innerHTML = `<input type="text" class="sfc-lang-name" data-lang-name value="${escapeHtml(name)}" maxlength="40" placeholder="语言名称（如：简体中文 / English）">
+            <label class="sfc-lang-check">
+                <input type="checkbox" data-lang-supported checked>
+                <span>支持</span>
+            </label>
+            <button class="sfc-lang-del" type="button" title="移除" data-del-idx="0">
+                <span class="material-icons">delete_outline</span>
+            </button>`;
+
+        row.querySelector('.sfc-lang-del')?.addEventListener('click', () => {
+            row.remove();
+            rebuildDelIdx(list, '[data-lang-row]');
+        });
+        list.appendChild(row);
+        addInput.value = '';
+    }
+
+    addBtn.addEventListener('click', addRow);
+    addInput.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); addRow(); } });
+    bindDelete();
+}
+
+function collectLanguageSupportValue(fieldKey) {
+    const card = document.querySelector(`[data-field-card="${fieldKey}"]`);
+    if (!card) return [];
+    const rows = card.querySelectorAll('[data-lang-row]');
+    const result = Array.from(rows).map(row => {
+        const name = row.querySelector('[data-lang-name]')?.value?.trim() || '';
+        const isSupported = row.querySelector('[data-lang-supported]')?.checked === true;
+        return { name, isSupported };
+    }).filter(item => item.name);
+
+    return result;
+}
+
 function renderChipsEditor(fieldKey, items) {
     const chipsHtml = items.map((item, idx) =>
         `<span class="sfc-chip" data-visual-item="${escapeAttr(item)}">
@@ -744,14 +956,12 @@ function renderChipsEditor(fieldKey, items) {
 
     return `<div class="sfc-chips-editor" id="sfc-editor-${fieldKey}">
         <div class="sfc-chips-list" id="sfc-chips-${fieldKey}">${chipsHtml}</div>
-        <div class="sfc-add-row">
-            <input class="sfc-add-input system-field-input" type="text"
-                placeholder="输入后按 Enter 或点击 ＋ 添加"
-                id="sfc-addinput-${fieldKey}">
-            <button class="sfc-add-btn" type="button" data-add-chips="${fieldKey}" title="添加">
-                <span class="material-icons">add</span>
+        <input-box size="small-headerless" show-action id="sfc-addinput-${fieldKey}"
+            placeholder="输入后按 Enter 或点击 ＋ 添加">
+            <button slot="action" class="sfc-add-btn" type="button" data-add-chips="${fieldKey}" title="添加">
+                <span class="material-icons" style="font-size:16px;">add</span>
             </button>
-        </div>
+        </input-box>
     </div>`;
 }
 
@@ -772,14 +982,12 @@ function renderImageListEditor(fieldKey, items) {
 
     return `<div class="sfc-imglist-editor" id="sfc-editor-${fieldKey}">
         <div class="sfc-imglist" id="sfc-imglist-${fieldKey}">${itemsHtml}</div>
-        <div class="sfc-add-row">
-            <input class="sfc-add-input system-field-input" type="text"
-                placeholder="粘贴图片 URL 后按 Enter 或点击 ＋"
-                id="sfc-addinput-${fieldKey}">
-            <button class="sfc-add-btn" type="button" data-add-imglist="${fieldKey}" title="添加">
-                <span class="material-icons">add_photo_alternate</span>
+        <input-box size="small-headerless" show-action id="sfc-addinput-${fieldKey}"
+            placeholder="粘贴图片 URL 后按 Enter 或点击 ＋">
+            <button slot="action" class="sfc-add-btn" type="button" data-add-imglist="${fieldKey}" title="添加">
+                <span class="material-icons" style="font-size:16px;">add_photo_alternate</span>
             </button>
-        </div>
+        </input-box>
     </div>`;
 }
 
@@ -881,18 +1089,21 @@ function renderSystemFieldCards() {
 
     container.innerHTML = SYSTEM_FIELD_CONFIG.map(field => {
         const raw = getSystemFieldRawValue(detail, field.key);
-        const value = normalizeSystemFieldValue(raw);
-        const preview = formatSystemFieldPreview(raw);
+        let value = normalizeSystemFieldValue(raw);
+        
+        const preview = formatSystemFieldPreview(value);
 
         let editorHtml;
         if (field.visualType === 'chips') {
             editorHtml = renderChipsEditor(field.key, parseSemicolon(value));
         } else if (field.visualType === 'image-list') {
             editorHtml = renderImageListEditor(field.key, parseSemicolon(value));
+        } else if (field.visualType === 'language-support') {
+            editorHtml = renderLanguageSupportEditor(field.key, parseLanguageSupportItems(raw));
         } else if (field.multiline) {
-            editorHtml = `<textarea class="system-field-input system-field-input-multiline" id="systemFieldInput-${field.key}" data-field="${field.key}" rows="3" placeholder="请输入 ${escapeHtml(field.label)}">${escapeHtml(value)}</textarea>`;
+            editorHtml = `<input-box textarea rows="3" id="systemFieldInput-${field.key}" data-field="${field.key}" value="${escapeHtml(value)}" placeholder="请输入 ${escapeHtml(field.label)}"></input-box>`;
         } else {
-            editorHtml = `<input class="system-field-input" id="systemFieldInput-${field.key}" data-field="${field.key}" type="text" value="${escapeHtml(value)}" placeholder="请输入 ${escapeHtml(field.label)}">`;
+            editorHtml = `<input-box size="small-headerless" show-action id="systemFieldInput-${field.key}" data-field="${field.key}" value="${escapeHtml(value)}" placeholder="请输入 ${escapeHtml(field.label)}"><button slot="action" class="system-rv-save-btn" type="button" data-system-save-field="${field.key}">保存</button></input-box>`;
         }
 
         return `
@@ -902,11 +1113,7 @@ function renderSystemFieldCards() {
                 </div>
                 <p class="system-field-card-current" title="${escapeHtml(value)}">${escapeHtml(preview)}</p>
                 ${editorHtml}
-                <div class="system-field-card-actions">
-                    <button class="btn small system-rv-save-btn" type="button" data-system-save-field="${field.key}">
-                        <span class="material-icons">save</span>保存
-                    </button>
-                </div>
+                ${field.multiline || field.visualType ? `<div class="system-field-card-actions"><button class="btn small system-rv-save-btn" type="button" data-system-save-field="${field.key}"><span class="material-icons">save</span>保存</button></div>` : ''}
             </article>`;
     }).join('');
 
@@ -914,11 +1121,20 @@ function renderSystemFieldCards() {
         const card = container.querySelector(`[data-field-card="${field.key}"]`);
         if (!card) return;
         const raw = getSystemFieldRawValue(detail, field.key);
-        const value = normalizeSystemFieldValue(raw);
+        
+        let value = normalizeSystemFieldValue(raw);
+
+        const input = document.getElementById(`systemFieldInput-${field.key}`);
+        if (input) {
+            input.value = value;
+        }
+
         if (field.visualType === 'chips') {
             bindChipsEditorEvents(card, field.key, parseSemicolon(value));
         } else if (field.visualType === 'image-list') {
             bindImageListEditorEvents(card, field.key);
+        } else if (field.visualType === 'language-support') {
+            bindLanguageSupportEditorEvents(card, field.key);
         }
     });
 
@@ -936,7 +1152,9 @@ async function saveSystemField(field, triggerBtn = null) {
 
     const fieldCfg = SYSTEM_FIELD_CONFIG.find(f => f.key === field);
     let value;
-    if (fieldCfg?.visualType) {
+    if (fieldCfg?.visualType === 'language-support') {
+        value = collectLanguageSupportValue(field);
+    } else if (fieldCfg?.visualType) {
         value = collectVisualValue(field);
     } else {
         const input = document.getElementById(`systemFieldInput-${field}`);

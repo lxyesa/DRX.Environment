@@ -8,6 +8,67 @@
  * ================================================================ */
 'use strict';
 
+function devMsgBox({ title = '提示', message = '', type = 'info', confirmText = '确定', cancelText = '取消', showCancel = false } = {}) {
+    if (typeof window.showMsgBox === 'function' && !showCancel) {
+        return new Promise(resolve => {
+            window.showMsgBox({
+                title,
+                message,
+                type,
+                onConfirm: () => resolve(true)
+            });
+        });
+    }
+
+    return new Promise(resolve => {
+        const overlay = document.createElement('div');
+        overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.48);display:flex;align-items:center;justify-content:center;z-index:9999;padding:16px;';
+
+        const card = document.createElement('div');
+        card.style.cssText = 'width:min(420px,100%);background:#121212;border:1px solid rgba(255,255,255,.1);border-radius:8px;padding:16px;color:#fff;box-shadow:0 14px 40px rgba(0,0,0,.4);';
+
+        const titleEl = document.createElement('h3');
+        titleEl.textContent = title;
+        titleEl.style.cssText = 'margin:0 0 8px;font-size:16px;font-weight:700;';
+
+        const msgEl = document.createElement('p');
+        msgEl.textContent = message;
+        msgEl.style.cssText = 'margin:0 0 14px;font-size:13px;line-height:1.6;color:rgba(255,255,255,.78);';
+
+        const actions = document.createElement('div');
+        actions.style.cssText = 'display:flex;justify-content:flex-end;gap:8px;';
+
+        const cancelBtn = document.createElement('button');
+        cancelBtn.type = 'button';
+        cancelBtn.textContent = cancelText;
+        cancelBtn.style.cssText = 'padding:8px 12px;border-radius:6px;border:1px solid rgba(255,255,255,.18);background:transparent;color:#fff;cursor:pointer;';
+
+        const confirmBtn = document.createElement('button');
+        confirmBtn.type = 'button';
+        confirmBtn.textContent = confirmText;
+        confirmBtn.style.cssText = 'padding:8px 12px;border-radius:6px;border:none;background:#fff;color:#0f0f0f;font-weight:700;cursor:pointer;';
+
+        const close = (result) => {
+            try { overlay.remove(); } catch (_) { }
+            resolve(result);
+        };
+
+        confirmBtn.addEventListener('click', () => close(true));
+        cancelBtn.addEventListener('click', () => close(false));
+        overlay.addEventListener('click', (e) => {
+            if (e.target === overlay && showCancel) close(false);
+        });
+
+        actions.appendChild(confirmBtn);
+        if (showCancel) actions.insertBefore(cancelBtn, confirmBtn);
+        card.appendChild(titleEl);
+        card.appendChild(msgEl);
+        card.appendChild(actions);
+        overlay.appendChild(card);
+        document.body.appendChild(overlay);
+    });
+}
+
 /* ----------------------------------------------------------------
    Tab 切换
    ---------------------------------------------------------------- */
@@ -55,26 +116,54 @@ async function submitForm() {
 
     try {
         if (state.editingId) {
-            const updateResp = await apiUpdateAsset({ id: state.editingId, ...data });
-            if (updateResp.code !== 0) {
-                alert(updateResp.message || '保存失败');
+            const shouldSubmitReview = await devMsgBox({
+                title: '确认发起重审',
+                message: '发起后将先保存当前修改，并使资源下架后重新进入审核状态。',
+                type: 'warn',
+                confirmText: '发起重审',
+                cancelText: '稍后再说',
+                showCancel: true
+            });
+
+            if (!shouldSubmitReview) {
                 return;
             }
-            const submitResp = await apiSubmitReview(state.editingId);
-            if (submitResp.code === 0) {
-                alert('资源已保存并提交重审，等待审核结果');
-            } else if (submitResp.cooldownRemaining) {
-                alert(`资源已保存，但提交冷却中，请在 ${formatCooldown(submitResp.cooldownRemaining)} 后手动重新提交`);
-            } else {
-                alert(`资源已保存，但提交审核失败：${submitResp.message || '未知错误'}`);
+
+            const updateResp = await apiUpdateAsset({ id: state.editingId, ...data });
+            if (updateResp.code !== 0) {
+                await devMsgBox({ title: '保存失败', message: updateResp.message || '保存失败', type: 'error' });
+                return;
+            }
+
+            if (shouldSubmitReview) {
+                const submitResp = await apiSubmitReview(state.editingId);
+                if (submitResp.code === 0) {
+                    await devMsgBox({
+                        title: '已提交重审',
+                        message: '资源已下架并重新进入审核状态，请等待审核结果。',
+                        type: 'success'
+                    });
+                } else if (submitResp.cooldownRemaining) {
+                    await devMsgBox({
+                        title: '提交冷却中',
+                        message: `资源已保存，但提交冷却中，请在 ${formatCooldown(submitResp.cooldownRemaining)} 后手动重新提交。`,
+                        type: 'warn'
+                    });
+                } else {
+                    await devMsgBox({
+                        title: '提交审核失败',
+                        message: `资源已保存，但提交审核失败：${submitResp.message || '未知错误'}`,
+                        type: 'error'
+                    });
+                }
             }
         } else {
             const resp = await apiCreateAsset(data);
             if (resp.code !== 0) {
-                alert(resp.message || '创建失败');
+                await devMsgBox({ title: '创建失败', message: resp.message || '创建失败', type: 'error' });
                 return;
             }
-            alert(resp.message || '操作成功');
+            await devMsgBox({ title: '创建成功', message: resp.message || '操作成功', type: 'success' });
         }
 
         resetForm();
@@ -343,6 +432,11 @@ function bindEvents() {
 
     const addPriceBtn = document.getElementById('addPriceBtn');
     if (addPriceBtn) addPriceBtn.addEventListener('click', () => addPriceRow());
+
+    const addLanguageSupportBtn = document.getElementById('addLanguageSupportBtn');
+    if (addLanguageSupportBtn) {
+        addLanguageSupportBtn.addEventListener('click', () => addLanguageSupportRow({ name: '', isSupported: true }));
+    }
 
     const submitBtn = document.getElementById('submitAssetBtn');
     if (submitBtn) submitBtn.addEventListener('click', submitForm);

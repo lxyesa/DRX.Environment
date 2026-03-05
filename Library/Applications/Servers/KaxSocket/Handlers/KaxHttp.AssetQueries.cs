@@ -124,6 +124,7 @@ public partial class KaxHttp
                     description   = a.Description,
                     coverImage    = a.CoverImage,
                     iconImage     = a.IconImage,
+                    tags          = a.Tags ?? string.Empty,
                     authorName    = authorNameMap.TryGetValue(a.AuthorId, out var n) ? n : "未知",
                     purchaseCount = s?.PurchaseCount ?? 0,
                     favoriteCount = s?.FavoriteCount ?? 0,
@@ -254,6 +255,11 @@ public partial class KaxHttp
                 duration          = p.Duration,
                 stock             = p.Stock
             }).ToList();
+            var languageSupports = GetLanguageSupports(asset).Select(x => new
+            {
+                name = x.Name,
+                isSupported = x.IsSupported
+            }).ToList();
             // 截图与标签均以分隔符存储，输出时转为数组
             var screenshotList = (asset.Screenshots ?? string.Empty).Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
             var tagList        = (asset.Tags        ?? string.Empty).Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
@@ -283,10 +289,6 @@ public partial class KaxHttp
                 viewCount     = specs.ViewCount,
                 lastUpdatedAt = specs.LastUpdatedAt
             };
-
-            // 徽章与特性：从数据库读取，为空则返回默认值（向后兼容）
-            var badgesRaw = asset.Badges ?? string.Empty;
-            var featuresRaw = asset.Features ?? string.Empty;
 
             // 作者显示名：优先 DisplayName，其次 UserName，兜底“未知”
             var authorName = "未知";
@@ -318,8 +320,8 @@ public partial class KaxHttp
                 iconImage   = asset.IconImage,
                 screenshots    = screenshotList,
                 tags           = tagList,
-                badges         = ParseStringArray(badgesRaw),
-                features       = ParseStringArray(featuresRaw),
+                languageSupportsJson = asset.LanguageSupportsJson,
+                languageSupports = languageSupports,
                 prices         = pricesList,
                 specs          = specsDto
             };

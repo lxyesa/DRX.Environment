@@ -291,6 +291,130 @@
 }
 
 /* ================================================================
+   Language Support Panel
+   ================================================================ */
+.dev-lang-panel {
+    border: 1px solid var(--dev-line-soft);
+    border-radius: 6px;
+    background: var(--dev-surface-soft);
+    overflow: hidden;
+}
+
+.dev-lang-top {
+    padding: 14px 16px 12px;
+    border-bottom: 1px solid var(--dev-line-soft);
+    background: rgba(255, 255, 255, 0.018);
+}
+
+.dev-lang-top-title {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    margin-bottom: 6px;
+    color: var(--dev-text-primary);
+    font-size: 0.92rem;
+    font-weight: 700;
+}
+
+.dev-lang-top-title .material-icons {
+    font-size: 18px;
+    color: var(--dev-accent);
+}
+
+.dev-lang-top p {
+    margin: 0;
+    color: var(--dev-text-secondary);
+    font-size: 0.8rem;
+    line-height: 1.6;
+}
+
+.dev-lang-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px;
+}
+
+.dev-lang-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    border: 1px solid var(--dev-line-soft);
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.015);
+    padding: 10px;
+}
+
+.dev-lang-item-main {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    min-width: 0;
+}
+
+.dev-lang-icon {
+    color: var(--dev-accent);
+    font-size: 17px;
+    opacity: 0.9;
+}
+
+.dev-lang-name {
+    width: 100%;
+    min-width: 0;
+    padding: 8px 10px;
+    border: 1px solid var(--dev-line-soft);
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.02);
+    color: var(--dev-text-strong);
+    font-size: 0.83rem;
+    outline: none;
+}
+
+.dev-lang-name:focus {
+    border-color: rgba(99, 140, 255, 0.35);
+}
+
+.dev-lang-check {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--dev-text-secondary);
+    font-size: 0.78rem;
+    user-select: none;
+    white-space: nowrap;
+}
+
+.dev-lang-check input {
+    accent-color: var(--dev-accent);
+    width: 15px;
+    height: 15px;
+}
+
+.dev-lang-remove {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 30px;
+    width: 30px;
+    border: 1px solid rgba(239, 68, 68, 0.22);
+    border-radius: 4px;
+    background: rgba(239, 68, 68, 0.08);
+    color: rgba(255, 120, 120, 0.95);
+    cursor: pointer;
+}
+
+.dev-lang-remove .material-icons {
+    font-size: 17px;
+}
+
+.dev-lang-actions {
+    padding: 0 12px 12px;
+}
+
+/* ================================================================
    Create Asset — 新提交资源布局
    ================================================================ */
 

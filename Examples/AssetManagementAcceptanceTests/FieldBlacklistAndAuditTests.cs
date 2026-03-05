@@ -45,8 +45,6 @@ public class FieldBlacklistAndAuditTests
         "description",
         "category",
         "tags",
-        "badges",
-        "features",
         "coverImage",
         "iconImage",
         "screenshots",
@@ -116,8 +114,6 @@ public class FieldBlacklistAndAuditTests
     [InlineData("description")]
     [InlineData("category")]
     [InlineData("tags")]
-    [InlineData("badges")]
-    [InlineData("features")]
     [InlineData("coverImage")]
     [InlineData("iconImage")]
     [InlineData("screenshots")]

@@ -1,7 +1,7 @@
 /* ================================================================
  *  developer.utils.js — 工具函数与常量
  *  包含：常量定义、formatDate、escapeHtml、statusBadge、
- *        normalizeTags、tryParseJsonArray、badges/features 格式化、
+ *        normalizeTags、tryParseJsonArray、
  *        setButtonLoading
  * ================================================================ */
 'use strict';
@@ -17,14 +17,13 @@ const SYSTEM_FIELD_CONFIG = [
     { key: 'description', label: '描述', multiline: true },
     { key: 'category', label: '分类', multiline: false },
     { key: 'tags', label: '标签', multiline: true, visualType: 'chips' },
-    { key: 'badges', label: '徽章', multiline: true, visualType: 'chips' },
-    { key: 'features', label: '特性', multiline: true, visualType: 'chips' },
     { key: 'coverImage', label: '封面图 URL', multiline: false },
     { key: 'iconImage', label: '图标 URL', multiline: false },
     { key: 'screenshots', label: '截图', multiline: true, visualType: 'image-list' },
     { key: 'downloadUrl', label: '下载地址', multiline: false },
     { key: 'license', label: '许可证', multiline: false },
-    { key: 'compatibility', label: '兼容性', multiline: true, visualType: 'chips' }
+    { key: 'compatibility', label: '兼容性', multiline: true, visualType: 'chips' },
+    { key: 'languageSupportsJson', label: '语言支持', multiline: true, visualType: 'language-support' }
 ];
 
 function formatDate(ts) {
@@ -83,73 +82,6 @@ function tryParseJsonArray(raw) {
     }
 }
 
-function formatBadgesForEditor(raw) {
-    const list = tryParseJsonArray(raw);
-    if (!list.length) return '';
-    return list.map(item => {
-        const icon = String(item?.icon ?? '').trim();
-        const text = String(item?.text ?? '').trim();
-        if (!text) return '';
-        return `${icon}|${text}`;
-    }).filter(Boolean).join('\n');
-}
-
-function formatFeaturesForEditor(raw) {
-    const list = tryParseJsonArray(raw);
-    if (!list.length) return '';
-    return list.map(item => {
-        const icon = String(item?.icon ?? '').trim();
-        const title = String(item?.title ?? '').trim();
-        const desc = String(item?.desc ?? '').trim();
-        if (!title) return '';
-        return `${icon}|${title}|${desc}`;
-    }).filter(Boolean).join('\n');
-}
-
-function serializeBadgesFromEditor(raw) {
-    const text = String(raw ?? '').trim();
-    if (!text) return '';
-
-    const parsedJson = tryParseJsonArray(text);
-    if (parsedJson.length) {
-        const normalized = parsedJson
-            .map(item => ({ icon: String(item?.icon ?? '').trim() || 'info', text: String(item?.text ?? '').trim() }))
-            .filter(item => item.text);
-        return normalized.length ? JSON.stringify(normalized) : '';
-    }
-
-    const list = text.split(/\r?\n/).map(line => line.trim()).filter(Boolean).map(line => {
-        const [iconRaw = '', ...rest] = line.split('|');
-        return { icon: iconRaw.trim() || 'info', text: rest.join('|').trim() };
-    }).filter(item => item.text);
-
-    return list.length ? JSON.stringify(list) : '';
-}
-
-function serializeFeaturesFromEditor(raw) {
-    const text = String(raw ?? '').trim();
-    if (!text) return '';
-
-    const parsedJson = tryParseJsonArray(text);
-    if (parsedJson.length) {
-        const normalized = parsedJson
-            .map(item => ({
-                icon: String(item?.icon ?? '').trim() || 'star',
-                title: String(item?.title ?? '').trim(),
-                desc: String(item?.desc ?? '').trim()
-            }))
-            .filter(item => item.title);
-        return normalized.length ? JSON.stringify(normalized) : '';
-    }
-
-    const list = text.split(/\r?\n/).map(line => line.trim()).filter(Boolean).map(line => {
-        const [iconRaw = '', titleRaw = '', ...descParts] = line.split('|');
-        return { icon: iconRaw.trim() || 'star', title: titleRaw.trim(), desc: descParts.join('|').trim() };
-    }).filter(item => item.title);
-
-    return list.length ? JSON.stringify(list) : '';
-}
-
 function getSystemFieldRawValue(detail, field) {
     if (!detail || !field) return '';
     if (Object.prototype.hasOwnProperty.call(detail, field)) return detail[field];
@@ -193,5 +125,5 @@ function setButtonLoading(button, loadingText) {
 
 function parseSemicolon(raw) {
     if (!raw) return [];
-    return String(raw).split(';').map(s => s.trim()).filter(Boolean);
+    return String(raw).split(/[;,]/).map(s => s.trim()).filter(Boolean);
 }
