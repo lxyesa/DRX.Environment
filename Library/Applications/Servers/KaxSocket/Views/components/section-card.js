@@ -6,6 +6,8 @@
     <style>
       :host {
         display: block;
+        width: var(--_width, auto);
+        height: var(--_height, auto);
       }
 
       /* 卡片容器 */
@@ -13,6 +15,8 @@
         background: var(--sc-bg, rgba(255,255,255,0.02));
         border: 1px solid var(--sc-border, rgba(255,255,255,0.06));
         border-radius: var(--sc-radius, 6px);
+        width: 100%;
+        height: 100%;
         overflow: hidden;
         transition: border-color 0.18s ease;
       }
@@ -125,7 +129,7 @@
 
     class SectionCard extends HTMLElement {
         static get observedAttributes() {
-            return ['icon', 'title', 'desc', 'no-header', 'no-padding'];
+        return ['icon', 'title', 'desc', 'no-header', 'no-padding', 'width', 'height'];
         }
 
         constructor() {
@@ -168,6 +172,14 @@
                 case 'desc':
                     if (this._descEl) this._descEl.textContent = val || '';
                     break;
+                case 'width':
+                  if (val) this.style.setProperty('--_width', val);
+                  else this.style.removeProperty('--_width');
+                  break;
+                case 'height':
+                  if (val) this.style.setProperty('--_height', val);
+                  else this.style.removeProperty('--_height');
+                  break;
             }
         }
 

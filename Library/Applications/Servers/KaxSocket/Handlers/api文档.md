@@ -323,6 +323,51 @@ POST /api/user/verify/account
 Authorization: Bearer <token>
 ```
 
+### 11.1 System 用户列表
+
+GET /api/system/users
+
+说明：仅 System 权限可访问，支持关键字与权限组筛选，返回分页用户列表。
+
+Query 参数：
+
+- q: string，可选，按用户名/显示名/邮箱模糊搜索
+- permissionGroup: int，可选，权限组（0=System, 2=Console, 3=Admin, 999=User）
+- page: int，可选，默认 1
+- pageSize: int，可选，默认 20，最大 100
+
+响应示例：
+
+```json
+{
+  "code": 0,
+  "message": "成功",
+  "data": {
+    "total": 1,
+    "page": 1,
+    "pageSize": 20,
+    "items": [
+      {
+        "id": 1,
+        "userName": "system",
+        "displayName": "system",
+        "email": "system@example.com",
+        "permissionGroup": 0,
+        "permissionGroupText": "System",
+        "emailVerified": true,
+        "isBanned": false,
+        "banExpiresAt": 0,
+        "registeredAt": 0,
+        "lastLoginAt": 0,
+        "recentActivity": 0,
+        "resourceCount": 0,
+        "gold": 0
+      }
+    ]
+  }
+}
+```
+
 **限制**：60 req/60s
 
 **功能**：验证当前登录令牌的有效性

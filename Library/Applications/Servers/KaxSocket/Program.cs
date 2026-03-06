@@ -95,6 +95,7 @@ public class Program
             server.AddRoute(HttpMethod.Get, "/forgot-password", req => new HtmlResultFromFile($"{AppDomain.CurrentDomain.BaseDirectory}Views/html/forgot-password.html"));
             server.AddRoute(HttpMethod.Get, "/reset-password", req => new HtmlResultFromFile($"{AppDomain.CurrentDomain.BaseDirectory}Views/html/reset-password.html"));
             server.AddRoute(HttpMethod.Get, "/console", req => new HtmlResultFromFile($"{AppDomain.CurrentDomain.BaseDirectory}Views/html/console.html"));
+            server.AddRoute(HttpMethod.Get, "/manage-users", req => new HtmlResultFromFile($"{AppDomain.CurrentDomain.BaseDirectory}Views/html/manage-users.html"));
             server.AddRoute(HttpMethod.Get, "/developer", req => new HtmlResultFromFile($"{AppDomain.CurrentDomain.BaseDirectory}Views/html/developer.html"));
 
             server.FileUploadRouter("/api/file/upload", "uploads");

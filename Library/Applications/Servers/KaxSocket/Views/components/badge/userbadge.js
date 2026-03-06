@@ -12,14 +12,14 @@
     };
 
     class UserBadge extends HTMLElement {
-        static get observedAttributes() { return ['text', 'variant', 'bg', 'color']; }
+        static get observedAttributes() { return ['text', 'variant', 'bg', 'color', 'width', 'height']; }
 
         constructor() {
             super();
             this._shadow = this.attachShadow({ mode: 'open' });
             this._shadow.innerHTML = `
                 <style>
-                    :host{ --ub-bg: var(--ub-bg, rgba(255,255,255,0.03)); --ub-color: var(--ub-color, rgba(255,255,255,0.9)); display:inline-flex; align-items:center; justify-content:center; padding:4px 8px; border-radius:999px; font-size:0.78rem; font-weight:700; line-height:1; box-sizing:border-box; min-height:20px; min-width:20px; color:var(--ub-color); background:var(--ub-bg); border:1px solid rgba(255,255,255,0.02); }
+                    :host{ --ub-bg: var(--ub-bg, rgba(255,255,255,0.03)); --ub-color: var(--ub-color, rgba(255,255,255,0.9)); display:inline-flex; align-items:center; justify-content:center; padding:4px 8px; border-radius:999px; font-size:0.78rem; font-weight:700; line-height:1; box-sizing:border-box; min-height:20px; min-width:20px; width:var(--ub-width, auto); height:var(--ub-height, auto); color:var(--ub-color); background:var(--ub-bg); border:1px solid rgba(255,255,255,0.02); }
                     .label{ display:inline-block; padding:6px; white-space:nowrap; }
                 </style>
                 <span class="label" part="label"></span>
@@ -47,6 +47,8 @@
             const variant = (this.getAttribute('variant') || '').toLowerCase();
             const explicitBg = this.getAttribute('bg');
             const explicitColor = this.getAttribute('color');
+            const explicitWidth = this.getAttribute('width');
+            const explicitHeight = this.getAttribute('height');
             const explicitPadding = this.getAttribute('padding');
 
             let bg, color;
@@ -66,6 +68,12 @@
             if (explicitPadding) {
                 this.style.setProperty('padding', explicitPadding);
             }
+
+            if (explicitWidth) this.style.setProperty('--ub-width', explicitWidth);
+            else this.style.removeProperty('--ub-width');
+
+            if (explicitHeight) this.style.setProperty('--ub-height', explicitHeight);
+            else this.style.removeProperty('--ub-height');
 
             // 将颜色写入 host 的 CSS 变量，shadow 样式会读取
             this.style.setProperty('--ub-bg', bg);

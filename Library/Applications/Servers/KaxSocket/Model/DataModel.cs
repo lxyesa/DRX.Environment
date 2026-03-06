@@ -82,6 +82,12 @@ namespace KaxSocket
 
         /// <summary>金币（平台积分/分数）</summary>
         public int Gold { get; set; } = 0;
+
+        /// <summary>
+        /// 徽章（JSON 数组字符串），格式：[{"text":"MVP","color":[59,130,246]}]
+        /// 兼容旧格式 badge1[r,g,b];badge2[r,g,b]，读取时自动迁移。
+        /// </summary>
+        public string Badges { get; set; } = string.Empty;
     }
 
     /// <summary>

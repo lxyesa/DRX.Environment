@@ -8,6 +8,8 @@
         display: inline-flex;
         align-items: flex-start;
         gap: 10px;
+        width: var(--_width, auto);
+        height: var(--_height, auto);
         cursor: pointer;
         user-select: none;
         -webkit-user-select: none;
@@ -169,7 +171,7 @@
 
     class CheckBox extends HTMLElement {
         static get observedAttributes() {
-            return ['label', 'desc', 'checked', 'disabled', 'name', 'value', 'size', 'indeterminate'];
+        return ['label', 'desc', 'checked', 'disabled', 'name', 'value', 'size', 'indeterminate', 'width', 'height'];
         }
 
         constructor() {
@@ -274,6 +276,14 @@
                 case 'indeterminate':
                     this._inputEl.indeterminate = val !== null;
                     break;
+                case 'width':
+                  if (val) this.style.setProperty('--_width', val);
+                  else this.style.removeProperty('--_width');
+                  break;
+                case 'height':
+                  if (val) this.style.setProperty('--_height', val);
+                  else this.style.removeProperty('--_height');
+                  break;
             }
         }
 

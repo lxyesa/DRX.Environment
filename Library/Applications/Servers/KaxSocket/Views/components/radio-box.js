@@ -8,6 +8,8 @@
         display: inline-flex;
         align-items: flex-start;
         gap: 10px;
+                width: var(--_width, auto);
+                height: var(--_height, auto);
         cursor: pointer;
         user-select: none;
         -webkit-user-select: none;
@@ -130,7 +132,7 @@
 
     class RadioBox extends HTMLElement {
         static get observedAttributes() {
-            return ['label', 'desc', 'checked', 'disabled', 'name', 'value', 'size'];
+            return ['label', 'desc', 'checked', 'disabled', 'name', 'value', 'size', 'width', 'height'];
         }
 
         constructor() {
@@ -228,6 +230,14 @@
                     break;
                 case 'value':
                     this._inputEl.value = val || '';
+                    break;
+                case 'width':
+                    if (val) this.style.setProperty('--_width', val);
+                    else this.style.removeProperty('--_width');
+                    break;
+                case 'height':
+                    if (val) this.style.setProperty('--_height', val);
+                    else this.style.removeProperty('--_height');
                     break;
             }
         }

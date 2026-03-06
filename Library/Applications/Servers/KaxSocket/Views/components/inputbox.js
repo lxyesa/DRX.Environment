@@ -4,8 +4,8 @@
     const template = document.createElement('template');
     template.innerHTML = `
     <style>
-      :host{display:block;} 
-    .field{ border-radius:4px; border:1px solid rgba(255,255,255,0.06); padding:10px 12px; background: rgba(255,255,255,0.01); box-sizing:border-box; min-height: var(--field-min-height, auto); }
+            :host{display:block; width: var(--_width, auto); height: var(--_height, auto);} 
+        .field{ border-radius:4px; border:1px solid rgba(255,255,255,0.06); padding:10px 12px; background: rgba(255,255,255,0.01); box-sizing:border-box; min-height: var(--field-min-height, auto); height: var(--field-height, auto); }
       .label{ display:block; font-size:0.82rem; color:rgba(255,255,255,0.72); margin-bottom:6px; }
       .label-divider{ height:1px; background:rgba(255,255,255,0.03); margin:6px 0 8px; border-radius:1px; }
     :host(:not([label])) .label,
@@ -125,7 +125,7 @@
     `;
 
     class InputBox extends HTMLElement {
-        static get observedAttributes(){ return ['label','placeholder','type','value','readonly','disabled','minlength','maxlength','name','autocomplete','textarea','rows','show-action','size','icon','button-height','button-width','button-color']; }
+        static get observedAttributes(){ return ['label','placeholder','type','value','readonly','disabled','minlength','maxlength','name','autocomplete','textarea','rows','show-action','size','icon','button-height','button-width','button-color','width','height']; }
         constructor(){
             super();
             this._shadow = this.attachShadow({mode:'open'});
@@ -296,6 +296,22 @@
                     } else {
                         this._shadow.host.style.removeProperty('--button-color');
                         this._shadow.host.style.removeProperty('--button-hover-color');
+                    }
+                    break;
+                case 'width':
+                    if (val) {
+                        this._shadow.host.style.setProperty('--_width', val);
+                    } else {
+                        this._shadow.host.style.removeProperty('--_width');
+                    }
+                    break;
+                case 'height':
+                    if (val) {
+                        this._shadow.host.style.setProperty('--_height', val);
+                        this._shadow.host.style.setProperty('--field-height', '100%');
+                    } else {
+                        this._shadow.host.style.removeProperty('--_height');
+                        this._shadow.host.style.removeProperty('--field-height');
                     }
                     break;
             }

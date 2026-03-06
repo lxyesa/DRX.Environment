@@ -6,13 +6,19 @@
     <style>
       *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-      :host { display: block; }
+      :host {
+        display: block;
+        width: var(--_width, auto);
+        height: var(--_height, auto);
+      }
 
       /* 外层卡片容器 */
       .card {
         border: 1px solid rgba(255,255,255,0.06);
         border-radius: 4px;
         background: rgba(255,255,255,0.02);
+        width: 100%;
+        height: 100%;
         overflow: hidden;
         transition: border-color 0.18s ease;
       }
@@ -183,7 +189,7 @@
      */
     class CollapsibleCard extends HTMLElement {
         static get observedAttributes() {
-            return ['title', 'subtitle', 'open'];
+        return ['title', 'subtitle', 'open', 'width', 'height'];
         }
 
         constructor() {
@@ -216,6 +222,14 @@
                 case 'title':    this._syncTitle();    break;
                 case 'subtitle': this._syncSubtitle(); break;
                 case 'open':     this._syncOpen();     break;
+              case 'width':
+                if (newVal) this.style.setProperty('--_width', newVal);
+                else this.style.removeProperty('--_width');
+                break;
+              case 'height':
+                if (newVal) this.style.setProperty('--_height', newVal);
+                else this.style.removeProperty('--_height');
+                break;
             }
         }
 

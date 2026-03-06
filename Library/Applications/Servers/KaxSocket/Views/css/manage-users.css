@@ -1,0 +1,176 @@
+.manage-users-panel-title {
+    color: var(--dev-text-primary, #ffffff);
+    font-size: 1rem;
+    font-weight: 600;
+}
+
+.manage-users-filter-card,
+.manage-users-list-card {
+    --sc-radius: 4px;
+    --sc-bg: rgba(255, 255, 255, 0.018);
+    --sc-border: rgba(255, 255, 255, 0.06);
+    --sc-border-hover: rgba(255, 255, 255, 0.1);
+}
+
+.manage-users-filter-card {
+    margin-bottom: 12px;
+}
+
+.manage-users-filter-grid {
+    display: grid;
+    grid-template-columns: minmax(320px, 1fr) 190px auto;
+    gap: 10px;
+    align-items: center;
+}
+
+.manage-users-filter-item {
+    min-width: 0;
+    min-height: 49px;
+}
+
+.manage-users-filter-item.keyword-item input-box,
+.manage-users-filter-item.permission-item select-box {
+    width: 100%;
+}
+
+.manage-users-filter-item.action-item {
+    justify-self: end;
+}
+
+#tab-user-list input-box,
+#tab-user-list select-box {
+    --dev-radius: 4px;
+    --field-min-height: 49px;
+}
+
+#tab-user-list action-btn {
+    --dev-radius: 4px;
+}
+
+#tab-user-list .manage-users-state {
+    margin: 4px 0 10px;
+    color: var(--dev-text-muted, rgba(255, 255, 255, 0.42));
+    font-size: 0.83rem;
+    letter-spacing: 0.01em;
+}
+
+.manage-users-table-wrap {
+    border: 1px solid var(--dev-card-border, rgba(255, 255, 255, 0.05));
+    border-radius: 4px;
+    overflow: hidden;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.016), rgba(255, 255, 255, 0.01));
+}
+
+.manage-users-table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+}
+
+.manage-users-table thead th {
+    text-align: left;
+    font-size: 0.76rem;
+    color: var(--dev-text-muted, rgba(255, 255, 255, 0.42));
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    padding: 12px 12px;
+    background: rgba(255, 255, 255, 0.02);
+    border-bottom: 1px solid var(--dev-line-soft, rgba(255, 255, 255, 0.05));
+}
+
+.manage-users-table tbody td {
+    padding: 12px;
+    border-bottom: 1px solid var(--dev-line-soft, rgba(255, 255, 255, 0.05));
+    color: var(--dev-text-secondary, rgba(255, 255, 255, 0.68));
+    font-size: 0.84rem;
+    line-height: 1.45;
+    word-break: break-word;
+}
+
+.manage-users-table tbody tr:hover {
+    background: rgba(255, 255, 255, 0.018);
+}
+
+.manage-users-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.manage-users-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 62px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    border: 1px solid transparent;
+    font-size: 0.74rem;
+    line-height: 1.55;
+}
+
+.manage-users-badge.permission-system {
+    color: #b9ccff;
+    background: rgba(99, 140, 255, 0.16);
+    border-color: rgba(99, 140, 255, 0.36);
+}
+
+.manage-users-badge.permission-console,
+.manage-users-badge.permission-admin {
+    color: #f8c36b;
+    background: rgba(245, 158, 11, 0.14);
+    border-color: rgba(245, 158, 11, 0.34);
+}
+
+.manage-users-badge.permission-user {
+    color: var(--dev-text-secondary, rgba(255, 255, 255, 0.68));
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.16);
+}
+
+.manage-users-badge.status-banned {
+    color: #ffb0b0;
+    background: rgba(239, 68, 68, 0.16);
+    border-color: rgba(239, 68, 68, 0.35);
+}
+
+.manage-users-badge.status-active {
+    color: #8de7ad;
+    background: rgba(34, 197, 94, 0.14);
+    border-color: rgba(34, 197, 94, 0.34);
+}
+
+.manage-users-empty {
+    display: flex;
+    min-height: 180px;
+}
+
+.manage-users-pagination {
+    margin-top: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+}
+
+.manage-users-page-text {
+    font-size: 0.8rem;
+    color: var(--dev-text-muted, rgba(255, 255, 255, 0.42));
+}
+
+#tab-user-list .dev-pagination .btn {
+    border-radius: 4px;
+}
+
+@media (max-width: 980px) {
+    .manage-users-filter-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .manage-users-filter-item.action-item {
+        justify-self: stretch;
+    }
+
+    .manage-users-filter-item.action-item action-btn {
+        width: 100%;
+    }
+}

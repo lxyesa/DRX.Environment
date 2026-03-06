@@ -117,6 +117,81 @@
         return String(str).replace(/[&<>"']/g, m => map[m]);
     }
 
+    function parseUserBadges(rawBadges) {
+        if (!rawBadges) return [];
+
+        const defaultColor = [120, 120, 120];
+
+        const clampColor = (arr) => {
+            if (!Array.isArray(arr) || arr.length !== 3) return null;
+            const clamped = arr.map(v => Math.max(0, Math.min(255, Number(v) | 0)));
+            return clamped.some(v => Number.isNaN(v)) ? null : clamped;
+        };
+
+        const parseBadgeItem = (item) => {
+            if (!item || typeof item !== 'object') return null;
+            const text = String(item.text || '').trim();
+            if (!text) return null;
+            const color = clampColor(item.color) || defaultColor;
+            return { text, color };
+        };
+
+        // 服务端现在返回原生数组，直接处理
+        let items = [];
+        if (Array.isArray(rawBadges)) {
+            items = rawBadges;
+        } else if (typeof rawBadges === 'string') {
+            // 兼容：字符串可能是 JSON 数组或旧分号格式
+            const input = rawBadges.trim();
+            if (!input) return [];
+            if (input.startsWith('[')) {
+                try { items = JSON.parse(input); } catch { return []; }
+            } else {
+                // 旧分号格式降级：text[r,g,b];text2[r,g,b]
+                const legacyRe = /^(.+?)\[(\d{1,3}),(\d{1,3}),(\d{1,3})\]$/;
+                items = input.split(';').map(s => s.trim()).filter(Boolean).map(seg => {
+                    const m = seg.match(legacyRe);
+                    if (m) return { text: m[1].trim(), color: [+m[2], +m[3], +m[4]] };
+                    return { text: seg, color: defaultColor };
+                });
+            }
+        } else {
+            return [];
+        }
+
+        return items.map(parseBadgeItem).filter(Boolean);
+    }
+
+    function renderUserBadges(rawBadges) {
+        const badgeContainer = document.getElementById('badgeContainer');
+        if (!badgeContainer) return;
+
+        const badges = parseUserBadges(rawBadges);
+        badgeContainer.innerHTML = '';
+
+        if (badges.length === 0) {
+            const emptyBadge = document.createElement('user-badge');
+            emptyBadge.setAttribute('text', '无徽章');
+            emptyBadge.setAttribute('variant', 'gray');
+            emptyBadge.setAttribute('role', 'status');
+            badgeContainer.appendChild(emptyBadge);
+            return;
+        }
+
+        for (const badge of badges) {
+            const [r, g, b] = badge.color;
+            const luminance = 0.299 * r + 0.587 * g + 0.114 * b;
+            const textColor = luminance >= 165 ? '#1f2937' : '#ffffff';
+
+            const node = document.createElement('user-badge');
+            node.setAttribute('text', badge.text);
+            node.setAttribute('bg', `rgb(${r}, ${g}, ${b})`);
+            node.setAttribute('color', textColor);
+            node.setAttribute('role', 'status');
+            badgeContainer.appendChild(node);
+        }
+    }
+
     async function withButtonLoading(btn, loadingText, fn) {
         if (typeof profileShared.withButtonLoading === 'function') {
             return profileShared.withButtonLoading(btn, loadingText, fn);
@@ -216,6 +291,7 @@
                 const email = data.email || '';
                 const bio = data.bio || '';
                 const signature = data.signature || '';
+                const badges = data.badges || '';
                 const registeredAt = data.registeredAt || 0;
                 const lastLoginAt = data.lastLoginAt || 0;
                 const roleText = state.deps.mapPermissionToRole(data.permissionGroup);
@@ -249,6 +325,7 @@
                 document.getElementById('displayName').textContent = displayName;
                 document.getElementById('displayHandle').textContent = '@' + user;
                 document.getElementById('displayBio').textContent = bio;
+                renderUserBadges(badges);
                 document.getElementById('role').textContent = roleText;
                 const emailEl = document.getElementById('currentEmailDisplay');
                 if (emailEl) emailEl.textContent = state.deps.maskEmail(email);

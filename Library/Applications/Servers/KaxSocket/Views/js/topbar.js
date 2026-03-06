@@ -67,6 +67,10 @@
         '            <span class="material-icons" aria-hidden="true">terminal</span>',
         '            <span>\u547d\u4ee4\u63a7\u5236\u53f0</span>',
         '          </a>',
+        '          <a role="menuitem" tabindex="0" id="systemManageUsersMenuItem" class="user-menu-item" href="/manage-users" style="display:none;">',
+        '            <span class="material-icons" aria-hidden="true">manage_accounts</span>',
+        '            <span>\u7ba1\u7406\u7528\u6237</span>',
+        '          </a>',
         '        </div>',
         '        <div id="adminMenuSeparator" class="separator" style="display:none;"></div>',
         '        <div class="user-menu-section">',
@@ -297,6 +301,11 @@
                                     var adminSep = document.getElementById('adminMenuSeparator');
                                     if (adminSection) { adminSection.style.display = ''; adminSection.setAttribute('aria-hidden', 'false'); }
                                     if (adminSep) { adminSep.style.display = ''; }
+                                }
+
+                                var systemManageUsersMenuItem = document.getElementById('systemManageUsersMenuItem');
+                                if (systemManageUsersMenuItem) {
+                                    systemManageUsersMenuItem.style.display = (j && j.isSystem) ? '' : 'none';
                                 }
 
                                 try {

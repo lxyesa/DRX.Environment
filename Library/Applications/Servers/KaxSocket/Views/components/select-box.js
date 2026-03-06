@@ -4,7 +4,7 @@
     const template = document.createElement('template');
     template.innerHTML = `
     <style>
-      :host { display: block; }
+    :host { display: block; width: var(--_width, auto); height: var(--_height, auto); }
 
       .field {
         border-radius: 4px;
@@ -12,6 +12,8 @@
         padding: 10px 12px;
         background: rgba(255,255,255,0.01);
         box-sizing: border-box;
+                min-height: var(--field-min-height, auto);
+                height: var(--field-height, auto);
         transition: border-color 0.18s ease, box-shadow 0.18s ease;
       }
 
@@ -46,6 +48,17 @@
         color: rgba(255,255,255,0.45);
         font-size: 18px;
         line-height: 1;
+                font-family: 'Material Icons';
+                font-weight: normal;
+                font-style: normal;
+                letter-spacing: normal;
+                text-transform: none;
+                white-space: nowrap;
+                word-wrap: normal;
+                direction: ltr;
+                font-feature-settings: 'liga';
+                -webkit-font-feature-settings: 'liga';
+                -webkit-font-smoothing: antialiased;
       }
       :host([icon]) .field-icon { display: flex; }
 
@@ -142,7 +155,7 @@
 
     class SelectBox extends HTMLElement {
         static get observedAttributes() {
-            return ['label', 'placeholder', 'value', 'disabled', 'name', 'size', 'icon', 'options'];
+            return ['label', 'placeholder', 'value', 'disabled', 'name', 'size', 'icon', 'options', 'width', 'height'];
         }
 
         constructor() {
@@ -217,6 +230,19 @@
                     break;
                 case 'options':
                     this._renderOptions(val);
+                    break;
+                case 'width':
+                    if (val) this._shadow.host.style.setProperty('--_width', val);
+                    else this._shadow.host.style.removeProperty('--_width');
+                    break;
+                case 'height':
+                    if (val) {
+                        this._shadow.host.style.setProperty('--_height', val);
+                        this._shadow.host.style.setProperty('--field-height', '100%');
+                    } else {
+                        this._shadow.host.style.removeProperty('--_height');
+                        this._shadow.host.style.removeProperty('--field-height');
+                    }
                     break;
             }
         }
