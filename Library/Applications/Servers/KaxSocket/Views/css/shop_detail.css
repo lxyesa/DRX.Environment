@@ -922,14 +922,14 @@
 .language-support-list {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 4px;
 }
 
 .language-support-item {
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 2px 0;
+    gap: 6px;
+    padding: 1px 0;
     border: none;
     border-radius: 0;
     background: transparent;
@@ -952,6 +952,20 @@
 .language-support-name {
     color: var(--text-primary);
     font-weight: 600;
+}
+
+.lang-toggle-btn {
+    display: inline-block;
+    margin-top: 4px;
+    color: var(--accent, #638cff);
+    font-size: 0.82rem;
+    font-weight: 500;
+    cursor: pointer;
+    user-select: none;
+}
+
+.lang-toggle-btn:hover {
+    color: var(--accent-hover, #7aa4ff);
 }
 
 .plan-item {

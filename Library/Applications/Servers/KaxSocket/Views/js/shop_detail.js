@@ -587,14 +587,31 @@
                     languageSupportGrid.innerHTML = '';
                 } else {
                     languageSupportCard.removeAttribute('hidden');
-                    languageSupportGrid.innerHTML = supports.map(item => {
+                    const LANG_LIMIT = 8;
+                    const renderItems = (list) => list.map(item => {
                         const ok = item.isSupported === true;
-                        return `
-                            <div class="language-support-item ${ok ? 'is-supported' : 'is-unsupported'}">
+                        return `<div class="language-support-item ${ok ? 'is-supported' : 'is-unsupported'}">
                                 <span class="material-icons">${ok ? 'check_circle' : 'cancel'}</span>
                                 <span class="language-support-name">${escHtml(item.name || '未命名语言')}</span>
                             </div>`;
                     }).join('');
+
+                    if (supports.length <= LANG_LIMIT) {
+                        languageSupportGrid.innerHTML = renderItems(supports);
+                    } else {
+                        const extra = supports.length - LANG_LIMIT;
+                        let expanded = false;
+                        const update = () => {
+                            const visible = expanded ? supports : supports.slice(0, LANG_LIMIT);
+                            languageSupportGrid.innerHTML = renderItems(visible) +
+                                `<span class="lang-toggle-btn" id="langToggleBtn">${expanded ? '收起' : '查看剩余 ' + extra + ' 个'}</span>`;
+                            document.getElementById('langToggleBtn').onclick = () => {
+                                expanded = !expanded;
+                                update();
+                            };
+                        };
+                        update();
+                    }
                 }
             }
 
