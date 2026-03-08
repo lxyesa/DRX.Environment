@@ -104,7 +104,8 @@ namespace Drx.Sdk.Network.Http
 
                     try
                     {
-                        list.Add(Path.GetFullPath(directory));
+                        var resolved = ResolveEffectiveRoot(directory) ?? directory;
+                        list.Add(Path.GetFullPath(resolved));
                     }
                     catch
                     {

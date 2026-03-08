@@ -245,13 +245,8 @@ public partial class KaxHttp
     {
         try
         {
-            var smtpEmail = Environment.GetEnvironmentVariable("KAX_SMTP_EMAIL") ?? "157335596@qq.com";
-            var smtpAuthCode = Environment.GetEnvironmentVariable("KAX_SMTP_AUTH_CODE") ?? "eymlrhwykskccbdb";
-            var smtpHost = Environment.GetEnvironmentVariable("KAX_SMTP_HOST") ?? "smtp.qq.com";
-            var smtpPort = int.TryParse(Environment.GetEnvironmentVariable("KAX_SMTP_PORT"), out var p) ? p : 587;
-            var smtpEnableSsl = !bool.TryParse(Environment.GetEnvironmentVariable("KAX_SMTP_ENABLE_SSL"), out var ssl) || ssl;
-
-            if (string.IsNullOrWhiteSpace(smtpEmail) || string.IsNullOrWhiteSpace(smtpAuthCode))
+          var smtpConfig = ResolveSmtpRuntimeConfig("PasswordReset");
+          if (smtpConfig == null)
             {
                 Logger.Error("[PasswordReset] SMTP 配置缺失，无法发送邮件");
                 return false;
@@ -366,14 +361,14 @@ public partial class KaxHttp
 
             var cfg = new EmailConfig
             {
-                SenderAddress = smtpEmail,
-                Password = smtpAuthCode,
+              SenderAddress = smtpConfig.SenderAddress,
+              Password = smtpConfig.AuthCode,
                 To = user.Email,
                 Subject = "KaxHub · 密码重置",
                 Body = bodyHtml,
-                SmtpHost = smtpHost,
-                SmtpPort = smtpPort,
-                EnableSsl = smtpEnableSsl,
+              SmtpHost = smtpConfig.Host,
+              SmtpPort = smtpConfig.Port,
+              EnableSsl = smtpConfig.EnableSsl,
                 ContentType = EmailContentType.Html
             };
 

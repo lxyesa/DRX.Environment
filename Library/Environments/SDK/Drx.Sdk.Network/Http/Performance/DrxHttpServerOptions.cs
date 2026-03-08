@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Threading;
+using Drx.Sdk.Network.Http.Cache;
 using Drx.Sdk.Network.Http.Configs;
 using Drx.Sdk.Shared;
 
@@ -56,10 +57,21 @@ namespace Drx.Sdk.Network.Http.Performance
         public int OverflowQueueCapacity { get; set; } = 1024;
 
         /// <summary>
-        /// 路由匹配缓存最大条目数。
-        /// 默认值：2048。
+        /// 统一缓存配置。
+        /// 用于集中管理静态资源、路由、中间件、令牌桶等缓存参数。
         /// </summary>
-        public int RouteCacheMaxSize { get; set; } = 2048;
+        public DrxCacheOptions CacheOptions { get; set; } = new();
+
+        /// <summary>
+        /// 路由匹配缓存最大条目数（兼容属性）。
+        /// 建议改用 <see cref="CacheOptions"/>.<see cref="DrxCacheOptions.RouteCacheMaxSize"/>。
+        /// </summary>
+        [Obsolete("Use CacheOptions.RouteCacheMaxSize instead.")]
+        public int RouteCacheMaxSize
+        {
+            get => CacheOptions.RouteCacheMaxSize;
+            set => CacheOptions.RouteCacheMaxSize = value;
+        }
 
         /// <summary>
         /// 是否启用自适应并发控制。
@@ -207,7 +219,8 @@ namespace Drx.Sdk.Network.Http.Performance
             if (ChannelCapacity <= 0) ChannelCapacity = 1000;
             if (PerCoreQueueCapacity <= 0) PerCoreQueueCapacity = 256;
             if (OverflowQueueCapacity <= 0) OverflowQueueCapacity = 1024;
-            if (RouteCacheMaxSize <= 0) RouteCacheMaxSize = 2048;
+            CacheOptions ??= new DrxCacheOptions();
+            CacheOptions.Validate();
             if (SlowRequestWarnThresholdMs <= 0) SlowRequestWarnThresholdMs = 1000;
             if (SessionTimeoutMinutes <= 0) SessionTimeoutMinutes = 30;
             if (AdaptiveMinConcurrency <= 0) AdaptiveMinConcurrency = Environment.ProcessorCount;

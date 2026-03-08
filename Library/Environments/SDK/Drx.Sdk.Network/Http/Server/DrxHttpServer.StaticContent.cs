@@ -1,10 +1,8 @@
 using System;
-using System.Collections.Concurrent;
-using System.Collections.Generic;
 using System.IO;
 using System.Net;
 using System.Security.Cryptography;
-using System.Text;
+using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
 using Drx.Sdk.Shared;
@@ -22,14 +20,24 @@ namespace Drx.Sdk.Network.Http
         #region 静态文件缓存条目
 
         /// <summary>
-        /// 静态文件缓存条目：存储文件的 ETag、最后修改时间、大小以及可选的内容缓存
+        /// 静态文件缓存条目：存储文件的 ETag、最后修改时间、大小以及可选的内容缓存。
+        /// 使用 public sealed class 以支持 FusionCache / Redis 序列化。
         /// </summary>
-        private sealed class StaticFileCacheEntry
+        public sealed class StaticFileCacheEntry
         {
+            [JsonPropertyName("e")]
             public string ETag { get; set; } = "";
+
+            [JsonPropertyName("lm")]
             public DateTime LastModifiedUtc { get; set; }
+
+            [JsonPropertyName("fs")]
             public long FileSize { get; set; }
+
+            [JsonPropertyName("cc")]
             public byte[]? CachedContent { get; set; }
+
+            [JsonPropertyName("ct")]
             public string ContentType { get; set; } = "application/octet-stream";
         }
 
@@ -37,11 +45,6 @@ namespace Drx.Sdk.Network.Http
         /// 小文件内容缓存阈值（小于此值的文件将缓存到内存中）
         /// </summary>
         private const int SmallFileCacheThreshold = 512 * 1024;
-
-        /// <summary>
-        /// 静态资源缓存字典：文件绝对路径 → 缓存条目
-        /// </summary>
-        private readonly ConcurrentDictionary<string, StaticFileCacheEntry> _staticContentCache = new(StringComparer.OrdinalIgnoreCase);
 
         /// <summary>
         /// 静态资源浏览器缓存时长（秒），默认 0（每次请求都走 ETag 验证）。
@@ -103,7 +106,7 @@ namespace Drx.Sdk.Network.Http
                     var serverETag = cacheEntry.ETag.Trim('"');
                     if (string.Equals(clientETag, serverETag, StringComparison.Ordinal))
                     {
-                        Logger.Info($"[静态资源缓存命中] 路径: {request.Path} | ETag: {serverETag} | 大小: {cacheEntry.FileSize} 字节");
+                        if (_debugMode) Logger.Debug($"[静态资源缓存命中] 路径: {request.Path} | ETag: {serverETag} | 大小: {cacheEntry.FileSize} 字节");
                         // [任务 4.3] 统一记录服务端 304 命中（ETag 路径）
                         HttpMetrics.Instance.RecordConditionalRequest(isConditional: true, is304: true);
                         return Build304Response(cacheEntry);
@@ -122,7 +125,7 @@ namespace Drx.Sdk.Network.Http
                             DateTimeKind.Utc);
                         if (clientDate >= serverDate)
                         {
-                            Logger.Info($"[静态资源缓存命中] 路径: {request.Path} | 修改时间: {serverDate:O} | 大小: {cacheEntry.FileSize} 字节");
+                            if (_debugMode) Logger.Debug($"[静态资源缓存命中] 路径: {request.Path} | 修改时间: {serverDate:O} | 大小: {cacheEntry.FileSize} 字节");
                             // [任务 4.3] 统一记录服务端 304 命中（Last-Modified 路径）
                             HttpMetrics.Instance.RecordConditionalRequest(isConditional: true, is304: true);
                             return Build304Response(cacheEntry);
@@ -130,7 +133,7 @@ namespace Drx.Sdk.Network.Http
                     }
                 }
 
-                Logger.Info($"[静态资源缓存未命中] 路径: {request.Path} | ETag: {cacheEntry.ETag} | 大小: {cacheEntry.FileSize} 字节");
+                if (_debugMode) Logger.Debug($"[静态资源缓存未命中] 路径: {request.Path} | ETag: {cacheEntry.ETag} | 大小: {cacheEntry.FileSize} 字节");
                 // [任务 4.3] 条件请求但未命中（资源已更新）
                 if (!string.IsNullOrEmpty(ifNoneMatch) || !string.IsNullOrEmpty(ifModifiedSince))
                     HttpMetrics.Instance.RecordConditionalRequest(isConditional: true, is304: false);
@@ -156,34 +159,68 @@ namespace Drx.Sdk.Network.Http
             var ext = Path.GetExtension(safeRelPath).ToLowerInvariant();
             bool isTextLike = IsTextLikeExtension(ext);
 
+            var effectiveViewRoot = ResolveEffectiveRoot(ViewRoot);
+            var effectiveFileRoot = ResolveEffectiveRoot(FileRootPath);
+
             if (isTextLike)
             {
-                if (!string.IsNullOrEmpty(ViewRoot))
+                if (!string.IsNullOrEmpty(effectiveViewRoot))
                 {
-                    var candidateView = Path.Combine(ViewRoot, safeRelPath);
+                    var candidateView = Path.Combine(effectiveViewRoot, safeRelPath);
                     if (File.Exists(candidateView)) return candidateView;
                 }
-                if (!string.IsNullOrEmpty(FileRootPath))
+                if (!string.IsNullOrEmpty(effectiveFileRoot))
                 {
-                    var candidateFile = Path.Combine(FileRootPath, safeRelPath);
+                    var candidateFile = Path.Combine(effectiveFileRoot, safeRelPath);
                     if (File.Exists(candidateFile)) return candidateFile;
                 }
             }
             else
             {
-                if (!string.IsNullOrEmpty(FileRootPath))
+                if (!string.IsNullOrEmpty(effectiveFileRoot))
                 {
-                    var candidateFile = Path.Combine(FileRootPath, safeRelPath);
+                    var candidateFile = Path.Combine(effectiveFileRoot, safeRelPath);
                     if (File.Exists(candidateFile)) return candidateFile;
                 }
-                if (!string.IsNullOrEmpty(ViewRoot))
+                if (!string.IsNullOrEmpty(effectiveViewRoot))
                 {
-                    var candidateView = Path.Combine(ViewRoot, safeRelPath);
+                    var candidateView = Path.Combine(effectiveViewRoot, safeRelPath);
                     if (File.Exists(candidateView)) return candidateView;
                 }
             }
 
             return null;
+        }
+
+        /// <summary>
+        /// 将配置的根目录在调试模式下重写基础路径：
+        /// 把路径中的运行目录前缀替换为项目根目录前缀，其余相对子目录保持不变。
+        /// 非调试模式下直接返回原始值。
+        /// </summary>
+        private string? ResolveEffectiveRoot(string? configuredRoot)
+        {
+            if (string.IsNullOrEmpty(configuredRoot))
+                return configuredRoot;
+
+            if (!_debugMode)
+                return configuredRoot;
+
+            var baseDir = AppDomain.CurrentDomain.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            var projectRoot = FindProjectRoot(baseDir).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+
+            // 如果配置路径以运行目录开头，则将其替换为项目根目录
+            var normalizedRoot = configuredRoot.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            if (normalizedRoot.StartsWith(baseDir, StringComparison.OrdinalIgnoreCase))
+            {
+                var rel = normalizedRoot.Substring(baseDir.Length).TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+                var resolved = string.IsNullOrEmpty(rel) ? projectRoot : Path.Combine(projectRoot, rel);
+                Logger.Debug($"[DebugMode] 文件索引目录: {resolved}");
+                return resolved;
+            }
+
+            // 配置路径不含运行目录前缀（如用户直接设置了绝对路径），调试模式下直接使用原路径
+            Logger.Debug($"[DebugMode] 文件索引目录（绝对路径，未重写）: {configuredRoot}");
+            return configuredRoot;
         }
 
         private static bool IsTextLikeExtension(string ext)
@@ -200,8 +237,15 @@ namespace Drx.Sdk.Network.Http
         #region 缓存管理
 
         /// <summary>
+        /// 静态资源缓存版本号。
+        /// 调用 ClearStaticContentCache() 时递增，使全部旧缓存键自动失效。
+        /// </summary>
+        private int _staticCacheVersion = 0;
+
+        /// <summary>
         /// 获取或更新指定文件的缓存条目。
-        /// 若缓存不存在或文件已被修改（修改时间/大小变化），则重新计算 SHA256 ETag 并更新缓存。
+        /// 使用 FusionCache GetOrSet — factory 检查文件修改时间/大小是否变化；
+        /// 若已缓存但文件已更新则强制重新计算 SHA256 ETag。
         /// </summary>
         private StaticFileCacheEntry? GetOrUpdateCacheEntry(string filePath, string contentType)
         {
@@ -210,20 +254,27 @@ namespace Drx.Sdk.Network.Http
                 var fileInfo = new FileInfo(filePath);
                 if (!fileInfo.Exists) return null;
 
-                var lastModified = fileInfo.LastWriteTimeUtc;
-                var fileSize = fileInfo.Length;
+                var lastModifiedAtRequest = fileInfo.LastWriteTimeUtc;
+                var fileSizeAtRequest = fileInfo.Length;
 
-                if (_staticContentCache.TryGetValue(filePath, out var existing))
+                // GetOrSet: 若键不存在则调用 factory 写入；若已存在直接返回缓存值。
+                // 版本号嵌入键， ClearStaticContentCache() 递增版本即可使全部旧条目失效。
+                var cacheKey = $"v{_staticCacheVersion}:{filePath}";
+                var cached = _cacheProvider.StaticContent.GetOrSet<StaticFileCacheEntry>(
+                    cacheKey,
+                    (_, _) => ComputeCacheEntry(filePath, fileInfo, contentType)
+                );
+
+                // 若缓存条目来自上一次写入但文件已被修改，强制刷新
+                if (cached != null &&
+                    (cached.LastModifiedUtc != lastModifiedAtRequest || cached.FileSize != fileSizeAtRequest))
                 {
-                    if (existing.LastModifiedUtc == lastModified && existing.FileSize == fileSize)
-                    {
-                        return existing;
-                    }
+                    var fresh = ComputeCacheEntry(filePath, new FileInfo(filePath), contentType);
+                    _cacheProvider.StaticContent.Set(cacheKey, fresh);
+                    return fresh;
                 }
 
-                var entry = ComputeCacheEntry(filePath, fileInfo, contentType);
-                _staticContentCache[filePath] = entry;
-                return entry;
+                return cached;
             }
             catch (Exception ex)
             {
@@ -279,10 +330,11 @@ namespace Drx.Sdk.Network.Http
 
         /// <summary>
         /// 清除静态资源缓存（当文件可能被外部修改时可手动调用）
+        /// 递增版本号，使全部现有缓存键失效。
         /// </summary>
         public void ClearStaticContentCache()
         {
-            _staticContentCache.Clear();
+            System.Threading.Interlocked.Increment(ref _staticCacheVersion);
             Logger.Info("静态资源缓存已清除");
         }
 
@@ -293,7 +345,8 @@ namespace Drx.Sdk.Network.Http
         {
             if (!string.IsNullOrEmpty(filePath))
             {
-                _staticContentCache.TryRemove(filePath, out _);
+                var key = $"v{_staticCacheVersion}:{filePath}";
+                _cacheProvider.StaticContent.Remove(key);
             }
         }
 

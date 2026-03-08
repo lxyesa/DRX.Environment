@@ -19,29 +19,43 @@ if (pathParts.length >= 2 && pathParts[0] === 'profile' && pathParts[1]) {
     const panels = document.querySelectorAll('.tab-panel');
     const adminTabLoaded = { 'admin-assets': false, 'admin-cdk': false };
 
-    tabs.forEach(tab => {
-        tab.addEventListener('click', () => {
-            const target = tab.dataset.tab;
-            tabs.forEach(t => {
-                t.classList.remove('active');
-                t.setAttribute('aria-selected', 'false');
-            });
-            panels.forEach(p => p.classList.remove('active'));
-
-            tab.classList.add('active');
-            tab.setAttribute('aria-selected', 'true');
-            const panel = document.getElementById('panel-' + target);
-            if (panel) panel.classList.add('active');
-
-            if (target === 'admin-assets' && !adminTabLoaded['admin-assets']) {
-                adminTabLoaded['admin-assets'] = true;
-                loadAdminAssets(1);
-            } else if (target === 'admin-cdk' && !adminTabLoaded['admin-cdk']) {
-                adminTabLoaded['admin-cdk'] = true;
-                loadAdminCdks(1);
-            }
+    function activateTab(target) {
+        tabs.forEach(t => {
+            t.classList.remove('active');
+            t.setAttribute('aria-selected', 'false');
         });
+        panels.forEach(p => p.classList.remove('active'));
+
+        const matchedTab = Array.from(tabs).find(t => t.dataset.tab === target);
+        if (matchedTab) {
+            matchedTab.classList.add('active');
+            matchedTab.setAttribute('aria-selected', 'true');
+        }
+        const panel = document.getElementById('panel-' + target);
+        if (panel) panel.classList.add('active');
+
+        // 写入 URL hash
+        history.replaceState(null, '', '#' + target);
+
+        if (target === 'admin-assets' && !adminTabLoaded['admin-assets']) {
+            adminTabLoaded['admin-assets'] = true;
+            loadAdminAssets(1);
+        } else if (target === 'admin-cdk' && !adminTabLoaded['admin-cdk']) {
+            adminTabLoaded['admin-cdk'] = true;
+            loadAdminCdks(1);
+        }
+    }
+
+    tabs.forEach(tab => {
+        tab.addEventListener('click', () => activateTab(tab.dataset.tab));
     });
+
+    // 从 URL hash 恢复 Tab 状态
+    const hashTab = location.hash.slice(1);
+    const validTabs = Array.from(tabs).map(t => t.dataset.tab);
+    if (hashTab && validTabs.includes(hashTab)) {
+        activateTab(hashTab);
+    }
 })();
 
 document.getElementById('editProfileBtn')?.addEventListener('click', () => {
@@ -56,16 +70,21 @@ let _isAdminUser = false;
 
 function formatUnix(ts) {
     if (!ts || ts <= 0) return '-';
-    try { return new Date(ts * 1000).toLocaleString(); } catch (e) { return '-'; }
+    try {
+        const num = Number(ts);
+        if (!Number.isFinite(num) || num <= 0) return '-';
+        const ms = num > 1e12 ? num : num * 1000;
+        const date = new Date(ms);
+        return Number.isNaN(date.getTime()) ? '-' : date.toLocaleString();
+    } catch (e) {
+        return '-';
+    }
 }
 
 function mapPermissionToRole(n) {
-    switch (Number(n)) {
-        case 0: return '系统';
-        case 2: return '控制台';
-        case 3: return '管理员';
-        default: return '普通用户';
-    }
+    // 委托到 AuthState 统一映射，消除魔法数字
+    if (window.AuthState) return window.AuthState.mapPermissionToLabel(n);
+    return String(n);
 }
 
 function maskEmail(email) {
@@ -76,6 +95,11 @@ function maskEmail(email) {
 }
 
 function isAdminPermission(permissionGroup) {
+    // 委托到 AuthState 语义字段，消除魔法数字
+    if (window.AuthState) {
+        const label = window.AuthState.mapPermissionToLabel(permissionGroup);
+        return label !== '普通用户';
+    }
     const group = Number(permissionGroup);
     return group === 0 || group === 2 || group === 3;
 }
@@ -96,7 +120,7 @@ function checkToken() {
     if (typeof profileShared.checkToken === 'function') {
         return profileShared.checkToken();
     }
-    const token = localStorage.getItem('kax_login_token');
+    const token = window.AuthState ? window.AuthState.getToken() : localStorage.getItem('kax_login_token');
     if (!token) { location.href = '/login'; return null; }
     return token;
 }

@@ -25,10 +25,12 @@
                 <span class="label" part="label"></span>
             `;
             this._labelEl = this._shadow.querySelector('.label');
-            this.setAttribute('role', this.getAttribute('role') || 'status');
         }
 
         connectedCallback() {
+            if (!this.hasAttribute('role')) {
+                this.setAttribute('role', 'status');
+            }
             this._render();
         }
 

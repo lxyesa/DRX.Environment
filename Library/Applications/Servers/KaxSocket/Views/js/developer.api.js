@@ -1,40 +1,38 @@
 /* ================================================================
  *  developer.api.js — 后端接口调用层
- *  所有 fetch 请求集中于此，依赖 developer.utils.js 中的常量
+ *  所有请求通过 ApiClient 统一发出（token 注入、超时、401 处理由
+ *  core/api-client.js 负责），不再重复 fetch 样板代码。
+ *  依赖加载顺序：core/auth-state.js → core/api-client.js → 本文件
  * ================================================================ */
 'use strict';
 
-function getToken() {
-    return localStorage.getItem(TOKEN_KEY);
-}
-
-function authHeaders(json = true) {
-    const h = {};
-    const t = getToken();
-    if (t) h['Authorization'] = 'Bearer ' + t;
-    if (json) h['Content-Type'] = 'application/json';
-    return h;
-}
-
+/**
+ * 检查登录态；未登录则跳转 /login 并返回 false。
+ * 优先由 ApiClient 的 401 拦截器处理，此函数用于主动前置校验。
+ * @returns {boolean}
+ */
 function requireLogin() {
-    if (!getToken()) {
-        alert('请先登录');
-        location.href = '/login';
-        return false;
+    if (window.AuthState && typeof window.AuthState.getToken === 'function') {
+        if (!window.AuthState.getToken()) {
+            location.href = '/login';
+            return false;
+        }
+        return true;
     }
+    const token = localStorage.getItem('kax_web_token') || localStorage.getItem('kax_login_token');
+    if (!token) { location.href = '/login'; return false; }
     return true;
 }
 
+/**
+ * 调用 /api/user/verify/account 验证登录态并填充 state 中的用户信息。
+ * 通过 ApiClient.requestJsonPost 统一处理 token 注入与 401 跳转。
+ * @returns {Promise<boolean>} 验证成功返回 true，失败跳转 /login 并返回 false。
+ */
 async function verifyUser() {
-    const token = getToken();
-    if (!token) { location.href = '/login'; return false; }
+    if (!requireLogin()) return false;
     try {
-        const resp = await fetch('/api/user/verify/account', {
-            method: 'POST',
-            headers: authHeaders()
-        });
-        if (!resp.ok) { location.href = '/login'; return false; }
-        const body = await resp.json();
+        const body = await ApiClient.requestJsonPost('/api/user/verify/account', {});
         state.userName = body.user || '';
         state.permissionGroup = body.permissionGroup ?? 999;
         state.isAdmin = body.isAdmin === true;
@@ -59,72 +57,46 @@ async function verifyUser() {
 async function apiGetMyAssets(page, status) {
     const params = new URLSearchParams({ page, pageSize: PAGE_SIZE });
     if (status !== '' && status != null) params.set('status', status);
-    const resp = await fetch('/api/developer/assets?' + params, { headers: authHeaders(false) });
-    if (!resp.ok) throw new Error('获取资产列表失败');
-    return resp.json();
+    return ApiClient.requestJson('/api/developer/assets?' + params);
 }
 
 async function apiGetMyAssetDetail(id) {
-    const resp = await fetch(`/api/developer/asset/${id}`, { headers: authHeaders(false) });
-    if (!resp.ok) throw new Error('获取资产详情失败');
-    return resp.json();
+    return ApiClient.requestJson(`/api/developer/asset/${id}`);
 }
 
 async function apiCreateAsset(payload) {
-    const resp = await fetch('/api/developer/asset/create', {
-        method: 'POST', headers: authHeaders(), body: JSON.stringify(payload)
-    });
-    return resp.json();
+    return ApiClient.requestJsonPost('/api/developer/asset/create', payload);
 }
 
 async function apiUpdateAsset(payload) {
-    const resp = await fetch('/api/developer/asset/update', {
-        method: 'POST', headers: authHeaders(), body: JSON.stringify(payload)
-    });
-    return resp.json();
+    return ApiClient.requestJsonPost('/api/developer/asset/update', payload);
 }
 
 async function apiSubmitReview(id, payload = null) {
     const body = payload ? { id, ...payload } : { id };
-    const resp = await fetch('/api/developer/asset/submit', {
-        method: 'POST', headers: authHeaders(), body: JSON.stringify(body)
-    });
-    return resp.json();
+    return ApiClient.requestJsonPost('/api/developer/asset/submit', body);
 }
 
 async function apiPublishAsset(id) {
-    const resp = await fetch('/api/developer/asset/publish', {
-        method: 'POST', headers: authHeaders(), body: JSON.stringify({ id })
-    });
-    return resp.json();
+    return ApiClient.requestJsonPost('/api/developer/asset/publish', { id });
 }
 
 async function apiGetReviewList(page, status) {
     const params = new URLSearchParams({ page, pageSize: PAGE_SIZE });
     if (status != null) params.set('status', status);
-    const resp = await fetch('/api/review/pending?' + params, { headers: authHeaders(false) });
-    if (!resp.ok) throw new Error('获取审核列表失败');
-    return resp.json();
+    return ApiClient.requestJson('/api/review/pending?' + params);
 }
 
 async function apiGetReviewAssetDetail(id) {
-    const resp = await fetch(`/api/review/asset/${id}`, { headers: authHeaders(false) });
-    if (!resp.ok) throw new Error('获取审核详情失败');
-    return resp.json();
+    return ApiClient.requestJson(`/api/review/asset/${id}`);
 }
 
 async function apiApprove(id) {
-    const resp = await fetch('/api/review/approve', {
-        method: 'POST', headers: authHeaders(), body: JSON.stringify({ id })
-    });
-    return resp.json();
+    return ApiClient.requestJsonPost('/api/review/approve', { id });
 }
 
 async function apiReject(id, reason) {
-    const resp = await fetch('/api/review/reject', {
-        method: 'POST', headers: authHeaders(), body: JSON.stringify({ id, reason })
-    });
-    return resp.json();
+    return ApiClient.requestJsonPost('/api/review/reject', { id, reason });
 }
 
 async function apiGetSystemAssetList(page, status, q, authorId) {
@@ -132,58 +104,29 @@ async function apiGetSystemAssetList(page, status, q, authorId) {
     if (status !== '' && status != null) params.set('status', status);
     if (q) params.set('q', q);
     if (authorId) params.set('authorId', authorId);
-    const resp = await fetch('/api/asset/system/list?' + params, { headers: authHeaders(false) });
-    if (!resp.ok) throw new Error('获取系统资产列表失败');
-    return resp.json();
+    return ApiClient.requestJson('/api/asset/system/list?' + params);
 }
 
 async function apiGetSystemAssetDetail(id) {
-    const resp = await fetch(`/api/asset/system/${id}`, { headers: authHeaders(false) });
-    if (!resp.ok) throw new Error('获取系统资产详情失败');
-    return resp.json();
+    return ApiClient.requestJson(`/api/asset/system/${id}`);
 }
 
 async function apiSystemUpdateField(id, field, value) {
-    const resp = await fetch('/api/asset/system/update-field', {
-        method: 'POST',
-        headers: authHeaders(),
-        body: JSON.stringify({ id, field, value })
-    });
-    return resp.json();
+    return ApiClient.requestJsonPost('/api/asset/system/update-field', { id, field, value });
 }
 
 async function apiSystemReturn(id, reason) {
-    const resp = await fetch('/api/asset/system/return', {
-        method: 'POST',
-        headers: authHeaders(),
-        body: JSON.stringify({ assetId: id, reason })
-    });
-    return resp.json();
+    return ApiClient.requestJsonPost('/api/asset/system/return', { assetId: id, reason });
 }
 
 async function apiSystemOffShelf(id, reason) {
-    const resp = await fetch('/api/asset/system/off-shelf', {
-        method: 'POST',
-        headers: authHeaders(),
-        body: JSON.stringify({ assetId: id, reason })
-    });
-    return resp.json();
+    return ApiClient.requestJsonPost('/api/asset/system/off-shelf', { assetId: id, reason });
 }
 
 async function apiSystemForceReview(id, reason) {
-    const resp = await fetch('/api/asset/system/review/force', {
-        method: 'POST',
-        headers: authHeaders(),
-        body: JSON.stringify({ assetId: id, reason, force: true })
-    });
-    return resp.json();
+    return ApiClient.requestJsonPost('/api/asset/system/review/force', { assetId: id, reason, force: true });
 }
 
 async function apiSystemHardDelete(id, reason) {
-    const resp = await fetch('/api/asset/system/hard-delete', {
-        method: 'POST',
-        headers: authHeaders(),
-        body: JSON.stringify({ assetId: id, reason, confirm: true })
-    });
-    return resp.json();
+    return ApiClient.requestJsonPost('/api/asset/system/hard-delete', { assetId: id, reason, confirm: true });
 }

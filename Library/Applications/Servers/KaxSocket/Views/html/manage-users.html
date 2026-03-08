@@ -9,10 +9,14 @@
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
     <link href="/css/global.css" rel="stylesheet">
     <link href="/css/developer.base.css" rel="stylesheet">
+    <link href="/css/developer.modal.css" rel="stylesheet">
+    <link href="/css/developer.review-modal.css" rel="stylesheet">
     <link href="/css/developer.system.css" rel="stylesheet">
     <link href="/css/developer.responsive.css" rel="stylesheet">
     <link href="/css/manage-users.css" rel="stylesheet">
     <script src="/js/global.js"></script>
+    <script src="/js/core/auth-state.js" defer></script>
+    <script src="/js/core/api-client.js" defer></script>
     <script src="/js/topbar.js" defer></script>
     <script src="/components/inputbox.js" defer></script>
     <script src="/components/select-box.js" defer></script>
@@ -124,6 +128,97 @@
                 <p>该区域将用于查看用户管理相关操作日志与审计记录。</p>
             </div>
         </section>
+    </div>
+
+    <!-- 用户详情/操作弹窗 -->
+    <div class="dev-modal-overlay" id="userDetailModal" style="display:none;"
+         role="dialog" aria-modal="true"
+         aria-labelledby="userModalTitle">
+        <div class="dev-modal rv-modal user-rv-modal">
+            <!-- 顶栏 -->
+            <div class="rv-header">
+                <div class="rv-header-left">
+                    <div class="rv-header-icon" id="userModalIcon">
+                        <span class="material-icons">person</span>
+                    </div>
+                    <div class="rv-header-meta">
+                        <h2 id="userModalTitle">用户详情</h2>
+                        <div class="rv-header-sub" id="userModalSub">—</div>
+                    </div>
+                </div>
+                <div class="rv-header-right">
+                    <div id="userModalStatusBadge"></div>
+                    <button class="dev-modal-close" id="closeUserModal" title="关闭">
+                        <span class="material-icons">close</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- 主体 -->
+            <div class="rv-body user-rv-body">
+                <!-- 左侧信息栏 -->
+                <aside class="rv-sidebar user-rv-sidebar">
+                    <div class="rv-info-list" id="userModalInfoList"></div>
+                </aside>
+
+                <!-- 右侧 Tab 内容 -->
+                <div class="rv-content">
+                    <div class="rv-tabs" id="userModalTabs">
+                        <button class="rv-tab active" data-panel="overview">概要</button>
+                        <button class="rv-tab" data-panel="stats">数据</button>
+                        <button class="rv-tab" data-panel="actions">操作</button>
+                    </div>
+                    <div class="rv-panels user-rv-panels" id="userModalPanels">
+                        <!-- 概要面板 -->
+                        <div class="rv-panel active" data-panel="overview">
+                            <div id="userModalOverview"></div>
+                        </div>
+                        <!-- 数据面板 -->
+                        <div class="rv-panel" data-panel="stats">
+                            <div id="userModalStats"></div>
+                        </div>
+                        <!-- 操作面板 -->
+                        <div class="rv-panel" data-panel="actions">
+                            <div id="userModalActions"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 底栏 -->
+            <div class="rv-footer user-rv-footer">
+                <span class="rv-footer-author" id="userModalFooterInfo"></span>
+                <div class="rv-footer-actions">
+                    <action-btn id="userModalBanBtn" label="封禁" icon="block" variant="danger" height="38px" padding="0 18px" radius="4px" font-size="0.86rem" icon-size="17px" gap="6px" style="display:none;"></action-btn>
+                    <action-btn id="userModalUnbanBtn" label="解封" icon="check_circle" height="38px" padding="0 18px" radius="4px" font-size="0.86rem" icon-size="17px" gap="6px" style="display:none;"></action-btn>
+                    <action-btn id="userModalForceLogoutBtn" label="强制登出" icon="logout" height="38px" padding="0 18px" radius="4px" font-size="0.86rem" icon-size="17px" gap="6px"></action-btn>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 封禁原因弹窗 -->
+    <div class="dev-modal-overlay" id="userBanModal" style="display:none;">
+        <div class="dev-modal dev-modal-sm">
+            <div class="dev-modal-header">
+                <h2>封禁用户</h2>
+                <button class="dev-modal-close" id="closeUserBanModal">
+                    <span class="material-icons">close</span>
+                </button>
+            </div>
+            <div class="dev-modal-body">
+                <div class="user-ban-field">
+                    <input-box id="banReason" label="封禁原因" textarea rows="3" placeholder="请填写封禁原因..."></input-box>
+                </div>
+                <div class="user-ban-field">
+                    <input-box id="banDuration" label="封禁时长（小时）" placeholder="0 表示永久封禁" type="number"></input-box>
+                </div>
+            </div>
+            <div class="dev-modal-footer">
+                <action-btn id="cancelBanBtn" height="38px" padding="0 18px" radius="4px" font-size="0.86rem" icon-size="17px" gap="6px" label="取消"></action-btn>
+                <action-btn id="confirmBanBtn" variant="danger" height="38px" padding="0 18px" radius="4px" font-size="0.86rem" icon-size="17px" gap="6px" label="确认封禁"></action-btn>
+            </div>
+        </div>
     </div>
 </body>
 

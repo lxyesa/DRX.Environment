@@ -1,0 +1,9 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "None",
+    "strict": false,
+    "moduleResolution": "node"
+  },
+  "include": ["*.ts", "Models/**/*.d.ts"]
+}

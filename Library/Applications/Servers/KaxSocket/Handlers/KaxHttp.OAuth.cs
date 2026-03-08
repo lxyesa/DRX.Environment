@@ -345,12 +345,22 @@ public partial class KaxHttp
         // 令牌签发后标记为已消费，防止重复换取
         record.IsAuthorized = false;
 
-        var accessToken = KaxGlobal.GenerateLoginToken(user);
+        var nowSeconds = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        // 单端登录策略：OAuth 换取令牌同样推进失效基线，防止绕过普通登录约束。
+        user.TokenInvalidBefore = nowSeconds * 1000L;
+        user.LastLoginAt = nowSeconds;
+        var (clientToken, webToken, webTokenRotated) = KaxGlobal.ResolveLoginTokens(user, false, null);
+        user.ClientToken = clientToken;
+        user.WebToken = webToken;
+        await KaxGlobal.UserDatabase.UpdateAsync(user).ConfigureAwait(false);
 
         return new JsonResult(new
         {
-            access_token = accessToken,
-            login_token = accessToken,
+            access_token = clientToken,
+            login_token = clientToken,
+            client_token = clientToken,
+            web_token = webToken,
+            web_token_rotated = webTokenRotated,
             token_type = "Bearer",
             expires_in = 3600,
             scope = record.Scopes,

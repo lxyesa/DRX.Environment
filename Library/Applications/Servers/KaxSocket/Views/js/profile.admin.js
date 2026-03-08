@@ -173,8 +173,8 @@
         try {
             const params = new URLSearchParams({ page, pageSize: state.adminAssetPageSize, includeDeleted });
             if (q) params.append('q', q);
-            const resp = await fetch('/api/asset/admin/list?' + params, { headers: { 'Authorization': 'Bearer ' + token } });
-            if (resp.status === 401) { localStorage.removeItem('kax_login_token'); location.href = '/login'; return; }
+            const resp = await ApiClient.request('/api/asset/admin/list?' + params);
+            if (resp.status === 401) { return; }
             if (!resp.ok) {
                 state.deps.setElementsDisplay({ 'adminAssetLoading': false, 'adminAssetEmpty': true });
                 emptyEl.querySelector('span:last-child').textContent = '加载失败';
@@ -253,9 +253,9 @@
         if (!token) return;
 
         try {
-            const resp = await fetch('/api/asset/admin/inspect', {
+            const resp = await ApiClient.request('/api/asset/admin/inspect', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ id: assetId })
             });
             if (!resp.ok) { alert('无法加载资产信息'); return; }
@@ -315,11 +315,12 @@
 
     async function restoreAdminAsset(id) {
         if (!confirm('确认恢复此资产？')) return;
-        const token = localStorage.getItem('kax_login_token');
+        const token = state.deps.checkToken();
+        if (!token) return;
         try {
-            const resp = await fetch('/api/asset/admin/restore', {
+            const resp = await ApiClient.request('/api/asset/admin/restore', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ id })
             });
             const result = await resp.json().catch(() => ({}));
@@ -388,9 +389,9 @@
                         }
                     }
 
-                    const resp = await fetch(url, {
+                    const resp = await ApiClient.request(url, {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+                        headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(finalPayload)
                     });
                     const result = await resp.json().catch(() => ({}));
@@ -435,9 +436,9 @@
 
             await state.deps.withButtonLoading(btn, '删除中...', async () => {
                 try {
-                    const resp = await fetch('/api/asset/admin/delete', {
+                    const resp = await ApiClient.request('/api/asset/admin/delete', {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+                        headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ id: state.assetDeleteTargetId })
                     });
                     const result = await resp.json().catch(() => ({}));
@@ -511,7 +512,7 @@
             } else {
                 url = '/api/cdk/admin/list?' + params;
             }
-            const resp = await fetch(url, { headers: { 'Authorization': 'Bearer ' + token } });
+            const resp = await ApiClient.request(url);
             if (!resp.ok) return null;
             const result = await resp.json().catch(() => ({}));
             const items = result.data || [];
@@ -559,8 +560,8 @@
             const params = new URLSearchParams({ page, pageSize: state.cdkAdminPageSize });
             if (isSearch) { params.append('keyword', keyword); params.append('searchIn', searchIn); }
             const url = isSearch ? '/api/cdk/admin/search?' + params : '/api/cdk/admin/list?' + params;
-            const resp = await fetch(url, { headers: { 'Authorization': 'Bearer ' + token } });
-            if (resp.status === 401) { localStorage.removeItem('kax_login_token'); location.href = '/login'; return; }
+            const resp = await ApiClient.request(url);
+            if (resp.status === 401) { return; }
             if (!resp.ok) {
                 state.deps.setElementsDisplay({ 'cdkAdminLoading': false, 'cdkAdminEmpty': true });
                 emptyEl.querySelector('span:last-child').textContent = '加载失败';
@@ -711,9 +712,9 @@
             const btn = document.getElementById('cdkBatchDeleteConfirmBtn');
             await state.deps.withButtonLoading(btn, '删除中…', async () => {
                 try {
-                    const resp = await fetch('/api/cdk/admin/delete', {
+                    const resp = await ApiClient.request('/api/cdk/admin/delete', {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+                        headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ codes: [...state.cdkSelectedCodes] })
                     });
                     const result = await resp.json().catch(() => ({}));
@@ -794,9 +795,9 @@
                     let removed = 0;
                     for (let i = 0; i < codes.length; i += batchSize) {
                         const batch = codes.slice(i, i + batchSize);
-                        const resp = await fetch('/api/cdk/admin/delete', {
+                        const resp = await ApiClient.request('/api/cdk/admin/delete', {
                             method: 'POST',
-                            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+                            headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ codes: batch })
                         });
                         const result = await resp.json().catch(() => ({}));
@@ -826,9 +827,9 @@
             const msgEl = document.getElementById('cdkAdminGenMsg');
 
             try {
-                const resp = await fetch('/api/cdk/admin/generate', {
+                const resp = await ApiClient.request('/api/cdk/admin/generate', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ count: Math.min(count, 20), length, prefix })
                 });
                 const result = await resp.json().catch(() => ({}));
@@ -860,9 +861,9 @@
             await state.deps.withButtonLoading(saveBtn, '生成中…', async () => {
                 state.deps.setElementDisplay(msgEl, false);
                 try {
-                    const resp = await fetch('/api/cdk/admin/save', {
+                    const resp = await ApiClient.request('/api/cdk/admin/save', {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+                        headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ count, length, prefix, goldValue, expiresInSeconds, description })
                     });
                     const result = await resp.json().catch(() => ({}));
@@ -897,9 +898,9 @@
 
             await state.deps.withButtonLoading(btn, '删除中...', async () => {
                 try {
-                    const resp = await fetch('/api/cdk/admin/delete', {
+                    const resp = await ApiClient.request('/api/cdk/admin/delete', {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+                        headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ code: state.cdkDeleteTargetCode })
                     });
                     const result = await resp.json().catch(() => ({}));

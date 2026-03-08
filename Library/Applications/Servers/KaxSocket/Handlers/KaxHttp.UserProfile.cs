@@ -9,6 +9,7 @@ using Drx.Sdk.Network.Http.Configs;
 using Drx.Sdk.Network.Email;
 using Drx.Sdk.Network.Http;
 using Drx.Sdk.Network.Http.Api;
+using Drx.Sdk.Network.Http.Auth;
 using Drx.Sdk.Network.Http.Protocol;
 using Drx.Sdk.Network.Http.Results;
 using Drx.Sdk.Shared;
@@ -251,16 +252,16 @@ public partial class KaxHttp
                 return new JsonResult(new { code = 46005, message = "发送次数已达每日上限" }, 429);
             }
 
-            var smtpEmail = "157335596@qq.com";
-            var smtpAuthCode = "eymlrhwykskccbdb";
-            var smtpHost = Environment.GetEnvironmentVariable("KAX_SMTP_HOST") ?? "smtp.qq.com";
-            var smtpPort = int.TryParse(Environment.GetEnvironmentVariable("KAX_SMTP_PORT"), out var p) ? p : 587;
-            var smtpEnableSsl = !bool.TryParse(Environment.GetEnvironmentVariable("KAX_SMTP_ENABLE_SSL"), out var ssl) || ssl;
+            var smtpEmail = Program.Config.SmtpEmail ?? string.Empty;
+            var smtpAuthCode = Program.Config.SmtpAuthCode ?? string.Empty;
+            var smtpHost = Program.Config.SmtpHost ?? "smtp.qq.com";
+            var smtpPort = Program.Config.SmtpPort > 0 ? Program.Config.SmtpPort : 587;
+            var smtpEnableSsl = Program.Config.SmtpEnableSsl;
 
             if (string.IsNullOrWhiteSpace(smtpEmail) || string.IsNullOrWhiteSpace(smtpAuthCode))
             {
                 Logger.Error($"SMTP 配置缺失，无法发送邮箱验证码: user={userName}, channel={channel}");
-                return new JsonResult(new { code = 500, message = "SMTP 配置缺失，请先配置 KAX_SMTP_EMAIL 与 KAX_SMTP_AUTH_CODE" }, 500);
+                return new JsonResult(new { code = 500, message = "SMTP 配置缺失，请先在 Program.Config 中配置 SmtpEmail 与 SmtpAuthCode" }, 500);
             }
 
             var code = Api.GenerateVerificationCode(8);
@@ -489,9 +490,6 @@ public partial class KaxHttp
             oldRecord.Status = "used";
             oldRecord.UsedAt = now;
             oldRecord.UpdatedAt = now;
-
-            // 邮箱更新属于敏感操作：清理用户会话标记并要求重新登录
-            user.LoginToken = string.Empty;
 
             var committed = await KaxGlobal.CommitEmailChangeAsync(user, newEmail);
             if (!committed)
@@ -891,6 +889,85 @@ public partial class KaxHttp
         var url = $"/api/user/avatar/{user.Id}?v={DateTimeOffset.UtcNow.ToUnixTimeSeconds()}";
         Logger.Info($"用户 {user!.UserName} 成功上传了头像");
         return new JsonResult(new { message = "头像已上传", url = url });
+    }
+
+    #endregion
+
+    #region 登录设备管理 (Login Devices)
+
+    /// <summary>
+    /// 查询当前用户的登录设备列表。
+    /// 返回按最近登录时间降序排列的设备记录，包含 id、hid（脱敏）、os、deviceName、lastLoginAt。
+    /// </summary>
+    [HttpHandle("/api/user/devices", "GET", RateLimitMaxRequests = 30, RateLimitWindowSeconds = 60, RateLimitCallbackMethodName = nameof(RateLimitCallback))]
+    public static async Task<IActionResult> Get_LoginDevices(HttpRequest request)
+    {
+        var (user, error) = await Api.GetUserAsync(request);
+        if (error != null) return error;
+
+        if (user!.LoginDevices == null || user.LoginDevices.Count == 0)
+        {
+            return new JsonResult(new { devices = System.Array.Empty<object>() });
+        }
+
+        var devices = user.LoginDevices
+            .OrderByDescending(d => d.LastLoginAt)
+            .Select(d => new
+            {
+                id = d.Id,
+                // HID 脱敏：仅保留前 8 位和后 4 位，中间用 *** 替代
+                hid = MaskHid(d.Hid),
+                os = d.Os,
+                deviceName = d.DeviceName,
+                lastLoginAt = d.LastLoginAt
+            })
+            .ToList();
+
+        return new JsonResult(new { devices });
+    }
+
+    /// <summary>
+    /// 移除指定登录设备记录。
+    /// 仅允许移除自己的设备，通过设备 id 定位。
+    /// </summary>
+    [HttpHandle("/api/user/devices/{id}", "DELETE", RateLimitMaxRequests = 10, RateLimitWindowSeconds = 60, RateLimitCallbackMethodName = nameof(RateLimitCallback))]
+    public static async Task<IActionResult> Delete_LoginDevice(HttpRequest request)
+    {
+        var (user, error) = await Api.GetUserAsync(request);
+        if (error != null) return error;
+
+        request.PathParameters.TryGetValue("id", out var idStr);
+        if (string.IsNullOrWhiteSpace(idStr))
+            return ApiResult.BadRequest("无效的设备 ID。");
+
+        if (user!.LoginDevices == null || user.LoginDevices.Count == 0)
+            return ApiResult.NotFound("设备记录不存在。");
+
+        var target = user.LoginDevices.FirstOrDefault(d => d.Id.ToString() == idStr);
+        if (target == null)
+            return ApiResult.NotFound("设备记录不存在。");
+
+        // 撤销该设备关联的 token，使其立即失效
+        if (!string.IsNullOrWhiteSpace(target.Token))
+        {
+            JwtHelper.RevokeToken(target.Token);
+        }
+
+        user.LoginDevices.Remove(target);
+        await KaxGlobal.UserDatabase.UpdateAsync(user);
+
+        Logger.Info($"用户 {user.UserName} 移除设备记录 id={idStr}（hid={MaskHid(target.Hid)}）。");
+        return ApiResult.Ok("设备已移除。");
+    }
+
+    /// <summary>
+    /// 对 HID 字符串进行脱敏处理，仅暴露前 8 位与后 4 位，中间替换为 ***。
+    /// </summary>
+    private static string MaskHid(string hid)
+    {
+        if (string.IsNullOrWhiteSpace(hid)) return string.Empty;
+        if (hid.Length <= 12) return new string('*', hid.Length);
+        return hid[..8] + "***" + hid[^4..];
     }
 
     #endregion

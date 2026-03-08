@@ -1209,6 +1209,82 @@
     opacity: 0.5;
     flex-shrink: 0;
 }
+
+/* #region 登录设备列表 */
+
+.devices-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 4px;
+}
+
+.device-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 12px 14px;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--profile-border);
+}
+
+.device-item-actions {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    align-self: center;
+}
+
+.device-item-icon {
+    font-size: 1.5rem;
+    color: var(--profile-muted);
+    flex-shrink: 0;
+    margin-top: 2px;
+}
+
+.device-item-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.device-item-name {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--profile-text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.device-item-meta {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 3px;
+    font-size: 0.78rem;
+    color: var(--profile-muted);
+    flex-wrap: wrap;
+}
+
+.device-item-sep {
+    opacity: 0.4;
+}
+
+.device-item-hid {
+    font-family: var(--font-mono, monospace);
+    font-size: 0.75rem;
+    opacity: 0.7;
+}
+
+.device-item-time {
+    margin-top: 4px;
+    font-size: 0.78rem;
+    color: var(--profile-muted);
+    opacity: 0.8;
+}
+
+/* #endregion */
 /* #endregion */
 
 /* #region 管理员面板 */

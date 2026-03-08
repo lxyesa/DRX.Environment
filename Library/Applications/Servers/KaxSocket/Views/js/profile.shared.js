@@ -3,13 +3,20 @@
  * - 仅提供跨 profile 子模块可复用的无状态工具；
  * - 不持有业务状态，不修改现有业务语义；
  * - 通过 window.ProfileShared 暴露，便于逐步拆分 profile.js。
+ * Dependencies: core/auth-state.js (window.AuthState), core/api-client.js (window.ApiClient)
  */
 (function registerProfileShared(global) {
     if (global.ProfileShared) return;
 
-    /** 检查登录态：未登录时保持原行为跳转到 /login */
+    /**
+     * 检查登录态：未登录时保持原行为跳转到 /login。
+     * 委托给 AuthState.getToken() 当可用，兼容旧 kax_login_token。
+     * @returns {string|null}
+     */
     function checkToken() {
-        const token = localStorage.getItem('kax_login_token');
+        const token = global.AuthState && typeof global.AuthState.getToken === 'function'
+            ? global.AuthState.getToken()
+            : localStorage.getItem('kax_login_token');
         if (!token) {
             location.href = '/login';
             return null;

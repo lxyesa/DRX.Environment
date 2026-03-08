@@ -103,6 +103,7 @@ namespace Drx.Sdk.Network.Http
                 try { _threadPool?.Dispose(); } catch { }
                 try { _tokenBucketManager?.Dispose(); } catch { }
                 try { _routeMatchCache?.Clear(); } catch { }
+                try { _cacheProvider?.Dispose(); } catch { }
                 Logger.Info("HttpServer 已停止");
             }
             catch (Exception ex)
@@ -389,11 +390,12 @@ namespace Drx.Sdk.Network.Http
                         }
                     }
 
-                    if (!string.IsNullOrEmpty(NotFoundPagePath) && File.Exists(NotFoundPagePath))
+                    var resolvedNotFoundPath = ResolveEffectiveRoot(NotFoundPagePath);
+                    if (!string.IsNullOrEmpty(resolvedNotFoundPath) && File.Exists(resolvedNotFoundPath))
                     {
                         try
                         {
-                            var notFoundHtml = await File.ReadAllTextAsync(NotFoundPagePath).ConfigureAwait(false);
+                            var notFoundHtml = await File.ReadAllTextAsync(resolvedNotFoundPath).ConfigureAwait(false);
                             var notFoundResp = new HttpResponse(404, notFoundHtml);
                             notFoundResp.Headers["Content-Type"] = "text/html; charset=utf-8";
                             return notFoundResp;

@@ -20,10 +20,16 @@ namespace Drx.Sdk.Network.Http.Auth
         /// </summary>
         public class JwtConfig
         {
-            public string SecretKey { get; set; } = "A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6"; // 生产环境应使用强密钥
-            public string Issuer { get; set; } = "DrxHttpServer";
-            public string Audience { get; set; } = "DrxUsers";
-            public TimeSpan Expiration { get; set; } = TimeSpan.FromDays(7);
+            public string SecretKey { get; set; } = 
+                Environment.GetEnvironmentVariable("KAX_JWT_SECRET_KEY") ?? "A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6";
+            public string Issuer { get; set; } = 
+                Environment.GetEnvironmentVariable("KAX_JWT_ISSUER") ?? "KaxSocket";
+            public string Audience { get; set; } = 
+                Environment.GetEnvironmentVariable("KAX_JWT_AUDIENCE") ?? "KaxUsers";
+            public TimeSpan Expiration { get; set; } = 
+                int.TryParse(Environment.GetEnvironmentVariable("KAX_JWT_EXPIRATION_DAYS"), out var days) && days > 0
+                    ? TimeSpan.FromDays(days)
+                    : TimeSpan.FromDays(7);
         }
 
         private static JwtConfig _config = new();
@@ -45,6 +51,17 @@ namespace Drx.Sdk.Network.Http.Auth
         /// <returns>JWT 字符串</returns>
         public static string GenerateToken(IEnumerable<Claim> claims)
         {
+            return GenerateToken(claims, null);
+        }
+
+        /// <summary>
+        /// 生成 JWT 令牌（支持自定义过期时间）。
+        /// </summary>
+        /// <param name="claims">用户声明列表</param>
+        /// <param name="expirationOverride">自定义过期时间；为 null 时使用全局配置</param>
+        /// <returns>JWT 字符串</returns>
+        public static string GenerateToken(IEnumerable<Claim> claims, TimeSpan? expirationOverride)
+        {
             var securityKey = new SymmetricSecurityKey(System.Text.Encoding.UTF8.GetBytes(_config.SecretKey));
             var credentials = new SigningCredentials(securityKey, SecurityAlgorithms.HmacSha256);
 
@@ -63,7 +80,7 @@ namespace Drx.Sdk.Network.Http.Auth
                 issuer: _config.Issuer,
                 audience: _config.Audience,
                 claims: claimsList,
-                expires: DateTime.UtcNow.Add(_config.Expiration),
+                expires: DateTime.UtcNow.Add(expirationOverride ?? _config.Expiration),
                 signingCredentials: credentials
             );
 

@@ -32,8 +32,7 @@ namespace KaxSocket
         /// <summary>最后一次登录时间（Unix 毫秒）</summary>
         public long LastLoginAt { get; set; }
 
-        /// <summary>登录令牌（可用于会话）</summary>
-        public string LoginToken { get; set; }
+
 
         /// <summary>显示名称</summary>
         public string DisplayName { get; set; }
@@ -88,6 +87,62 @@ namespace KaxSocket
         /// 兼容旧格式 badge1[r,g,b];badge2[r,g,b]，读取时自动迁移。
         /// </summary>
         public string Badges { get; set; } = string.Empty;
+
+        /// <summary>
+        /// 客户端专用 JWT。每次登录都会重新签发，默认长期有效，仅允许非浏览器端使用。
+        /// </summary>
+        public string ClientToken { get; set; } = string.Empty;
+
+        /// <summary>
+        /// Web 专用 JWT。登录时若仍有效则复用，过期后才重新签发，仅允许浏览器端使用。
+        /// </summary>
+        public string WebToken { get; set; } = string.Empty;
+
+        /// <summary>
+        /// 客户端硬件唯一标识（HID）。客户端登录时写入，用于与 client token 强绑定。
+        /// </summary>
+        public string ClientHid { get; set; } = string.Empty;
+
+        /// <summary>
+        /// 登录设备记录（子表）。每次客户端登录时追加一条记录，含 HID、OS、设备名称与时间戳。
+        /// </summary>
+        public TableList<LoginDevice> LoginDevices { get; set; }
+    }
+
+    /// <summary>
+    /// 登录设备记录（子表项）。
+    /// 每次客户端携带 hid/device-name/device-os 登录时写入，用于安全页面展示已登录设备。
+    /// </summary>
+    public class LoginDevice : IDataTableV2
+    {
+        /// <summary>子表项唯一 Id（字符串）</summary>
+        public string Id { get; set; } = Guid.NewGuid().ToString();
+
+        /// <summary>父表主键（所属 UserData.Id）</summary>
+        public int ParentId { get; set; }
+
+        /// <summary>创建时间（Unix 毫秒）</summary>
+        public long CreatedAt { get; set; } = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+
+        /// <summary>更新时间（Unix 毫秒）</summary>
+        public long UpdatedAt { get; set; } = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+
+        /// <summary>设备硬件唯一标识（HID）</summary>
+        public string Hid { get; set; } = string.Empty;
+
+        /// <summary>操作系统名称，如 "Windows 11"、"macOS 14"</summary>
+        public string Os { get; set; } = string.Empty;
+
+        /// <summary>设备名称，如 "DESKTOP-ABC123"</summary>
+        public string DeviceName { get; set; } = string.Empty;
+
+        /// <summary>最近登录时间（Unix 毫秒）</summary>
+        public long LastLoginAt { get; set; } = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+
+        /// <summary>与该设备关联的 JWT（完整字符串），移除设备时用于撤销 token。</summary>
+        public string Token { get; set; } = string.Empty;
+
+        public string TableName => nameof(LoginDevice);
     }
 
     /// <summary>

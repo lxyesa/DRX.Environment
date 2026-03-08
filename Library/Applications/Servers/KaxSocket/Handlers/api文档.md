@@ -27,7 +27,7 @@ KaxSocket 是一个功能完整的资产/商品销售平台 HTTP 服务器，采
 
 ### 核心特性
 
-- **认证方式**：JWT Bearer Token（有效期 1 小时）
+- **认证方式**：双 JWT（`client_token` + `web_token`）与端侧隔离校验
 - **速率限制**：支持端点级别的请求限制，超限自动封禁用户
 - **权限管理**：基于权限组的访问控制（System > Console > Admin > User）
 - **数据库**：SQLite V2 ORM + TableList 一对多关系
@@ -38,10 +38,22 @@ KaxSocket 是一个功能完整的资产/商品销售平台 HTTP 服务器，采
 | 权限组 | 值 | 权限 |
 |-------|---|------|
 | System | 0 | 最高权限，系统内部使用 |
-| Console | 1 | 控制台权限，可执行命令 |
-| Admin | 2 | 管理员权限，可管理资源和 CDK |
-| User | 3 | 普通用户权限 |
-| Banned | 4 | 已封禁用户 |
+| Console | 2 | 控制台权限，可执行命令 |
+| Admin | 3 | 管理员权限，可管理资源和 CDK |
+| User | 999 | 普通用户权限（默认） |
+
+> 前端页面请优先消费 `/api/user/verify/account` 的语义字段（`isSystem` / `isAdmin` / `role`），避免在页面脚本中直接写权限魔法数字。
+
+### 前端公共模块基线（解耦后）
+
+`Views/js` 下统一复用以下模块，避免重复实现：
+
+- `core/api-client.js`：统一 token 注入、超时、401 处理、JSON 解析。
+- `core/auth-state.js`：统一登录态读取与权限语义映射。
+- `core/error-presenter.js`：统一错误码到用户提示映射与展示出口。
+- `shared/utils.js`：统一 `formatDate` / `escapeHtml` / `formatDownloadCount` / `formatCurrency`。
+
+迁移约束：业务页面不再新增裸 `fetch + Authorization + alert` 样板，统一通过公共层调用。
 
 ---
 
@@ -55,9 +67,11 @@ JwtHelper.Configure(new JwtHelper.JwtConfig
     SecretKey = "A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6",
     Issuer = "KaxSocket",
     Audience = "KaxUsers",
-    Expiration = TimeSpan.FromHours(1)
+  Expiration = TimeSpan.FromDays(7)
 });
 ```
+
+> 说明：`Expiration` 主要用于 `web_token`。`client_token` 由服务端使用长期有效期单独签发（业务上近似不过期）。
 
 ### 速率限制回调
 
@@ -77,9 +91,37 @@ JwtHelper.Configure(new JwtHelper.JwtConfig
 Authorization: Bearer <token>
 ```
 
+### 双令牌策略（2026-03）
+
+- `client_token`
+  - 每次 **客户端登录**都会重签。
+  - 仅允许 **非浏览器请求** 使用。
+  - 需与 `hid`（硬件唯一标识）绑定。
+- `web_token`
+  - 登录时若未过期则复用，过期后才更新。
+  - 仅允许 **浏览器请求** 使用。
+
+### 客户端请求头要求
+
+当以客户端模式登录或调用受保护接口时，请求头必须包含：
+
+```http
+type: client
+hid: <ASCII安全字符串>
+Authorization: Bearer <client_token>
+```
+
+说明：
+- `hid` 会被服务端持久化到用户字段，并参与 `client_token` 绑定校验。
+- 非 ASCII 字符（如中文）不可直接放入 HTTP Header，建议客户端先转为 ASCII 安全值（如 Base64Url）。
+- 缺失 `hid`、`hid` 与登录绑定不一致、或 `client_token`/`web_token` 互换使用，都会返回 `401`。
+
 ### 令牌生成
 
-通过 `/api/user/login` 获取令牌后，在后续请求中使用。
+通过 `/api/user/login` 获取双令牌后按端侧使用：
+
+- 客户端：使用 `client_token`
+- 浏览器：使用 `web_token`
 
 ---
 
@@ -93,13 +135,15 @@ Authorization: Bearer <token>
 
 成功：
 ```json
-{ "code": 0, "message": "成功", "data": {} }
+{ "code": 0, "message": "成功", "data": {}, "traceId": "req-20260307-001" }
 ```
 
 失败：
 ```json
-{ "code": 4000, "message": "错误描述", "data": null }
+{ "code": 4000, "message": "错误描述", "data": null, "traceId": "req-20260307-001" }
 ```
+
+> 回归排障建议：所有关键路径失败都应保留并上报 `traceId`，用于快速定位服务端日志。
 
 #### 1) 商品列表
 
@@ -287,6 +331,12 @@ Content-Type: application/json
 POST /api/user/login
 Content-Type: application/json
 
+# 客户端登录时必须携带
+type: client
+hid: <硬件唯一标识>
+device-name: <设备名称, 可选>
+device-os: <设备操作系统, 可选>
+
 {
   "username": "user123",
   "password": "password123"
@@ -295,22 +345,61 @@ Content-Type: application/json
 
 **限制**：5 req/60s
 
+**请求头说明**：
+- `type`：登录类型，`client` 或 `web`（默认 web）
+- `hid`：硬件唯一标识，客户端登录必填
+- `device-name`：设备名称，客户端登录可选
+- `device-os`：设备操作系统，客户端登录可选
+
 **响应成功**：
 ```json
 {
   "StatusCode": 200,
   "Body": {
     "message": "登录成功。",
-    "login_token": "eyJhbGciOiJIUzI1NiIs..."
+    "client_token": "<客户端令牌>",
+    "web_token": "<浏览器令牌>",
+    "web_token_rotated": true
   }
 }
 ```
 
-**响应失败**：
+**响应说明**：
+- `client_token`：客户端使用的令牌，每次客户端登录都会重新签发
+- `web_token`：浏览器使用的令牌，登录时若未过期则复用，过期后才更新
+- `web_token_rotated`：标识是否生成了新的 web_token（true 表示新生成，false 表示复用旧的）
+
+**登录设备记录**：
+- 每次登录都会自动记录设备信息到 `LoginDevices` 列表
+- 客户端登录使用 `hid` 作为设备唯一标识，并记录 `device-name` 和 `device-os`
+- Web 登录使用 User-Agent 的 SHA-256 哈希作为设备唯一标识，自动解析浏览器名称和操作系统
+- 相同设备的记录仅更新登录时间，不重复生成新记录
+
+**响应失败 - 用户已封禁**：
+```json
+{
+  "StatusCode": 403,
+  "Body": {
+    "message": "您的账号已被封禁，无法登录。",
+    "ban_reason": "违反服务条款",
+    "ban_expires": "2026-04-07 12:00:00 (UTC)"
+  }
+}
+```
+
+**响应失败 - 凭证错误**：
 ```json
 {
   "StatusCode": 401,
-  "Body": "用户名或密码错误。"
+  "Body": "用户名/邮箱或密码错误。"
+}
+```
+
+**响应失败 - 客户端缺少 hid**：
+```json
+{
+  "StatusCode": 400,
+  "Body": "客户端登录缺少 hid 请求头。"
 }
 ```
 
@@ -323,62 +412,45 @@ POST /api/user/verify/account
 Authorization: Bearer <token>
 ```
 
-### 11.1 System 用户列表
-
-GET /api/system/users
-
-说明：仅 System 权限可访问，支持关键字与权限组筛选，返回分页用户列表。
-
-Query 参数：
-
-- q: string，可选，按用户名/显示名/邮箱模糊搜索
-- permissionGroup: int，可选，权限组（0=System, 2=Console, 3=Admin, 999=User）
-- page: int，可选，默认 1
-- pageSize: int，可选，默认 20，最大 100
-
-响应示例：
-
-```json
-{
-  "code": 0,
-  "message": "成功",
-  "data": {
-    "total": 1,
-    "page": 1,
-    "pageSize": 20,
-    "items": [
-      {
-        "id": 1,
-        "userName": "system",
-        "displayName": "system",
-        "email": "system@example.com",
-        "permissionGroup": 0,
-        "permissionGroupText": "System",
-        "emailVerified": true,
-        "isBanned": false,
-        "banExpiresAt": 0,
-        "registeredAt": 0,
-        "lastLoginAt": 0,
-        "recentActivity": 0,
-        "resourceCount": 0,
-        "gold": 0
-      }
-    ]
-  }
-}
-```
-
 **限制**：60 req/60s
 
-**功能**：验证当前登录令牌的有效性
+**功能**：验证当前登录令牌的有效性，返回用户权限和个人统计信息
 
 **响应**：
 ```json
 {
-  "code": 0,
-  "message": "验证成功"
+  "message": "令牌有效，欢迎您！",
+  "user": "user123",
+  "permissionGroup": 3,
+  "isAdmin": true,
+  "isSystem": false,
+  "avatarUrl": "/api/user/avatar/1?v=1700000100",
+  "resourceCount": 5,
+  "gold": 1000,
+  "recentActivity": 100,
+  "cdkCount": 2
 }
 ```
+
+**响应字段说明**：
+- `user`：用户名
+- `permissionGroup`：权限组编号（0=System, 2=Console, 3=Admin, 999=User）
+- `isAdmin`：是否为管理员（包含 System、Console、Admin 三个权限组）
+- `isSystem`：是否为系统权限（精确标识 System 权限组，用于前端判断是否显示"资产管理"等仅系统管理员可见的功能）
+- `avatarUrl`：用户头像 URL，如果用户上传过头像则返回，否则为空字符串
+- `resourceCount`：用户拥有的资源数
+- `gold`：用户的金币余额
+- `recentActivity`：最近活动计数
+- `cdkCount`：用户持有的有效 CDK 数量
+
+**鉴权行为补充**：
+- 当 token 声明 `token_use=client`：
+  - 拒绝浏览器特征请求（如 `User-Agent` 含 `Mozilla`、含 `Origin`、含 `Sec-Fetch-Mode`、`Accept` 含 `text/html`）
+  - 必须带 `hid` 请求头，并与用户持久化 `ClientHid`、令牌内 `hid` 声明一致
+  - 校验 `client_seed = sha256(hid:username)`
+- 当 token 声明 `token_use=web`：
+  - 仅允许浏览器特征请求
+- 使用旧 token（与用户当前存储 token 不一致）会返回 `401` 并要求重新登录
 
 ---
 
@@ -1590,27 +1662,44 @@ data: {"subscribers":5}
 
 ## 错误响应
 
-### 通用错误码
+> 统一错误码出口：`KaxSocket.Handlers.Helpers.ApiErrorCodes`。
+> 新改接口应优先复用该常量集，避免新增魔法数字。
 
-| 状态码 | 含义 | 场景 |
-|-------|------|------|
-| 400 | 请求错误 | 参数无效、请求体格式错误 |
-| 401 | 未授权 | 令牌缺失或无效 |
-| 403 | 禁止访问 | 权限不足、用户被封禁 |
-| 404 | 未找到 | 资源、用户、订单不存在 |
-| 409 | 冲突 | 用户名/邮箱已注册 |
-| 429 | 请求过于频繁 | 超过速率限制 |
-| 500 | 服务器错误 | 内部处理异常 |
+### 通用错误码（ApiErrorCodes）
 
-### 业务错误码
+| 常量名 | 错误码 | HTTP状态 | 含义 |
+|-------|-------:|---------:|------|
+| `Success` | 0 | 200 | 请求成功 |
+| `BadRequest` | 4000 | 400 | 通用请求错误 |
+| `InvalidArgument` | 4001 | 400 | 参数无效或校验失败 |
+| `Unauthorized` | 4010 | 401 | 未授权访问 |
+| `TokenMissing` | 4011 | 401 | 缺少令牌 |
+| `TokenInvalid` | 4012 | 401 | 令牌无效或已过期 |
+| `Forbidden` | 4030 | 403 | 权限不足 |
+| `AccountBanned` | 4031 | 403 | 账号已被封禁 |
+| `NotFound` | 4040 | 404 | 目标资源不存在 |
+| `Conflict` | 4090 | 409 | 资源冲突 |
+| `TooManyRequests` | 4290 | 429 | 请求过于频繁 |
+| `InternalServerError` | 5000 | 500 | 服务器内部异常 |
 
-| 错误码 | 含义 |
-|-------|------|
-| 0 | 成功 |
-| 2001 | CDK 不存在 |
-| 2002 | CDK 已被使用 |
-| 2003 | CDK 已过期 |
-| 2004 | 资源未拥有 |
+### 业务错误码（已纳入 ApiErrorCodes）
+
+| 常量名 | 错误码 | 含义 |
+|-------|-------:|------|
+| `CdkNotFound` | 2001 | CDK 不存在 |
+| `CdkUsed` | 2002 | CDK 已被使用 |
+| `CdkExpired` | 2003 | CDK 已过期 |
+| `AssetNotOwned` | 2004 | 资源未拥有 |
+| `EmailInvalidArgument` | 46001 | 邮箱流程参数无效 |
+| `EmailAlreadyUsed` | 46002 | 邮箱已被占用 |
+| `EmailSendTooFast` | 46003 | 发送过快，请稍后重试 |
+| `EmailHourlyLimit` | 46004 | 每小时发送次数超限 |
+| `EmailDailyLimit` | 46005 | 每日发送次数超限 |
+| `EmailCodeInvalid` | 46006 | 验证码错误 |
+| `EmailCodeExpired` | 46007 | 验证码过期 |
+| `EmailCodeUsed` | 46008 | 验证码已使用 |
+| `EmailCodeTooManyAttempts` | 46009 | 验证码尝试次数过多 |
+| `EmailFlowNotStarted` | 46010 | 请先发起验证码流程 |
 
 ---
 
@@ -1689,9 +1778,10 @@ public class UserData : IDataBase
 ## 最佳实践
 
 ### 1. 令牌管理
-- 在登录后立即保存令牌到本地存储
-- 每小时重新获取新令牌
-- 在请求失败时检查令牌有效性
+- 登录后同时保存 `client_token` 与 `web_token`，按端侧分别使用
+- 客户端请求始终携带 `type=client` 与 `hid`
+- 禁止互换使用两类 token（`web_token` 不能当 `client_token`，反之亦然）
+- 在请求失败时检查是否触发了 token/hid 绑定校验并重新登录
 
 ### 2. 错误处理
 - 总是检查 HTTP 状态码
@@ -1711,5 +1801,5 @@ public class UserData : IDataBase
 
 ---
 
-**最后更新**：2026-03-03  
-**API 版本**：1.1
+**最后更新**：2026-03-07  
+**API 版本**：1.2

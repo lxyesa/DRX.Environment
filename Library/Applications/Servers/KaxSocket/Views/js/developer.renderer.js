@@ -309,6 +309,7 @@ function resetForm() {
     document.getElementById('assetCoverImage').value = '';
     document.getElementById('assetIconImage').value = '';
     document.getElementById('assetScreenshots').value = '';
+    document.getElementById('assetDownloadUrl').value = '';
     document.getElementById('pricesList').innerHTML = '';
     const langList = document.getElementById('languageSupportList');
     if (langList) langList.innerHTML = '';
@@ -333,6 +334,7 @@ function fillForm(asset) {
     document.getElementById('assetCoverImage').value = asset.coverImage || '';
     document.getElementById('assetIconImage').value = asset.iconImage || '';
     document.getElementById('assetScreenshots').value = Array.isArray(asset.screenshots) ? asset.screenshots.join(';') : (asset.screenshots || '');
+    document.getElementById('assetDownloadUrl').value = asset.downloadUrl || asset.specs?.downloadUrl || '';
     document.getElementById('cancelEditBtn').style.display = '';
     document.getElementById('submitAssetBtn').textContent = '保存并重审';
     const aside = document.getElementById('cancelEditBtnAside');
@@ -365,6 +367,7 @@ function collectFormData() {
     const coverImage = document.getElementById('assetCoverImage').value.trim();
     const iconImage = document.getElementById('assetIconImage').value.trim();
     const screenshots = document.getElementById('assetScreenshots').value.trim();
+    const downloadUrl = document.getElementById('assetDownloadUrl').value.trim();
 
     const priceItems = document.querySelectorAll('#pricesList .dev-price-item');
     const prices = [];
@@ -394,7 +397,7 @@ function collectFormData() {
         languageSupports.push({ name, isSupported });
     });
 
-    return { name, version, description, category, tags, coverImage, iconImage, screenshots, prices, languageSupports };
+    return { name, version, description, category, tags, coverImage, iconImage, screenshots, downloadUrl, prices, languageSupports };
 }
 
 /* ----------------------------------------------------------------

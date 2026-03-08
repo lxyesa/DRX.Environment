@@ -9,6 +9,9 @@
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
     <link href="/css/global.css" rel="stylesheet">
     <script src="/js/global.js"></script>
+    <script src="/js/core/auth-state.js" defer></script>
+    <script src="/js/core/api-client.js" defer></script>
+    <script src="/js/core/error-presenter.js" defer></script>
     <script src="/js/topbar.js" defer></script>
     <script src="/components/inputbox.js?v=3" defer></script>
     <script src="/components/action-btn.js" defer></script>
@@ -186,6 +189,9 @@
                                     </div>
                                     <div class="dev-field">
                                         <input-box id="assetScreenshots" label="截图 URL（分号分隔）" icon="photo_library" placeholder="https://img1.png;https://img2.png"></input-box>
+                                    </div>
+                                    <div class="dev-field create-field-span2">
+                                        <input-box id="assetDownloadUrl" label="下载 URL" icon="download" placeholder="https://example.com/asset.zip"></input-box>
                                     </div>
                                 </div>
                             </div>

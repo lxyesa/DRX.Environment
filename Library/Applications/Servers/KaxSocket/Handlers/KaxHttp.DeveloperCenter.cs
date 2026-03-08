@@ -92,12 +92,12 @@ public partial class KaxHttp
                     };
                 }).ToList();
 
-            return new JsonResult(new { code = 0, message = "成功", data = new { total, page, pageSize, items } }, 200);
+            return Api.EnvelopePaged(request, items, page, pageSize, total, "成功");
         }
         catch (Exception ex)
         {
             Logger.Error($"获取开发者资产列表失败: {ex.Message}");
-            return new JsonResult(new { code = 500, message = "服务器错误" }, 500);
+            return Api.EnvelopeFail(request, 500, ApiErrorCodes.InternalServerError, "服务器错误");
         }
     }
 
@@ -122,11 +122,11 @@ public partial class KaxHttp
             var description = body["description"]?.ToString() ?? "";
 
             if (string.IsNullOrEmpty(name) || name.Length > 100)
-                return new JsonResult(new { message = "资源名称无效（1-100字符）" }, 400);
+                return Api.EnvelopeFail(request, 400, ApiErrorCodes.InvalidArgument, "资源名称无效（1-100字符）");
             if (string.IsNullOrEmpty(version) || version.Length > 50)
-                return new JsonResult(new { message = "版本字段无效（1-50字符）" }, 400);
+                return Api.EnvelopeFail(request, 400, ApiErrorCodes.InvalidArgument, "版本字段无效（1-50字符）");
             if (description.Length > 500)
-                return new JsonResult(new { message = "描述过长（最多500字符）" }, 400);
+                return Api.EnvelopeFail(request, 400, ApiErrorCodes.InvalidArgument, "描述过长（最多500字符）");
 
             var asset = new Model.AssetModel
             {
@@ -160,12 +160,12 @@ public partial class KaxHttp
             await KaxGlobal.AssetDataBase.UpdateAsync(asset);
 
             Logger.Info($"开发者 {userName} (id={user.Id}) 创建了资源: {name} (v{version})，状态：审核中");
-            return new JsonResult(new { code = 0, message = "资源已创建，等待审核", id = asset.Id }, 200);
+            return Api.EnvelopeOk(request, new { id = asset.Id }, "资源已创建，等待审核");
         }
         catch (Exception ex)
         {
             Logger.Error($"开发者创建资源失败: {ex.Message}");
-            return new JsonResult(new { code = 500, message = "服务器错误" }, 500);
+            return Api.EnvelopeFail(request, 500, ApiErrorCodes.InternalServerError, "服务器错误");
         }
     }
 
@@ -186,36 +186,36 @@ public partial class KaxHttp
         {
 
             if (!int.TryParse(body["id"]?.ToString(), out var id) || id <= 0)
-                return new JsonResult(new { message = "资源ID无效" }, 400);
+                return Api.EnvelopeFail(request, 400, ApiErrorCodes.InvalidArgument, "资源ID无效");
 
             var asset = await KaxGlobal.AssetDataBase.SelectByIdAsync(id);
-            if (asset == null) return new JsonResult(new { message = "资源不存在" }, 404);
+            if (asset == null) return Api.EnvelopeFail(request, 404, ApiErrorCodes.NotFound, "资源不存在");
 
             // 验证所有权
             if (asset.AuthorId != user.Id)
-                return new JsonResult(new { message = "无权修改此资源" }, 403);
+                return Api.EnvelopeFail(request, 403, ApiErrorCodes.Forbidden, "无权修改此资源");
 
             // 仅在被拒绝或待发布状态下允许修改
             if (asset.Status == AssetStatus.PendingReview)
-                return new JsonResult(new { message = "资源正在审核中，无法修改" }, 400);
+                return Api.EnvelopeFail(request, 400, ApiErrorCodes.BadRequest, "资源正在审核中，无法修改");
 
             // 基本字段更新
             if (body["name"] != null)
             {
                 var name = body["name"]?.ToString() ?? string.Empty;
-                if (name.Length > 100) return new JsonResult(new { message = "名称过长（最多100字符）" }, 400);
+                if (name.Length > 100) return Api.EnvelopeFail(request, 400, ApiErrorCodes.InvalidArgument, "名称过长（最多100字符）");
                 if (!string.IsNullOrEmpty(name)) asset.Name = name;
             }
             if (body["version"] != null)
             {
                 var version = body["version"]?.ToString() ?? string.Empty;
-                if (version.Length > 50) return new JsonResult(new { message = "版本过长（最多50字符）" }, 400);
+                if (version.Length > 50) return Api.EnvelopeFail(request, 400, ApiErrorCodes.InvalidArgument, "版本过长（最多50字符）");
                 if (!string.IsNullOrEmpty(version)) asset.Version = version;
             }
             if (body["description"] != null)
             {
                 var desc = body["description"]?.ToString() ?? string.Empty;
-                if (desc.Length > 500) return new JsonResult(new { message = "描述过长（最多500字符）" }, 400);
+                if (desc.Length > 500) return Api.EnvelopeFail(request, 400, ApiErrorCodes.InvalidArgument, "描述过长（最多500字符）");
                 asset.Description = desc;
             }
             if (body["category"] != null)
@@ -236,12 +236,12 @@ public partial class KaxHttp
             await KaxGlobal.AssetDataBase.UpdateAsync(asset);
 
             Logger.Info($"开发者 {userName} 更新了资源: {asset.Name} (id={id})");
-            return new JsonResult(new { code = 0, message = "资源已更新" }, 200);
+            return Api.EnvelopeOk(request, null, "资源已更新");
         }
         catch (Exception ex)
         {
             Logger.Error($"开发者更新资源失败: {ex.Message}");
-            return new JsonResult(new { code = 500, message = "服务器错误" }, 500);
+            return Api.EnvelopeFail(request, 500, ApiErrorCodes.InternalServerError, "服务器错误");
         }
     }
 
@@ -253,17 +253,17 @@ public partial class KaxHttp
     {
         var (user, authError) = await Api.GetUserAsync(request);
         if (authError != null) return authError;
-        if (user == null) return new JsonResult(new { message = "用户认证失败" }, 401);
+        if (user == null) return Api.EnvelopeFail(request, 401, ApiErrorCodes.Unauthorized, "用户认证失败");
 
         if (!request.PathParameters.TryGetValue("id", out var idStr) || !int.TryParse(idStr, out var assetId) || assetId <= 0)
-            return new JsonResult(new { message = "id 参数无效" }, 400);
+            return Api.EnvelopeFail(request, 400, ApiErrorCodes.InvalidArgument, "id 参数无效");
 
         try
         {
             var asset = await KaxGlobal.AssetDataBase.SelectByIdAsync(assetId);
-            if (asset == null) return new JsonResult(new { message = "资源不存在" }, 404);
+            if (asset == null) return Api.EnvelopeFail(request, 404, ApiErrorCodes.NotFound, "资源不存在");
             if (asset.AuthorId != user.Id)
-                return new JsonResult(new { message = "无权查看此资源" }, 403);
+                return Api.EnvelopeFail(request, 403, ApiErrorCodes.Forbidden, "无权查看此资源");
 
             var specs = EnsureSpecs(asset);
             var pricesList = asset.Prices?.Select(p => new
@@ -285,51 +285,48 @@ public partial class KaxHttp
             var screenshotList = (asset.Screenshots ?? string.Empty).Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
             var tagList = (asset.Tags ?? string.Empty).Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
-            return new JsonResult(new
+            var result = new
             {
-                code = 0,
-                message = "成功",
-                data = new
+                id = asset.Id,
+                name = asset.Name,
+                version = asset.Version,
+                authorId = asset.AuthorId,
+                description = asset.Description,
+                category = asset.Category,
+                status = (int)asset.Status,
+                statusText = AssetStatusText(asset.Status),
+                rejectReason = asset.RejectReason ?? string.Empty,
+                lastSubmittedAt = DisplaySubmittedAt(asset),
+                coverImage = asset.CoverImage,
+                iconImage = asset.IconImage,
+                screenshots = screenshotList,
+                tags = tagList,
+                languageSupportsJson = asset.LanguageSupportsJson,
+                languageSupports = languageSupports,
+                prices = pricesList,
+                specs = new
                 {
-                    id = asset.Id,
-                    name = asset.Name,
-                    version = asset.Version,
-                    authorId = asset.AuthorId,
-                    description = asset.Description,
-                    category = asset.Category,
-                    status = (int)asset.Status,
-                    statusText = AssetStatusText(asset.Status),
-                    rejectReason = asset.RejectReason ?? string.Empty,
-                    lastSubmittedAt = DisplaySubmittedAt(asset),
-                    coverImage = asset.CoverImage,
-                    iconImage = asset.IconImage,
-                    screenshots = screenshotList,
-                    tags = tagList,
-                    languageSupportsJson = asset.LanguageSupportsJson,
-                    languageSupports = languageSupports,
-                    prices = pricesList,
-                    specs = new
-                    {
-                        fileSize = specs.FileSize,
-                        rating = specs.Rating,
-                        reviewCount = specs.ReviewCount,
-                        compatibility = specs.Compatibility,
-                        downloads = specs.Downloads,
-                        uploadDate = specs.UploadDate,
-                        license = specs.License,
-                        downloadUrl = specs.DownloadUrl,
-                        purchaseCount = specs.PurchaseCount,
-                        favoriteCount = specs.FavoriteCount,
-                        viewCount = specs.ViewCount,
-                        lastUpdatedAt = specs.LastUpdatedAt
-                    }
+                    fileSize = specs.FileSize,
+                    rating = specs.Rating,
+                    reviewCount = specs.ReviewCount,
+                    compatibility = specs.Compatibility,
+                    downloads = specs.Downloads,
+                    uploadDate = specs.UploadDate,
+                    license = specs.License,
+                    downloadUrl = specs.DownloadUrl,
+                    purchaseCount = specs.PurchaseCount,
+                    favoriteCount = specs.FavoriteCount,
+                    viewCount = specs.ViewCount,
+                    lastUpdatedAt = specs.LastUpdatedAt
                 }
-            }, 200);
+            };
+
+            return Api.EnvelopeOk(request, result, "成功");
         }
         catch (Exception ex)
         {
             Logger.Error($"获取开发者资产详情失败: {ex.Message}");
-            return new JsonResult(new { code = 500, message = "服务器错误" }, 500);
+            return Api.EnvelopeFail(request, 500, ApiErrorCodes.InternalServerError, "服务器错误");
         }
     }
 
@@ -350,19 +347,19 @@ public partial class KaxHttp
         {
 
             if (!int.TryParse(body["id"]?.ToString(), out var id) || id <= 0)
-                return new JsonResult(new { message = "资源ID无效" }, 400);
+                return Api.EnvelopeFail(request, 400, ApiErrorCodes.InvalidArgument, "资源ID无效");
 
             var asset = await KaxGlobal.AssetDataBase.SelectByIdAsync(id);
-            if (asset == null) return new JsonResult(new { message = "资源不存在" }, 404);
+            if (asset == null) return Api.EnvelopeFail(request, 404, ApiErrorCodes.NotFound, "资源不存在");
             if (asset.AuthorId != user.Id)
-                return new JsonResult(new { message = "无权操作此资源" }, 403);
+                return Api.EnvelopeFail(request, 403, ApiErrorCodes.Forbidden, "无权操作此资源");
 
             // 检查当前状态：
             // - PendingReview：已在审核中，不可重复提交
             // - Active：允许开发者发起重审（将自动下架并进入审核中）
             // - Rejected / ApprovedPendingPublish / OffShelf：允许提交
             if (asset.Status == AssetStatus.PendingReview)
-                return new JsonResult(new { message = "资源已在审核中" }, 400);
+                return Api.EnvelopeFail(request, 400, ApiErrorCodes.BadRequest, "资源已在审核中");
 
             var wasActive = asset.Status == AssetStatus.Active;
 
@@ -374,11 +371,7 @@ public partial class KaxHttp
                 var remaining = REVIEW_COOLDOWN_SECONDS - elapsed;
                 var hours = remaining / 3600;
                 var minutes = (remaining % 3600) / 60;
-                return new JsonResult(new
-                {
-                    message = $"提交审核冷却中，请在 {hours} 小时 {minutes} 分钟后重试",
-                    cooldownRemaining = remaining
-                }, 429);
+                return Api.EnvelopeFail(request, 429, ApiErrorCodes.TooManyRequests, $"提交审核冷却中，请在 {hours} 小时 {minutes} 分钟后重试", new { cooldownRemaining = remaining });
             }
 
             // 可选：允许在“提交审核”时附带最新资料（包括价格方案）一起保存
@@ -387,21 +380,21 @@ public partial class KaxHttp
             {
                 var name = body["name"]?.ToString() ?? string.Empty;
                 if (name.Length > 100)
-                    return new JsonResult(new { message = "名称过长（最多100字符）" }, 400);
+                    return Api.EnvelopeFail(request, 400, ApiErrorCodes.InvalidArgument, "名称过长（最多100字符）");
                 if (!string.IsNullOrEmpty(name)) asset.Name = name;
             }
             if (body["version"] != null)
             {
                 var version = body["version"]?.ToString() ?? string.Empty;
                 if (version.Length > 50)
-                    return new JsonResult(new { message = "版本过长（最多50字符）" }, 400);
+                    return Api.EnvelopeFail(request, 400, ApiErrorCodes.InvalidArgument, "版本过长（最多50字符）");
                 if (!string.IsNullOrEmpty(version)) asset.Version = version;
             }
             if (body["description"] != null)
             {
                 var desc = body["description"]?.ToString() ?? string.Empty;
                 if (desc.Length > 500)
-                    return new JsonResult(new { message = "描述过长（最多500字符）" }, 400);
+                    return Api.EnvelopeFail(request, 400, ApiErrorCodes.InvalidArgument, "描述过长（最多500字符）");
                 asset.Description = desc;
             }
             if (body["category"] != null) asset.Category = body["category"]?.ToString() ?? string.Empty;
@@ -424,21 +417,16 @@ public partial class KaxHttp
             await KaxGlobal.AssetDataBase.UpdateAsync(asset);
 
             Logger.Info($"开发者 {userName} 提交资源 {asset.Name} (id={id}) 进入审核" + (wasActive ? "（由已上线状态发起，已自动下架）" : string.Empty));
-            return new JsonResult(new
+            return Api.EnvelopeOk(request, new
             {
-                code = 0,
-                message = wasActive ? "资源已下架并提交重审" : "已提交审核",
-                data = new
-                {
-                    wasActive,
-                    currentStatus = (int)AssetStatus.PendingReview
-                }
-            }, 200);
+                wasActive,
+                currentStatus = (int)AssetStatus.PendingReview
+            }, wasActive ? "资源已下架并提交重审" : "已提交审核");
         }
         catch (Exception ex)
         {
             Logger.Error($"提交审核失败: {ex.Message}");
-            return new JsonResult(new { code = 500, message = "服务器错误" }, 500);
+            return Api.EnvelopeFail(request, 500, ApiErrorCodes.InternalServerError, "服务器错误");
         }
     }
 
@@ -458,14 +446,14 @@ public partial class KaxHttp
         try
         {
             if (!int.TryParse(body?["id"]?.ToString(), out var id) || id <= 0)
-                return new JsonResult(new { message = "资源ID无效" }, 400);
+                return Api.EnvelopeFail(request, 400, ApiErrorCodes.InvalidArgument, "资源ID无效");
 
             var asset = await KaxGlobal.AssetDataBase.SelectByIdAsync(id);
-            if (asset == null) return new JsonResult(new { message = "资源不存在" }, 404);
+            if (asset == null) return Api.EnvelopeFail(request, 404, ApiErrorCodes.NotFound, "资源不存在");
             if (asset.AuthorId != user.Id)
-                return new JsonResult(new { message = "无权操作此资源" }, 403);
+                return Api.EnvelopeFail(request, 403, ApiErrorCodes.Forbidden, "无权操作此资源");
             if (asset.Status != AssetStatus.ApprovedPendingPublish)
-                return new JsonResult(new { message = "仅审核通过待发布的资源可发布" }, 400);
+                return Api.EnvelopeFail(request, 400, ApiErrorCodes.BadRequest, "仅审核通过待发布的资源可发布");
 
             asset.Status = AssetStatus.Active;
             var specs = EnsureSpecs(asset);
@@ -473,12 +461,12 @@ public partial class KaxHttp
             await KaxGlobal.AssetDataBase.UpdateAsync(asset);
 
             Logger.Info($"开发者 {userName} 发布了资源: {asset.Name} (id={id})");
-            return new JsonResult(new { code = 0, message = "资源已发布到商店" }, 200);
+            return Api.EnvelopeOk(request, null, "资源已发布到商店");
         }
         catch (Exception ex)
         {
             Logger.Error($"发布资源失败: {ex.Message}");
-            return new JsonResult(new { code = 500, message = "服务器错误" }, 500);
+            return Api.EnvelopeFail(request, 500, ApiErrorCodes.InternalServerError, "服务器错误");
         }
     }
 
@@ -492,7 +480,7 @@ public partial class KaxHttp
     [HttpHandle("/api/review/pending", "GET", RateLimitMaxRequests = 30, RateLimitWindowSeconds = 60)]
     public static async Task<IActionResult> Get_ReviewPendingList(HttpRequest request)
     {
-        var (_, authError) = await Api.RequireAdminNameAsync(request);
+        var (_, authError) = await Api.RequirePolicyNameAsync(request, ApiAccessPolicy.Admin);
         if (authError != null) return authError;
 
         try
@@ -542,12 +530,12 @@ public partial class KaxHttp
                     };
                 }).ToList();
 
-            return new JsonResult(new { code = 0, message = "成功", data = new { total, page, pageSize, items } }, 200);
+            return Api.EnvelopePaged(request, items, page, pageSize, total, "成功");
         }
         catch (Exception ex)
         {
             Logger.Error($"获取待审核列表失败: {ex.Message}");
-            return new JsonResult(new { code = 500, message = "服务器错误" }, 500);
+            return Api.EnvelopeFail(request, 500, ApiErrorCodes.InternalServerError, "服务器错误");
         }
     }
 
@@ -557,16 +545,16 @@ public partial class KaxHttp
     [HttpHandle("/api/review/asset/{id}", "GET", RateLimitMaxRequests = 30, RateLimitWindowSeconds = 60)]
     public static async Task<IActionResult> Get_ReviewAssetDetail(HttpRequest request)
     {
-        var (_, authError) = await Api.RequireAdminNameAsync(request);
+        var (_, authError) = await Api.RequirePolicyNameAsync(request, ApiAccessPolicy.Admin);
         if (authError != null) return authError;
 
         if (!request.PathParameters.TryGetValue("id", out var idStr) || !int.TryParse(idStr, out var assetId) || assetId <= 0)
-            return new JsonResult(new { message = "id 参数无效" }, 400);
+            return Api.EnvelopeFail(request, 400, ApiErrorCodes.InvalidArgument, "id 参数无效");
 
         try
         {
             var asset = await KaxGlobal.AssetDataBase.SelectByIdAsync(assetId);
-            if (asset == null) return new JsonResult(new { message = "资源不存在" }, 404);
+            if (asset == null) return Api.EnvelopeFail(request, 404, ApiErrorCodes.NotFound, "资源不存在");
 
             var specs = EnsureSpecs(asset);
             var pricesList = asset.Prices?.Select(p => new
@@ -592,49 +580,46 @@ public partial class KaxHttp
             }
             catch { }
 
-            return new JsonResult(new
+            var result = new
             {
-                code = 0,
-                message = "成功",
-                data = new
+                id = asset.Id,
+                name = asset.Name,
+                version = asset.Version,
+                authorId = asset.AuthorId,
+                authorName,
+                description = asset.Description,
+                category = asset.Category,
+                status = (int)asset.Status,
+                rejectReason = asset.RejectReason ?? string.Empty,
+                lastSubmittedAt = DisplaySubmittedAt(asset),
+                coverImage = asset.CoverImage,
+                iconImage = asset.IconImage,
+                screenshots = screenshotList,
+                tags = tagList,
+                prices = pricesList,
+                specs = new
                 {
-                    id = asset.Id,
-                    name = asset.Name,
-                    version = asset.Version,
-                    authorId = asset.AuthorId,
-                    authorName,
-                    description = asset.Description,
-                    category = asset.Category,
-                    status = (int)asset.Status,
-                    rejectReason = asset.RejectReason ?? string.Empty,
-                    lastSubmittedAt = DisplaySubmittedAt(asset),
-                    coverImage = asset.CoverImage,
-                    iconImage = asset.IconImage,
-                    screenshots = screenshotList,
-                    tags = tagList,
-                    prices = pricesList,
-                    specs = new
-                    {
-                        fileSize = specs.FileSize,
-                        rating = specs.Rating,
-                        reviewCount = specs.ReviewCount,
-                        compatibility = specs.Compatibility,
-                        downloads = specs.Downloads,
-                        uploadDate = specs.UploadDate,
-                        license = specs.License,
-                        downloadUrl = specs.DownloadUrl,
-                        purchaseCount = specs.PurchaseCount,
-                        favoriteCount = specs.FavoriteCount,
-                        viewCount = specs.ViewCount,
-                        lastUpdatedAt = specs.LastUpdatedAt
-                    }
+                    fileSize = specs.FileSize,
+                    rating = specs.Rating,
+                    reviewCount = specs.ReviewCount,
+                    compatibility = specs.Compatibility,
+                    downloads = specs.Downloads,
+                    uploadDate = specs.UploadDate,
+                    license = specs.License,
+                    downloadUrl = specs.DownloadUrl,
+                    purchaseCount = specs.PurchaseCount,
+                    favoriteCount = specs.FavoriteCount,
+                    viewCount = specs.ViewCount,
+                    lastUpdatedAt = specs.LastUpdatedAt
                 }
-            }, 200);
+            };
+
+            return Api.EnvelopeOk(request, result, "成功");
         }
         catch (Exception ex)
         {
             Logger.Error($"获取审核资产详情失败: {ex.Message}");
-            return new JsonResult(new { code = 500, message = "服务器错误" }, 500);
+            return Api.EnvelopeFail(request, 500, ApiErrorCodes.InternalServerError, "服务器错误");
         }
     }
 
@@ -645,7 +630,7 @@ public partial class KaxHttp
     [HttpHandle("/api/review/approve", "POST", RateLimitMaxRequests = 20, RateLimitWindowSeconds = 60)]
     public static async Task<IActionResult> Post_ReviewApprove(HttpRequest request)
     {
-        var (operatorName, authError) = await Api.RequireAdminNameAsync(request);
+        var (operatorName, authError) = await Api.RequirePolicyNameAsync(request, ApiAccessPolicy.Admin);
         if (authError != null) return authError;
 
         if (!ApiBody.TryParse(request, out var body, out var parseError))
@@ -654,13 +639,13 @@ public partial class KaxHttp
         try
         {
             if (!int.TryParse(body?["id"]?.ToString(), out var id) || id <= 0)
-                return new JsonResult(new { message = "资源ID无效" }, 400);
+                return Api.EnvelopeFail(request, 400, ApiErrorCodes.InvalidArgument, "资源ID无效");
 
             var asset = await KaxGlobal.AssetDataBase.SelectByIdAsync(id);
-            if (asset == null) return new JsonResult(new { message = "资源不存在" }, 404);
+            if (asset == null) return Api.EnvelopeFail(request, 404, ApiErrorCodes.NotFound, "资源不存在");
 
             if (asset.Status != AssetStatus.PendingReview)
-                return new JsonResult(new { message = "仅审核中的资源可执行通过操作" }, 400);
+                return Api.EnvelopeFail(request, 400, ApiErrorCodes.BadRequest, "仅审核中的资源可执行通过操作");
 
             // 审核通过后设为待发布状态，需开发者手动发布才上线
             asset.Status = AssetStatus.ApprovedPendingPublish;
@@ -671,12 +656,12 @@ public partial class KaxHttp
             await NotifyAssetActionEmailAsync(asset, "审核通过", null, operatorName ?? "系统");
 
             Logger.Info($"管理员 {operatorName} 通过了资源审核: {asset.Name} (id={id})，状态变更为待发布");
-            return new JsonResult(new { code = 0, message = "审核通过，等待开发者发布" }, 200);
+            return Api.EnvelopeOk(request, null, "审核通过，等待开发者发布");
         }
         catch (Exception ex)
         {
             Logger.Error($"审核通过操作失败: {ex.Message}");
-            return new JsonResult(new { code = 500, message = "服务器错误" }, 500);
+            return Api.EnvelopeFail(request, 500, ApiErrorCodes.InternalServerError, "服务器错误");
         }
     }
 
@@ -686,7 +671,7 @@ public partial class KaxHttp
     [HttpHandle("/api/review/reject", "POST", RateLimitMaxRequests = 20, RateLimitWindowSeconds = 60)]
     public static async Task<IActionResult> Post_ReviewReject(HttpRequest request)
     {
-        var (operatorName, authError) = await Api.RequireAdminNameAsync(request);
+        var (operatorName, authError) = await Api.RequirePolicyNameAsync(request, ApiAccessPolicy.Admin);
         if (authError != null) return authError;
 
         if (!ApiBody.TryParse(request, out var body, out var parseError))
@@ -695,19 +680,19 @@ public partial class KaxHttp
         try
         {
             if (!int.TryParse(body?["id"]?.ToString(), out var id) || id <= 0)
-                return new JsonResult(new { message = "资源ID无效" }, 400);
+                return Api.EnvelopeFail(request, 400, ApiErrorCodes.InvalidArgument, "资源ID无效");
 
             var reason = body?["reason"]?.ToString()?.Trim() ?? string.Empty;
             if (string.IsNullOrEmpty(reason))
-                return new JsonResult(new { message = "拒绝原因不能为空" }, 400);
+                return Api.EnvelopeFail(request, 400, ApiErrorCodes.InvalidArgument, "拒绝原因不能为空");
             if (reason.Length > 500)
-                return new JsonResult(new { message = "拒绝原因过长（最多500字符）" }, 400);
+                return Api.EnvelopeFail(request, 400, ApiErrorCodes.InvalidArgument, "拒绝原因过长（最多500字符）");
 
             var asset = await KaxGlobal.AssetDataBase.SelectByIdAsync(id);
-            if (asset == null) return new JsonResult(new { message = "资源不存在" }, 404);
+            if (asset == null) return Api.EnvelopeFail(request, 404, ApiErrorCodes.NotFound, "资源不存在");
 
             if (asset.Status != AssetStatus.PendingReview)
-                return new JsonResult(new { message = "仅审核中的资源可执行拒绝操作" }, 400);
+                return Api.EnvelopeFail(request, 400, ApiErrorCodes.BadRequest, "仅审核中的资源可执行拒绝操作");
 
             asset.Status = AssetStatus.Rejected;
             asset.RejectReason = reason;
@@ -717,12 +702,12 @@ public partial class KaxHttp
             await NotifyAssetActionEmailAsync(asset, "拒绝", reason, operatorName ?? "系统");
 
             Logger.Info($"管理员 {operatorName} 拒绝了资源审核: {asset.Name} (id={id})，原因: {reason}");
-            return new JsonResult(new { code = 0, message = "已拒绝" }, 200);
+            return Api.EnvelopeOk(request, null, "已拒绝");
         }
         catch (Exception ex)
         {
             Logger.Error($"审核拒绝操作失败: {ex.Message}");
-            return new JsonResult(new { code = 500, message = "服务器错误" }, 500);
+            return Api.EnvelopeFail(request, 500, ApiErrorCodes.InternalServerError, "服务器错误");
         }
     }
 

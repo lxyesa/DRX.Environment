@@ -25,13 +25,8 @@ public partial class KaxHttp
                 return;
             }
 
-            var smtpEmail = Environment.GetEnvironmentVariable("KAX_SMTP_EMAIL") ?? "157335596@qq.com";
-            var smtpAuthCode = Environment.GetEnvironmentVariable("KAX_SMTP_AUTH_CODE") ?? "eymlrhwykskccbdb";
-            var smtpHost = Environment.GetEnvironmentVariable("KAX_SMTP_HOST") ?? "smtp.qq.com";
-            var smtpPort = int.TryParse(Environment.GetEnvironmentVariable("KAX_SMTP_PORT"), out var p) ? p : 587;
-            var smtpEnableSsl = !bool.TryParse(Environment.GetEnvironmentVariable("KAX_SMTP_ENABLE_SSL"), out var ssl) || ssl;
-
-            if (string.IsNullOrWhiteSpace(smtpEmail) || string.IsNullOrWhiteSpace(smtpAuthCode))
+            var smtpConfig = ResolveSmtpRuntimeConfig("AssetNotify");
+            if (smtpConfig == null)
             {
                 Logger.Warn($"[AssetNotify] SMTP 未配置，跳过邮件发送, assetId={asset.Id}, action={actionName}");
                 return;
@@ -148,11 +143,11 @@ public partial class KaxHttp
 
             var sender = new SmtpEmailSender(new EmailSenderOptions
             {
-                SenderAddress = smtpEmail,
-                Password = smtpAuthCode,
-                SmtpHost = smtpHost,
-                SmtpPort = smtpPort,
-                EnableSsl = smtpEnableSsl
+                SenderAddress = smtpConfig.SenderAddress,
+                Password = smtpConfig.AuthCode,
+                SmtpHost = smtpConfig.Host,
+                SmtpPort = smtpConfig.Port,
+                EnableSsl = smtpConfig.EnableSsl
             });
 
             var ok = await sender.TrySendAsync(EmailMessage.Create(user.Email, subject, bodyHtml, EmailContentType.Html));

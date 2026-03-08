@@ -23,6 +23,7 @@ using Drx.Sdk.Network.Http.Configs;
 using Drx.Sdk.Network.Http.Protocol;
 using Drx.Sdk.Network.Http.Serialization;
 using Drx.Sdk.Network.Http.Performance;
+using Drx.Sdk.Network.Http.Cache;
 using Drx.Sdk.Network.Http.Auth;
 using Drx.Sdk.Network.Http.Utilities;
 using Drx.Sdk.Network.Http.Entry;
@@ -93,6 +94,40 @@ namespace Drx.Sdk.Network.Http
         /// 默认为链式回退模式（先反射，后安全模式）
         /// </summary>
         /// <param name="serializer">自定义序列化器，或 null 则恢复默认配置</param>
+        /// <summary>
+        /// 启用或关闭调试模式。
+        /// <para>
+        /// 开启时（true）：静态资源文件查找的基础目录将从程序运行目录切换为项目根目录
+        /// （即向上递归查找包含 .csproj 或 .sln 文件的目录），适合开发期直接读取源码目录中的资源。
+        /// </para>
+        /// <para>
+        /// 关闭时（false，默认）：使用程序运行目录（<see cref="AppDomain.CurrentDomain.BaseDirectory"/>）作为基础目录。
+        /// </para>
+        /// </summary>
+        /// <param name="enable">是否启用调试模式</param>
+        /// <returns>当前服务器实例（支持链式调用）</returns>
+        public DrxHttpServer DebugMode(bool enable)
+        {
+            _debugMode = enable;
+            return this;
+        }
+
+        /// <summary>
+        /// 从指定起始目录向上递归查找包含 .csproj 或 .sln 文件的项目根目录。
+        /// 找不到时返回起始目录本身。
+        /// </summary>
+        private static string FindProjectRoot(string startDir)
+        {
+            var dir = new DirectoryInfo(startDir);
+            while (dir != null)
+            {
+                if (dir.GetFiles("*.csproj").Length > 0 || dir.GetFiles("*.sln").Length > 0)
+                    return dir.FullName;
+                dir = dir.Parent;
+            }
+            return startDir;
+        }
+
         public static void ConfigureJsonSerializer(IDrxJsonSerializer? serializer)
         {
             if (serializer == null)
@@ -172,6 +207,11 @@ namespace Drx.Sdk.Network.Http
         }
         private HttpListener _listener;
         private readonly List<(string Prefix, string RootDir)> _fileRoutes = new();
+
+        /// <summary>
+        /// 是否处于调试模式。调试模式下，静态资源根目录的基础路径将从程序运行目录改为项目根目录。
+        /// </summary>
+        private bool _debugMode = false;
         private readonly List<RouteEntry> _routes = new();
         /// <summary>
         /// 路由表快照（不可变引用）。读取路径无锁——直接读 volatile 引用。
@@ -179,10 +219,6 @@ namespace Drx.Sdk.Network.Http
         /// </summary>
         private volatile System.Collections.Generic.Dictionary<HttpMethod, List<RouteEntry>> _routesByMethod = new();
         private readonly object _routesLock = new();
-        private readonly System.Collections.Generic.Dictionary<string, string> _rateLimitKeyCache = new();
-        private readonly object _rateLimitKeyCacheLock = new();
-        private readonly System.Collections.Concurrent.ConcurrentDictionary<string, RouteEntry?> _routeCache = new();
-        private readonly object _routeCacheLock = new();
         private readonly System.Collections.Generic.List<(string Template, Func<HttpListenerContext, Task> Handler, int RateLimitMaxRequests, int RateLimitWindowSeconds, Func<int, HttpRequest, OverrideContext, Task<HttpResponse?>>? RateLimitCallback)> _rawRoutes = new();
         private readonly string? _staticFileRoot;
         private readonly List<MiddlewareEntry> _middlewares = new();
@@ -237,6 +273,8 @@ namespace Drx.Sdk.Network.Http
         /// 响应压缩策略引擎（任务 3：按内容类型+体积阈值压缩，CPU 守护降级）。
         /// </summary>
         private readonly HttpCompressionStrategy _compressionStrategy;
+
+        private readonly DrxCacheProvider _cacheProvider;
 
 
         /// <summary>
@@ -301,9 +339,11 @@ namespace Drx.Sdk.Network.Http
 
             _dataPersistentManager = new DataPersistentManager();
 
-            _tokenBucketManager = new TokenBucketManager();
+            _cacheProvider = new DrxCacheProvider(_options.CacheOptions);
 
-            _routeMatchCache = new RouteMatchCache(_options.RouteCacheMaxSize);
+            _tokenBucketManager = new TokenBucketManager(_cacheProvider.TokenBucket, _options.CacheOptions.TokenBucketIdleExpiry);
+
+            _routeMatchCache = new RouteMatchCache(_cacheProvider.RouteMatch);
 
             _compressionStrategy = new HttpCompressionStrategy(_options);
 

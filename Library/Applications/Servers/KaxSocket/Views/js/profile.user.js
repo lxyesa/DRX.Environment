@@ -129,10 +129,20 @@
         };
 
         const parseBadgeItem = (item) => {
+            if (typeof item === 'string') {
+                const text = item.trim();
+                return text ? { text, color: defaultColor } : null;
+            }
+
             if (!item || typeof item !== 'object') return null;
-            const text = String(item.text || '').trim();
+
+            // 兼容后端可能返回 PascalCase（Text/Color）
+            const rawText = item.text ?? item.Text ?? item.label ?? item.Label ?? '';
+            const text = String(rawText).trim();
             if (!text) return null;
-            const color = clampColor(item.color) || defaultColor;
+
+            const rawColor = item.color ?? item.Color;
+            const color = clampColor(rawColor) || defaultColor;
             return { text, color };
         };
 
@@ -155,6 +165,9 @@
                     return { text: seg, color: defaultColor };
                 });
             }
+        } else if (typeof rawBadges === 'object') {
+            // 兼容单对象徽章
+            items = [rawBadges];
         } else {
             return [];
         }
@@ -259,8 +272,8 @@
      * - DOM: displayName/displayHandle/displayBio/currentEmailDisplay/overview* 等展示位
      */
     async function loadProfileFromServer() {
-        const token = localStorage.getItem('kax_login_token');
-        if (!token) { location.href = '/login'; return; }
+        const token = checkToken();
+        if (!token) return;
 
         try {
             const endpoint = state.targetUid ? `/api/user/profile/${state.targetUid}` : '/api/user/profile';
@@ -275,7 +288,7 @@
             let selfUid = null;
             if (state.targetUid) {
                 try {
-                    const selfResp = await fetch('/api/user/profile', { headers: { 'Authorization': 'Bearer ' + token } });
+                    const selfResp = await ApiClient.request('/api/user/profile');
                     if (selfResp.status === 200) {
                         const selfData = await selfResp.json();
                         selfUid = (typeof selfData.id !== 'undefined') ? selfData.id : null;
@@ -283,7 +296,7 @@
                 } catch (e) { /* 容错 */ }
             }
 
-            const resp = await fetch(endpoint, { headers: { 'Authorization': 'Bearer ' + token } });
+            const resp = await ApiClient.request(endpoint);
             if (resp.status === 200) {
                 const data = await resp.json();
                 const user = data.user || '';
@@ -381,8 +394,8 @@
 
                 updateEditableState();
             } else if (resp.status === 401) {
-                localStorage.removeItem('kax_login_token');
-                location.href = '/login';
+                // 401 由 ApiClient 统一处理（清 token + 跳转 /login）
+                return;
             } else if (resp.status === 403) {
                 alert('账号被封禁，无法访问资料页。');
                 location.href = '/login';
@@ -640,8 +653,8 @@
             ev.preventDefault();
             if (state.isViewingOtherProfile) { alert('无法编辑他人资料'); return; }
 
-            const token = localStorage.getItem('kax_login_token');
-            if (!token) { location.href = '/login'; return; }
+            const token = checkToken();
+            if (!token) return;
 
             const displayName = document.getElementById('inputName').value.trim();
             const bio = document.getElementById('inputBio').value || '';
@@ -654,7 +667,7 @@
                     const file = avatarFileEl.files[0];
                     const fd = new FormData();
                     fd.append('avatar', file, file.name);
-                    const upResp = await fetch('/api/user/avatar', { method: 'POST', headers: { 'Authorization': 'Bearer ' + token }, body: fd });
+                    const upResp = await ApiClient.request('/api/user/avatar', { method: 'POST', body: fd });
                     const upJson = await upResp.json().catch(() => ({}));
                     if (upResp.status === 200 || upResp.status === 201) {
                         if (upJson.url) {
@@ -672,16 +685,16 @@
                             }
                         }
                     } else if (upResp.status === 401) {
-                        localStorage.removeItem('kax_login_token'); location.href = '/login'; return;
+                        return;
                     } else {
                         alert(upJson.message || '头像上传失败');
                         saveBtn.disabled = false; return;
                     }
                 }
 
-                const resp = await fetch('/api/user/profile', {
+                const resp = await ApiClient.request('/api/user/profile', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ displayName, bio, signature, targetUid: state.currentUserUid })
                 });
 
@@ -696,8 +709,8 @@
                     if (leftEmail) leftEmail.textContent = state.deps.maskEmail(state.originalProfile.email);
                     alert(result.message || '资料已保存');
                 } else if (resp.status === 401) {
-                    localStorage.removeItem('kax_login_token');
-                    location.href = '/login';
+                    // 由 ApiClient 自动处理
+                    return;
                 } else {
                     alert(result.message || ('保存失败：' + resp.status));
                 }
@@ -764,9 +777,9 @@
                 try {
                     const payload = { targetUid: state.currentUserUid, channel: 'old' };
 
-                    const resp = await fetch('/api/user/email-change/send-code', {
+                    const resp = await ApiClient.request('/api/user/email-change/send-code', {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+                        headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(payload)
                     });
                     const result = await resp.json().catch(() => ({}));
@@ -776,8 +789,8 @@
                         const cooldown = Number(result?.data?.cooldownSeconds || 30);
                         startButtonCooldown(btn, cooldown);
                     } else if (resp.status === 401) {
-                        localStorage.removeItem('kax_login_token');
-                        location.href = '/login';
+                        // 由 ApiClient 自动处理
+                        return;
                     } else {
                         showErrorMsg(emailVerifyMessage, result.message || `验证码发送失败：${resp.status}`, true);
                     }
@@ -808,9 +821,9 @@
             const btn = document.getElementById('changePwBtn');
             await withButtonLoading(btn, '更新中...', async () => {
                 try {
-                    const resp = await fetch('/api/user/password', {
+                    const resp = await ApiClient.request('/api/user/password', {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+                        headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ oldPassword: oldPw, newPassword: newPw, confirmPassword: confirmPw })
                     });
                     const result = await resp.json().catch(() => ({}));
@@ -820,8 +833,8 @@
                         pw1El.value = '';
                         pw2El.value = '';
                     } else if (resp.status === 401) {
-                        localStorage.removeItem('kax_login_token');
-                        location.href = '/login';
+                        // 由 ApiClient 自动处理
+                        return;
                     } else {
                         alert(result.message || ('修改失败：' + resp.status));
                     }
@@ -845,9 +858,9 @@
 
             await withButtonLoading(updateEmailBtn, '验证并更新中...', async () => {
                 try {
-                    const resp = await fetch('/api/user/email-change/confirm', {
+                    const resp = await ApiClient.request('/api/user/email-change/confirm', {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+                        headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ targetUid: state.currentUserUid, newEmail, oldEmailCode })
                     });
                     const result = await resp.json().catch(() => ({}));
@@ -858,12 +871,16 @@
                         if (emailEl) emailEl.textContent = state.deps.maskEmail(newEmail);
                         showErrorMsg(emailVerifyMessage, result.message || '邮箱已更新', false);
                         if (result?.data?.requireRelogin) {
-                            localStorage.removeItem('kax_login_token');
+                            if (global.AuthState && typeof global.AuthState.clearToken === 'function') {
+                                global.AuthState.clearToken();
+                            } else {
+                                localStorage.removeItem('kax_login_token');
+                            }
                             setTimeout(() => { location.href = '/login'; }, 800);
                         }
                     } else if (resp.status === 401) {
-                        localStorage.removeItem('kax_login_token');
-                        location.href = '/login';
+                        // 由 ApiClient 自动处理
+                        return;
                     } else {
                         showErrorMsg(emailVerifyMessage, result.message || ('邮箱更新失败：' + resp.status), true);
                     }
@@ -875,6 +892,140 @@
         });
 
         sendOldEmailCodeBtn?.addEventListener('click', sendOldEmailCode);
+    }
+
+    /**
+     * 业务意图：从 /api/user/devices 加载当前用户的登录设备列表并渲染至安全选项卡。
+     * 权限：仅查看自己资料时展示，他人资料不加载。
+     * DOM/API 映射：
+     * - API: GET /api/user/devices
+     * - DOM: devicesLoading / devicesEmpty / devicesList
+     */
+    async function loadLoginDevices() {
+        if (state.isViewingOtherProfile) return;
+
+        const token = checkToken();
+        if (!token) return;
+
+        const loadingEl = document.getElementById('devicesLoading');
+        const emptyEl = document.getElementById('devicesEmpty');
+        const listEl = document.getElementById('devicesList');
+        if (!listEl) return;
+
+        if (loadingEl) loadingEl.style.display = '';
+        if (emptyEl) emptyEl.style.display = 'none';
+        listEl.innerHTML = '';
+
+        try {
+            const resp = await ApiClient.request('/api/user/devices', { method: 'GET' });
+            const result = await resp.json().catch(() => ({}));
+
+            if (loadingEl) loadingEl.style.display = 'none';
+
+            if (!resp.ok || !Array.isArray(result?.devices)) {
+                if (emptyEl) emptyEl.style.display = '';
+                return;
+            }
+
+            const devices = result.devices;
+            if (devices.length === 0) {
+                if (emptyEl) emptyEl.style.display = '';
+                return;
+            }
+
+            const escHtml = state.deps.escapeHtml || (v => String(v ?? ''));
+            // 自动区分秒级（< 1e12）和毫秒级时间戳，避免年份显示异常
+            const formatTs = state.deps.formatUnix || (ts => {
+                if (!ts) return '—';
+                const ms = ts < 1e12 ? ts * 1000 : ts;
+                return new Date(ms).toLocaleString();
+            });
+
+            devices.forEach(device => {
+                const item = document.createElement('div');
+                item.className = 'device-item';
+                const osIcon = getOsIcon(device.os || '');
+                item.innerHTML = `
+                    <div class="device-item-icon material-icons">${escHtml(osIcon)}</div>
+                    <div class="device-item-info">
+                        <div class="device-item-name">${escHtml(device.deviceName || '未知设备')}</div>
+                        <div class="device-item-meta">
+                            <span class="device-item-os">${escHtml(device.os || '未知系统')}</span>
+                            <span class="device-item-sep">·</span>
+                            <span class="device-item-hid">HID: ${escHtml(device.hid || '—')}</span>
+                        </div>
+                        <div class="device-item-time">最近登录：${escHtml(formatTs(device.lastLoginAt))}</div>
+                    </div>
+                    <div class="device-item-actions">
+                        <action-btn class="device-remove-btn"
+                            icon="person_remove"
+                            label="不是你？移除该登录"
+                            variant="danger"
+                            font-size="0.78rem"
+                            padding="0 10px"
+                            height="30px"
+                            radius="6px"
+                            icon-size="15px"
+                            gap="4px"></action-btn>
+                    </div>`;
+
+                const removeBtn = item.querySelector('.device-remove-btn');
+                removeBtn.addEventListener('click', () => removeLoginDevice(device.id, item, removeBtn));
+
+                listEl.appendChild(item);
+            });
+        } catch (err) {
+            console.error('[devices] 加载失败', err);
+            if (loadingEl) loadingEl.style.display = 'none';
+            if (emptyEl) emptyEl.style.display = '';
+        }
+    }
+
+    /** 根据 OS 字符串返回合适的 Material Icons 图标名 */
+    function getOsIcon(os) {
+        const lower = os.toLowerCase();
+        if (lower.includes('windows')) return 'computer';
+        if (lower.includes('mac') || lower.includes('osx') || lower.includes('macos')) return 'laptop_mac';
+        if (lower.includes('linux')) return 'terminal';
+        if (lower.includes('android')) return 'phone_android';
+        if (lower.includes('ios') || lower.includes('iphone') || lower.includes('ipad')) return 'phone_iphone';
+        return 'devices_other';
+    }
+
+    /**
+     * 移除指定登录设备记录。
+     * @param {number} deviceId - 设备数据库 id
+     * @param {HTMLElement} itemEl - 对应的 .device-item 元素，移除成功后从 DOM 删除
+     * @param {HTMLElement} btnEl - action-btn 元素，操作期间置为 loading 状态
+     */
+    async function removeLoginDevice(deviceId, itemEl, btnEl) {
+        const token = checkToken();
+        if (!token) return;
+
+        btnEl.loading = true;
+        try {
+            const resp = await ApiClient.request(`/api/user/devices/${deviceId}`, { method: 'DELETE' });
+            if (resp.ok) {
+                itemEl.style.transition = 'opacity 0.2s ease, transform 0.2s ease';
+                itemEl.style.opacity = '0';
+                itemEl.style.transform = 'translateX(8px)';
+                setTimeout(() => itemEl.remove(), 200);
+
+                // 若列表已空则显示空态
+                const listEl = document.getElementById('devicesList');
+                const emptyEl = document.getElementById('devicesEmpty');
+                if (listEl && emptyEl && listEl.children.length === 0) {
+                    emptyEl.style.display = '';
+                }
+            } else {
+                const result = await resp.json().catch(() => ({}));
+                console.error('[devices] 移除失败', result);
+                btnEl.loading = false;
+            }
+        } catch (err) {
+            console.error('[devices] 移除请求失败', err);
+            btnEl.loading = false;
+        }
     }
 
     /**
@@ -894,7 +1045,7 @@
         const assetsCount = document.getElementById('assetsCount');
 
         try {
-            const resp = await fetch('/api/user/assets/active', { headers: { 'Authorization': 'Bearer ' + token } });
+            const resp = await ApiClient.request('/api/user/assets/active');
             if (resp.status === 200) {
                 const result = await resp.json().catch(() => ({}));
                 const assets = result.data || [];
@@ -911,7 +1062,7 @@
                     async function fetchAssetName(id) {
                         if (assetNameCache[id]) return assetNameCache[id];
                         try {
-                            const r = await fetch(`/api/asset/name/${id}`);
+                            const r = await ApiClient.request(`/api/asset/name/${id}`);
                             if (r.status === 200) {
                                 const j = await r.json().catch(() => ({}));
                                 assetNameCache[id] = j.name || `资源 #${id}`;
@@ -998,8 +1149,8 @@
                     if (elForever) elForever.textContent = countForever;
                 }
             } else if (resp.status === 401) {
-                localStorage.removeItem('kax_login_token');
-                location.href = '/login';
+                // 由 ApiClient 自动处理
+                return;
             } else {
                 setElementDisplay(assetsLoading, false);
                 setElementDisplay(assetsEmpty, true);
@@ -1049,10 +1200,10 @@
         planList.innerHTML = '<div style="color: var(--profile-muted); text-align: center; padding: 20px;">加载套餐中...</div>';
 
         try {
-            const token = localStorage.getItem('kax_login_token');
-            if (!token) { location.href = '/login'; return; }
+            const token = checkToken();
+            if (!token) return;
 
-            const resp = await fetch(`/api/asset/${state.currentAssetId}/plans`, { headers: { 'Authorization': 'Bearer ' + token } });
+            const resp = await ApiClient.request(`/api/asset/${state.currentAssetId}/plans`);
             if (resp.status === 200) {
                 const result = await resp.json().catch(() => ({}));
                 const plans = result.data || [];
@@ -1077,8 +1228,8 @@
                     }).join('');
                 }
             } else if (resp.status === 401) {
-                localStorage.removeItem('kax_login_token');
-                location.href = '/login';
+                // 由 ApiClient 自动处理
+                return;
             } else {
                 planList.innerHTML = '<div style="color: var(--profile-danger); text-align: center; padding: 20px;">加载套餐失败</div>';
             }
@@ -1118,9 +1269,9 @@
                 setElementDisplay(cdkResult, false);
 
                 try {
-                    const resp = await fetch('/api/cdk/activate', {
+                    const resp = await ApiClient.request('/api/cdk/activate', {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+                        headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ code: cdkCode })
                     });
                     const result = await resp.json().catch(() => ({}));
@@ -1137,8 +1288,8 @@
                         setTimeout(() => { activateCdkBtn.textContent = '激活'; }, 2000);
                         try { await loadProfileFromServer(); await loadActiveAssets(); } catch (e) { /* 忽略 */ }
                     } else if (resp.status === 401) {
-                        localStorage.removeItem('kax_login_token');
-                        location.href = '/login';
+                        // 由 ApiClient 自动处理
+                        return;
                     } else {
                         const code = result.code;
                         let errorMsg = result.message || ('激活失败：' + resp.status);
@@ -1183,9 +1334,9 @@
             const btn = document.getElementById('confirmChangePlanBtn');
             await withButtonLoading(btn, '处理中...', async () => {
                 try {
-                    const resp = await fetch(`/api/asset/${state.currentAssetId}/changePlan`, {
+                    const resp = await ApiClient.request(`/api/asset/${state.currentAssetId}/changePlan`, {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+                        headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ planId: state.selectedPlanId })
                     });
                     const result = await resp.json().catch(() => ({}));
@@ -1194,8 +1345,8 @@
                         showErrorMsg(msgEl, `成功更变套餐！需支付 💰 ${(result.cost || 0).toFixed(2)}`, false);
                         setTimeout(() => { closePlanModal(); loadActiveAssets(); }, 1500);
                     } else if (resp.status === 401) {
-                        localStorage.removeItem('kax_login_token');
-                        location.href = '/login';
+                        // 由 ApiClient 自动处理
+                        return;
                     } else {
                         showErrorMsg(msgEl, result.message || ('更变失败：' + resp.status), true);
                     }
@@ -1213,9 +1364,8 @@
             const btn = document.getElementById('confirmUnsubscribeBtn');
             await withButtonLoading(btn, '取消中...', async () => {
                 try {
-                    const resp = await fetch(`/api/asset/${state.currentAssetId}/unsubscribe`, {
-                        method: 'POST',
-                        headers: { 'Authorization': 'Bearer ' + token }
+                    const resp = await ApiClient.request(`/api/asset/${state.currentAssetId}/unsubscribe`, {
+                        method: 'POST'
                     });
                     const result = await resp.json().catch(() => ({}));
                     if (resp.status === 200) {
@@ -1223,8 +1373,8 @@
                         closeUnsubscribeModal();
                         await loadActiveAssets();
                     } else if (resp.status === 401) {
-                        localStorage.removeItem('kax_login_token');
-                        location.href = '/login';
+                        // 由 ApiClient 自动处理
+                        return;
                     } else {
                         alert(result.message || ('取消失败：' + resp.status));
                     }
@@ -1259,11 +1409,11 @@
     }
 
     async function initializePage() {
-        const token = localStorage.getItem('kax_login_token');
-        if (!token) { location.href = '/login'; return; }
+        const token = checkToken();
+        if (!token) return;
 
         try {
-            const currentResp = await fetch('/api/user/profile', { headers: { 'Authorization': 'Bearer ' + token } });
+            const currentResp = await ApiClient.request('/api/user/profile');
             if (currentResp.status === 200) {
                 const currentData = await currentResp.json();
                 state.currentUserUid = (typeof currentData.id !== 'undefined') ? currentData.id : null;
@@ -1277,6 +1427,7 @@
 
         await loadProfileFromServer();
         await loadActiveAssets();
+        loadLoginDevices();
 
         if (!avatarImg.src || avatarImg.src.endsWith('/default-avatar.jpg')) {
             avatarImg.style.display = 'none';
@@ -1306,6 +1457,11 @@
         bindSecurityEvents();
         bindAssetsEvents();
 
+        // 安全选项卡激活时懒加载设备列表
+        document.querySelectorAll('.profile-tab[data-tab="security"]').forEach(tab => {
+            tab.addEventListener('click', () => { loadLoginDevices(); }, { once: true });
+        });
+
         // 兼容既有 inline onclick
         global.openChangePlanModal = openChangePlanModal;
         global.closePlanModal = closePlanModal;
@@ -1322,6 +1478,7 @@
         loadProfileFromServer,
         updateEditableState,
         loadActiveAssets,
+        loadLoginDevices,
         openChangePlanModal,
         closePlanModal,
         openUnsubscribeModal,

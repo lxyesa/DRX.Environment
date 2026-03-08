@@ -166,6 +166,10 @@ public partial class KaxHttp
         // 处理登录逻辑
         var loginValue = bodyJson["username"]?.ToString();
         var password = bodyJson["password"]?.ToString();
+        var loginType = (request.Headers["type"] ?? "web").Trim().ToLowerInvariant();
+        var hid = (request.Headers["hid"] ?? string.Empty).Trim();
+        var deviceName = (request.Headers["device-name"] ?? string.Empty).Trim();
+        var deviceOs = (request.Headers["device-os"] ?? string.Empty).Trim();
 
         if (string.IsNullOrEmpty(loginValue) || string.IsNullOrEmpty(password))
         {
@@ -173,6 +177,15 @@ public partial class KaxHttp
             {
                 StatusCode = 400,
                 Body = "用户名/邮箱和密码不能为空。",
+            };
+        }
+
+        if (loginType == "client" && string.IsNullOrWhiteSpace(hid))
+        {
+            return new HttpResponse()
+            {
+                StatusCode = 400,
+                Body = "客户端登录缺少 hid 请求头。",
             };
         }
 
@@ -211,8 +224,70 @@ public partial class KaxHttp
                 };
             }
 
-            var token = KaxGlobal.GenerateLoginToken(userExists);
-            userExists.LastLoginAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+            var nowSeconds = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+            // TokenInvalidBefore 仅由密码重置等全局失效场景写入，登录时不再推进，
+            // 以允许客户端与 Web 端同时在线、Web 多端并存。
+            userExists.LastLoginAt = nowSeconds;
+            var isClientLogin = string.Equals(loginType, "client", StringComparison.OrdinalIgnoreCase);
+            var (clientToken, webToken, webTokenRotated) = KaxGlobal.ResolveLoginTokens(userExists, isClientLogin, hid, deviceName, deviceOs);
+            userExists.ClientToken = clientToken;
+            userExists.WebToken = webToken;
+
+            // 写入登录设备记录：客户端登录使用 hid，Web 登录使用 User-Agent 哈希作为唯一键
+            var recordDevice = isClientLogin ? !string.IsNullOrWhiteSpace(hid) : true;
+            if (recordDevice)
+            {
+                if (userExists.LoginDevices == null)
+                    userExists.LoginDevices = new Drx.Sdk.Network.DataBase.TableList<LoginDevice>();
+
+                string deviceKey;
+                string resolvedDeviceName;
+                string resolvedOs;
+
+                if (isClientLogin)
+                {
+                    deviceKey = hid;
+                    resolvedDeviceName = deviceName;
+                    resolvedOs = deviceOs;
+                }
+                else
+                {
+                    // Web 登录：用 User-Agent 的 SHA-256 前 16 字节作为稳定唯一键
+                    var ua = request.Headers["User-Agent"] ?? string.Empty;
+                    var uaBytes = System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(ua));
+                    deviceKey = "web:" + Convert.ToHexString(uaBytes[..8]).ToLowerInvariant();
+                    resolvedDeviceName = ParseBrowserName(ua);
+                    resolvedOs = ParseOsFromUserAgent(ua);
+                }
+
+                var nowMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+                // 相同 key 的记录仅更新时间，避免每次登录都新增一行
+                var existing = userExists.LoginDevices.FirstOrDefault(d => d.Hid == deviceKey);
+                // 当前设备对应的 token（客户端用 clientToken，Web 用 webToken）
+                var deviceToken = isClientLogin ? clientToken : webToken;
+                if (existing != null)
+                {
+                    existing.DeviceName = string.IsNullOrWhiteSpace(resolvedDeviceName) ? existing.DeviceName : resolvedDeviceName;
+                    existing.Os = string.IsNullOrWhiteSpace(resolvedOs) ? existing.Os : resolvedOs;
+                    existing.LastLoginAt = nowMs;
+                    existing.UpdatedAt = nowMs;
+                    existing.Token = deviceToken ?? string.Empty;
+                    userExists.LoginDevices.Update(existing);
+                }
+                else
+                {
+                    userExists.LoginDevices.Add(new LoginDevice
+                    {
+                        ParentId = userExists.Id,
+                        Hid = deviceKey,
+                        DeviceName = resolvedDeviceName,
+                        Os = resolvedOs,
+                        LastLoginAt = nowMs,
+                        Token = deviceToken ?? string.Empty
+                    });
+                }
+            }
+
             await KaxGlobal.UserDatabase.UpdateAsync(userExists);
 
             var resp = new HttpResponse()
@@ -221,7 +296,9 @@ public partial class KaxHttp
                 Body = new JsonObject
                 {
                     ["message"] = "登录成功。",
-                    ["login_token"] = token
+                    ["client_token"] = clientToken,
+                    ["web_token"] = webToken,
+                    ["web_token_rotated"] = webTokenRotated
                 }.ToJsonString(),
             };
 
@@ -281,4 +358,33 @@ public partial class KaxHttp
     }
 
     #endregion
+
+    /// <summary>从 User-Agent 字符串解析浏览器名称，用于 Web 登录设备记录。</summary>
+    private static string ParseBrowserName(string ua)
+    {
+        if (string.IsNullOrWhiteSpace(ua)) return "Web Browser";
+        if (ua.Contains("Edg/") || ua.Contains("EdgA/")) return "Microsoft Edge";
+        if (ua.Contains("OPR/") || ua.Contains("Opera/")) return "Opera";
+        if (ua.Contains("Chrome/") && !ua.Contains("Chromium/")) return "Chrome";
+        if (ua.Contains("Chromium/")) return "Chromium";
+        if (ua.Contains("Firefox/")) return "Firefox";
+        if (ua.Contains("Safari/") && !ua.Contains("Chrome/")) return "Safari";
+        return "Web Browser";
+    }
+
+    /// <summary>从 User-Agent 字符串解析操作系统名称，用于 Web 登录设备记录。</summary>
+    private static string ParseOsFromUserAgent(string ua)
+    {
+        if (string.IsNullOrWhiteSpace(ua)) return "Unknown";
+        if (ua.Contains("Windows NT 10.0")) return "Windows 10/11";
+        if (ua.Contains("Windows NT 6.3")) return "Windows 8.1";
+        if (ua.Contains("Windows NT 6.2")) return "Windows 8";
+        if (ua.Contains("Windows NT 6.1")) return "Windows 7";
+        if (ua.Contains("Windows")) return "Windows";
+        if (ua.Contains("Mac OS X")) return "macOS";
+        if (ua.Contains("Android")) return "Android";
+        if (ua.Contains("iPhone") || ua.Contains("iPad")) return "iOS";
+        if (ua.Contains("Linux")) return "Linux";
+        return "Unknown";
+    }
 }

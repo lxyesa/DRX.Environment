@@ -424,7 +424,7 @@ public partial class KaxHttp
     {
         var (operatorName, authError) = await Api.RequireAdminNameAsync(request);
         if (authError != null) return authError;
-        if (string.IsNullOrEmpty(operatorName)) return new JsonResult(new { message = "管理员认证失败" }, 401);
+        if (string.IsNullOrEmpty(operatorName)) return Api.EnvelopeFail(request, 401, ApiErrorCodes.Unauthorized, "管理员认证失败");
 
         if (!ApiBody.TryParse(request, out var body, out var parseError))
             return parseError!;
@@ -452,13 +452,13 @@ public partial class KaxHttp
             }
 
             if (string.IsNullOrEmpty(name) || name.Length > 100)
-                return new JsonResult(new { message = "资源名称无效（1-100字符）" }, 400);
+                return Api.EnvelopeFail(request, 400, ApiErrorCodes.InvalidArgument, "资源名称无效（1-100字符）");
             if (string.IsNullOrEmpty(version) || version.Length > 50)
-                return new JsonResult(new { message = "版本字段无效（1-50字符）" }, 400);
+                return Api.EnvelopeFail(request, 400, ApiErrorCodes.InvalidArgument, "版本字段无效（1-50字符）");
             if (authorId <= 0)
-                return new JsonResult(new { message = "作者ID无效" }, 400);
+                return Api.EnvelopeFail(request, 400, ApiErrorCodes.InvalidArgument, "作者ID无效");
             if (description.Length > 500)
-                return new JsonResult(new { message = "描述过长（最多500字符）" }, 400);
+                return Api.EnvelopeFail(request, 400, ApiErrorCodes.InvalidArgument, "描述过长（最多500字符）");
 
             var asset = new Model.AssetModel
             {
@@ -483,12 +483,12 @@ public partial class KaxHttp
             await KaxGlobal.AssetDataBase.UpdateAsync(asset);
 
             Logger.Info($"用户 {operatorName} 创建了资源: {name} (v{version})");
-            return new JsonResult(new { message = "资源创建成功", id = asset.Id });
+            return Api.EnvelopeOk(request, new { id = asset.Id }, "资源创建成功");
         }
         catch (Exception ex)
         {
             Logger.Error($"创建资源失败: {ex.Message}");
-            return new JsonResult(new { message = "服务器错误" }, 500);
+            return Api.EnvelopeFail(request, 500, ApiErrorCodes.InternalServerError, "服务器错误");
         }
     }
 
@@ -505,11 +505,11 @@ public partial class KaxHttp
         {
 
             if (!int.TryParse(body["id"]?.ToString(), out var id) || id <= 0)
-                return new JsonResult(new { message = "资源ID无效" }, 400);
+                return Api.EnvelopeFail(request, 400, ApiErrorCodes.InvalidArgument, "资源ID无效");
 
             var asset = await KaxGlobal.AssetDataBase.SelectByIdAsync(id);
             if (asset == null)
-                return new JsonResult(new { message = "资源不存在" }, 404);
+                return Api.EnvelopeFail(request, 404, ApiErrorCodes.NotFound, "资源不存在");
 
             var version = body["version"]?.ToString();
             bool hasDescription = body["description"] != null || body["fullDesc"] != null || body["introduction"] != null || body["intro"] != null;
@@ -524,9 +524,9 @@ public partial class KaxHttp
             }
 
             if (!string.IsNullOrEmpty(version) && version.Length > 50)
-                return new JsonResult(new { message = "版本字段无效（最多50字符）" }, 400);
+                return Api.EnvelopeFail(request, 400, ApiErrorCodes.InvalidArgument, "版本字段无效（最多50字符）");
             if (description != null && description.Length > 500)
-                return new JsonResult(new { message = "描述过长（最多500字符）" }, 400);
+                return Api.EnvelopeFail(request, 400, ApiErrorCodes.InvalidArgument, "描述过长（最多500字符）");
 
             if (!string.IsNullOrEmpty(version)) asset.Version = version;
 
@@ -543,7 +543,7 @@ public partial class KaxHttp
             {
                 var name = body["name"]?.ToString() ?? string.Empty;
                 if (name.Length > 200)
-                    return new JsonResult(new { message = "名称过长（最多200字符）" }, 400);
+                    return Api.EnvelopeFail(request, 400, ApiErrorCodes.InvalidArgument, "名称过长（最多200字符）");
                 if (!string.IsNullOrEmpty(name)) asset.Name = name;
             }
 
@@ -552,7 +552,7 @@ public partial class KaxHttp
             {
                 var tags = body["tags"]?.ToString() ?? string.Empty;
                 if (tags.Length > 500)
-                    return new JsonResult(new { message = "标签过长（最多500字符）" }, 400);
+                    return Api.EnvelopeFail(request, 400, ApiErrorCodes.InvalidArgument, "标签过长（最多500字符）");
                 asset.Tags = tags;
             }
 
@@ -573,7 +573,7 @@ public partial class KaxHttp
             {
                 var screenshots = body["screenshots"]?.ToString() ?? string.Empty;
                 if (screenshots.Length > 5000)
-                    return new JsonResult(new { message = "截图列表数据过长" }, 400);
+                    return Api.EnvelopeFail(request, 400, ApiErrorCodes.InvalidArgument, "截图列表数据过长");
                 asset.Screenshots = screenshots;
             }
 
@@ -595,12 +595,12 @@ public partial class KaxHttp
             await KaxGlobal.AssetDataBase.UpdateAsync(asset);
 
             Logger.Info($"用户 {operatorName} 修改了资源: {asset.Name} (id={id})");
-            return new JsonResult(new { message = "资源已更新" });
+            return Api.EnvelopeOk(request, null, "资源已更新");
         }
         catch (Exception ex)
         {
             Logger.Error($"更新资源失败: {ex}");
-            return new JsonResult(new { message = "服务器错误" }, 500);
+            return Api.EnvelopeFail(request, 500, ApiErrorCodes.InternalServerError, "服务器错误");
         }
     }
 
@@ -746,30 +746,30 @@ public partial class KaxHttp
         try
         {
             if (!int.TryParse(body["id"]?.ToString(), out var id) || id <= 0)
-                return new JsonResult(new { message = "资源ID无效" }, 400);
+                return Api.EnvelopeFail(request, 400, ApiErrorCodes.InvalidArgument, "资源ID无效");
 
             var field = body["field"]?.ToString()?.Trim() ?? string.Empty;
             if (string.IsNullOrEmpty(field))
-                return new JsonResult(new { message = "field 参数缺失" }, 400);
+                return Api.EnvelopeFail(request, 400, ApiErrorCodes.InvalidArgument, "field 参数缺失");
 
             var asset = await KaxGlobal.AssetDataBase.SelectByIdAsync(id);
             if (asset == null)
-                return new JsonResult(new { message = "资源不存在" }, 404);
+                return Api.EnvelopeFail(request, 404, ApiErrorCodes.NotFound, "资源不存在");
 
             if (!TryApplyAssetSingleField(asset, field, body["value"], out var fieldError))
-                return new JsonResult(new { message = fieldError }, 400);
+                return Api.EnvelopeFail(request, 400, ApiErrorCodes.InvalidArgument, fieldError);
 
             var specs = EnsureSpecs(asset);
             specs.LastUpdatedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
             await KaxGlobal.AssetDataBase.UpdateAsync(asset);
 
             Logger.Info($"用户 {operatorName} 单字段修改了资源: {asset.Name} (id={id}, field={field})");
-            return new JsonResult(new { message = "字段已更新", id, field });
+            return Api.EnvelopeOk(request, new { id, field }, "字段已更新");
         }
         catch (Exception ex)
         {
             Logger.Error($"单字段更新资源失败: {ex}");
-            return new JsonResult(new { message = "服务器错误" }, 500);
+            return Api.EnvelopeFail(request, 500, ApiErrorCodes.InternalServerError, "服务器错误");
         }
     }
 
@@ -786,20 +786,18 @@ public partial class KaxHttp
         {
 
             if (!int.TryParse(body["id"]?.ToString(), out var id) || id <= 0)
-                return new JsonResult(new { message = "资源ID无效" }, 400);
+                return Api.EnvelopeFail(request, 400, ApiErrorCodes.InvalidArgument, "资源ID无效");
 
             var asset = await KaxGlobal.AssetDataBase.SelectByIdAsync(id);
             if (asset == null)
-                return new JsonResult(new { message = "资源不存在" }, 404);
+                return Api.EnvelopeFail(request, 404, ApiErrorCodes.NotFound, "资源不存在");
 
             // 将价格方案列表转换为可序列化的格式，并从第一个方案派生兼容字段
             var pricesList = asset.Prices?.ToList();
             var primaryPrice = (pricesList != null && pricesList.Any()) ? pricesList.First() : null;
             var specs = asset.Specs;
 
-            return new JsonResult(new
-            {
-                data = new
+            return Api.EnvelopeOk(request, new
                 {
                     id = asset.Id,
                     name = asset.Name,
@@ -843,13 +841,12 @@ public partial class KaxHttp
                     isDeleted = asset.IsDeleted,
                     deletedAt = asset.DeletedAt,
                     prices = pricesList
-                }
-            });
+                });
         }
         catch (Exception ex)
         {
             Logger.Error($"查询资源失败: {ex.Message}");
-            return new JsonResult(new { message = "服务器错误" }, 500);
+            return Api.EnvelopeFail(request, 500, ApiErrorCodes.InternalServerError, "服务器错误");
         }
     }
 
@@ -866,11 +863,11 @@ public partial class KaxHttp
         {
 
             if (!int.TryParse(body["id"]?.ToString(), out var id) || id <= 0)
-                return new JsonResult(new { message = "资源ID无效" }, 400);
+                return Api.EnvelopeFail(request, 400, ApiErrorCodes.InvalidArgument, "资源ID无效");
 
             var asset = await KaxGlobal.AssetDataBase.SelectByIdAsync(id);
             if (asset == null)
-                return new JsonResult(new { message = "资源不存在" }, 404);
+                return Api.EnvelopeFail(request, 404, ApiErrorCodes.NotFound, "资源不存在");
 
             // 软删除：标记为已删除并记录时间
             asset.IsDeleted = true;
@@ -880,12 +877,12 @@ public partial class KaxHttp
             await KaxGlobal.AssetDataBase.UpdateAsync(asset);
 
             Logger.Info($"用户 {operatorName} 软删除了资源: {asset.Name} (id={id})");
-            return new JsonResult(new { message = "资源已标记为已删除" });
+            return Api.EnvelopeOk(request, null, "资源已标记为已删除");
         }
         catch (Exception ex)
         {
             Logger.Error($"删除资源失败: {ex.Message}");
-            return new JsonResult(new { message = "服务器错误" }, 500);
+            return Api.EnvelopeFail(request, 500, ApiErrorCodes.InternalServerError, "服务器错误");
         }
     }
 
@@ -902,11 +899,11 @@ public partial class KaxHttp
         {
 
             if (!int.TryParse(body["id"]?.ToString(), out var id) || id <= 0)
-                return new JsonResult(new { message = "资源ID无效" }, 400);
+                return Api.EnvelopeFail(request, 400, ApiErrorCodes.InvalidArgument, "资源ID无效");
 
             var asset = await KaxGlobal.AssetDataBase.SelectByIdAsync(id);
             if (asset == null)
-                return new JsonResult(new { message = "资源不存在" }, 404);
+                return Api.EnvelopeFail(request, 404, ApiErrorCodes.NotFound, "资源不存在");
 
             asset.IsDeleted = false;
             asset.DeletedAt = 0;
@@ -915,12 +912,12 @@ public partial class KaxHttp
             await KaxGlobal.AssetDataBase.UpdateAsync(asset);
 
             Logger.Info($"用户 {operatorName} 恢复了资源: {asset.Name} (id={id})");
-            return new JsonResult(new { message = "资源已恢复" });
+            return Api.EnvelopeOk(request, null, "资源已恢复");
         }
         catch (Exception ex)
         {
             Logger.Error($"恢复资源失败: {ex.Message}");
-            return new JsonResult(new { message = "服务器错误" }, 500);
+            return Api.EnvelopeFail(request, 500, ApiErrorCodes.InternalServerError, "服务器错误");
         }
     }
 
@@ -979,12 +976,12 @@ public partial class KaxHttp
                 })
                 .ToList<object>();
 
-            return new JsonResult(new { data = items, page, pageSize, total });
+            return Api.EnvelopePaged(request, items, page, pageSize, total);
         }
         catch (Exception ex)
         {
             Logger.Error($"读取资源列表失败: {ex.Message}");
-            return new JsonResult(new { message = "无法读取资源列表" }, 500);
+            return Api.EnvelopeFail(request, 500, ApiErrorCodes.InternalServerError, "无法读取资源列表");
         }
     }
 
@@ -1065,12 +1062,12 @@ public partial class KaxHttp
                 })
                 .ToList<object>();
 
-            return new JsonResult(new { data = items, page, pageSize, total });
+            return Api.EnvelopePaged(request, items, page, pageSize, total);
         }
         catch (Exception ex)
         {
             Logger.Error($"[System] 读取资源列表失败: {ex.Message}");
-            return new JsonResult(new { message = "无法读取资源列表" }, 500);
+            return Api.EnvelopeFail(request, 500, ApiErrorCodes.InternalServerError, "无法读取资源列表");
         }
     }
 
@@ -1089,20 +1086,18 @@ public partial class KaxHttp
             // 从路由模板提取 id
             var idStr = request.PathParameters.GetValueOrDefault("id") ?? string.Empty;
             if (!int.TryParse(idStr, out var id) || id <= 0)
-                return new JsonResult(new { message = "资源ID无效" }, 400);
+                return Api.EnvelopeFail(request, 400, ApiErrorCodes.InvalidArgument, "资源ID无效");
 
             var asset = await KaxGlobal.AssetDataBase.SelectByIdAsync(id);
             if (asset == null)
-                return new JsonResult(new { message = "资源不存在" }, 404);
+                return Api.EnvelopeFail(request, 404, ApiErrorCodes.NotFound, "资源不存在");
 
             // 将价格方案列表转换为可序列化的格式，并从第一个方案派生兼容字段
             var pricesList = asset.Prices?.ToList();
             var primaryPrice = pricesList?.FirstOrDefault();
             var specs = asset.Specs;
 
-            return new JsonResult(new
-            {
-                data = new
+            return Api.EnvelopeOk(request, new
                 {
                     id = asset.Id,
                     name = asset.Name,
@@ -1156,13 +1151,12 @@ public partial class KaxHttp
                     isDeleted = asset.IsDeleted,
                     deletedAt = asset.DeletedAt,
                     prices = pricesList
-                }
-            });
+                });
         }
         catch (Exception ex)
         {
             Logger.Error($"[System] 查询资源详情失败: {ex.Message}");
-            return new JsonResult(new { message = "服务器错误" }, 500);
+            return Api.EnvelopeFail(request, 500, ApiErrorCodes.InternalServerError, "服务器错误");
         }
     }
 
@@ -1199,19 +1193,19 @@ public partial class KaxHttp
         try
         {
             if (!int.TryParse(body["id"]?.ToString(), out var id) || id <= 0)
-                return new JsonResult(new { message = "资源ID无效" }, 400);
+                return Api.EnvelopeFail(request, 400, ApiErrorCodes.InvalidArgument, "资源ID无效");
 
             var field = body["field"]?.ToString()?.Trim() ?? string.Empty;
             if (string.IsNullOrEmpty(field))
-                return new JsonResult(new { message = "field 参数缺失" }, 400);
+                return Api.EnvelopeFail(request, 400, ApiErrorCodes.InvalidArgument, "field 参数缺失");
 
             // 字段黑名单检查：禁止修改 AuthorId/DeveloperId 和 Id/AssetId
             if (SystemFieldBlacklist.Contains(field))
-                return new JsonResult(new { message = $"字段 '{field}' 禁止修改", code = "FIELD_FORBIDDEN" }, 403);
+                return Api.EnvelopeFail(request, 403, ApiErrorCodes.Forbidden, $"字段 '{field}' 禁止修改");
 
             var asset = await KaxGlobal.AssetDataBase.SelectByIdAsync(id);
             if (asset == null)
-                return new JsonResult(new { message = "资源不存在" }, 404);
+                return Api.EnvelopeFail(request, 404, ApiErrorCodes.NotFound, "资源不存在");
 
             // 记录旧值（用于审计）
             var oldValue = GetAssetFieldValue(asset, field);
@@ -1223,7 +1217,7 @@ public partial class KaxHttp
                     errorCode: "FIELD_APPLY_ERROR",
                     errorMessage: fieldError ?? string.Empty,
                     requestId: requestId);
-                return new JsonResult(new { message = fieldError }, 400);
+                return Api.EnvelopeFail(request, 400, ApiErrorCodes.InvalidArgument, fieldError);
             }
 
             // 记录新值（用于审计）
@@ -1239,7 +1233,7 @@ public partial class KaxHttp
                 requestId: requestId);
 
             Logger.Info($"[System] 用户 {operatorName} 单字段修改了资源: {asset.Name} (id={id}, field={field})");
-            return new JsonResult(new { message = "字段已更新", id, field });
+            return Api.EnvelopeOk(request, new { id, field }, "字段已更新");
         }
         catch (Exception ex)
         {
@@ -1248,7 +1242,7 @@ public partial class KaxHttp
                 errorCode: "INTERNAL_ERROR",
                 errorMessage: ex.Message,
                 requestId: requestId);
-            return new JsonResult(new { message = "服务器错误" }, 500);
+            return Api.EnvelopeFail(request, 500, ApiErrorCodes.InternalServerError, "服务器错误");
         }
     }
 
@@ -1396,22 +1390,22 @@ public partial class KaxHttp
         try
         {
             if (!int.TryParse(body["assetId"]?.ToString() ?? body["id"]?.ToString(), out var assetId) || assetId <= 0)
-                return new JsonResult(new { message = "资源ID无效", code = "INVALID_ASSET_ID" }, 400);
+                return Api.EnvelopeFail(request, 400, ApiErrorCodes.InvalidArgument, "资源ID无效");
 
             var reason = body["reason"]?.ToString()?.Trim() ?? string.Empty;
             if (string.IsNullOrEmpty(reason))
-                return new JsonResult(new { message = "彻底删除原因不能为空", code = "REASON_REQUIRED" }, 400);
+                return Api.EnvelopeFail(request, 400, ApiErrorCodes.InvalidArgument, "彻底删除原因不能为空");
             if (reason.Length > 500)
-                return new JsonResult(new { message = "彻底删除原因过长（最多500字符）", code = "REASON_TOO_LONG" }, 400);
+                return Api.EnvelopeFail(request, 400, ApiErrorCodes.InvalidArgument, "彻底删除原因过长（最多500字符）");
 
             var confirmStr = body["confirm"]?.ToString()?.ToLowerInvariant();
             var confirm = confirmStr == "true" || confirmStr == "1";
             if (!confirm)
-                return new JsonResult(new { message = "confirm 参数必须为 true", code = "CONFIRM_REQUIRED" }, 400);
+                return Api.EnvelopeFail(request, 400, ApiErrorCodes.InvalidArgument, "confirm 参数必须为 true");
 
             var asset = await KaxGlobal.AssetDataBase.SelectByIdAsync(assetId);
             if (asset == null)
-                return new JsonResult(new { message = "资源不存在", code = "ASSET_NOT_FOUND" }, 404);
+                return Api.EnvelopeFail(request, 404, ApiErrorCodes.NotFound, "资源不存在");
 
             await NotifyAssetActionEmailAsync(asset, "彻底删除", reason, operatorName);
             await KaxGlobal.AssetDataBase.DeleteByIdAsync(assetId);
@@ -1423,17 +1417,12 @@ public partial class KaxHttp
                 requestId: requestId);
 
             Logger.Info($"[System] 用户 {operatorName} 彻底删除了资源: {asset.Name} (id={assetId})，原因: {reason}");
-            return new JsonResult(new
-            {
-                code = 0,
-                message = "资源已彻底删除",
-                data = new
+            return Api.EnvelopeOk(request, new
                 {
                     assetId,
                     deleted = true,
                     reason
-                }
-            });
+                }, "资源已彻底删除");
         }
         catch (Exception ex)
         {
@@ -1442,7 +1431,7 @@ public partial class KaxHttp
                 errorCode: "INTERNAL_ERROR",
                 errorMessage: ex.Message,
                 requestId: requestId);
-            return new JsonResult(new { message = "服务器错误", code = "INTERNAL_ERROR" }, 500);
+            return Api.EnvelopeFail(request, 500, ApiErrorCodes.InternalServerError, "服务器错误");
         }
     }
 
@@ -1471,19 +1460,19 @@ public partial class KaxHttp
         {
             // 参数校验
             if (!int.TryParse(body["assetId"]?.ToString() ?? body["id"]?.ToString(), out var assetId) || assetId <= 0)
-                return new JsonResult(new { message = "资源ID无效", code = "INVALID_ASSET_ID" }, 400);
+                return Api.EnvelopeFail(request, 400, ApiErrorCodes.InvalidArgument, "资源ID无效");
 
             var reason = body["reason"]?.ToString()?.Trim();
             if (string.IsNullOrEmpty(reason))
-                return new JsonResult(new { message = "退回原因不能为空", code = "REASON_REQUIRED" }, 400);
+                return Api.EnvelopeFail(request, 400, ApiErrorCodes.InvalidArgument, "退回原因不能为空");
 
             if (reason.Length > 500)
-                return new JsonResult(new { message = "退回原因过长（最多500字符）", code = "REASON_TOO_LONG" }, 400);
+                return Api.EnvelopeFail(request, 400, ApiErrorCodes.InvalidArgument, "退回原因过长（最多500字符）");
 
             // 获取资产
             var asset = await KaxGlobal.AssetDataBase.SelectByIdAsync(assetId);
             if (asset == null)
-                return new JsonResult(new { message = "资源不存在", code = "ASSET_NOT_FOUND" }, 404);
+                return Api.EnvelopeFail(request, 404, ApiErrorCodes.NotFound, "资源不存在");
 
             // 状态流转校验
             var transition = ValidateStateTransition(asset.Status, "return");
@@ -1495,7 +1484,7 @@ public partial class KaxHttp
                     errorCode: transition.ErrorCode,
                     errorMessage: transition.ErrorMessage,
                     requestId: requestId);
-                return new JsonResult(new { message = transition.ErrorMessage, code = transition.ErrorCode }, 400);
+                return Api.EnvelopeFail(request, 400, ApiErrorCodes.InvalidArgument, transition.ErrorMessage);
             }
 
             // 记录原状态用于日志
@@ -1517,18 +1506,13 @@ public partial class KaxHttp
                 requestId: requestId);
 
             Logger.Info($"[System] 用户 {operatorName} 退回了资源: {asset.Name} (id={assetId})，状态: {previousStatus} -> Rejected，原因: {reason}");
-            return new JsonResult(new
-            {
-                code = 0,
-                message = "资源已退回",
-                data = new
+            return Api.EnvelopeOk(request, new
                 {
                     assetId,
                     previousStatus = (int)previousStatus,
                     currentStatus = (int)AssetStatus.Rejected,
                     reason
-                }
-            });
+                }, "资源已退回");
         }
         catch (Exception ex)
         {
@@ -1538,7 +1522,7 @@ public partial class KaxHttp
                 errorCode: "INTERNAL_ERROR",
                 errorMessage: ex.Message,
                 requestId: requestId);
-            return new JsonResult(new { message = "服务器错误", code = "INTERNAL_ERROR" }, 500);
+            return Api.EnvelopeFail(request, 500, ApiErrorCodes.InternalServerError, "服务器错误");
         }
     }
 
@@ -1567,18 +1551,18 @@ public partial class KaxHttp
         {
             // 参数校验
             if (!int.TryParse(body["assetId"]?.ToString() ?? body["id"]?.ToString(), out var assetId) || assetId <= 0)
-                return new JsonResult(new { message = "资源ID无效", code = "INVALID_ASSET_ID" }, 400);
+                return Api.EnvelopeFail(request, 400, ApiErrorCodes.InvalidArgument, "资源ID无效");
 
             var reason = body["reason"]?.ToString()?.Trim() ?? string.Empty;
             if (string.IsNullOrEmpty(reason))
-                return new JsonResult(new { message = "下架原因不能为空", code = "REASON_REQUIRED" }, 400);
+                return Api.EnvelopeFail(request, 400, ApiErrorCodes.InvalidArgument, "下架原因不能为空");
             if (reason.Length > 500)
-                return new JsonResult(new { message = "下架原因过长（最多500字符）", code = "REASON_TOO_LONG" }, 400);
+                return Api.EnvelopeFail(request, 400, ApiErrorCodes.InvalidArgument, "下架原因过长（最多500字符）");
 
             // 获取资产
             var asset = await KaxGlobal.AssetDataBase.SelectByIdAsync(assetId);
             if (asset == null)
-                return new JsonResult(new { message = "资源不存在", code = "ASSET_NOT_FOUND" }, 404);
+                return Api.EnvelopeFail(request, 404, ApiErrorCodes.NotFound, "资源不存在");
 
             // 状态流转校验
             var transition = ValidateStateTransition(asset.Status, "off-shelf");
@@ -1590,7 +1574,7 @@ public partial class KaxHttp
                     errorCode: transition.ErrorCode,
                     errorMessage: transition.ErrorMessage,
                     requestId: requestId);
-                return new JsonResult(new { message = transition.ErrorMessage, code = transition.ErrorCode }, 400);
+                return Api.EnvelopeFail(request, 400, ApiErrorCodes.InvalidArgument, transition.ErrorMessage);
             }
 
             // 记录原状态
@@ -1614,18 +1598,13 @@ public partial class KaxHttp
                 requestId: requestId);
 
             Logger.Info($"[System] 用户 {operatorName} 下架了资源: {asset.Name} (id={assetId})，状态: {previousStatus} -> OffShelf" + (string.IsNullOrEmpty(reason) ? "" : $"，原因: {reason}"));
-            return new JsonResult(new
-            {
-                code = 0,
-                message = "资源已下架",
-                data = new
+            return Api.EnvelopeOk(request, new
                 {
                     assetId,
                     previousStatus = (int)previousStatus,
                     currentStatus = (int)AssetStatus.OffShelf,
                     reason = string.IsNullOrEmpty(reason) ? null : reason
-                }
-            });
+                }, "资源已下架");
         }
         catch (Exception ex)
         {
@@ -1634,7 +1613,7 @@ public partial class KaxHttp
                 errorCode: "INTERNAL_ERROR",
                 errorMessage: ex.Message,
                 requestId: requestId);
-            return new JsonResult(new { message = "服务器错误", code = "INTERNAL_ERROR" }, 500);
+            return Api.EnvelopeFail(request, 500, ApiErrorCodes.InternalServerError, "服务器错误");
         }
     }
 
@@ -1663,25 +1642,25 @@ public partial class KaxHttp
         {
             // 参数校验
             if (!int.TryParse(body["assetId"]?.ToString() ?? body["id"]?.ToString(), out var assetId) || assetId <= 0)
-                return new JsonResult(new { message = "资源ID无效", code = "INVALID_ASSET_ID" }, 400);
+                return Api.EnvelopeFail(request, 400, ApiErrorCodes.InvalidArgument, "资源ID无效");
 
             var reason = body["reason"]?.ToString()?.Trim() ?? string.Empty;
             if (string.IsNullOrEmpty(reason))
-                return new JsonResult(new { message = "重审原因不能为空", code = "REASON_REQUIRED" }, 400);
+                return Api.EnvelopeFail(request, 400, ApiErrorCodes.InvalidArgument, "重审原因不能为空");
             if (reason.Length > 500)
-                return new JsonResult(new { message = "原因过长（最多500字符）", code = "REASON_TOO_LONG" }, 400);
+                return Api.EnvelopeFail(request, 400, ApiErrorCodes.InvalidArgument, "原因过长（最多500字符）");
 
             // force 参数（可选，默认 true）
             var forceStr = body["force"]?.ToString()?.ToLowerInvariant();
             var force = string.IsNullOrEmpty(forceStr) || forceStr == "true" || forceStr == "1";
 
             if (!force)
-                return new JsonResult(new { message = "force 参数必须为 true", code = "FORCE_REQUIRED" }, 400);
+                return Api.EnvelopeFail(request, 400, ApiErrorCodes.InvalidArgument, "force 参数必须为 true");
 
             // 获取资产
             var asset = await KaxGlobal.AssetDataBase.SelectByIdAsync(assetId);
             if (asset == null)
-                return new JsonResult(new { message = "资源不存在", code = "ASSET_NOT_FOUND" }, 404);
+                return Api.EnvelopeFail(request, 404, ApiErrorCodes.NotFound, "资源不存在");
 
             // 状态流转校验
             var transition = ValidateStateTransition(asset.Status, "force-review");
@@ -1693,7 +1672,7 @@ public partial class KaxHttp
                     errorCode: transition.ErrorCode,
                     errorMessage: transition.ErrorMessage,
                     requestId: requestId);
-                return new JsonResult(new { message = transition.ErrorMessage, code = transition.ErrorCode }, 400);
+                return Api.EnvelopeFail(request, 400, ApiErrorCodes.InvalidArgument, transition.ErrorMessage);
             }
 
             // 记录原状态
@@ -1716,18 +1695,13 @@ public partial class KaxHttp
                 requestId: requestId);
 
             Logger.Info($"[System] 用户 {operatorName} 强制重审了资源: {asset.Name} (id={assetId})，状态: {previousStatus} -> PendingReview" + (string.IsNullOrEmpty(reason) ? "" : $"，原因: {reason}"));
-            return new JsonResult(new
-            {
-                code = 0,
-                message = "资源已进入重审流程",
-                data = new
+            return Api.EnvelopeOk(request, new
                 {
                     assetId,
                     previousStatus = (int)previousStatus,
                     currentStatus = (int)AssetStatus.PendingReview,
                     reason = string.IsNullOrEmpty(reason) ? null : reason
-                }
-            });
+                }, "资源已进入重审流程");
         }
         catch (Exception ex)
         {
@@ -1736,7 +1710,7 @@ public partial class KaxHttp
                 errorCode: "INTERNAL_ERROR",
                 errorMessage: ex.Message,
                 requestId: requestId);
-            return new JsonResult(new { message = "服务器错误", code = "INTERNAL_ERROR" }, 500);
+            return Api.EnvelopeFail(request, 500, ApiErrorCodes.InternalServerError, "服务器错误");
         }
     }
 
@@ -1764,16 +1738,16 @@ public partial class KaxHttp
         {
             // 参数校验
             if (!int.TryParse(body["assetId"]?.ToString() ?? body["id"]?.ToString(), out var assetId) || assetId <= 0)
-                return new JsonResult(new { message = "资源ID无效", code = "INVALID_ASSET_ID" }, 400);
+                return Api.EnvelopeFail(request, 400, ApiErrorCodes.InvalidArgument, "资源ID无效");
 
             var reason = body["reason"]?.ToString()?.Trim() ?? string.Empty;
             if (reason.Length > 500)
-                return new JsonResult(new { message = "原因过长（最多500字符）", code = "REASON_TOO_LONG" }, 400);
+                return Api.EnvelopeFail(request, 400, ApiErrorCodes.InvalidArgument, "原因过长（最多500字符）");
 
             // 获取资产
             var asset = await KaxGlobal.AssetDataBase.SelectByIdAsync(assetId);
             if (asset == null)
-                return new JsonResult(new { message = "资源不存在", code = "ASSET_NOT_FOUND" }, 404);
+                return Api.EnvelopeFail(request, 404, ApiErrorCodes.NotFound, "资源不存在");
 
             // 状态流转校验
             var transition = ValidateStateTransition(asset.Status, "relist");
@@ -1785,7 +1759,7 @@ public partial class KaxHttp
                     errorCode: transition.ErrorCode,
                     errorMessage: transition.ErrorMessage,
                     requestId: requestId);
-                return new JsonResult(new { message = transition.ErrorMessage, code = transition.ErrorCode }, 400);
+                return Api.EnvelopeFail(request, 400, ApiErrorCodes.InvalidArgument, transition.ErrorMessage);
             }
 
             // 记录原状态
@@ -1806,18 +1780,13 @@ public partial class KaxHttp
                 requestId: requestId);
 
             Logger.Info($"[System] 用户 {operatorName} 恢复上架了资源: {asset.Name} (id={assetId})，状态: {previousStatus} -> Active" + (string.IsNullOrEmpty(reason) ? "" : $"，原因: {reason}"));
-            return new JsonResult(new
-            {
-                code = 0,
-                message = "资源已恢复上架",
-                data = new
+            return Api.EnvelopeOk(request, new
                 {
                     assetId,
                     previousStatus = (int)previousStatus,
                     currentStatus = (int)AssetStatus.Active,
                     reason = string.IsNullOrEmpty(reason) ? null : reason
-                }
-            });
+                }, "资源已恢复上架");
         }
         catch (Exception ex)
         {
@@ -1826,7 +1795,7 @@ public partial class KaxHttp
                 errorCode: "INTERNAL_ERROR",
                 errorMessage: ex.Message,
                 requestId: requestId);
-            return new JsonResult(new { message = "服务器错误", code = "INTERNAL_ERROR" }, 500);
+            return Api.EnvelopeFail(request, 500, ApiErrorCodes.InternalServerError, "服务器错误");
         }
     }
 
@@ -1850,7 +1819,7 @@ public partial class KaxHttp
         {
             var assetIdStr = request.PathParameters.GetValueOrDefault("assetId") ?? string.Empty;
             if (!int.TryParse(assetIdStr, out var assetId) || assetId <= 0)
-                return new JsonResult(new { message = "资源ID无效", code = "INVALID_ASSET_ID" }, 400);
+                return Api.EnvelopeFail(request, 400, ApiErrorCodes.InvalidArgument, "资源ID无效");
 
             // 分页参数（可选）
             var (page, pageSize) = ApiPagination.Parse(request, defaultPageSize: 50);
@@ -1892,12 +1861,12 @@ public partial class KaxHttp
                 })
                 .ToList<object>();
 
-            return new JsonResult(new { data = items, page, pageSize, total, assetId });
+            return Api.EnvelopePaged(request, items, page, pageSize, total);
         }
         catch (Exception ex)
         {
             Logger.Error($"[System] 查询资产审计记录失败: {ex.Message}");
-            return new JsonResult(new { message = "服务器错误", code = "INTERNAL_ERROR" }, 500);
+            return Api.EnvelopeFail(request, 500, ApiErrorCodes.InternalServerError, "服务器错误");
         }
     }
 

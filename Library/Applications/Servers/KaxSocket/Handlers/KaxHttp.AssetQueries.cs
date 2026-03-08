@@ -133,12 +133,12 @@ public partial class KaxHttp
                 };
             }).ToList();
 
-            return new JsonResult(new { code = 0, message = "成功", data = new { total, page, pageSize, items = result } }, 200);
+            return Api.EnvelopePaged(request, result, page, pageSize, total, "成功");
         }
         catch (Exception ex)
         {
             Logger.Error($"获取公共资产列表失败: {ex.Message}");
-            return new JsonResult(new { code = 500, message = "服务器错误" }, 500);
+            return Api.EnvelopeFail(request, 500, ApiErrorCodes.InternalServerError, "服务器错误");
         }
     }
 
@@ -149,7 +149,7 @@ public partial class KaxHttp
     public static async Task<IActionResult> Get_AssetsByCategory(HttpRequest request)
     {
         if (!request.PathParameters.TryGetValue("category", out var category) || string.IsNullOrWhiteSpace(category))
-            return new JsonResult(new { message = "category 参数不能为空" }, 400);
+            return Api.EnvelopeFail(request, 400, ApiErrorCodes.InvalidArgument, "category 参数不能为空");
 
         try
         {
@@ -185,12 +185,12 @@ public partial class KaxHttp
                     };
                 }).ToList();
 
-            return new JsonResult(new { code = 0, message = "成功", data = new { total, page, pageSize, items } }, 200);
+            return Api.EnvelopePaged(request, items, page, pageSize, total, "成功");
         }
         catch (Exception ex)
         {
             Logger.Error($"按分类获取资源列表失败: {ex.Message}");
-            return new JsonResult(new { code = 500, message = "服务器错误" }, 500);
+            return Api.EnvelopeFail(request, 500, ApiErrorCodes.InternalServerError, "服务器错误");
         }
     }
 
@@ -201,20 +201,20 @@ public partial class KaxHttp
     public static async Task<IActionResult> Get_AssetName(HttpRequest request)
     {
         if (!request.PathParameters.TryGetValue("assetId", out var assetIdString) || !int.TryParse(assetIdString, out var assetId) || assetId <= 0)
-            return new JsonResult(new { message = "assetId 参数必须是大于 0 的整数" }, 400);
+            return Api.EnvelopeFail(request, 400, ApiErrorCodes.InvalidArgument, "assetId 参数必须是大于 0 的整数");
 
         try
         {
             var asset = await KaxGlobal.AssetDataBase.SelectByIdAsync(assetId);
             if (asset == null)
-                return new JsonResult(new { assetId, name = string.Empty, code = 2004 }, 404);
+                return Api.EnvelopeFail(request, 404, ApiErrorCodes.AssetNotOwned, "资源不存在", new { assetId, name = string.Empty });
 
-            return new JsonResult(new { assetId = asset.Id, name = asset.Name ?? string.Empty, code = 0 }, 200);
+            return Api.EnvelopeOk(request, new { assetId = asset.Id, name = asset.Name ?? string.Empty });
         }
         catch (Exception ex)
         {
             Logger.Error($"Get_AssetName 失败: {ex.Message}");
-            return new JsonResult(new { message = "服务器错误" }, 500);
+            return Api.EnvelopeFail(request, 500, ApiErrorCodes.InternalServerError, "服务器错误");
         }
     }
 
@@ -225,13 +225,13 @@ public partial class KaxHttp
     public static async Task<IActionResult> Get_AssetDetail(HttpRequest request)
     {
         if (!request.PathParameters.TryGetValue("id", out var idStr) || !int.TryParse(idStr, out var assetId) || assetId <= 0)
-            return new JsonResult(new { code = 400, message = "id 参数必须是大于 0 的整数", data = (object?)null }, 400);
+            return Api.EnvelopeFail(request, 400, ApiErrorCodes.InvalidArgument, "id 参数必须是大于 0 的整数");
 
         try
         {
             var asset = await KaxGlobal.AssetDataBase.SelectByIdAsync(assetId);
             if (asset == null)
-                return new JsonResult(new { code = 404, message = "资源不存在", data = (object?)null }, 404);
+                return Api.EnvelopeFail(request, 404, ApiErrorCodes.NotFound, "资源不存在");
 
             var specs = EnsureSpecs(asset);
 
@@ -263,17 +263,6 @@ public partial class KaxHttp
             // 截图与标签均以分隔符存储，输出时转为数组
             var screenshotList = (asset.Screenshots ?? string.Empty).Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
             var tagList        = (asset.Tags        ?? string.Empty).Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-
-            static string[] ParseStringArray(string? raw)
-            {
-                if (string.IsNullOrWhiteSpace(raw)) return Array.Empty<string>();
-                return raw
-                    .Split(new[] { ',', ';', '|', '\n' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-                    .Where(x => !string.IsNullOrWhiteSpace(x))
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .ToArray();
-            }
-
             var specsDto = new
             {
                 fileSize      = specs.FileSize,
@@ -326,12 +315,12 @@ public partial class KaxHttp
                 specs          = specsDto
             };
 
-            return new JsonResult(new { code = 0, message = "成功", data = result }, 200);
+            return Api.EnvelopeOk(request, result, "成功");
         }
         catch (Exception ex)
         {
             Logger.Error($"Get_AssetDetail 失败: {ex.Message}");
-            return new JsonResult(new { code = 500, message = "服务器错误", data = (object?)null }, 500);
+            return Api.EnvelopeFail(request, 500, ApiErrorCodes.InternalServerError, "服务器错误");
         }
     }
 
@@ -343,7 +332,7 @@ public partial class KaxHttp
     public static async Task<IActionResult> Get_RelatedAssets(HttpRequest request)
     {
         if (!request.PathParameters.TryGetValue("id", out var idStr) || !int.TryParse(idStr, out var assetId) || assetId <= 0)
-            return new JsonResult(new { code = 400, message = "id 参数必须是大于 0 的整数", data = (object?)null }, 400);
+            return Api.EnvelopeFail(request, 400, ApiErrorCodes.InvalidArgument, "id 参数必须是大于 0 的整数");
 
         int top = 4;
         if (int.TryParse(request.Query[("top")], out var topParam) && topParam > 0 && topParam <= 20)
@@ -391,12 +380,12 @@ public partial class KaxHttp
                 };
             }).ToList();
 
-            return new JsonResult(new { code = 0, message = "成功", data = items }, 200);
+            return Api.EnvelopeOk(request, items, "成功");
         }
         catch (Exception ex)
         {
             Logger.Error($"获取相关推荐失败: {ex.Message}");
-            return new JsonResult(new { code = 500, message = "服务器错误", data = (object?)null }, 500);
+            return Api.EnvelopeFail(request, 500, ApiErrorCodes.InternalServerError, "服务器错误");
         }
     }
 
@@ -411,13 +400,13 @@ public partial class KaxHttp
         if (authError != null) return authError;
 
         if (!request.PathParameters.TryGetValue("assetId", out var assetIdStr) || !int.TryParse(assetIdStr, out var assetId) || assetId <= 0)
-            return new JsonResult(new { code = 400, message = "assetId 参数无效" }, 400);
+            return Api.EnvelopeFail(request, 400, ApiErrorCodes.InvalidArgument, "assetId 参数无效");
 
         try
         {
             var asset = await KaxGlobal.AssetDataBase.SelectByIdAsync(assetId);
             if (asset == null || asset.IsDeleted)
-                return new JsonResult(new { code = 404, message = "资产不存在" }, 404);
+                return Api.EnvelopeFail(request, 404, ApiErrorCodes.NotFound, "资产不存在");
 
             var pricesList = asset.Prices?.Select(p => new
             {
@@ -431,7 +420,7 @@ public partial class KaxHttp
                 stock        = p.Stock
             }).ToList();
             if (pricesList == null || pricesList.Count == 0)
-                return new JsonResult(new { code = 200, message = "该资产暂无可用套餐", data = new object[0] }, 200);
+                return Api.EnvelopeOk(request, Array.Empty<object>(), "该资产暂无可用套餐");
 
             string LocalizeDuration(int days)
             {
@@ -454,12 +443,12 @@ public partial class KaxHttp
                 stock         = p.stock
             }).ToList();
 
-            return new JsonResult(new { code = 0, message = "成功", data = plans }, 200);
+            return Api.EnvelopeOk(request, plans, "成功");
         }
         catch (Exception ex)
         {
             Logger.Error($"获取资产套餐列表失败: {ex.Message}");
-            return new JsonResult(new { code = 500, message = "服务器错误" }, 500);
+            return Api.EnvelopeFail(request, 500, ApiErrorCodes.InternalServerError, "服务器错误");
         }
     }
 

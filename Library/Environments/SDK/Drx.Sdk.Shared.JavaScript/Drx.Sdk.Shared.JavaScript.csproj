@@ -14,6 +14,9 @@
     <PackageReference Include="Microsoft.ClearScript.V8" Version="7.4.0" />
     <PackageReference Include="Microsoft.ClearScript.Core" Version="7.4.0" />
     <PackageReference Include="Microsoft.ClearScript" Version="7.4.0" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="9.0.0" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="9.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Options" Version="9.0.0" />
   </ItemGroup>
 
 </Project>

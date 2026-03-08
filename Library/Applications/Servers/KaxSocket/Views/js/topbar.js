@@ -266,7 +266,7 @@
                 }
 
                 try {
-                    var token = localStorage.getItem('kax_login_token');
+                    var token = localStorage.getItem('kax_web_token') || localStorage.getItem('kax_login_token');
                     if (!token) { resetHeaderAuth(); return; }
 
                     var controller = new AbortController();
@@ -281,6 +281,7 @@
                     try {
                         if (!(resp.status >= 200 && resp.status < 300)) {
                             try { localStorage.removeItem('kax_login_token'); } catch (_) { }
+                            try { localStorage.removeItem('kax_web_token'); } catch (_) { }
                             try { setBtnDisabled(joinBtn, false); } catch (_) { }
                             try { var um = document.getElementById('userMenu'); if (um) { um.classList.remove('open'); um.setAttribute('aria-hidden', 'true'); } } catch (_) { }
                             resetHeaderAuth();
@@ -342,6 +343,7 @@
                         } catch (_) { }
                     } else if (resp.status === 401) {
                         try { localStorage.removeItem('kax_login_token'); } catch (_) { }
+                        try { localStorage.removeItem('kax_web_token'); } catch (_) { }
                         try { var um = document.getElementById('userMenu'); if (um) { um.classList.remove('open'); um.setAttribute('aria-hidden', 'true'); } } catch (_) { }
                         resetHeaderAuth();
                     } else {
@@ -484,7 +486,12 @@
             // 注销按钮
             document.addEventListener('click', function (e) {
                 var s = e.target.closest('#signOutBtn');
-                if (s) { e.preventDefault(); try { localStorage.removeItem('kax_login_token'); } catch (_) { } location.reload(); }
+                if (s) {
+                    e.preventDefault();
+                    try { localStorage.removeItem('kax_login_token'); } catch (_) { }
+                    try { localStorage.removeItem('kax_web_token'); } catch (_) { }
+                    location.reload();
+                }
             });
 
             // joinBtn 点击验证（保持与 index.html 语义一致）
@@ -492,15 +499,21 @@
                 joinBtn.addEventListener('click', async function (e) {
                     try {
                         if (joinBtn.classList.contains('kax-disabled') || joinBtn.getAttribute('aria-disabled') === 'true') { e.preventDefault(); return; }
-                        var token = localStorage.getItem('kax_login_token');
+                        var token = localStorage.getItem('kax_web_token') || localStorage.getItem('kax_login_token');
                         if (!token) return;
 
                         e.preventDefault(); joinBtn.textContent = '\u9a8c\u8bc1\u4e2d...'; setBtnDisabled(joinBtn, true);
                         var controller = new AbortController(); var timeoutId = setTimeout(function () { controller.abort(); }, 8000);
-                        var resp = await fetch('/api/token/test', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token }, signal: controller.signal });
+                        var resp = await fetch('/api/user/verify/account', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token }, signal: controller.signal });
                         clearTimeout(timeoutId);
 
-                        try { if (!(resp.status >= 200 && resp.status < 300)) { try { localStorage.removeItem('kax_login_token'); } catch (_) { } try { setBtnDisabled(joinBtn, false); } catch (_) { } } } catch (_) { }
+                        try {
+                            if (!(resp.status >= 200 && resp.status < 300)) {
+                                try { localStorage.removeItem('kax_login_token'); } catch (_) { }
+                                try { localStorage.removeItem('kax_web_token'); } catch (_) { }
+                                try { setBtnDisabled(joinBtn, false); } catch (_) { }
+                            }
+                        } catch (_) { }
 
                         if (resp.status === 200) {
                             setBtnDisabled(joinBtn, true); joinBtn.textContent = '\u4f60\u5df2\u53c2\u52a0\u6d4b\u8bd5'; joinBtn.removeAttribute('href');
@@ -524,15 +537,29 @@
                             return;
                         }
 
-                        if (resp.status === 401) { localStorage.removeItem('kax_login_token'); location.href = 'login'; return; }
-                        if (resp.status === 403) { try { var jf = await resp.json(); if (jf && jf.message) alert(jf.message); } catch (_) { alert('\u60a8\u7684\u8d26\u53f7\u65e0\u6cd5\u8bbf\u95ee\u6b64\u8d44\u6e90\u3002'); } localStorage.removeItem('kax_login_token'); location.href = 'login'; return; }
+                        if (resp.status === 401) {
+                            localStorage.removeItem('kax_login_token');
+                            localStorage.removeItem('kax_web_token');
+                            location.href = 'login';
+                            return;
+                        }
+                        if (resp.status === 403) {
+                            try { var jf = await resp.json(); if (jf && jf.message) alert(jf.message); } catch (_) { alert('\u60a8\u7684\u8d26\u53f7\u65e0\u6cd5\u8bbf\u95ee\u6b64\u8d44\u6e90\u3002'); }
+                            localStorage.removeItem('kax_login_token');
+                            localStorage.removeItem('kax_web_token');
+                            location.href = 'login';
+                            return;
+                        }
 
                         try { var txt = await resp.text(); if (txt) console.warn('token test \u8fd4\u56de\uff1a', txt); } catch (_) { }
-                        localStorage.removeItem('kax_login_token'); location.href = 'login';
+                        localStorage.removeItem('kax_login_token');
+                        localStorage.removeItem('kax_web_token');
+                        location.href = 'login';
 
                     } catch (err) {
                         console.error('\u9a8c\u8bc1\u767b\u5f55\u4ee4\u724c\u65f6\u51fa\u9519', err);
                         try { localStorage.removeItem('kax_login_token'); } catch (_) { }
+                        try { localStorage.removeItem('kax_web_token'); } catch (_) { }
                         alert('\u65e0\u6cd5\u9a8c\u8bc1\u767b\u5f55\u72b6\u6001\uff0c\u8bf7\u91cd\u65b0\u767b\u5f55\u3002'); location.href = 'login';
                     } finally {
                         try { if (!keepDisabled) { setBtnDisabled(joinBtn, false); joinBtn.textContent = originalText; } } catch (_) { }
@@ -587,7 +614,7 @@
             return;
         }
 
-        var token = localStorage.getItem('kax_login_token');
+        var token = localStorage.getItem('kax_web_token') || localStorage.getItem('kax_login_token');
         if (!token) { alert('\u8bf7\u5148\u767b\u5f55'); location.href = '/login'; return; }
 
         if (activateBtn) { activateBtn.setAttribute('disabled', 'true'); activateBtn.textContent = '\u6fc0\u6d3b\u4e2d\u2026'; }
@@ -614,7 +641,9 @@
                     var input = document.getElementById('cdkInput'); if (input) input.value = '';
                 }, 1500);
             } else if (resp.status === 401) {
-                localStorage.removeItem('kax_login_token'); location.href = '/login';
+                localStorage.removeItem('kax_login_token');
+                localStorage.removeItem('kax_web_token');
+                location.href = '/login';
             } else {
                 var errorMsg = result.message || '\u6fc0\u6d3b\u5931\u8d25';
                 if (result.code === 1) errorMsg = 'CDK\u4e3a\u7a7a';

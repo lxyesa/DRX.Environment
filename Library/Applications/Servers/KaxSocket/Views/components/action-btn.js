@@ -129,6 +129,27 @@
     `;
 
     class ActionBtn extends HTMLElement {
+        /**
+         * action-btn 支持参数说明
+         *
+         * 1) HTML Attributes（可直接写在标签上）
+         * - 文本/图标: label, icon, icon-lib, icon-font
+         * - 尺寸/布局: width, height, min-width, padding, radius, font-size, gap, icon-size
+         * - 颜色/边框: color, bg, border, hover-bg, hover-color, hover-shadow, focus-ring
+         * - 状态/行为: disabled, loading, type(button|submit|reset), variant(default|ghost|danger), block
+         *
+         * 2) CSS Variables（可在外部通过 action-btn 选择器传入）
+         * - --dev-radius（项目通用圆角变量，作为 --_radius 默认来源）
+         * - --dev-accent（默认主色来源）
+         * - 组件内部变量: --_bg, --_bg-hover, --_color, --_color-hover, --_border,
+         *   --_radius, --_padding, --_font-size, --_icon-size, --_gap, --_focus-ring,
+         *   --_width, --_height, --_min-width, --_icon-font-family
+         *
+         * 3) JavaScript API
+         * - disabled: boolean
+         * - loading: boolean
+         * - value: string（映射到 label）
+         */
         static get observedAttributes() {
             return [
                 'label', 'icon', 'icon-lib',
@@ -152,10 +173,10 @@
             // 代理原生点击事件
             this._btn.addEventListener('click', e => {
                 if (this.hasAttribute('disabled') || this.hasAttribute('loading')) {
+                    e.preventDefault();
                     e.stopImmediatePropagation();
                     return;
                 }
-                this.dispatchEvent(new MouseEvent('click', e));
             });
 
             this._applyDefaults();
@@ -178,7 +199,7 @@
             this._setCss('--_color',        'var(--dev-accent, #638cff)');
             this._setCss('--_color-hover',  'var(--dev-accent, #638cff)');
             this._setCss('--_border',       '1px solid rgba(99,140,255,0.2)');
-            this._setCss('--_radius',       '4px');
+            this._setCss('--_radius',       'var(--dev-radius, 4px)');
             this._setCss('--_padding',      '0 12px');
             this._setCss('--_font-size',    '0.9rem');
             this._setCss('--_icon-size',    '18px');
@@ -193,6 +214,14 @@
 
         _removeCss(prop) {
             this._shadow.host.style.removeProperty(prop);
+        }
+
+        _normalizeCssSize(val) {
+            if (val == null) return '';
+            const str = String(val).trim();
+            if (!str) return '';
+            if (/^-?\d+(\.\d+)?$/.test(str)) return `${str}px`;
+            return str;
         }
 
         _syncAttribute(name, val) {
@@ -238,28 +267,28 @@
                     val ? this._setCss('--_border', val) : this._removeCss('--_border');
                     break;
                 case 'width':
-                    val ? this._setCss('--_width', val) : this._removeCss('--_width');
+                    val ? this._setCss('--_width', this._normalizeCssSize(val)) : this._removeCss('--_width');
                     break;
                 case 'height':
-                    val ? this._setCss('--_height', val) : this._removeCss('--_height');
+                    val ? this._setCss('--_height', this._normalizeCssSize(val)) : this._removeCss('--_height');
                     break;
                 case 'min-width':
-                    val ? this._setCss('--_min-width', val) : this._removeCss('--_min-width');
+                    val ? this._setCss('--_min-width', this._normalizeCssSize(val)) : this._removeCss('--_min-width');
                     break;
                 case 'padding':
                     val ? this._setCss('--_padding', val) : this._removeCss('--_padding');
                     break;
                 case 'radius':
-                    val ? this._setCss('--_radius', val) : this._removeCss('--_radius');
+                    val ? this._setCss('--_radius', this._normalizeCssSize(val)) : this._removeCss('--_radius');
                     break;
                 case 'font-size':
-                    val ? this._setCss('--_font-size', val) : this._removeCss('--_font-size');
+                    val ? this._setCss('--_font-size', this._normalizeCssSize(val)) : this._removeCss('--_font-size');
                     break;
                 case 'icon-size':
-                    val ? this._setCss('--_icon-size', val) : this._removeCss('--_icon-size');
+                    val ? this._setCss('--_icon-size', this._normalizeCssSize(val)) : this._removeCss('--_icon-size');
                     break;
                 case 'gap':
-                    val ? this._setCss('--_gap', val) : this._removeCss('--_gap');
+                    val ? this._setCss('--_gap', this._normalizeCssSize(val)) : this._removeCss('--_gap');
                     break;
                 case 'type':
                     if (val) this._btn.type = val;

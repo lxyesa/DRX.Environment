@@ -2,13 +2,13 @@
             // 页面加载时：若本地存在 token 且能通过验证，则重定向到首页，避免已登录用户重复注册
             (async function checkTokenRedirect() {
                 try {
-                    var token = localStorage.getItem('kax_login_token');
+                    var token = localStorage.getItem('kax_web_token') || localStorage.getItem('kax_login_token');
                     if (!token) return;
 
                     var controller = new AbortController();
                     var timeoutId = setTimeout(function () { controller.abort(); }, 6000);
 
-                    var resp = await fetch('/api/token/test', {
+                    var resp = await fetch('/api/user/verify/account', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
                         signal: controller.signal
@@ -22,6 +22,7 @@
 
                     if (resp.status === 401) {
                         try { localStorage.removeItem('kax_login_token'); } catch (_) { }
+                        try { localStorage.removeItem('kax_web_token'); } catch (_) { }
                     }
                 } catch (err) {
                     if (err && err.name === 'AbortError') console.warn('token 验证超时，未自动跳转');

@@ -1,6 +1,6 @@
 using System;
-using System.Collections.Concurrent;
 using System.Threading;
+using ZiggyCreatures.Caching.Fusion;
 
 namespace Drx.Sdk.Network.Http.Auth
 {
@@ -125,50 +125,28 @@ namespace Drx.Sdk.Network.Http.Auth
 
     /// <summary>
     /// 令牌桶管理器：管理全局和路由级别的令牌桶实例。
-    /// 使用分片 ConcurrentDictionary 按 (IP + 路由键) 维护独立的令牌桶，
-    /// 并提供过期桶的定期清理功能以防止内存泄漏。
-    /// 分片设计减少锁竞争，提高并发性能。
+    /// 使用 FusionCache 按 (IP + 路由键) 维护独立的令牌桶生命周期，
+    /// SlidingExpiration 自动替代手动定时清理，FusionCache SizeLimit 提供内存驱逐。
     /// </summary>
     internal sealed class TokenBucketManager : IDisposable
     {
-        private const int ShardCount = 16;
-        private readonly ConcurrentDictionary<string, TokenBucketEntry>[] _bucketShards = new ConcurrentDictionary<string, TokenBucketEntry>[ShardCount];
-        private readonly Timer _cleanupTimer;
-        private const int CleanupIntervalMs = 60_000;
-        private const int BucketExpirationMs = 300_000;
-
-        private sealed class TokenBucketEntry
-        {
-            public TokenBucket Bucket { get; }
-            public long LastAccessTimestamp { get; set; }
-
-            public TokenBucketEntry(TokenBucket bucket)
-            {
-                Bucket = bucket;
-                LastAccessTimestamp = Environment.TickCount64;
-            }
-        }
-
-        public TokenBucketManager()
-        {
-            for (int i = 0; i < ShardCount; i++)
-            {
-                _bucketShards[i] = new ConcurrentDictionary<string, TokenBucketEntry>();
-            }
-            _cleanupTimer = new Timer(CleanupExpiredBuckets, null, CleanupIntervalMs, CleanupIntervalMs);
-        }
+        private readonly IFusionCache _cache;
+        private readonly TimeSpan _idleExpiry;
 
         /// <summary>
-        /// 根据键获取对应的分片索引
+        /// 创建令牌桶管理器。
         /// </summary>
-        private int GetShardIndex(string key)
+        /// <param name="cache">FusionCache 实例，负责令牌桶的生命周期与驱逐（由 DrxCacheProvider 提供）。</param>
+        /// <param name="idleExpiry">令牌桶空闲超时时间。超过此时间未访问的桶将被 FusionCache SlidingExpiration 自动移除。</param>
+        public TokenBucketManager(IFusionCache cache, TimeSpan idleExpiry)
         {
-            return Math.Abs(key.GetHashCode()) % ShardCount;
+            _cache = cache ?? throw new ArgumentNullException(nameof(cache));
+            _idleExpiry = idleExpiry;
         }
 
         /// <summary>
         /// 尝试消耗指定键的令牌桶中的一个令牌。
-        /// 如果该键的令牌桶不存在则自动创建。
+        /// 如果该键的令牌桶不存在则自动创建；每次访问后 SlidingExpiration 自动续期。
         /// </summary>
         /// <param name="key">桶的唯一标识（通常为 IP 或 IP#路由键）</param>
         /// <param name="maxTokens">桶容量</param>
@@ -176,51 +154,36 @@ namespace Drx.Sdk.Network.Http.Auth
         /// <returns>true 表示令牌可用（请求通过），false 表示被限流</returns>
         public bool TryConsume(string key, int maxTokens, double windowMilliseconds)
         {
-            var shardIndex = GetShardIndex(key);
-            var shard = _bucketShards[shardIndex];
-            var entry = shard.GetOrAdd(key, _ => new TokenBucketEntry(new TokenBucket(maxTokens, windowMilliseconds)));
-            entry.LastAccessTimestamp = Environment.TickCount64;
-            return entry.Bucket.TryConsume();
+            var entryOptions = new FusionCacheEntryOptions
+            {
+                Duration = _idleExpiry,
+                IsFailSafeEnabled = false,
+                Size = 1
+            };
+            var bucket = _cache.GetOrSet<TokenBucket>(
+                key,
+                _ => new TokenBucket(maxTokens, windowMilliseconds),
+                entryOptions
+            );
+            return bucket!.TryConsume();
         }
 
         /// <summary>
-        /// 获取指定键的当前可用令牌数（仅用于监控）
+        /// 获取指定键的当前可用令牌数（仅用于监控）。
+        /// 返回 -1 表示该键对应的令牌桶不存在（已过期或从未创建）。
         /// </summary>
         public int GetAvailableTokens(string key)
         {
-            var shardIndex = GetShardIndex(key);
-            var shard = _bucketShards[shardIndex];
-            if (shard.TryGetValue(key, out var entry))
-                return entry.Bucket.AvailableTokens;
-            return -1;
+            var result = _cache.TryGet<TokenBucket>(key);
+            return result.HasValue ? result.Value.AvailableTokens : -1;
         }
 
         /// <summary>
-        /// 定期清理过期的令牌桶（5分钟未访问的桶将被移除）
+        /// 释放管理器。令牌桶 FusionCache 实例由 DrxCacheProvider 统一管理，此处无需 Dispose。
         /// </summary>
-        private void CleanupExpiredBuckets(object? state)
-        {
-            var now = Environment.TickCount64;
-            for (int shardIndex = 0; shardIndex < ShardCount; shardIndex++)
-            {
-                var shard = _bucketShards[shardIndex];
-                foreach (var kvp in shard)
-                {
-                    if (now - kvp.Value.LastAccessTimestamp > BucketExpirationMs)
-                    {
-                        shard.TryRemove(kvp.Key, out _);
-                    }
-                }
-            }
-        }
-
         public void Dispose()
         {
-            _cleanupTimer?.Dispose();
-            for (int i = 0; i < ShardCount; i++)
-            {
-                _bucketShards[i].Clear();
-            }
+            // _cache 由 DrxCacheProvider 统一 Dispose，此处不重复释放。
         }
     }
 }

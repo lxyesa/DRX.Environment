@@ -298,6 +298,27 @@ public static partial class Logger
     // 后台消费循环
     // ─────────────────────────────────────────────────────────────────────────
 
+    /// <summary>
+    /// 等待 Channel 中所有已入队日志全部写出后返回。
+    /// 适用于控制台程序退出前确保日志不丢失。
+    /// </summary>
+    public static async Task FlushAsync()
+    {
+        _channel.Writer.TryComplete();
+        await _worker.ConfigureAwait(false);
+        var sinks = _sinkSnapshot;
+        for (int i = 0; i < sinks.Length; i++)
+        {
+            try { sinks[i].Flush(); }
+            catch { }
+        }
+    }
+
+    /// <summary>
+    /// 同步版 Flush，阻塞调用线程直到所有日志写出。
+    /// </summary>
+    public static void Flush() => FlushAsync().GetAwaiter().GetResult();
+
     private static async Task ProcessQueueAsync()
     {
         var token = _cts.Token;

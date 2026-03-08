@@ -87,15 +87,10 @@ namespace Drx.Sdk.Network.Http
         /// </summary>
         private string GetOrCacheRateLimitKey(string baseKey)
         {
-            lock (_rateLimitKeyCacheLock)
-            {
-                if (_rateLimitKeyCache.TryGetValue(baseKey, out var cached))
-                {
-                    return cached;
-                }
-                _rateLimitKeyCache[baseKey] = baseKey;
-                return baseKey;
-            }
+            return _cacheProvider.RateLimitKey.GetOrSet<string>(
+                baseKey,
+                (_, _) => baseKey
+            );
         }
 
         /// <summary>
@@ -138,9 +133,10 @@ namespace Drx.Sdk.Network.Http
         /// </summary>
         public void ResumeCompression() => _compressionStrategy?.ForceEnable();
 
-        public ValueTask DisposeAsync()
+        public async ValueTask DisposeAsync()
         {
             Stop();
+            await _cacheProvider.DisposeAsync().ConfigureAwait(false);
             _sessionManager?.Dispose();
             _authorizationManager?.Dispose();
 
@@ -152,10 +148,8 @@ namespace Drx.Sdk.Network.Http
 
             _ipRequestHistory.Clear();
             _ipRouteRequestHistory.Clear();
-            _staticContentCache.Clear();
-            lock (_rateLimitKeyCacheLock) { _rateLimitKeyCache.Clear(); }
 
-            return ValueTask.CompletedTask;
+            return;
         }
     }
 }

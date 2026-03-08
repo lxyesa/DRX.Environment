@@ -82,6 +82,9 @@ function switchTab(tabName) {
         c.classList.toggle('active', c.id === 'tab-' + tabName);
     });
 
+    // 将当前 Tab 写入 URL hash，刷新后可恢复
+    history.replaceState(null, '', '#' + tabName);
+
     if (tabName === 'review-panel' && state.isAdmin) {
         loadReviewList();
     }
@@ -99,11 +102,11 @@ function switchTab(tabName) {
 async function editAsset(id) {
     try {
         const resp = await apiGetMyAssetDetail(id);
-        if (resp.code !== 0) { alert(resp.message); return; }
+        if (resp.code !== 0) { ErrorPresenter.notifyError(resp.code, resp.message); return; }
         fillForm(resp.data);
         switchTab('create-asset');
     } catch (e) {
-        alert('加载资产详情失败');
+        ErrorPresenter.notifyError('NETWORK_ERROR', '加载资产详情失败');
     }
 }
 
@@ -111,8 +114,8 @@ async function submitForm() {
     if (!requireLogin()) return;
 
     const data = collectFormData();
-    if (!data.name) { alert('请填写资源名称'); return; }
-    if (!data.version) { alert('请填写版本号'); return; }
+    if (!data.name) { ErrorPresenter.notifyError(null, '请填写资源名称'); return; }
+    if (!data.version) { ErrorPresenter.notifyError(null, '请填写版本号'); return; }
 
     try {
         if (state.editingId) {
@@ -171,7 +174,7 @@ async function submitForm() {
         loadMyAssets();
         loadMyStats();
     } catch (e) {
-        alert('请求失败: ' + e.message);
+        ErrorPresenter.notifyError('NETWORK_ERROR', '请求失败: ' + e.message);
     }
 }
 
@@ -184,18 +187,18 @@ async function submitReview(id) {
         }
         const resp = await apiSubmitReview(id, submitPayload);
         if (resp.code === 0) {
-            alert('已提交审核');
+            ErrorPresenter.notifySuccess('已提交审核');
             loadMyAssets();
             loadMyStats();
         } else {
             if (resp.cooldownRemaining) {
-                alert(`冷却中，请在 ${formatCooldown(resp.cooldownRemaining)} 后重试`);
+                ErrorPresenter.notifyError(null, `冷却中，请在 ${formatCooldown(resp.cooldownRemaining)} 后重试`);
             } else {
-                alert(resp.message || '操作失败');
+                ErrorPresenter.notifyError(resp.code, resp.message || '操作失败');
             }
         }
     } catch (e) {
-        alert('请求失败');
+        ErrorPresenter.notifyError('NETWORK_ERROR');
     }
 }
 
@@ -204,14 +207,14 @@ async function publishAsset(id) {
     try {
         const resp = await apiPublishAsset(id);
         if (resp.code === 0) {
-            alert('已发布');
+            ErrorPresenter.notifySuccess('已发布');
             loadMyAssets();
             loadMyStats();
         } else {
-            alert(resp.message || '发布失败');
+            ErrorPresenter.notifyError(resp.code, resp.message || '发布失败');
         }
     } catch (e) {
-        alert('请求失败');
+        ErrorPresenter.notifyError('NETWORK_ERROR');
     }
 }
 
@@ -229,14 +232,14 @@ async function approveAsset() {
     try {
         const resp = await apiApprove(id);
         if (resp.code === 0) {
-            alert('审核通过');
+            ErrorPresenter.notifySuccess('审核通过');
             closeReviewModal();
-            loadReviewList();
+            location.reload();
         } else {
-            alert(resp.message || '操作失败');
+            ErrorPresenter.notifyError(resp.code, resp.message || '操作失败');
         }
     } catch (e) {
-        alert('请求失败');
+        ErrorPresenter.notifyError('NETWORK_ERROR');
     } finally {
         stopLoading();
     }
@@ -258,21 +261,21 @@ async function confirmReject() {
     const actionBtn = document.getElementById('confirmRejectBtn');
     if (actionBtn?.dataset.loading === '1') return;
     const reason = document.getElementById('rejectReason').value.trim();
-    if (!reason) { alert('请填写拒绝原因'); return; }
+    if (!reason) { ErrorPresenter.notifyError(null, '请填写拒绝原因'); return; }
 
     const stopLoading = setButtonLoading(actionBtn, '拒绝中...');
     try {
         const resp = await apiReject(id, reason);
         if (resp.code === 0) {
-            alert('已拒绝');
+            ErrorPresenter.notifySuccess('已拒绝');
             closeRejectModal();
             closeReviewModal();
             loadReviewList();
         } else {
-            alert(resp.message || '操作失败');
+            ErrorPresenter.notifyError(resp.code, resp.message || '操作失败');
         }
     } catch (e) {
-        alert('请求失败');
+        ErrorPresenter.notifyError('NETWORK_ERROR');
     } finally {
         stopLoading();
     }
@@ -287,20 +290,20 @@ async function returnSystemAsset() {
     const actionBtn = document.getElementById('systemReturnBtn');
     if (actionBtn?.dataset.loading === '1') return;
     const reason = document.getElementById('systemActionReason')?.value.trim() || '';
-    if (!reason) { alert('退回原因必填'); return; }
+    if (!reason) { ErrorPresenter.notifyError(null, '退回原因必填'); return; }
     if (!confirm('确认退回该资产？')) return;
 
     const stopLoading = setButtonLoading(actionBtn, '退回中...');
     try {
         const resp = await apiSystemReturn(id, reason);
         if (resp.code === 0) {
-            alert(resp.message || '已退回');
+            ErrorPresenter.notifySuccess(resp.message || '已退回');
             await Promise.all([loadSystemAssetList(), openSystemAssetModal(id)]);
         } else {
-            alert(resp.message || '退回失败');
+            ErrorPresenter.notifyError(resp.code, resp.message || '退回失败');
         }
     } catch (e) {
-        alert('退回失败: ' + e.message);
+        ErrorPresenter.notifyError('NETWORK_ERROR', '退回失败');
     } finally {
         stopLoading();
     }
@@ -312,20 +315,20 @@ async function offShelfSystemAsset() {
     const actionBtn = document.getElementById('systemOffShelfBtn');
     if (actionBtn?.dataset.loading === '1') return;
     const reason = document.getElementById('systemActionReason')?.value.trim() || '';
-    if (!reason) { alert('下架原因必填'); return; }
+    if (!reason) { ErrorPresenter.notifyError(null, '下架原因必填'); return; }
     if (!confirm('确认将该资产下架？')) return;
 
     const stopLoading = setButtonLoading(actionBtn, '下架中...');
     try {
         const resp = await apiSystemOffShelf(id, reason);
         if (resp.code === 0) {
-            alert(resp.message || '已下架');
+            ErrorPresenter.notifySuccess(resp.message || '已下架');
             await Promise.all([loadSystemAssetList(), openSystemAssetModal(id)]);
         } else {
-            alert(resp.message || '下架失败');
+            ErrorPresenter.notifyError(resp.code, resp.message || '下架失败');
         }
     } catch (e) {
-        alert('下架失败: ' + e.message);
+        ErrorPresenter.notifyError('NETWORK_ERROR', '下架失败');
     } finally {
         stopLoading();
     }
@@ -337,20 +340,20 @@ async function forceReviewSystemAsset() {
     const actionBtn = document.getElementById('systemForceReviewBtn');
     if (actionBtn?.dataset.loading === '1') return;
     const reason = document.getElementById('systemActionReason')?.value.trim() || '';
-    if (!reason) { alert('重审原因必填'); return; }
+    if (!reason) { ErrorPresenter.notifyError(null, '重审原因必填'); return; }
     if (!confirm('确认强制重审该资产？')) return;
 
     const stopLoading = setButtonLoading(actionBtn, '重审中...');
     try {
         const resp = await apiSystemForceReview(id, reason);
         if (resp.code === 0) {
-            alert(resp.message || '已进入重审流程');
+            ErrorPresenter.notifySuccess(resp.message || '已进入重审流程');
             await Promise.all([loadSystemAssetList(), openSystemAssetModal(id)]);
         } else {
-            alert(resp.message || '强制重审失败');
+            ErrorPresenter.notifyError(resp.code, resp.message || '强制重审失败');
         }
     } catch (e) {
-        alert('强制重审失败: ' + e.message);
+        ErrorPresenter.notifyError('NETWORK_ERROR', '强制重审失败');
     } finally {
         stopLoading();
     }
@@ -362,21 +365,21 @@ async function hardDeleteSystemAsset() {
     const actionBtn = document.getElementById('systemHardDeleteBtn');
     if (actionBtn?.dataset.loading === '1') return;
     const reason = document.getElementById('systemActionReason')?.value.trim() || '';
-    if (!reason) { alert('彻底删除原因必填'); return; }
+    if (!reason) { ErrorPresenter.notifyError(null, '彻底删除原因必填'); return; }
     if (!confirm('确认彻底删除该资产？该操作不可恢复。')) return;
 
     const stopLoading = setButtonLoading(actionBtn, '删除中...');
     try {
         const resp = await apiSystemHardDelete(id, reason);
         if (resp.code === 0) {
-            alert(resp.message || '已彻底删除');
+            ErrorPresenter.notifySuccess(resp.message || '已彻底删除');
             closeSystemAssetModal();
             await loadSystemAssetList();
         } else {
-            alert(resp.message || '彻底删除失败');
+            ErrorPresenter.notifyError(resp.code, resp.message || '彻底删除失败');
         }
     } catch (e) {
-        alert('彻底删除失败: ' + e.message);
+        ErrorPresenter.notifyError('NETWORK_ERROR', '彻底删除失败');
     } finally {
         stopLoading();
     }
@@ -479,6 +482,13 @@ async function init() {
     if (!ok) return;
 
     bindEvents();
+
+    // 从 URL hash 恢复 Tab 状态（默认 my-assets）
+    const hashTab = location.hash.slice(1);
+    const validTabs = ['my-assets', 'create-asset', 'asset-management', 'review-panel'];
+    if (hashTab && validTabs.includes(hashTab)) {
+        switchTab(hashTab);
+    }
 
     await Promise.all([loadMyAssets(), loadMyStats()]);
 }

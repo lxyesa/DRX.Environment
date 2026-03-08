@@ -20,14 +20,37 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Web;
+using System.IO;
 using HttpMethod = System.Net.Http.HttpMethod;
 
 public class Program
 {
+    /// <summary>
+    /// 应用配置（用于 JWT 和 SMTP）。
+    /// </summary>
+    public static class Config
+    {
+        // JWT 配置
+        public const string JwtSecretKey = "your-secret-key-here-min-32-chars-recommended";
+        public const string JwtIssuer = "KaxSocket";
+        public const string JwtAudience = "KaxUsers";
+        public const int JwtExpirationDays = 7;
 
-    // 简单测试：启动 HttpServer 并注册处理方法
+        // SMTP 配置
+        public const string SmtpEmail = "157335596@qq.com";  // 发送者邮箱
+        public const string SmtpAuthCode = "eymlrhwykskccbdb";  // 授权码
+        public const string SmtpHost = "smtp.qq.com";
+        public const int SmtpPort = 587;
+        public const bool SmtpEnableSsl = true;
+    }
+
     public static async Task Main(string[] args)
     {
+        // 配置 JWT
+        var jwtConfig = new Drx.Sdk.Network.Http.Auth.JwtHelper.JwtConfig();
+        Drx.Sdk.Network.Http.Auth.JwtHelper.Configure(jwtConfig);
+        Logger.Info($"JWT 已配置 - Issuer: {jwtConfig.Issuer}, Audience: {jwtConfig.Audience}, Expiration: {jwtConfig.Expiration.Days} 天");
+
         // await TableListPerformanceTest.RunAllTests();
         if (!GlobalUtility.IsAdministrator())
         {
@@ -58,18 +81,21 @@ public class Program
         try
         {
             await server.InitializeResourceIndexAsync();
+            #if DEBUG
+            server.DebugMode(true);
+            #endif
 
             server.FileRootPath = $"{AppDomain.CurrentDomain.BaseDirectory}Views";
             server.NotFoundPagePath = $"{AppDomain.CurrentDomain.BaseDirectory}Views/html/404.html";
 
-            server.AddRoute(HttpMethod.Get, "/", req => new HtmlResultFromFile($"{AppDomain.CurrentDomain.BaseDirectory}Views/html/index.html"));
-            server.AddRoute(HttpMethod.Get, "/login", req => new HtmlResultFromFile($"{AppDomain.CurrentDomain.BaseDirectory}Views/html/login.html"));
-            server.AddRoute(HttpMethod.Get, "/register", req => new HtmlResultFromFile($"{AppDomain.CurrentDomain.BaseDirectory}Views/html/register.html"));
-            server.AddRoute(HttpMethod.Get, "/oauth/authorize", req => new HtmlResultFromFile($"{AppDomain.CurrentDomain.BaseDirectory}Views/html/oauth_authorize.html"));
-            server.AddRoute(HttpMethod.Get, "/profile", req => new HtmlResultFromFile($"{AppDomain.CurrentDomain.BaseDirectory}Views/html/profile.html"));
-            server.AddRoute(HttpMethod.Get, "/profile/{uid}", req => new HtmlResultFromFile($"{AppDomain.CurrentDomain.BaseDirectory}Views/html/profile.html"));
-            server.AddRoute(HttpMethod.Get, "/shop", req => new HtmlResultFromFile($"{AppDomain.CurrentDomain.BaseDirectory}Views/html/shop.html"));
-            server.AddRoute(HttpMethod.Get, "/asset", req => new HtmlResultFromFile($"{AppDomain.CurrentDomain.BaseDirectory}Views/html/shop.html"));
+            server.AddRoute(HttpMethod.Get, "/", req => new HtmlResultFromFile("html/index.html"));
+            server.AddRoute(HttpMethod.Get, "/login", req => new HtmlResultFromFile("html/login.html"));
+            server.AddRoute(HttpMethod.Get, "/register", req => new HtmlResultFromFile("html/register.html"));
+            server.AddRoute(HttpMethod.Get, "/oauth/authorize", req => new HtmlResultFromFile("html/oauth_authorize.html"));
+            server.AddRoute(HttpMethod.Get, "/profile", req => new HtmlResultFromFile("html/profile.html"));
+            server.AddRoute(HttpMethod.Get, "/profile/{uid}", req => new HtmlResultFromFile("html/profile.html"));
+            server.AddRoute(HttpMethod.Get, "/shop", req => new HtmlResultFromFile("html/shop.html"));
+            server.AddRoute(HttpMethod.Get, "/asset", req => new HtmlResultFromFile("html/shop.html"));
             server.AddRoute(HttpMethod.Get, "/shop/detail", req =>
             {
                 var legacyIdRaw = req.Query["id"];
@@ -90,13 +116,13 @@ public class Program
 
                 return new RedirectResult("/asset");
             });
-            server.AddRoute(HttpMethod.Get, "/asset/detail/{id}", req => new HtmlResultFromFile($"{AppDomain.CurrentDomain.BaseDirectory}Views/html/shop_detail.html"));
-            server.AddRoute(HttpMethod.Get, "/user/verify-email", req => new HtmlResultFromFile($"{AppDomain.CurrentDomain.BaseDirectory}Views/html/verify-email.html"));
-            server.AddRoute(HttpMethod.Get, "/forgot-password", req => new HtmlResultFromFile($"{AppDomain.CurrentDomain.BaseDirectory}Views/html/forgot-password.html"));
-            server.AddRoute(HttpMethod.Get, "/reset-password", req => new HtmlResultFromFile($"{AppDomain.CurrentDomain.BaseDirectory}Views/html/reset-password.html"));
-            server.AddRoute(HttpMethod.Get, "/console", req => new HtmlResultFromFile($"{AppDomain.CurrentDomain.BaseDirectory}Views/html/console.html"));
-            server.AddRoute(HttpMethod.Get, "/manage-users", req => new HtmlResultFromFile($"{AppDomain.CurrentDomain.BaseDirectory}Views/html/manage-users.html"));
-            server.AddRoute(HttpMethod.Get, "/developer", req => new HtmlResultFromFile($"{AppDomain.CurrentDomain.BaseDirectory}Views/html/developer.html"));
+            server.AddRoute(HttpMethod.Get, "/asset/detail/{id}", req => new HtmlResultFromFile("html/shop_detail.html"));
+            server.AddRoute(HttpMethod.Get, "/user/verify-email", req => new HtmlResultFromFile("html/verify-email.html"));
+            server.AddRoute(HttpMethod.Get, "/forgot-password", req => new HtmlResultFromFile("html/forgot-password.html"));
+            server.AddRoute(HttpMethod.Get, "/reset-password", req => new HtmlResultFromFile("html/reset-password.html"));
+            server.AddRoute(HttpMethod.Get, "/console", req => new HtmlResultFromFile("html/console.html"));
+            server.AddRoute(HttpMethod.Get, "/manage-users", req => new HtmlResultFromFile("html/manage-users.html"));
+            server.AddRoute(HttpMethod.Get, "/developer", req => new HtmlResultFromFile("html/developer.html"));
 
             server.FileUploadRouter("/api/file/upload", "uploads");
 

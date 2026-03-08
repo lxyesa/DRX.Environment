@@ -1,0 +1,193 @@
+{
+  "updated": "2026-03-09",
+  "entries": [
+    {
+      "file": "Library/Environments/SDK/Drx.Sdk.Shared.JavaScript/Conversion/TypeConverter.cs",
+      "md_file": "TypeConverter.md",
+      "description": "TypeConverter partial class 核心调度：策略管道(RegisterStrategy)与接口调度，命名空间 Drx.Sdk.Shared.JavaScript.Conversion，实现 ITypeConverter。"
+    },
+    {
+      "file": "Library/Environments/SDK/Drx.Sdk.Shared.JavaScript/Conversion/TypeConverter.ToJs.cs",
+      "md_file": "TypeConverter.md",
+      "description": "TypeConverter partial — .NET 转 JS 逻辑：自定义策略优先，回退内置基元/集合/字典/对象属性映射。"
+    },
+    {
+      "file": "Library/Environments/SDK/Drx.Sdk.Shared.JavaScript/Conversion/TypeConverter.FromJs.cs",
+      "md_file": "TypeConverter.md",
+      "description": "TypeConverter partial — JS 转 .NET 逻辑：修复 null 处理（引用类型→null，值类型→default，Nullable→null），支持 List/Dictionary/自定义对象映射。"
+    },
+    {
+      "file": "Library/Environments/SDK/Drx.Sdk.Shared.JavaScript/Registration/ExpressionTreeBinder.cs",
+      "md_file": "ExpressionTreeBinder.md",
+      "description": "高性能方法绑定器，实现 IScriptBinder。Expression Tree 编译方法委托，ConcurrentDictionary 缓存已编译委托，延迟 Func 字段/属性注册，命名空间 Registration。"
+    },
+    {
+      "file": "Library/Environments/SDK/Drx.Sdk.Shared.JavaScript/Metadata/ScriptTypeMetadata.cs",
+      "md_file": "ScriptTypeMetadata.md",
+      "description": "脚本类型元数据，描述导出到 JS 的 .NET 类型成员。ConcurrentDictionary 线程安全缓存，识别 ScriptIgnore 排除成员，ScriptName 覆盖 JS 侧名称，MemberJsNames 字典存储名称映射。命名空间 Metadata。"
+    },
+    {
+      "file": "Library/Environments/SDK/Drx.Sdk.Shared.JavaScript/Registration/ScriptRegistry.cs",
+      "md_file": "ScriptRegistry.md",
+      "description": "脚本类型注册表，实现 IScriptRegistry，非单例。ConcurrentDictionary 按名称索引 + 按 ScriptExportType 分组查询；导出注册 Debug 日志由 SDK 开关控制（默认关闭）。"
+    },
+    {
+      "file": "Library/Environments/SDK/Drx.Sdk.Shared.JavaScript/Metadata/ScriptTypeScanner.cs",
+      "md_file": "ScriptTypeScanner.md",
+      "description": "程序集扫描器，实现 IScriptTypeScanner，实例类。构造器接受可选 ITypeFilter，扫描带 ScriptExport 标注的类型生成 ScriptTypeMetadata。移除静态状态，支持 DI 注入。命名空间 Metadata。"
+    },
+    {
+      "file": "Library/Environments/SDK/Drx.Sdk.Shared.JavaScript/Metadata/ScriptReflectionUtil.cs",
+      "md_file": "ScriptReflectionUtil.md",
+      "description": "脚本反射工具类，提供 IsStaticClass/IsValidExport/GetJavaScriptFriendlyName/SafeGetType/IsExportedMember 静态方法。命名空间 Metadata。"
+    },
+    {
+      "file": "Library/Environments/SDK/Drx.Sdk.Shared.JavaScript/Abstractions/JavaScriptEngineOptions.cs",
+      "md_file": "JavaScriptEngineOptions.md",
+      "description": "JavaScript 引擎配置选项类。EnableScriptCaching/MaxRetry/ScanAssemblies/Plugins/ConfigureConverter 属性。命名空间 Abstractions，供 DI 注册和 Options 模式使用。"
+    },
+    {
+      "file": "Library/Environments/SDK/Drx.Sdk.Shared.JavaScript/Abstractions/ModuleRuntimeOptions.cs",
+      "md_file": "ModuleRuntimeOptions.md",
+      "description": "Module Runtime 配置选项：项目根目录、安全白名单、调试输出、workspace imports map，提供安全默认值与配置校验。"
+    },
+    {
+      "file": "Library/Environments/SDK/Drx.Sdk.Shared.JavaScript/Abstractions/IJavaScriptEngine.cs",
+      "md_file": "IJavaScriptEngine.md",
+      "description": "脚本引擎统一接口，定义执行/调用/注册能力；含 RegisterGlobal 与 RegisterHostType 公开注册契约。"
+    },
+    {
+      "file": "Library/Environments/SDK/Drx.Sdk.Shared.JavaScript/DependencyInjection/ServiceCollectionExtensions.cs",
+      "md_file": "ServiceCollectionExtensions.md",
+      "description": "IServiceCollection 扩展方法 AddDrxJavaScript，注册引擎核心服务（IScriptRegistry/ITypeConverter/IScriptBinder/IScriptTypeScanner/IScriptEngineRuntime/IJavaScriptEngineFactory），支持 Options 配置委托。命名空间 DependencyInjection。"
+    },
+    {
+      "file": "Library/Environments/SDK/Drx.Sdk.Shared.JavaScript/DependencyInjection/JavaScriptEngineFactory.cs",
+      "md_file": "JavaScriptEngineFactory.md",
+      "description": "IJavaScriptEngineFactory 实现，通过 IServiceProvider 创建 IJavaScriptEngine 实例，支持默认配置和自定义选项覆盖（CreateScope）。命名空间 DependencyInjection。"
+    },
+    {
+      "file": "Library/Environments/SDK/Drx.Sdk.Shared.JavaScript/Engine/JavaScriptEngine.cs",
+      "md_file": "JavaScriptEngine.md",
+      "description": "JavaScriptEngine partial 核心初始化与生命周期：构造器注入 runtime/binder/registry/scanner/converter/options，启动时扫描并注册 ScriptExport 类型后绑定与加载插件。"
+    },
+    {
+      "file": "Library/Environments/SDK/Drx.Sdk.Shared.JavaScript/Engine/JavaScriptEngine.Execution.cs",
+      "md_file": "JavaScriptEngine.md",
+      "description": "JavaScriptEngine partial 执行能力：Execute/ExecuteAsync/ExecuteFile/CallFunction，统一使用 runtime.Evaluate 并支持脚本文件缓存。"
+    },
+    {
+      "file": "Library/Environments/SDK/Drx.Sdk.Shared.JavaScript/Engine/JavaScriptEngine.Registration.cs",
+      "md_file": "JavaScriptEngine.md",
+      "description": "JavaScriptEngine partial 注册能力：RegisterGlobal 对象/委托、RegisterHostType 类型注册与全局目录查询。"
+    },
+    {
+      "file": "Library/Environments/SDK/Drx.Sdk.Shared.JavaScript/JavaScript.cs",
+      "md_file": "JavaScriptFacade.md",
+      "description": "JavaScript 静态门面核心：Lazy<IJavaScriptEngine> 初始化与默认 DI 容器构建。"
+    },
+    {
+      "file": "Library/Environments/SDK/Drx.Sdk.Shared.JavaScript/JavaScript.Execute.cs",
+      "md_file": "JavaScriptFacade.md",
+      "description": "JavaScript partial 执行入口：Execute/ExecuteAsync/ExecuteFile，统一转发至 Engine。"
+    },
+    {
+      "file": "Library/Environments/SDK/Drx.Sdk.Shared.JavaScript/JavaScript.TryExecute.cs",
+      "md_file": "JavaScriptFacade.md",
+      "description": "JavaScript partial 安全执行入口：TryExecute/TryExecuteAsync/TryExecuteFile。"
+    },
+    {
+      "file": "Library/Environments/SDK/Drx.Sdk.Shared.JavaScript/JavaScript.TypeScript.cs",
+      "md_file": "JavaScriptFacade.md",
+      "description": "JavaScript partial TypeScript 支持：运行时加载 typescript.js、转译 TS 文件并生成 sourceURL，同时提供 TS 项目脚手架生成。"
+    },
+    {
+      "file": "Library/Environments/SDK/Drx.Sdk.Shared.JavaScript/JavaScript.Registration.cs",
+      "md_file": "JavaScriptFacade.md",
+      "description": "JavaScript partial 注册入口：RegisterGlobal/ RegisterHostType 重载及已注册对象查询。"
+    },
+    {
+      "file": "Library/Environments/SDK/Drx.Sdk.Shared.JavaScript/JavaScript.Functions.cs",
+      "md_file": "JavaScriptFacade.md",
+      "description": "JavaScript partial 函数调用入口：CallFunction 与泛型返回重载。"
+    },
+    {
+      "file": "Library/Environments/SDK/Drx.Sdk.Shared.JavaScript/Engine/JavaScriptEngineBuilder.cs",
+      "md_file": "JavaScriptEngineBuilder.md",
+      "description": "Fluent API 构建器，支持链式 WithOption/WithConverter/WithPlugin/WithAssemblies/Build，内部用 ServiceCollection 完成 DI 组装，返回 IJavaScriptEngine 实例。命名空间 Engine。"
+    },
+    {
+      "file": "Library/Applications/Clients/Paperclip/Program.cs",
+      "md_file": "PaperclipProgram.md",
+      "description": "Paperclip 脚本主机入口：EnsurePathRegistered（自注册 PATH/PAPERCLIP_HOME）、run/mrun/create 与 ts run/ts create 命令、run 支持 --debug、mrun 进入 Module Runtime。"
+    },
+    {
+      "file": "Library/Applications/Clients/Paperclip/Program.Project.cs",
+      "md_file": "PaperclipProgram.md",
+      "description": "Program partial（项目与环境）：PATH 自注册、create/ts create 项目初始化，并委托 SDK 生成 TypeScript 脚手架。"
+    },
+    {
+      "file": "Library/Applications/Clients/Paperclip/Program.Execution.cs",
+      "md_file": "PaperclipProgram.md",
+      "description": "Program partial（执行链路）：run/mrun 参数解析与脚本执行、ModuleRuntimeOptions 配置装载（CLI+paperclip.json，含 imports map）、安全边界校验与调试输出控制；预置模块预加载与宿主类型注册。"
+    },
+    {
+      "file": "Library/Applications/Clients/Paperclip/Program.Resources.cs",
+      "md_file": "PaperclipProgram.md",
+      "description": "Program partial（资源发现）：嵌入模型资源扫描与 EmbeddedModelResource 记录类型定义。"
+    },
+    {
+      "file": "Library/Applications/Clients/Paperclip/TypeScriptCommandHandler.cs",
+      "md_file": "PaperclipProgram.md",
+      "description": "TypeScript 命令处理器：封装 ts run/ts create 子命令分发与执行，供 Program 仅做路由委托。"
+    },
+    {
+      "file": "Library/Applications/Clients/Paperclip/Models/paperclip.module.js",
+      "md_file": "PaperclipSdkModule.md",
+      "description": "Paperclip 单文件 SDK 模块：内置桥接兜底、核心模块系统与 log/fs/stream/dotnet 子模块注册，兼容旧 API 并提供 JS/TS 友好命名。"
+    },
+    {
+      "file": "Library/Applications/Clients/Paperclip/Models/TypeScript/paperclip.module.d.ts",
+      "md_file": "PaperclipSdkModule.md",
+      "description": "Paperclip 单文件 TypeScript 声明：集中定义全局 Paperclip、模块上下文与 log/fs/stream/dotnet 全量类型。"
+    },
+    {
+      "file": "Library/Environments/SDK/Drx.Sdk.Shared.JavaScript/Bridges/LoggerJSBridge.cs",
+      "md_file": "LoggerJSBridge.md",
+      "description": "Logger 的 JavaScript 桥接层，导出 logger/Logger 静态日志 API（info/warn/error/debug/log）及对应 Async 异步方法。"
+    },
+    {
+      "file": "Library/Environments/SDK/Drx.Sdk.Shared.JavaScript/Bridges/ConsoleJSBridge.cs",
+      "md_file": "ConsoleJSBridge.md",
+      "description": "Console 原生输出桥接，导出 console 静态 API（log/info/debug/warn/error）及 Async 异步输出方法，直接写入标准输出/错误流。"
+    },
+    {
+      "file": "Library/Environments/SDK/Drx.Sdk.Shared.JavaScript/Bridges/FileJSBridge.cs",
+      "md_file": "FileJSBridge.md",
+      "description": "File 常用文件系统操作桥接，导出 File 静态 API 的同步/异步版本（read/write/append bytes&text、delete/copy/move）。"
+    },
+    {
+      "file": "Library/Environments/SDK/Drx.Sdk.Shared.JavaScript/Bridges/FileStreamJSBridge.cs",
+      "md_file": "FileStreamJSBridge.md",
+      "description": "文件流辅助桥接，导出 FileStream 静态 API 的同步/异步读写与生命周期方法（read/write/flush/close），用于 JS 侧管理流对象。"
+    },
+    {
+      "file": "Library/Environments/SDK/Drx.Sdk.Shared.JavaScript/Engine/ModuleResolver.cs",
+      "md_file": "ModuleResolver.md",
+      "description": "ModuleResolver 与解析流水线：按 deterministic 顺序解析 builtin/relative/absolute/imports-map/node_modules specifier，支持裸包逐级查找与 package.json exports/conditions/main/index 入口解析。"    },
+    {
+      "file": "Library/Environments/SDK/Drx.Sdk.Shared.JavaScript/Engine/ModuleRecord.cs",
+      "md_file": "ModuleRecord.md",
+      "description": "模块记录数据模型与状态机：ModuleRecord 状态（Loading/Loaded/Failed）、ModuleKind（Esm/Cjs/Json/Builtin）、缓存键与依赖追踪。"
+    },
+    {
+      "file": "Library/Environments/SDK/Drx.Sdk.Shared.JavaScript/Engine/ModuleCache.cs",
+      "md_file": "ModuleCache.md",
+      "description": "线程安全模块实例缓存：规范化 URL 缓存键、ConcurrentDictionary 存储、single-flight 并发合并加载、缓存命中/未命中统计、循环依赖占位机制。"
+    },
+    {
+      "file": "Library/Environments/SDK/Drx.Sdk.Shared.JavaScript/Engine/ModuleLoader.cs",
+      "md_file": "ModuleLoader.md",
+      "description": "模块加载器：递归构建模块依赖图、状态机驱动加载流程、集成 ModuleResolver + ModuleCache、循环依赖检测、错误传播与诊断事件。"    }
+  ]
+}

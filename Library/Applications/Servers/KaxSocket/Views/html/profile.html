@@ -11,7 +11,10 @@
     <link href="/css/global.css?v=2" rel="stylesheet">
     <script src="/js/avatarCache.js?v=2" defer></script>
     <script src="/js/global.js?v=2"></script>
+    <script src="/js/core/auth-state.js?v=2" defer></script>
+    <script src="/js/core/api-client.js?v=2" defer></script>
     <script src="/js/topbar.js?v=2" defer></script>
+    <script src="/components/action-btn.js?v=2" defer></script>
     <script src="/components/inputbox.js?v=3" defer></script>
     <script src="/components/badge/userbadge.js?v=2" defer></script>
     <script src="/components/collapsible-card.js?v=2" defer></script>
@@ -281,6 +284,20 @@
                             <span class="edit-hint">密码长度至少 8 位，区分大小写</span>
                             <button class="btn" id="changePwBtn">更新密码</button>
                         </div>
+                    </collapsible-card>
+
+                    <!-- 登录设备卡片 -->
+                    <collapsible-card title="登录设备" subtitle="已使用客户端登录过的设备列表" open>
+                        <span slot="icon" class="material-icons">devices</span>
+                        <div id="devicesLoading" class="assets-state">
+                            <span class="material-icons assets-state-icon spin">sync</span>
+                            <span>正在加载设备列表…</span>
+                        </div>
+                        <div id="devicesEmpty" class="assets-state" style="display:none;">
+                            <span class="material-icons assets-state-icon">devices_other</span>
+                            <span>暂无登录设备记录</span>
+                        </div>
+                        <div id="devicesList" class="devices-list"></div>
                     </collapsible-card>
 
                 </div>

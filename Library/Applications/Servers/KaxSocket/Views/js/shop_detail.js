@@ -1,73 +1,26 @@
-﻿/** 时间戳或日期字符串 → zh-CN 日期显示 */
-        function formatDate(ts) {
-            if (!ts || ts === '--') return '--';
-            const ms = ts > 9999999999 ? ts : ts * 1000;
-            const date = new Date(ms);
-            if (isNaN(date.getTime())) return '--';
-            return date.toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' });
-        }
+﻿/** 时间戳或日期字符串 → zh-CN 日期显示（委托 ShopUtils.formatDate） */
+        const formatDate = (ts) => ShopUtils.formatDate(ts, '--');
+
+        /** HTML 转义别名（委托 ShopUtils.escapeHtml） */
+        const escHtml = ShopUtils.escapeHtml;
 
         // ================================================================
-        // 统一错误码映射与提示语义（FR-8, FR-10, NFR-3, NFR-4）
-        // 与 shop.js 保持一致的错误处理体系
+        // 错误处理委托给 ErrorPresenter (core/error-presenter.js)
         // ================================================================
 
         /**
-         * 统一错误码映射表：将后端 HTTP 状态码/业务 code 映射为用户友好提示
-         * 商店域关键接口错误响应统一出口
-         */
-        const ERROR_CODE_MAP = {
-            // HTTP 状态码
-            0:   { title: '成功', message: '操作成功', type: 'success' },
-            400: { title: '参数错误', message: '请求参数有误，请检查后重试。', type: 'error' },
-            401: { title: '未登录', message: '请先登录以继续操作。', type: 'warn', action: 'login' },
-            403: { title: '无权限', message: '您没有执行此操作的权限。', type: 'error' },
-            404: { title: '未找到', message: '请求的资源不存在或已被删除。', type: 'error' },
-            409: { title: '操作冲突', message: '资源已存在或状态冲突，请稍后重试。', type: 'warn' },
-            500: { title: '服务异常', message: '服务器出现问题，请稍后重试。', type: 'error' },
-            502: { title: '服务异常', message: '服务暂时不可用，请稍后重试。', type: 'error' },
-            503: { title: '服务繁忙', message: '系统繁忙，请稍后重试。', type: 'error' },
-            // 业务错误码（1000+）
-            1001: { title: '余额不足', message: '您的账户余额不足，请先充值。', type: 'warn' },
-            1002: { title: '已购买', message: '您已拥有该资产，无需重复购买。', type: 'info' },
-            1003: { title: '库存不足', message: '该商品已售罄，请选择其他方案。', type: 'warn' },
-            1004: { title: '已下架', message: '该商品已下架，暂时无法购买。', type: 'warn' },
-            // 网络相关
-            'NETWORK_ERROR': { title: '网络错误', message: '网络连接异常，请检查网络后重试。', type: 'error' },
-            'TIMEOUT':       { title: '请求超时', message: '服务响应超时，请稍后重试。', type: 'error' },
-            'PARSE_ERROR':   { title: '数据异常', message: '服务返回数据格式错误，请稍后重试。', type: 'error' },
-            'UNKNOWN':       { title: '未知错误', message: '发生未知错误，请稍后重试。', type: 'error' }
-        };
-
-        /**
-         * 根据错误码/HTTP状态获取统一错误提示
-         * @param {number|string} code - HTTP 状态码或业务错误码
-         * @param {string} [fallbackMsg] - 后端返回的原始消息（兜底文案）
-         * @returns {{ title: string, message: string, type: string, action?: string }}
-         */
-        function getErrorInfo(code, fallbackMsg) {
-            const mapped = ERROR_CODE_MAP[code] || ERROR_CODE_MAP['UNKNOWN'];
-            return {
-                title: mapped.title,
-                message: fallbackMsg || mapped.message,
-                type: mapped.type,
-                action: mapped.action
-            };
-        }
-
-        /**
-         * 显示统一错误消息弹窗（使用 showMsgBox）
-         * @param {number|string} code - 错误码
-         * @param {string} [serverMessage] - 服务端返回的错误消息
+         * 显示统一错误消息弹窗（委托给 ErrorPresenter）
+         * @param {number|string} code
+         * @param {string} [serverMessage]
          */
         function showUnifiedError(code, serverMessage) {
-            const info = getErrorInfo(code, serverMessage);
-            showMsgBox({
-                title: info.title,
-                message: info.message,
-                type: info.type,
-                onConfirm: info.action === 'login' ? () => { location.href = '/login'; } : null
-            });
+            if (window.ErrorPresenter) {
+                ErrorPresenter.notifyError(code, serverMessage);
+            } else {
+                var msg = serverMessage || String(code);
+                alert(msg);
+                if (code === 401) location.href = '/login';
+            }
         }
 
         // ================================================================
@@ -238,8 +191,15 @@
             };
         }
 
-        // 未登录直接跳转登录页
-        const token = localStorage.getItem('kax_login_token');
+        // 未登录直接跳转登录页（通过 AuthState 或 localStorage 获取 token）
+        function getToken() {
+            if (window.AuthState && typeof window.AuthState.getToken === 'function') {
+                return window.AuthState.getToken();
+            }
+            return localStorage.getItem('kax_web_token') || localStorage.getItem('kax_login_token') || null;
+        }
+
+        const token = getToken();
         if (!token) {
             window.location.href = '/login';
         }
@@ -326,56 +286,32 @@
             // ── 请求层：从后端获取详情 ──────────────────────────────────────
             let vm = null;
             try {
-                const resp = await fetch(`/api/asset/detail/${productId}`, {
-                    headers: { 'Authorization': 'Bearer ' + (localStorage.getItem('kax_login_token') || '') }
-                });
-                
-                // 根据 HTTP 状态码提供精确错误提示
-                if (!resp.ok) {
-                    const errorInfo = getErrorInfo(resp.status);
-                    console.error('[shop_detail] 获取详情失败, HTTP', resp.status);
-                    removeSkeleton();
-                    showDetailError(errorInfo.title, errorInfo.message);
-                    return;
-                }
-                
-                let json;
-                try {
-                    json = await resp.json();
-                } catch (parseErr) {
-                    const errorInfo = getErrorInfo('PARSE_ERROR');
-                    console.error('[shop_detail] JSON 解析失败', parseErr);
-                    removeSkeleton();
-                    showDetailError(errorInfo.title, errorInfo.message);
-                    return;
-                }
-                
+                const json = await ApiClient.requestJson(`/api/asset/detail/${productId}`);
+
                 // 处理业务错误码
                 if (!json || (json.code !== 0 && json.code !== undefined)) {
-                    const errorInfo = getErrorInfo(json?.code || 'UNKNOWN', json?.message);
+                    const info = ErrorPresenter.resolveError(json?.code || 'UNKNOWN', json?.message);
                     console.error('[shop_detail] 业务错误, code:', json?.code);
                     removeSkeleton();
-                    showDetailError(errorInfo.title, errorInfo.message);
+                    showDetailError(info.title, info.message);
                     return;
                 }
-                
+
                 if (!json.data) {
-                    const errorInfo = getErrorInfo(404);
+                    const info = ErrorPresenter.resolveError(404);
                     removeSkeleton();
-                    showDetailError(errorInfo.title, '商品数据为空，可能已被删除。');
+                    showDetailError(info.title, '商品数据为空，可能已被删除。');
                     return;
                 }
-                
+
                 // ── 映射层：DTO → ShopDetailVM ──────────────────────────────
                 vm = mapDetailToVM(json.data);
             } catch (e) {
                 console.error('[shop_detail] 获取详情失败', e);
                 removeSkeleton();
-                // 网络异常
-                const errorInfo = e.name === 'TypeError' && e.message.includes('fetch')
-                    ? getErrorInfo('NETWORK_ERROR')
-                    : getErrorInfo('UNKNOWN');
-                showDetailError(errorInfo.title, errorInfo.message);
+                const code = (e && e.apiCode) ? e.apiCode : 'UNKNOWN';
+                const info = ErrorPresenter.resolveError(code);
+                showDetailError(info.title, info.message);
                 return;
             }
 
@@ -720,20 +656,30 @@
             // ── Tab 页签切换 ──
             const tabs   = document.querySelectorAll('.detail-tab[data-tab]');
             const panels = document.querySelectorAll('.detail-tab-panel');
-            tabs.forEach(tab => {
-                tab.addEventListener('click', () => {
-                    const target = tab.dataset.tab;
-                    tabs.forEach(t => {
-                        t.classList.toggle('active', t === tab);
-                        t.setAttribute('aria-selected', t === tab ? 'true' : 'false');
-                    });
-                    panels.forEach(p => {
-                        const isTarget = p.id === 'panel-' + target;
-                        p.classList.toggle('active', isTarget);
-                        if (isTarget) p.removeAttribute('hidden'); else p.setAttribute('hidden', '');
-                    });
+
+            function activateDetailTab(target) {
+                tabs.forEach(t => {
+                    t.classList.toggle('active', t.dataset.tab === target);
+                    t.setAttribute('aria-selected', t.dataset.tab === target ? 'true' : 'false');
                 });
+                panels.forEach(p => {
+                    const isTarget = p.id === 'panel-' + target;
+                    p.classList.toggle('active', isTarget);
+                    if (isTarget) p.removeAttribute('hidden'); else p.setAttribute('hidden', '');
+                });
+                history.replaceState(null, '', '#' + target);
+            }
+
+            tabs.forEach(tab => {
+                tab.addEventListener('click', () => activateDetailTab(tab.dataset.tab));
             });
+
+            // 从 URL hash 恢复 Tab 状态
+            const hashTab = location.hash.slice(1);
+            const validTabs = Array.from(tabs).map(t => t.dataset.tab);
+            if (hashTab && validTabs.includes(hashTab)) {
+                activateDetailTab(hashTab);
+            }
 
             // ── 购买面板元素 ──
             const purchaseBtn = document.getElementById('purchaseBtn');
@@ -833,7 +779,7 @@
                 }
 
                 const vm = window.currentProduct;
-                const token = localStorage.getItem('kax_login_token');
+                const token = getToken();
 
                 if (!token) {
                     showUnifiedError(401);
@@ -844,30 +790,12 @@
                 purchaseBtn.innerHTML = '<span class="material-icons" style="font-size:18px;vertical-align:middle;">hourglass_top</span> 处理中…';
 
                 try {
-                    const resp = await fetch('/api/shop/purchase', {
-                        method: 'POST',
-                        headers: {
-                            'Authorization': 'Bearer ' + token,
-                            'Content-Type': 'application/json'
-                        },
-                        // 请求体使用契约字段 assetId（design.md 12.2 节）
-                        body: JSON.stringify({
-                            assetId: vm.assetId,
-                            priceId: selectedPriceId
-                        })
+                    const data = await ApiClient.requestJsonPost('/api/shop/purchase', {
+                        assetId: vm.assetId,
+                        priceId: selectedPriceId
                     });
 
-                    let data;
-                    try {
-                        data = await resp.json();
-                    } catch (parseErr) {
-                        showUnifiedError('PARSE_ERROR');
-                        purchaseBtn.innerHTML = '<span class="material-icons">shopping_bag</span> 立即购买';
-                        purchaseBtn.disabled = false;
-                        return;
-                    }
-
-                    if (resp.ok && data.code === 0) {
+                    if (data.code === 0) {
                         purchaseBtn.innerHTML = '<span class="material-icons" style="font-size:18px;vertical-align:middle;">check_circle</span> 购买成功';
                         showMsgBox({
                             title: '购买成功',
@@ -876,15 +804,13 @@
                             onConfirm: () => { location.reload(); }
                         });
                     } else {
-                        // 使用统一错误码映射
-                        const errorCode = data.code || resp.status;
-                        showUnifiedError(errorCode, data.message);
+                        showUnifiedError(data.code || 'UNKNOWN', data.message);
                         purchaseBtn.innerHTML = '<span class="material-icons">shopping_bag</span> 立即购买';
                         purchaseBtn.disabled = false;
                     }
                 } catch (e) {
                     console.error('购买失败', e);
-                    showUnifiedError('NETWORK_ERROR');
+                    showUnifiedError((e && e.apiCode) || 'NETWORK_ERROR');
                     purchaseBtn.innerHTML = '<span class="material-icons">shopping_bag</span> 立即购买';
                     purchaseBtn.disabled = false;
                 }
@@ -893,7 +819,7 @@
             // 收藏按钮 — 使用后端 API（登录用户），未登录则跳转登录
             favBtn.addEventListener('click', async () => {
                 const vm = window.currentProduct;
-                const token = localStorage.getItem('kax_login_token');
+                const token = getToken();
                 const icon = favBtn.querySelector('.material-icons');
 
                 if (!token) {
@@ -904,37 +830,21 @@
                 try {
                     const isActive = favBtn.classList.contains('active');
                     if (!isActive) {
-                        const resp = await fetch('/api/user/favorites', {
-                            method: 'POST',
-                            headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ assetId: vm.assetId })
-                        });
-                        if (resp.ok) {
-                            const body = await resp.json();
-                            if (body.code === 0 || body.code === undefined) {
-                                favBtn.classList.add('active');
-                                icon.textContent = 'favorite';
-                            } else {
-                                showUnifiedError(body.code, body.message);
-                            }
+                        const body = await ApiClient.requestJsonPost('/api/user/favorites', { assetId: vm.assetId });
+                        if (body.code === 0 || body.code === undefined) {
+                            favBtn.classList.add('active');
+                            icon.textContent = 'favorite';
                         } else {
-                            showUnifiedError(resp.status);
+                            showUnifiedError(body.code, body.message);
                         }
                     } else {
-                        const resp = await fetch(`/api/user/favorites/${vm.assetId}`, {
-                            method: 'DELETE',
-                            headers: { 'Authorization': 'Bearer ' + token }
-                        });
-                        if (resp.ok) {
-                            favBtn.classList.remove('active');
-                            icon.textContent = 'favorite_border';
-                        } else {
-                            showUnifiedError(resp.status);
-                        }
+                        await ApiClient.request(`/api/user/favorites/${vm.assetId}`, { method: 'DELETE' });
+                        favBtn.classList.remove('active');
+                        icon.textContent = 'favorite_border';
                     }
                 } catch (e) {
                     console.error('收藏操作失败', e);
-                    showUnifiedError('NETWORK_ERROR');
+                    showUnifiedError((e && e.apiCode) || 'NETWORK_ERROR');
                 }
             });
 
@@ -1000,16 +910,11 @@
             const vm = window.currentProduct;
             const favBtn = document.getElementById('favBtn');
             const icon = favBtn && favBtn.querySelector('.material-icons');
-            const token = localStorage.getItem('kax_login_token');
 
-            if (!token || !vm) return;
+            if (!vm) return;
 
             try {
-                const resp = await fetch('/api/user/favorites', {
-                    headers: { 'Authorization': 'Bearer ' + token }
-                });
-                if (!resp.ok) return;
-                const j = await resp.json();
+                const j = await ApiClient.requestJson('/api/user/favorites');
                 // 契约：data 为 number[]（资产 ID 数组）
                 const raw = (j && j.code === 0 && Array.isArray(j.data)) ? j.data : [];
                 const favSet = new Set(raw.map(id => Number(id)).filter(n => !isNaN(n)));
@@ -1018,6 +923,7 @@
                     if (icon) icon.textContent = 'favorite';
                 }
             } catch (e) {
+                // 401 由 ApiClient 自动处理；其他静默降级
                 console.warn('[shop_detail] 检查收藏状态失败', e);
             }
         }
@@ -1025,15 +931,10 @@
         // 更新购物车计数（/api/user/cart 返回 CartItem[] — design.md 附录 D）
         async function updateCartBadge() {
             const cartCountEl = document.getElementById('cartCount');
-            const token = localStorage.getItem('kax_login_token');
-            if (!cartCountEl || !token) return;
+            if (!cartCountEl) return;
 
             try {
-                const resp = await fetch('/api/user/cart', {
-                    headers: { 'Authorization': 'Bearer ' + token }
-                });
-                if (!resp.ok) return;
-                const j = await resp.json();
+                const j = await ApiClient.requestJson('/api/user/cart');
                 // 契约：data 为 CartItem[]，每项包含 assetId/priceId/quantity
                 if (j && j.code === 0 && Array.isArray(j.data)) {
                     const count = j.data.reduce((sum, item) => sum + Number(item.quantity || 1), 0);
@@ -1198,27 +1099,9 @@
             if (!grid) return;
 
             try {
-                const resp = await fetch(`/api/asset/related/${currentId}?top=4`, {
-                    headers: { 'Authorization': 'Bearer ' + (localStorage.getItem('kax_login_token') || '') }
-                });
-                
-                if (!resp.ok) {
-                    // 相关推荐加载失败不阻断主流程，仅展示空态
-                    console.warn('[shop_detail] 加载相关推荐失败, HTTP', resp.status);
-                    grid.innerHTML = '<div style="color:var(--text-muted,#888);padding:12px;text-align:center;">暂无相关推荐</div>';
-                    return;
-                }
-
-                let json;
-                try {
-                    json = await resp.json();
-                } catch (parseErr) {
-                    console.warn('[shop_detail] 相关推荐 JSON 解析失败', parseErr);
-                    return;
-                }
+                const json = await ApiClient.requestJson(`/api/asset/related/${currentId}?top=4`);
 
                 if (!json || (json.code !== 0 && json.code !== undefined) || !Array.isArray(json.data) || json.data.length === 0) {
-                    // 空结果展示空态
                     grid.innerHTML = '<div style="color:var(--text-muted,#888);padding:12px;text-align:center;">暂无相关推荐</div>';
                     return;
                 }
@@ -1243,7 +1126,6 @@
                 }).join('');
             } catch (e) {
                 console.warn('[shop_detail] 加载相关推荐失败', e);
-                // 网络异常不阻断主流程
                 grid.innerHTML = '<div style="color:var(--text-muted,#888);padding:12px;text-align:center;">加载失败</div>';
             }
         }
@@ -1255,19 +1137,6 @@
             initPage();
         }
 
-        /** 解析 JSON 字符串，失败返回 null */
-        function tryParseJson(str) {
-            if (!str || typeof str !== 'string') return null;
-            try { return JSON.parse(str); } catch { return null; }
-        }
-
-        /** HTML 转义 */
-        function escHtml(str) {
-            const div = document.createElement('div');
-            div.textContent = String(str);
-            return div.innerHTML.replace(/"/g, '&quot;');
-        }
-
         // ================================================================
         // System 权限检测与编辑模式
         // ================================================================
@@ -1277,17 +1146,8 @@
 
         /** 检查当前用户是否为 System 权限组 */
         async function checkSystemPermission() {
-            const token = localStorage.getItem('kax_login_token');
-            if (!token) { console.log('[编辑模式] 未检测到登录令牌，跳过权限检测'); return; }
-
             try {
-                const resp = await fetch('/api/user/verify/account', {
-                    method: 'POST',
-                    headers: { 'Authorization': 'Bearer ' + token }
-                });
-                if (!resp.ok) { console.warn('[编辑模式] 权限接口返回非200:', resp.status); return; }
-
-                const data = await resp.json();
+                const data = await ApiClient.requestJson('/api/user/verify/account', { method: 'POST' });
                 const permGroup = data.permissionGroup ?? data.permission_group ?? 999;
                 console.log('[编辑模式] 权限检测结果: permissionGroup =', permGroup);
 
@@ -1297,6 +1157,7 @@
                     initEditMode();
                 }
             } catch (e) {
+                // 401 由 ApiClient 自动处理（未登录则静默跳过编辑模式）
                 console.warn('[编辑模式] 权限检测失败', e);
             }
         }
@@ -1551,12 +1412,6 @@
                 return;
             }
 
-            const token = localStorage.getItem('kax_login_token');
-            if (!token) {
-                showEditToast('error', '登录已过期，请重新登录');
-                return;
-            }
-
             const vm = window.currentProduct;
             const saveBtn = document.getElementById('editSaveBtn');
             saveBtn.disabled = true;
@@ -1581,23 +1436,16 @@
                     if (apiKey) body[apiKey] = val;
                 }
 
-                const resp = await fetch('/api/asset/admin/update', {
-                    method: 'POST',
-                    headers: {
-                        'Authorization': 'Bearer ' + token,
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify(body)
-                });
+                const data = await ApiClient.requestJsonPost('/api/asset/admin/update', body);
 
-                const data = await resp.json();
-
-                if (resp.ok) {
+                if (!data || data.code === 0 || data.code === undefined) {
                     showEditToast('success', '保存成功！');
                     window._editedFields = {};
                     updateSaveBtnState();
                 } else {
                     showEditToast('error', '保存失败: ' + (data.message || '未知错误'));
+                    saveBtn.disabled = false;
+                    saveBtn.innerHTML = '<span class="material-icons">save</span> 保存更改';
                 }
             } catch (e) {
                 console.error('保存失败', e);

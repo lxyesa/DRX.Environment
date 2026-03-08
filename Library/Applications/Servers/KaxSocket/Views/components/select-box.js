@@ -137,6 +137,14 @@
       :host([size="headerless"]) .label,
       :host([size="headerless"]) .label-divider { display: none; }
       :host([size="headerless"]) .field { padding: 6px 10px; }
+
+      /* size 档位：small-headerless — small 尺寸 + 无 label */
+      :host([size="small-headerless"]) .label,
+      :host([size="small-headerless"]) .label-divider { display: none; }
+      :host([size="small-headerless"]) .field { padding: 6px 8px; }
+      :host([size="small-headerless"]) select { font-size: 0.85rem; padding: 4px 24px 4px 0; }
+      :host([size="small-headerless"]) .field-icon { font-size: 15px; margin-right: 6px; }
+      :host([size="small-headerless"]) .chevron { width: 14px; height: 14px; }
     </style>
     <div class="field" part="field">
       <label class="label" part="label"></label>

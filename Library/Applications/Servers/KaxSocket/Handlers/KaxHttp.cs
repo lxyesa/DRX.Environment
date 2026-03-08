@@ -46,13 +46,23 @@ public partial class KaxHttp
 
     static KaxHttp()
     {
-        // 配置 JWT
+        var jwtSecretKey = Program.Config.JwtSecretKey;
+        var jwtIssuer = Program.Config.JwtIssuer;
+        var jwtAudience = Program.Config.JwtAudience;
+        var jwtExpirationDays = Program.Config.JwtExpirationDays;
+
+        if (string.IsNullOrWhiteSpace(jwtSecretKey))
+        {
+            jwtSecretKey = Convert.ToBase64String(RandomNumberGenerator.GetBytes(48));
+            Logger.Warn("[Config] JWT 密钥为空，已使用进程内随机密钥；重启后旧 JWT 将失效。请检查 Program.Config.JwtSecretKey。");
+        }
+
         JwtHelper.Configure(new JwtHelper.JwtConfig
         {
-            SecretKey = "A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6",
-            Issuer = "KaxSocket",
-            Audience = "KaxUsers",
-            Expiration = TimeSpan.FromDays(7) // 7 天过期
+            SecretKey = jwtSecretKey,
+            Issuer = jwtIssuer,
+            Audience = jwtAudience,
+            Expiration = TimeSpan.FromDays(jwtExpirationDays)
         });
 
         ApiGuard.Configure((token) =>
@@ -124,6 +134,51 @@ public partial class KaxHttp
             sb.Append(chars[(int)(v % (uint)chars.Length)]);
         }
         return sb.ToString();
+    }
+
+    private sealed class SmtpRuntimeConfig
+    {
+        public string SenderAddress { get; init; } = string.Empty;
+        public string AuthCode { get; init; } = string.Empty;
+        public string Host { get; init; } = "smtp.qq.com";
+        public int Port { get; init; } = 587;
+        public bool EnableSsl { get; init; } = true;
+    }
+
+    private static SmtpRuntimeConfig? ResolveSmtpRuntimeConfig(string scenario)
+    {
+        var senderAddress = Program.Config.SmtpEmail?.Trim() ?? string.Empty;
+        var authCode = Program.Config.SmtpAuthCode?.Trim() ?? string.Empty;
+        var host = Program.Config.SmtpHost ?? "smtp.qq.com";
+        var port = Program.Config.SmtpPort;
+        var enableSsl = Program.Config.SmtpEnableSsl;
+
+        if (string.IsNullOrWhiteSpace(senderAddress) || string.IsNullOrWhiteSpace(authCode))
+        {
+            Logger.Warn($"[Config][{scenario}] SMTP 配置缺失：请在 Program.Config 中设置 SmtpEmail 与 SmtpAuthCode。");
+            return null;
+        }
+
+        if (string.IsNullOrWhiteSpace(host))
+        {
+            host = "smtp.qq.com";
+            Logger.Warn($"[Config][{scenario}] SmtpHost 为空，已回退到 smtp.qq.com。");
+        }
+
+        if (port <= 0)
+        {
+            port = 587;
+            Logger.Warn($"[Config][{scenario}] SmtpPort 配置无效: {Program.Config.SmtpPort}，已回退到 587。");
+        }
+
+        return new SmtpRuntimeConfig
+        {
+            SenderAddress = senderAddress,
+            AuthCode = authCode,
+            Host = host,
+            Port = port,
+            EnableSsl = enableSsl
+        };
     }
 
     #endregion

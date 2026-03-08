@@ -180,13 +180,13 @@
             // 页面加载时：若本地存在 token 且能通过验证，则视为已登录并重定向到首页
             (async function checkTokenRedirect() {
                 try {
-                    var token = localStorage.getItem('kax_login_token');
+                    var token = localStorage.getItem('kax_web_token') || localStorage.getItem('kax_login_token');
                     if (!token) return; // 无 token，继续显示登录页
 
                     var controller = new AbortController();
                     var timeoutId = setTimeout(function () { controller.abort(); }, 6000);
 
-                    var resp = await fetch('/api/token/test', {
+                    var resp = await fetch('/api/user/verify/account', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
                         signal: controller.signal
@@ -202,6 +202,7 @@
                     if (resp.status === 401) {
                         // token 无效或过期，清理并留在当前页
                         try { localStorage.removeItem('kax_login_token'); } catch (_) { }
+                        try { localStorage.removeItem('kax_web_token'); } catch (_) { }
                     }
                     // 其他情况不做处理，保持在登录页以便用户登录
                 } catch (err) {
@@ -252,9 +253,11 @@
                     if (resp.status === 200) {
                         let json = {};
                         try { json = JSON.parse(text); } catch { }
-                        var token = json.login_token || null;
+                        // Web 端优先保存 web_token；客户端登录时回退到 client_token。
+                        var token = json.web_token || json.client_token || null;
                         if (token) {
                             try { localStorage.setItem('kax_login_token', token); } catch { }
+                            try { localStorage.setItem('kax_web_token', token); } catch { }
                         }
 
                         window.location.href = postLoginRedirect;

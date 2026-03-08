@@ -161,6 +161,236 @@
     border-radius: 4px;
 }
 
+/* ================================================================
+   用户详情弹窗 (user-rv-*)
+   ================================================================ */
+
+/* 表格行可点击 */
+.manage-users-table tbody tr {
+    cursor: pointer;
+    transition: background .14s ease;
+}
+
+.manage-users-table tbody tr:active {
+    background: rgba(99, 140, 255, 0.06);
+}
+
+/* 弹窗尺寸 */
+.user-rv-modal {
+    max-width: 860px !important;
+    max-height: 85vh !important;
+}
+
+.user-rv-body {
+    min-height: 340px;
+}
+
+.user-rv-sidebar {
+    width: 210px;
+}
+
+.user-rv-sidebar .rv-info-list {
+    padding: 16px 14px 12px;
+}
+
+.user-rv-panels {
+    overflow-y: auto;
+}
+
+.user-rv-footer {
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.user-rv-footer .rv-footer-author {
+    flex: 1;
+    min-width: 0;
+}
+
+/* 概要面板 */
+.user-overview-section {
+    margin-bottom: 16px;
+}
+
+.user-overview-section-title {
+    font-size: 0.74rem;
+    font-weight: 700;
+    color: var(--dev-text-muted);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+}
+
+.user-overview-bio {
+    font-size: 0.88rem;
+    color: var(--dev-text-secondary);
+    line-height: 1.75;
+    padding: 12px 14px;
+    background: var(--dev-surface-soft);
+    border: 1px solid var(--dev-line-soft);
+    border-radius: 6px;
+}
+
+.user-overview-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.user-overview-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-size: 0.76rem;
+    font-weight: 600;
+    border: 1px solid transparent;
+}
+
+.user-ban-banner {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 12px 14px;
+    background: rgba(239, 68, 68, 0.07);
+    border: 1px solid rgba(239, 68, 68, 0.2);
+    border-radius: 6px;
+    margin-bottom: 14px;
+}
+
+.user-ban-banner .material-icons {
+    font-size: 18px;
+    color: #f87171;
+    flex-shrink: 0;
+    margin-top: 1px;
+}
+
+.user-ban-banner p {
+    font-size: 0.84rem;
+    color: rgba(239, 68, 68, 0.9);
+    line-height: 1.55;
+    margin: 0;
+}
+
+/* 数据面板 */
+.user-stats-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+}
+
+.user-stat-card {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 14px 16px;
+    background: var(--dev-surface-soft);
+    border: 1px solid var(--dev-line-soft);
+    border-radius: 6px;
+}
+
+.user-stat-label {
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: var(--dev-text-muted);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+.user-stat-value {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: var(--dev-text-primary);
+    line-height: 1;
+}
+
+/* 操作面板 */
+.user-action-group {
+    margin-bottom: 18px;
+}
+
+.user-action-group-title {
+    font-size: 0.76rem;
+    font-weight: 700;
+    color: var(--dev-text-muted);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    margin-bottom: 10px;
+}
+
+.user-action-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+    flex-wrap: wrap;
+}
+
+/* ---------- 操作面板控件高度统一 ---------- */
+/* 所有控件对齐到同一行高，通过各组件的 --field-height / height 控制 */
+.user-action-row {
+    align-items: stretch;
+    min-height: 36px;
+}
+
+.user-action-row select-box,
+.user-action-row input-box {
+    --dev-radius: 4px;
+    --field-height: 100%;
+    --field-min-height: 36px;
+    height: 36px;
+}
+
+.user-action-permission-select {
+    width: 160px;
+    flex: 0 0 160px;
+}
+
+.user-action-gold-amount {
+    width: 180px;
+    flex: 0 0 180px;
+}
+
+.user-action-gold-reason {
+    flex: 1;
+    min-width: 140px;
+}
+
+
+.user-action-btn {
+    min-width: 96px;
+}
+
+/* 封禁弹窗字段间距 */
+.user-ban-field {
+    margin-bottom: 14px;
+}
+
+.user-ban-field:last-child {
+    margin-bottom: 0;
+}
+
+/* 响应式 */
+@media (max-width: 700px) {
+    .user-rv-modal {
+        max-width: 100% !important;
+    }
+
+    .user-rv-body {
+        flex-direction: column;
+    }
+
+    .user-rv-sidebar {
+        width: 100%;
+        border-right: none;
+        border-bottom: 1px solid var(--dev-line-soft);
+    }
+
+    .user-stats-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
 @media (max-width: 980px) {
     .manage-users-filter-grid {
         grid-template-columns: 1fr;

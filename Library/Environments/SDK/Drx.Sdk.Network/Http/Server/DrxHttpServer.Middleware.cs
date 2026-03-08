@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -18,11 +17,17 @@ namespace Drx.Sdk.Network.Http
     /// 线程安全模型：
     ///   - _middlewares 受 _middlewareCacheLock 保护（读写均加锁，但中间件注册是低频操作）
     ///   - _cachedSortedMiddlewares 是不可变快照，运行时读取无锁
-    ///   - _pathMiddlewareCache 使用 ConcurrentDictionary，线程安全
+    ///   - 路径缓存由 _cacheProvider.MiddlewarePath 管理，统一容量与淘汰策略
     ///   - _middlewareCounter 使用 Interlocked 原子操作
     /// </summary>
     public partial class DrxHttpServer
     {
+        /// <summary>
+        /// 中间件路径缓存版本号。
+        /// 当中间件列表快照重建时递增，用于让旧缓存键自动失效。
+        /// </summary>
+        private int _middlewarePathCacheVersion = 0;
+
         /// <summary>
         /// 添加中间件
         /// </summary>
@@ -96,13 +101,6 @@ namespace Drx.Sdk.Network.Http
         }
 
         /// <summary>
-        /// 路径级中间件列表缓存，避免每次请求都重新过滤和分配列表。
-        /// 设置上限防止动态路径参数导致的无限增长。
-        /// </summary>
-        private readonly ConcurrentDictionary<string, List<MiddlewareEntry>> _pathMiddlewareCache = new(StringComparer.OrdinalIgnoreCase);
-        private const int MaxPathMiddlewareCacheSize = 2048;
-
-        /// <summary>
         /// 执行中间件管道
         /// </summary>
         private async Task<HttpResponse?> ExecuteMiddlewarePipelineAsync(HttpListenerContext context, HttpRequest request, Func<HttpRequest, Task<HttpResponse?>> finalHandler)
@@ -110,6 +108,7 @@ namespace Drx.Sdk.Network.Http
             var rawPath = context.Request.Url?.AbsolutePath ?? "/";
 
             List<MiddlewareEntry> sortedMiddlewares;
+            int middlewarePathCacheVersion;
             lock (_middlewareCacheLock)
             {
                 if (_cachedSortedMiddlewares == null)
@@ -127,27 +126,28 @@ namespace Drx.Sdk.Network.Http
                         return a.AddOrder.CompareTo(b.AddOrder);
                     });
                     _cachedSortedMiddlewares = applicableMiddlewares;
-                    _pathMiddlewareCache.Clear();
+                    _middlewarePathCacheVersion = unchecked(_middlewarePathCacheVersion + 1);
                 }
                 sortedMiddlewares = _cachedSortedMiddlewares;
+                middlewarePathCacheVersion = _middlewarePathCacheVersion;
             }
 
-            if (!_pathMiddlewareCache.TryGetValue(rawPath, out var applicableForPath))
-            {
-                applicableForPath = new List<MiddlewareEntry>(sortedMiddlewares.Count);
-                foreach (var m in sortedMiddlewares)
+            var applicableForPath = _cacheProvider.MiddlewarePath.GetOrSet<List<MiddlewareEntry>>(
+                $"v{middlewarePathCacheVersion}:{rawPath}",
+                (_, _) =>
                 {
-                    if (m.Path == null || rawPath.StartsWith(m.Path, StringComparison.OrdinalIgnoreCase))
+                    var middlewares = new List<MiddlewareEntry>(sortedMiddlewares.Count);
+                    foreach (var m in sortedMiddlewares)
                     {
-                        applicableForPath.Add(m);
+                        if (m.Path == null || rawPath.StartsWith(m.Path, StringComparison.OrdinalIgnoreCase))
+                        {
+                            middlewares.Add(m);
+                        }
                     }
+
+                    return middlewares;
                 }
-                // 防止动态路径参数（如 /user/123）导致缓存无限增长
-                if (_pathMiddlewareCache.Count < MaxPathMiddlewareCacheSize)
-                {
-                    _pathMiddlewareCache.TryAdd(rawPath, applicableForPath);
-                }
-            }
+            );
 
             Func<HttpRequest, Task<HttpResponse?>> pipeline = finalHandler;
             for (int i = applicableForPath.Count - 1; i >= 0; i--)
