@@ -1,7 +1,0 @@
-{
-  "name": "demo-ts",
-  "private": true,
-  "devDependencies": {
-    "typescript": "^5.8.3"
-  }
-}

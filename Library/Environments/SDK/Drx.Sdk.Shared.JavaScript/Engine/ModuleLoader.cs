@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
+using System.Threading.Tasks;
 using Drx.Sdk.Shared.JavaScript.Abstractions;
 
 namespace Drx.Sdk.Shared.JavaScript.Engine
@@ -24,22 +25,43 @@ namespace Drx.Sdk.Shared.JavaScript.Engine
         private readonly ModuleResolver _resolver;
         private readonly ModuleCache _cache;
         private readonly ModuleRuntimeOptions _options;
+        private readonly InteropBridge _interop;
+        private readonly ImportSecurityPolicy? _securityPolicy;
+        private readonly ModuleDiagnosticCollector? _diagnosticCollector;
 
         /// <summary>
         /// 加载过程中产生的诊断事件（仅 debug 模式收集）。
         /// </summary>
         public IReadOnlyList<ModuleLoaderEvent> DiagnosticEvents => _diagnosticEvents;
 
+        /// <summary>
+        /// 统一诊断收集器（若已注入），供外部获取全链路事件。
+        /// </summary>
+        public ModuleDiagnosticCollector? DiagnosticCollector => _diagnosticCollector;
+
+        /// <summary>
+        /// 互操作桥接层实例，供外部查看诊断事件。
+        /// </summary>
+        public InteropBridge Interop => _interop;
+
+        /// <summary>
+        /// 安全策略实例（若已注入），供外部读取审计日志。
+        /// </summary>
+        public ImportSecurityPolicy? SecurityPolicy => _securityPolicy;
+
         private readonly List<ModuleLoaderEvent> _diagnosticEvents = new();
 
         /// <summary>
         /// 初始化 <see cref="ModuleLoader"/>。
         /// </summary>
-        public ModuleLoader(ModuleResolver resolver, ModuleCache cache, ModuleRuntimeOptions options)
+        public ModuleLoader(ModuleResolver resolver, ModuleCache cache, ModuleRuntimeOptions options, ImportSecurityPolicy? securityPolicy = null, ModuleDiagnosticCollector? diagnosticCollector = null)
         {
             _resolver = resolver ?? throw new ArgumentNullException(nameof(resolver));
             _cache = cache ?? throw new ArgumentNullException(nameof(cache));
             _options = options ?? throw new ArgumentNullException(nameof(options));
+            _interop = new InteropBridge(options, diagnosticCollector);
+            _securityPolicy = securityPolicy;
+            _diagnosticCollector = diagnosticCollector;
         }
 
         /// <summary>
@@ -73,6 +95,115 @@ namespace Drx.Sdk.Shared.JavaScript.Engine
 
             var loadingStack = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             return LoadModuleRecursive(resolvedEntry.ResolvedPath, null, executeModule, loadingStack, depth: 0);
+        }
+
+        /// <summary>
+        /// 异步动态导入模块（对应 JS 的 <c>import()</c> 表达式）。
+        /// 复用统一的 <see cref="ModuleResolver"/>、<see cref="ModuleCache"/> 与 <see cref="InteropBridge"/>，
+        /// 错误模型与静态导入一致（<see cref="ModuleLoadException"/>）。
+        /// </summary>
+        /// <param name="specifier">导入标识符（相对路径 / 绝对路径 / 裸包名 / builtin）。</param>
+        /// <param name="fromFilePath">发起 import() 调用的文件路径（用于相对路径解析），可为 null。</param>
+        /// <param name="executeModule">执行模块源码并返回 namespace（由引擎层提供）。</param>
+        /// <returns>已加载的模块记录（含 namespace 与导出）。</returns>
+        public Task<ModuleRecord> DynamicImportAsync(
+            string specifier,
+            string? fromFilePath,
+            Func<string, string, object?> executeModule)
+        {
+            if (string.IsNullOrWhiteSpace(specifier))
+            {
+                throw new ArgumentException("动态导入 specifier 不能为空。", nameof(specifier));
+            }
+
+            if (executeModule is null)
+            {
+                throw new ArgumentNullException(nameof(executeModule));
+            }
+
+            EmitEvent("dynamic.import.start", specifier, new { from = fromFilePath });
+
+            return Task.Run(() =>
+            {
+                try
+                {
+                    // 1. 统一解析
+                    ModuleResolutionResult resolved;
+                    try
+                    {
+                        resolved = _resolver.Resolve(specifier, fromFilePath);
+                    }
+                    catch (ModuleResolutionException ex)
+                    {
+                        var loadEx = new ModuleLoadException(
+                            code: "PC_DYN_001",
+                            moduleUrl: specifier,
+                            phase: "dynamic-resolve",
+                            reason: $"动态导入解析失败：{ex.Reason}",
+                            hint: ex.Hint,
+                            innerException: ex);
+
+                        EmitEvent("dynamic.import.fail", specifier, new { phase = "resolve", reason = ex.Reason });
+                        throw loadEx;
+                    }
+
+                    if (resolved.ResolvedPath is null)
+                    {
+                        var loadEx = new ModuleLoadException(
+                            code: "PC_DYN_002",
+                            moduleUrl: specifier,
+                            phase: "dynamic-resolve",
+                            reason: $"动态导入无法解析 specifier '{specifier}'。",
+                            hint: fromFilePath is not null
+                                ? $"请确认相对于 '{fromFilePath}' 的路径是否正确。"
+                                : "请确认 specifier 是否正确。");
+
+                        EmitEvent("dynamic.import.fail", specifier, new { phase = "resolve", reason = "resolved path is null" });
+                        throw loadEx;
+                    }
+
+                    // 2. 复用递归加载（同步部分，共享缓存）
+                    var loadingStack = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    var record = LoadModuleRecursive(resolved.ResolvedPath, fromFilePath, executeModule, loadingStack, depth: 0);
+
+                    if (record.State == ModuleRecordState.Failed)
+                    {
+                        EmitEvent("dynamic.import.fail", specifier, new { phase = "load", cacheKey = record.CacheKey });
+                        throw record.Error ?? new ModuleLoadException(
+                            code: "PC_DYN_003",
+                            moduleUrl: resolved.ResolvedPath,
+                            phase: "dynamic-load",
+                            reason: "动态导入的模块处于 Failed 状态。");
+                    }
+
+                    EmitEvent("dynamic.import.end", specifier, new
+                    {
+                        resolvedPath = resolved.ResolvedPath,
+                        cacheKey = record.CacheKey,
+                        state = record.State.ToString(),
+                        cached = _cache.TryGet(record.CacheKey, out _)
+                    });
+
+                    return record;
+                }
+                catch (ModuleLoadException)
+                {
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    var loadEx = new ModuleLoadException(
+                        code: "PC_DYN_004",
+                        moduleUrl: specifier,
+                        phase: "dynamic-import",
+                        reason: $"动态导入异常：{ex.Message}",
+                        hint: "请检查 specifier 与目标模块。",
+                        innerException: ex);
+
+                    EmitEvent("dynamic.import.fail", specifier, new { phase = "unexpected", reason = ex.Message });
+                    throw loadEx;
+                }
+            });
         }
 
         /// <summary>
@@ -146,7 +277,27 @@ namespace Drx.Sdk.Shared.JavaScript.Engine
 
             try
             {
-                // 4. 读取源码
+                // 4a. 安全策略复查（对符号链接做完整验证）
+                if (_securityPolicy is not null)
+                {
+                    try
+                    {
+                        _securityPolicy.ValidateAccess(absolutePath, absolutePath, fromPath);
+                        EmitEvent("security.check.pass", cacheKey, new { path = absolutePath });
+                    }
+                    catch (ImportSecurityException secEx)
+                    {
+                        throw new ModuleLoadException(
+                            code: secEx.Code,
+                            moduleUrl: absolutePath,
+                            phase: "security-check",
+                            reason: secEx.Message,
+                            hint: secEx.Hint,
+                            innerException: secEx);
+                    }
+                }
+
+                // 4b. 读取源码
                 if (!File.Exists(absolutePath))
                 {
                     throw new ModuleLoadException(
@@ -296,6 +447,33 @@ namespace Drx.Sdk.Shared.JavaScript.Engine
             return null;
         }
 
+        /// <summary>
+        /// 获取依赖模块的导出，自动应用 ESM↔CJS 互操作包装。
+        /// 当导入方与目标模块类型不同时（如 ESM import CJS），返回经互操作转换后的 namespace。
+        /// </summary>
+        /// <param name="importerKind">导入方模块类型。</param>
+        /// <param name="dependencyCacheKey">依赖模块的缓存键。</param>
+        /// <param name="targetSource">依赖模块源码（CJS→ESM 时用于静态推导命名导出）。</param>
+        /// <returns>互操作结果，含方向、是否应用包装、最终导出字典。</returns>
+        /// <exception cref="InteropException">互操作语义错误时抛出（不隐式吞错）。</exception>
+        public InteropResult GetDependencyExports(
+            ModuleKind importerKind,
+            string dependencyCacheKey,
+            string? targetSource = null)
+        {
+            if (!_cache.TryGet(dependencyCacheKey, out var targetRecord) || targetRecord is null)
+            {
+                throw new ModuleLoadException(
+                    code: "PC_LOAD_006",
+                    moduleUrl: dependencyCacheKey,
+                    phase: "interop",
+                    reason: "依赖模块未在缓存中找到。",
+                    hint: "请确认依赖模块已先通过 LoadModuleGraph 加载。");
+            }
+
+            return _interop.ResolveInterop(importerKind, targetRecord, targetSource);
+        }
+
         private void EmitEvent(string eventName, string cacheKey, object? data)
         {
             if (!_options.EnableDebugLogs && !_options.EnableStructuredDebugEvents)
@@ -304,6 +482,31 @@ namespace Drx.Sdk.Shared.JavaScript.Engine
             }
 
             _diagnosticEvents.Add(new ModuleLoaderEvent(eventName, cacheKey, data));
+
+            // 向统一收集器推送（带类别分类）
+            if (_diagnosticCollector is not null)
+            {
+                var category = ClassifyEventCategory(eventName);
+                var severity = eventName.Contains("fail") || eventName.Contains("error")
+                    ? DiagnosticSeverity.Error
+                    : eventName.Contains("circular") || eventName.Contains("static-only")
+                        ? DiagnosticSeverity.Warning
+                        : DiagnosticSeverity.Debug;
+                _diagnosticCollector.Emit(eventName, category, severity, cacheKey, data);
+            }
+        }
+
+        private static DiagnosticCategory ClassifyEventCategory(string eventName)
+        {
+            if (eventName.StartsWith("cache.", StringComparison.Ordinal))
+                return DiagnosticCategory.Cache;
+            if (eventName.StartsWith("security.", StringComparison.Ordinal))
+                return DiagnosticCategory.Security;
+            if (eventName.StartsWith("dynamic.", StringComparison.Ordinal))
+                return DiagnosticCategory.DynamicImport;
+            if (eventName.StartsWith("module.circular", StringComparison.Ordinal))
+                return DiagnosticCategory.Load;
+            return DiagnosticCategory.Load;
         }
     }
 

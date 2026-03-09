@@ -2,6 +2,56 @@
   "updated": "2026-03-09",
   "entries": [
     {
+      "file": "Examples/PackageImportSystemTests/PackageImportSystemTests.csproj",
+      "md_file": "PackageImportSystemTests.md",
+      "description": "Module Import System 完整测试矩阵工程：xUnit + FluentAssertions，覆盖 Resolver/Cache/Interop/Security/Diagnostics/Record 单元测试、集成测试、性能基准。"
+    },
+    {
+      "file": "Examples/PackageImportSystemTests/TestHelper.cs",
+      "md_file": "PackageImportSystemTests.md",
+      "description": "测试基础设施：TestFixtures 路径工厂、ModuleRuntimeOptions 构建、Resolver/Cache/Loader 管线快捷创建。"
+    },
+    {
+      "file": "Examples/PackageImportSystemTests/ModuleResolverTests.cs",
+      "md_file": "PackageImportSystemTests.md",
+      "description": "ModuleResolver 单元测试（20+ 用例）：specifier 分类、relative/absolute/builtin/workspace imports/node_modules/exports 条件解析、错误结构验证。"
+    },
+    {
+      "file": "Examples/PackageImportSystemTests/ModuleCacheTests.cs",
+      "md_file": "PackageImportSystemTests.md",
+      "description": "ModuleCache 单元测试：TryGet/GetOrLoad/single-flight 并发、缓存统计、循环依赖占位、NormalizeCacheKey 边界、Clear/Snapshot。"
+    },
+    {
+      "file": "Examples/PackageImportSystemTests/InteropBridgeTests.cs",
+      "md_file": "PackageImportSystemTests.md",
+      "description": "InteropBridge 单元测试（13 用例）：CJS→ESM namespace 包装、ESM→CJS require 包装、方向分类、ResolveInterop 集成、诊断事件 debug 开关。"
+    },
+    {
+      "file": "Examples/PackageImportSystemTests/ImportSecurityPolicyTests.cs",
+      "md_file": "PackageImportSystemTests.md",
+      "description": "ImportSecurityPolicy 安全测试（16 用例）：deny-by-default、路径穿越攻击、空/非法路径、白名单放开、审计日志、IsPathAllowed 预检、结构化异常。"
+    },
+    {
+      "file": "Examples/PackageImportSystemTests/ModuleRecordTests.cs",
+      "md_file": "PackageImportSystemTests.md",
+      "description": "ModuleRecord 状态机测试：Loading→Loaded/Failed 转换、非法转换断言、ToDiagnostic、ModuleKind 枚举验证。"
+    },
+    {
+      "file": "Examples/PackageImportSystemTests/ModuleDiagnosticsTests.cs",
+      "md_file": "PackageImportSystemTests.md",
+      "description": "ModuleDiagnostics 测试：Collector 启用/禁用、事件分类快捷方法、JSONL/可读文本输出、摘要统计、ErrorCodes 常量验证。"
+    },
+    {
+      "file": "Examples/PackageImportSystemTests/ModuleLoaderIntegrationTests.cs",
+      "md_file": "PackageImportSystemTests.md",
+      "description": "ModuleLoader 集成测试：单入口/链式/缺失依赖/循环依赖/dynamic import/安全策略集成/诊断事件集成/ESM↔CJS 混合加载。"
+    },
+    {
+      "file": "Examples/PackageImportSystemTests/PerformanceBenchmarkTests.cs",
+      "md_file": "PackageImportSystemTests.md",
+      "description": "性能基准测试：缓存命中率≥60%改善、100模块解析<300ms、200次并发无崩溃/死锁、50深度链式不溢出。"
+    },
+    {
       "file": "Library/Environments/SDK/Drx.Sdk.Shared.JavaScript/Conversion/TypeConverter.cs",
       "md_file": "TypeConverter.md",
       "description": "TypeConverter partial class 核心调度：策略管道(RegisterStrategy)与接口调度，命名空间 Drx.Sdk.Shared.JavaScript.Conversion，实现 ITypeConverter。"
@@ -119,17 +169,17 @@
     {
       "file": "Library/Applications/Clients/Paperclip/Program.cs",
       "md_file": "PaperclipProgram.md",
-      "description": "Paperclip 脚本主机入口：EnsurePathRegistered（自注册 PATH/PAPERCLIP_HOME）、run/mrun/create 与 ts run/ts create 命令、run 支持 --debug、mrun 进入 Module Runtime。"
+      "description": "Paperclip 脚本主机入口：EnsurePathRegistered（自注册 PATH/PAPERCLIP_HOME）、run/mrun/create 与 ts run/ts create 命令，默认脚手架目录统一为 paperclip_models。"
     },
     {
       "file": "Library/Applications/Clients/Paperclip/Program.Project.cs",
       "md_file": "PaperclipProgram.md",
-      "description": "Program partial（项目与环境）：PATH 自注册、create/ts create 项目初始化，并委托 SDK 生成 TypeScript 脚手架。"
+      "description": "Program partial（项目与环境）：PATH 自注册、create/ts create 项目初始化，生成 main.js/main.ts 初始模板与 paperclip_models 下 JS/TS 友好导出模块。"
     },
     {
       "file": "Library/Applications/Clients/Paperclip/Program.Execution.cs",
       "md_file": "PaperclipProgram.md",
-      "description": "Program partial（执行链路）：run/mrun 参数解析与脚本执行、ModuleRuntimeOptions 配置装载（CLI+paperclip.json，含 imports map）、安全边界校验与调试输出控制；预置模块预加载与宿主类型注册。"
+      "description": "Program partial（执行链路）：run/mrun 参数解析与脚本执行、ModuleRuntimeOptions 配置装载（CLI+paperclip.json，含 imports map）、安全边界校验与调试输出控制；预置模块预加载、宿主类型注册与 dynamic import() 全局函数注册。"
     },
     {
       "file": "Library/Applications/Clients/Paperclip/Program.Resources.cs",
@@ -144,12 +194,12 @@
     {
       "file": "Library/Applications/Clients/Paperclip/Models/paperclip.module.js",
       "md_file": "PaperclipSdkModule.md",
-      "description": "Paperclip 单文件 SDK 模块：内置桥接兜底、核心模块系统与 log/fs/stream/dotnet 子模块注册，兼容旧 API 并提供 JS/TS 友好命名。"
+      "description": "Paperclip 单文件 SDK 模块：内置桥接兜底、核心模块系统与 log/fs/stream/dotnet 子模块注册，兼容旧 API 并提供 JS/TS 友好命名；末尾导出层为 @paperclip/sdk 包入口提供 ESM-compatible namespace。"
     },
     {
       "file": "Library/Applications/Clients/Paperclip/Models/TypeScript/paperclip.module.d.ts",
       "md_file": "PaperclipSdkModule.md",
-      "description": "Paperclip 单文件 TypeScript 声明：集中定义全局 Paperclip、模块上下文与 log/fs/stream/dotnet 全量类型。"
+      "description": "Paperclip 单文件 TypeScript 声明：集中定义全局 Paperclip、模块上下文与 log/fs/stream/dotnet 全量类型；新增 declare module '@paperclip/sdk' 包入口类型映射。"
     },
     {
       "file": "Library/Environments/SDK/Drx.Sdk.Shared.JavaScript/Bridges/LoggerJSBridge.cs",
@@ -188,6 +238,67 @@
     {
       "file": "Library/Environments/SDK/Drx.Sdk.Shared.JavaScript/Engine/ModuleLoader.cs",
       "md_file": "ModuleLoader.md",
-      "description": "模块加载器：递归构建模块依赖图、状态机驱动加载流程、集成 ModuleResolver + ModuleCache、循环依赖检测、错误传播与诊断事件。"    }
+      "description": "模块加载器：递归构建模块依赖图、状态机驱动加载流程、集成 ModuleResolver + ModuleCache + InteropBridge、循环依赖检测、ESM↔CJS 互操作、动态 import() 异步加载、错误传播与诊断事件。"
+    },
+    {
+      "file": "Library/Environments/SDK/Drx.Sdk.Shared.JavaScript/Engine/InteropBridge.cs",
+      "md_file": "InteropBridge.md",
+      "description": "ESM↔CJS 互操作桥接层：CJS→ESM namespace 包装（default + 命名导出静态推导）、ESM→CJS require 包装，支持方向分类与诊断事件，不隐式吞错。"
+    },
+    {
+      "file": "Library/Environments/SDK/Drx.Sdk.Shared.JavaScript/Engine/ImportSecurityPolicy.cs",
+      "md_file": "ImportSecurityPolicy.md",
+      "description": "导入安全策略——deny-by-default 路径安全边界：项目根内+白名单校验、符号链接越界检测、路径穿越阻断、审计日志，含 ImportSecurityException 结构化错误，支持统一诊断收集器接入。"
+    },
+    {
+      "file": "Library/Environments/SDK/Drx.Sdk.Shared.JavaScript/Engine/ModuleDiagnostics.cs",
+      "md_file": "ModuleDiagnostics.md",
+      "description": "统一模块诊断事件模型与收集器：ModuleDiagnosticEvent（resolve/load/cache/security/interop 全链路结构化事件）、ModuleDiagnosticCollector（线程安全零开销收集）、ModuleErrorCodes（错误码常量）、IModuleStructuredError（统一结构化错误接口）、DiagnosticSummary（摘要统计）。"
+    },
+    {
+      "file": "Library/Applications/Clients/Paperclip/Cli/PaperclipOptions.cs",
+      "md_file": "PaperclipCli.md",
+      "description": "CLI 参数解析结果数据类：ScriptPath、IsRepl、IsHelp、IsVersion、Debug、NoModules、TypeScriptPath、AllowPaths、PluginPaths、ErrorMessage 属性，纯数据持有无逻辑。"
+    },
+    {
+      "file": "Library/Applications/Clients/Paperclip/Cli/CliParser.cs",
+      "md_file": "PaperclipCli.md",
+      "description": "手写 CLI 参数解析器：Parse(string[]) 静态方法，解析 run/repl 子命令及 --help/--version/--debug/--no-modules/--allow-path/--plugin/--typescript-path 标志，返回 PaperclipOptions。未识别参数设置 ErrorMessage。"
+    },
+    {
+      "file": "Library/Applications/Clients/Paperclip/Cli/HelpText.cs",
+      "md_file": "PaperclipCli.md",
+      "description": "帮助文本与版本号常量：GetHelpText() 返回完整使用说明（含子命令 run/repl 及所有选项），GetVersion() 返回版本字符串。纯常量，无逻辑。"
+    },
+    {
+      "file": "Library/Applications/Clients/Paperclip/Formatting/ErrorFormatter.cs",
+      "md_file": "PaperclipErrorFormatter.md",
+      "description": "异常格式化静态类：Format(Exception) 将 SDK 异常（JavaScriptException/ModuleLoadException/ModuleResolutionException/ImportSecurityException）格式化为 Error [{code}]: {message} + Hint 格式；GetExitCode(Exception) 返回 NFR-3 退出码映射。"
+    },
+    {
+      "file": "Library/Applications/Clients/Paperclip/Hosting/PluginLoader.cs",
+      "md_file": "PaperclipPluginLoader.md",
+      "description": "插件动态加载静态类：Load(IReadOnlyList<string>) 加载用户指定 DLL，扫描 IJavaScriptPlugin 实现并实例化返回。仅加载显式指定 DLL，不自动扫描目录。"
+    },
+    {
+      "file": "Library/Applications/Clients/Paperclip/Diagnostics/DiagnosticOutput.cs",
+      "md_file": "PaperclipDiagnosticOutput.md",
+      "description": "诊断输出管道类：封装 ModuleDiagnosticCollector 事件到 stderr 的实时输出；Flush() 增量输出新事件；PrintSummary(ModuleCache) 输出缓存统计与诊断摘要。仅 --debug 模式激活。"
+    },
+    {
+      "file": "Library/Applications/Clients/Paperclip/Hosting/EngineBootstrap.cs",
+      "md_file": "PaperclipEngineBootstrap.md",
+      "description": "引擎启动器（IDisposable）：根据 PaperclipOptions 配置 ModuleRuntimeOptions/ImportSecurityPolicy/ModuleResolver/ModuleCache/ModuleLoader/DiagnosticCollector 全栈，通过 JavaScriptEngineBuilder 创建引擎实例，暴露 Engine/ModuleLoader/DiagnosticOutput 属性。"
+    },
+    {
+      "file": "Library/Applications/Clients/Paperclip/Hosting/ScriptHost.cs",
+      "md_file": "PaperclipScriptHost.md",
+      "description": "脚本执行器静态类：入口检测（文件/目录+project.json/index.js/index.ts）、TypeScript 转译、模块图加载或直接执行，返回退出码。"
+    },
+    {
+      "file": "Library/Applications/Clients/Paperclip/Hosting/ReplHost.cs",
+      "md_file": "PaperclipReplHost.md",
+      "description": "REPL 交互宿主：支持多行输入、.exit/.help/.clear/.load 命令、错误不中断循环与 Ctrl+C/Ctrl+D 处理。"
+    }
   ]
 }

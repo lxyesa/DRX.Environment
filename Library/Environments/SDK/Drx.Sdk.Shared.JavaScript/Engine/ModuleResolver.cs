@@ -20,6 +20,12 @@ namespace Drx.Sdk.Shared.JavaScript.Engine
         private readonly ModuleRuntimeOptions _options;
         private readonly IReadOnlyDictionary<string, string> _builtinSpecifierMap;
         private readonly IReadOnlyDictionary<string, string> _workspaceImportsMap;
+        private readonly ImportSecurityPolicy? _securityPolicy;
+
+        /// <summary>
+        /// 安全策略实例（若已注入），供外部读取审计日志。
+        /// </summary>
+        public ImportSecurityPolicy? SecurityPolicy => _securityPolicy;
 
         /// <summary>
         /// 初始化 <see cref="ModuleResolver"/>。
@@ -27,11 +33,13 @@ namespace Drx.Sdk.Shared.JavaScript.Engine
         public ModuleResolver(
             ModuleRuntimeOptions options,
             IReadOnlyDictionary<string, string>? builtinSpecifierMap = null,
-            IReadOnlyDictionary<string, string>? workspaceImportsMap = null)
+            IReadOnlyDictionary<string, string>? workspaceImportsMap = null,
+            ImportSecurityPolicy? securityPolicy = null)
         {
             _options = options ?? throw new ArgumentNullException(nameof(options));
             _builtinSpecifierMap = builtinSpecifierMap ?? new Dictionary<string, string>(StringComparer.Ordinal);
             _workspaceImportsMap = workspaceImportsMap ?? new Dictionary<string, string>(StringComparer.Ordinal);
+            _securityPolicy = securityPolicy;
         }
 
         /// <summary>
@@ -267,7 +275,12 @@ namespace Drx.Sdk.Shared.JavaScript.Engine
                     continue;
                 }
 
-                if (!_options.IsPathAllowed(candidate))
+                // 安全校验：优先使用 ImportSecurityPolicy（完整符号链接检测），回退 options.IsPathAllowed
+                if (_securityPolicy is not null)
+                {
+                    _securityPolicy.ValidateAccess(candidate, specifier, fromFilePath);
+                }
+                else if (!_options.IsPathAllowed(candidate))
                 {
                     throw new ModuleResolutionException(
                         code: "PC_SEC_001",
@@ -557,7 +570,7 @@ namespace Drx.Sdk.Shared.JavaScript.Engine
             foreach (var candidate in EnumerateIndexCandidates(packageDir))
             {
                 attempts.Add(candidate);
-                if (File.Exists(candidate) && _options.IsPathAllowed(candidate))
+                if (File.Exists(candidate) && (_securityPolicy is not null ? _securityPolicy.IsPathAllowed(candidate) : _options.IsPathAllowed(candidate)))
                 {
                     return new ModuleResolutionResult(
                         specifier, fromFilePath, ModuleSpecifierKind.Bare,
@@ -591,7 +604,15 @@ namespace Drx.Sdk.Shared.JavaScript.Engine
                     continue;
                 }
 
-                if (!_options.IsPathAllowed(candidate))
+                // 安全校验：优先使用 ImportSecurityPolicy，回退 options.IsPathAllowed
+                if (_securityPolicy is not null)
+                {
+                    if (!_securityPolicy.IsPathAllowed(candidate))
+                    {
+                        return null;
+                    }
+                }
+                else if (!_options.IsPathAllowed(candidate))
                 {
                     return null;
                 }
@@ -926,7 +947,7 @@ namespace Drx.Sdk.Shared.JavaScript.Engine
     /// <summary>
     /// 标准化的模块解析异常，包含 specifier/from/attempts/reason 等结构化字段。
     /// </summary>
-    public sealed class ModuleResolutionException : Exception
+    public sealed class ModuleResolutionException : Exception, IModuleStructuredError
     {
         /// <summary>业务错误码。</summary>
         public string Code { get; }

@@ -154,7 +154,7 @@ namespace Drx.Sdk.Shared.JavaScript.Engine
     /// <summary>
     /// 模块加载异常，标准化错误结构。
     /// </summary>
-    public sealed class ModuleLoadException : Exception
+    public sealed class ModuleLoadException : Exception, IModuleStructuredError
     {
         /// <summary>业务错误码（PC_LOAD_*）。</summary>
         public string Code { get; }

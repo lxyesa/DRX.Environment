@@ -12,14 +12,4 @@
     <ProjectReference Include="..\..\..\Environments\SDK\Drx.Sdk.Shared\Drx.Sdk.Shared.csproj" />
   </ItemGroup>
 
-  <ItemGroup>
-    <EmbeddedResource Include="Models\**\*.js">
-      <LogicalName>PaperclipModels/%(RecursiveDir)%(Filename)%(Extension)</LogicalName>
-    </EmbeddedResource>
-    <EmbeddedResource Include="Models\**\*.d.ts">
-      <LogicalName>PaperclipModels/%(RecursiveDir)%(Filename)%(Extension)</LogicalName>
-    </EmbeddedResource>
-    <Folder Include="Models\" />
-  </ItemGroup>
-
 </Project>

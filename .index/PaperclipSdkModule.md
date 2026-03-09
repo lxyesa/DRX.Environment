@@ -24,7 +24,7 @@
 
 ## Usage
 ```javascript
-// main.js
+// 方式1: 全局 API（legacy + module runtime 均可）
 const { log, fs, dotnet } = Paperclip.use(['log', 'fs', 'dotnet']);
 
 log.info('start');
@@ -34,6 +34,21 @@ const Path = dotnet.io.Path();
 log.info(Path.Combine('.', 'demo.txt'));
 ```
 
+```typescript
+// 方式2: 包式 import（Module Runtime 下）
+import { log, fs, dotnet } from '@paperclip/sdk';
+// 或
+import sdk from '@paperclip/sdk';
+sdk.use(['log']);
+```
+
+## @paperclip/sdk 包入口
+- 文件末尾的导出层 IIFE 构造 namespace 对象，包含 `{ default, Paperclip, log, fs, stream, dotnet, use, registerModule, createModule, getModule, requireMethod, version }`。
+- 全局预加载（`ExecuteFile`）时导出层返回值被忽略，不影响现有行为。
+- 模块加载器 `Execute(source)` 时，最终表达式值即为 SDK namespace。
+
 ## TypeScript
 - 类型声明文件：`Models/TypeScript/paperclip.module.d.ts`
-- 在 `tsconfig.json` 已包含 `Models/**/*.d.ts` 时，`Paperclip.use()` 与内置模块将获得类型提示。
+- 全局声明：`declare global { ... const Paperclip: PaperclipNamespace; }`
+- 模块声明：`declare module "@paperclip/sdk" { ... }` — 与运行时导出层一致。
+- 在 `tsconfig.json` 已包含 `Models/**/*.d.ts` 时，全局 API 与包式 import 均获得类型提示。

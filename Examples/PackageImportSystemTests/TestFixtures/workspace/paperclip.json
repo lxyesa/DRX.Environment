@@ -1,0 +1,6 @@
+{
+  "imports": {
+    "@app/utils": "./src/utils.js",
+    "@app/config": "./src/config.js"
+  }
+}

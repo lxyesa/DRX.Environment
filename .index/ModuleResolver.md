@@ -11,7 +11,7 @@
 ## Methods
 | 方法 | 参数 | 返回 | 说明 |
 |------|------|------|------|
-| `Resolve(specifier, fromFilePath)` | `string, string?` | `ModuleResolutionResult` | 分类并按固定顺序解析单个 specifier。 |
+| `Resolve(specifier, fromFilePath)` | `string, string?` | `ModuleResolutionResult` | 分类并按固定顺序解析单个 specifier，若注入了 `ImportSecurityPolicy` 则在解析成功后自动校验安全边界（含符号链接）。 |
 | `ResolveForEntry(entryFilePath)` | `string` | `ModuleResolutionResult` | 解析入口文件（绝对路径）。 |
 | `ResolveStaticImportsRecursively(entryFilePath)` | `string` | `IReadOnlyList<ModuleResolutionResult>` | 递归扫描并解析静态导入，保持稳定顺序。 |
 | `Classify(specifier)` | `string` | `ModuleSpecifierKind` | specifier 分类：builtin/relative/absolute/bare。 |
@@ -26,6 +26,7 @@
 var options = ModuleRuntimeOptions.CreateSecureDefaults(projectRoot);
 options.AllowNodeModulesResolution = true;
 
+var policy = new ImportSecurityPolicy(options);
 var resolver = new ModuleResolver(options, new Dictionary<string, string>
 {
     ["@paperclip/sdk"] = sdkModuleFilePath
