@@ -1,7 +1,7 @@
 # PaperclipScriptHost
 
 ## File
-`Library/Applications/Clients/Paperclip/Hosting/ScriptHost.cs`
+`Library/Applications/Clients/Paperclip/Hosting/Runtime/ScriptHost.cs`
 
 ## Namespace
 `DrxPaperclip.Hosting`
@@ -22,6 +22,7 @@
 ### Run() 执行流程
 1. `DetectEntryPoint(options.ScriptPath)` → 确定入口文件
 2. 若入口为 TypeScript → `JavaScript.TranspileTypeScriptFile(path, projectRoot)` 转译
+   - 若 `bootstrap.TranspileCache` 可用，先尝试命中缓存；miss 时再转译并回写缓存
 3. `options.NoModules` 为 true → `engine.Execute(source)` 或 `engine.ExecuteFile(path)` 直接执行
 4. `options.NoModules` 为 false → `moduleLoader.LoadModuleGraph(entryPath, executeModule)` 模块模式
 

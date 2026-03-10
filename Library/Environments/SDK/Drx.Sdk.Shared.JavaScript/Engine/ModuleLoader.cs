@@ -474,6 +474,25 @@ namespace Drx.Sdk.Shared.JavaScript.Engine
             return _interop.ResolveInterop(importerKind, targetRecord, targetSource);
         }
 
+        /// <summary>
+        /// 尝试获取已加载模块的命名空间对象（供 CJS require 桥接使用）。
+        /// </summary>
+        /// <param name="absolutePath">模块绝对路径。</param>
+        /// <param name="moduleNamespace">命中时返回模块 namespace（即 module.exports 或 ESM 导出对象），否则 null。</param>
+        /// <returns>找到并已 Loaded 时返回 true。</returns>
+        public bool TryGetLoadedExports(string absolutePath, out object? moduleNamespace)
+        {
+            moduleNamespace = null;
+            var cacheKey = ModuleCache.NormalizeCacheKey(absolutePath);
+            if (!_cache.TryGet(cacheKey, out var record) || record is null || record.State != ModuleRecordState.Loaded)
+            {
+                return false;
+            }
+
+            moduleNamespace = record.Namespace;
+            return true;
+        }
+
         private void EmitEvent(string eventName, string cacheKey, object? data)
         {
             if (!_options.EnableDebugLogs && !_options.EnableStructuredDebugEvents)

@@ -34,6 +34,18 @@ public static class CliParser
                     {
                         options.ScriptPath = args[i];
                         i++;
+
+                        // run 可选第二参数：入口函数名
+                        if (i < args.Length && args[i] is not ['-', ..])
+                        {
+                            options.RunFunctionName = args[i];
+                            i++;
+                        }
+                    }
+                    else
+                    {
+                        options.ErrorMessage = "run requires a script path argument.";
+                        return options;
                     }
                     break;
 
@@ -42,10 +54,60 @@ public static class CliParser
                     i = 1;
                     break;
 
+                case "project":
+                    i = 1;
+                    if (i >= args.Length || args[i] is ['-', ..])
+                    {
+                        options.ErrorMessage = "project requires an action: cr or de.";
+                        return options;
+                    }
+
+                    var action = args[i];
+                    i++;
+
+                    // project cr 支持可选 -http 模板标志
+                    if (string.Equals(action, "cr", StringComparison.OrdinalIgnoreCase)
+                        && i < args.Length
+                        && string.Equals(args[i], "-http", StringComparison.OrdinalIgnoreCase))
+                    {
+                        options.IsHttpTemplate = true;
+                        i++;
+                    }
+
+                    if (i >= args.Length || args[i] is ['-', ..])
+                    {
+                        options.ErrorMessage = $"project {action} requires a project name.";
+                        return options;
+                    }
+
+                    options.ProjectName = args[i];
+                    i++;
+
+                    if (string.Equals(action, "cr", StringComparison.OrdinalIgnoreCase))
+                    {
+                        options.IsProjectCreate = true;
+                    }
+                    else if (string.Equals(action, "de", StringComparison.OrdinalIgnoreCase))
+                    {
+                        options.IsProjectDelete = true;
+                    }
+                    else
+                    {
+                        options.ErrorMessage = $"Unknown project action: {action}. Use cr or de.";
+                        return options;
+                    }
+                    break;
+
                 default:
                     // 单独传入非子命令名称，视为 run <path> 的简写
                     options.ScriptPath = args[0];
                     i = 1;
+
+                    if (i < args.Length && args[i] is not ['-', ..])
+                    {
+                        options.RunFunctionName = args[i];
+                        i++;
+                    }
                     break;
             }
         }
@@ -67,6 +129,15 @@ public static class CliParser
 
                 case "--debug":
                     options.Debug = true;
+                    break;
+
+                case "--watch":
+                case "-w":
+                    options.Watch = true;
+                    break;
+
+                case "--no-cache":
+                    options.NoCache = true;
                     break;
 
                 case "--no-modules":

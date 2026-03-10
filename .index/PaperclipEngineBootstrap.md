@@ -1,7 +1,7 @@
 # PaperclipEngineBootstrap
 
 ## File
-`Library/Applications/Clients/Paperclip/Hosting/EngineBootstrap.cs`
+`Library/Applications/Clients/Paperclip/Hosting/Bootstrap/EngineBootstrap.cs`
 
 ## Namespace
 `DrxPaperclip.Hosting`
@@ -19,6 +19,7 @@
 | `Engine` | `IJavaScriptEngine` | 已配置的 JavaScript 引擎实例 |
 | `ModuleLoader` | `ModuleLoader?` | 模块加载器（`--no-modules` 时为 null） |
 | `ModuleCache` | `ModuleCache?` | 模块缓存实例 |
+| `TranspileCache` | `TranspileCache?` | TS 转译缓存实例（`--no-cache` 时为 null） |
 | `DiagnosticOutput` | `DiagnosticOutput` | 诊断输出管道 |
 | `Options` | `ModuleRuntimeOptions` | 运行时配置选项 |
 
@@ -36,13 +37,16 @@
 5. `AllowNodeModulesResolution = true`
 6. `ValidateAndNormalize()`
 7. 创建 `ImportSecurityPolicy` → `ModuleDiagnosticCollector` → `ModuleResolver` → `ModuleCache` → `ModuleLoader`
-8. `PluginLoader.Load()` 加载插件
-9. `JavaScriptEngineBuilder` 链式配置 + `Build()`
-10. 创建 `DiagnosticOutput`
+8. 根据 `--no-cache` 决定是否创建 `TranspileCache`
+9. `PluginLoader.Load()` 加载插件
+10. `JavaScriptEngineBuilder` 链式配置 + `Build()`
+11. 注册 `print/pause` 全局函数（`0` 参数与 `1` 参数桥接包装）
+12. 创建 `DiagnosticOutput`
 
 ## Dependencies
 - `DrxPaperclip.Cli.PaperclipOptions`
 - `DrxPaperclip.Diagnostics.DiagnosticOutput`
+- `DrxPaperclip.Hosting.Caching.TranspileCache`
 - `Drx.Sdk.Shared.JavaScript.Abstractions.IJavaScriptEngine`
 - `Drx.Sdk.Shared.JavaScript.Abstractions.IJavaScriptPlugin`
 - `Drx.Sdk.Shared.JavaScript.Abstractions.ModuleRuntimeOptions`

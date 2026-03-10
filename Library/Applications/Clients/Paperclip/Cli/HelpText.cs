@@ -11,20 +11,31 @@ public static class HelpText
         Paperclip — JS/TS modular script host
 
         Usage:
-          paperclip run <path> [options]     Execute a script file or project directory
+          paperclip run <path> [function] [options]
+                                            Execute a script file or project directory
           paperclip repl [options]           Start interactive REPL mode
+          paperclip project cr <name>        Create a new Paperclip project
+          paperclip project cr -http <name>  Create an HTTP server project
+          paperclip project de <name>        Delete a Paperclip project
           paperclip --help                   Show this help message
           paperclip --version                Show version information
 
         Subcommands:
-          run <path>        Run a .js/.ts file or a project directory
-                            (directory resolves via project.json → index.js → index.ts)
+          run <path> [fn]   Run a .js/.ts file or a project directory
+                            (directory resolves via project.json entryModule/main)
+                            if fn is provided, invoke globalThis[fn]() after loading entry
           repl              Enter interactive JavaScript/TypeScript REPL
+          project cr <name> Create project folder with main.ts + project.json
+          project cr -http <name>
+                          Create HTTP server project with routes + index.html
+          project de <name> Delete project folder recursively
 
         Options:
           -h, --help                Show this help message
           -v, --version             Show version information
           --debug                   Enable diagnostic output to stderr
+          -w, --watch               Watch script files and rerun on changes (run only)
+          --no-cache                Disable TypeScript transpile cache (run only)
           --no-modules              Disable the module system (direct execution only)
           --allow-path <dir>        Add a directory to the import security whitelist
                                     (can be specified multiple times)
@@ -34,8 +45,13 @@ public static class HelpText
 
         Examples:
           paperclip run script.js
+          paperclip run script.js boot
           paperclip run ./my-project/
           paperclip run app.ts --debug --allow-path ./lib
+          paperclip run app.ts --watch --no-cache
+          paperclip project cr demo
+          paperclip project cr -http myserver
+          paperclip project de demo
           paperclip repl --plugin ./myplugin.dll
         """;
 

@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Paperclip HTTP Server</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: system-ui, -apple-system, sans-serif; background: #f5f5f5; color: #333; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+        .container { text-align: center; padding: 2rem; }
+        h1 { font-size: 2rem; margin-bottom: 0.5rem; }
+        p { color: #666; margin-bottom: 1.5rem; }
+        .api-list { list-style: none; text-align: left; display: inline-block; }
+        .api-list li { padding: 0.4rem 0; font-family: monospace; font-size: 0.95rem; }
+        .method { font-weight: bold; color: #2563eb; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Paperclip HTTP Server</h1>
+        <p>Server is running. Available API routes:</p>
+        <ul class="api-list">
+            <li><span class="method">GET</span>  /api/hello — Returns a greeting</li>
+            <li><span class="method">GET</span>  /api/time  — Returns current time</li>
+            <li><span class="method">POST</span> /api/echo  — Echoes request body</li>
+        </ul>
+    </div>
+</body>
+</html>

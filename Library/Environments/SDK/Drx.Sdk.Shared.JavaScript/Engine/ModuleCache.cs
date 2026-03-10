@@ -148,6 +148,56 @@ namespace Drx.Sdk.Shared.JavaScript.Engine
         }
 
         /// <summary>
+        /// 失效单模块：仅移除指定 cacheKey 的缓存与 in-flight 加载占位。
+        /// </summary>
+        /// <param name="cacheKey">目标模块缓存键。</param>
+        /// <returns>若存在并成功移除缓存项返回 true；否则返回 false。</returns>
+        public bool InvalidateModule(string cacheKey)
+        {
+            if (string.IsNullOrWhiteSpace(cacheKey))
+            {
+                throw new ArgumentException("缓存键不能为空。", nameof(cacheKey));
+            }
+
+            _inflight.TryRemove(cacheKey, out _);
+            return _cache.TryRemove(cacheKey, out _);
+        }
+
+        /// <summary>
+        /// 失效所有依赖指定模块的依赖者（直接/间接，不包含自身）。
+        /// </summary>
+        /// <param name="cacheKey">变更模块缓存键。</param>
+        /// <returns>实际被失效的依赖者键集合。</returns>
+        public IReadOnlyList<string> InvalidateDependents(string cacheKey)
+        {
+            if (string.IsNullOrWhiteSpace(cacheKey))
+            {
+                throw new ArgumentException("缓存键不能为空。", nameof(cacheKey));
+            }
+
+            var toInvalidate = CollectDependents(cacheKey, includeRoot: false);
+            RemoveKeys(toInvalidate);
+            return toInvalidate;
+        }
+
+        /// <summary>
+        /// 失效指定模块及其所有依赖者（直接/间接）。
+        /// </summary>
+        /// <param name="cacheKey">变更模块缓存键。</param>
+        /// <returns>实际被失效的键集合（包含自身）。</returns>
+        public IReadOnlyList<string> InvalidateWithDependents(string cacheKey)
+        {
+            if (string.IsNullOrWhiteSpace(cacheKey))
+            {
+                throw new ArgumentException("缓存键不能为空。", nameof(cacheKey));
+            }
+
+            var toInvalidate = CollectDependents(cacheKey, includeRoot: true);
+            RemoveKeys(toInvalidate);
+            return toInvalidate;
+        }
+
+        /// <summary>
         /// 获取所有缓存条目的只读快照（用于诊断）。
         /// </summary>
         public IReadOnlyDictionary<string, ModuleRecord> GetSnapshot()
@@ -178,6 +228,82 @@ namespace Drx.Sdk.Shared.JavaScript.Engine
             _inflight.Clear();
             Interlocked.Exchange(ref _hitCount, 0);
             Interlocked.Exchange(ref _missCount, 0);
+        }
+
+        private IReadOnlyList<string> CollectDependents(string cacheKey, bool includeRoot)
+        {
+            var comparer = StringComparer.OrdinalIgnoreCase;
+            var reverseGraph = BuildReverseDependencyGraph();
+            var visited = new HashSet<string>(comparer);
+            var queue = new Queue<string>();
+
+            if (includeRoot)
+            {
+                visited.Add(cacheKey);
+            }
+
+            queue.Enqueue(cacheKey);
+
+            while (queue.Count > 0)
+            {
+                var current = queue.Dequeue();
+
+                if (!reverseGraph.TryGetValue(current, out var dependents))
+                {
+                    continue;
+                }
+
+                foreach (var dependent in dependents)
+                {
+                    if (!visited.Add(dependent))
+                    {
+                        continue;
+                    }
+
+                    queue.Enqueue(dependent);
+                }
+            }
+
+            return visited.Count == 0 ? Array.Empty<string>() : new List<string>(visited);
+        }
+
+        private Dictionary<string, HashSet<string>> BuildReverseDependencyGraph()
+        {
+            var comparer = StringComparer.OrdinalIgnoreCase;
+            var graph = new Dictionary<string, HashSet<string>>(comparer);
+
+            foreach (var item in _cache)
+            {
+                var dependentKey = item.Key;
+                var dependencies = item.Value.Dependencies;
+
+                foreach (var dependency in dependencies)
+                {
+                    if (string.IsNullOrWhiteSpace(dependency))
+                    {
+                        continue;
+                    }
+
+                    if (!graph.TryGetValue(dependency, out var dependents))
+                    {
+                        dependents = new HashSet<string>(comparer);
+                        graph[dependency] = dependents;
+                    }
+
+                    dependents.Add(dependentKey);
+                }
+            }
+
+            return graph;
+        }
+
+        private void RemoveKeys(IReadOnlyList<string> keys)
+        {
+            foreach (var key in keys)
+            {
+                _inflight.TryRemove(key, out _);
+                _cache.TryRemove(key, out _);
+            }
         }
 
         private int CountByState(ModuleRecordState state)

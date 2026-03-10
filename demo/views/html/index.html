@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DRX — Developer Runtime Environment</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/html.css" />
+</head>
+<body>
+
+  <!-- ═══ Nav ═══ -->
+  <nav class="nav" id="nav">
+    <div class="container nav__inner">
+      <a href="#" class="nav__brand"><span class="gradient-text">DRX</span></a>
+      <ul class="nav__links">
+        <li><a href="#features" class="nav__link">功能</a></li>
+        <li><a href="#stats" class="nav__link">数据</a></li>
+        <li><a href="#testimonials" class="nav__link">评价</a></li>
+        <li><a href="#pricing" class="nav__link">定价</a></li>
+        <li><a href="#faq" class="nav__link">FAQ</a></li>
+      </ul>
+      <a href="#cta" class="nav__cta">立即开始</a>
+      <button class="nav__toggle" id="nav-toggle" aria-label="菜单">
+        <span></span><span></span><span></span>
+      </button>
+    </div>
+  </nav>
+
+  <!-- ═══ Hero ═══ -->
+  <header class="hero" id="hero">
+    <div class="hero__glow" aria-hidden="true"></div>
+    <div class="hero__content">
+      <div class="hero__badge">
+        <span class="hero__badge-dot" aria-hidden="true"></span>
+        v0.2 已发布 — 全新运行时引擎
+      </div>
+      <h1 class="hero__title">
+        由DRX开发的脚本主机<br /><span class="gradient-text">回形针</span>
+      </h1>
+      <p class="hero__desc">
+        极速启动 · 零配置集成 · 毫秒级热重载。用更少的样板代码，交付更优的产品体验。
+      </p>
+      <div class="hero__actions">
+        <a href="#cta" class="btn btn--primary">
+          快速上手 →
+        </a>
+        <a href="#features" class="btn btn--outline">
+          了解更多
+        </a>
+      </div>
+      <div class="hero__code">
+        <span class="cmt">// 一行启动</span><br />
+        <span class="kw">const</span> server = <span class="kw">new</span> HttpServer(<span class="str">"http://localhost:8080/"</span>);<br />
+        server.<span class="kw">get</span>(<span class="str">"/hello"</span>, () =&gt; <span class="str">"Hello, DRX!"</span>);
+      </div>
+    </div>
+  </header>
+
+  <!-- ═══ Features ═══ -->
+  <section class="features" id="features">
+    <div class="container">
+      <h2 class="section-title fade-up">核心<span class="gradient-text">特性</span></h2>
+      <p class="section-subtitle fade-up">从原型到生产，一个运行时覆盖全链路。</p>
+      <div class="features__grid">
+        <article class="feature-card fade-up">
+          <div class="feature-card__icon" aria-hidden="true">⚡</div>
+          <h3 class="feature-card__title">极速启动</h3>
+          <p class="feature-card__desc">冷启动低于 50ms，采用增量编译和惰性加载策略，让开发循环快如闪电。</p>
+        </article>
+        <article class="feature-card fade-up">
+          <div class="feature-card__icon" aria-hidden="true">🔌</div>
+          <h3 class="feature-card__title">插件生态</h3>
+          <p class="feature-card__desc">内置模块系统支持 ESM/CJS 互操作，三方插件即装即用，无需额外配置。</p>
+        </article>
+        <article class="feature-card fade-up">
+          <div class="feature-card__icon" aria-hidden="true">🛡️</div>
+          <h3 class="feature-card__title">安全优先</h3>
+          <p class="feature-card__desc">沙箱隔离 + 导入安全策略，路径穿越防护与审计日志开箱即用。</p>
+        </article>
+        <article class="feature-card fade-up">
+          <div class="feature-card__icon" aria-hidden="true">📊</div>
+          <h3 class="feature-card__title">诊断面板</h3>
+          <p class="feature-card__desc">实时性能指标、依赖关系图谱、JSONL 结构化日志，问题一目了然。</p>
+        </article>
+        <article class="feature-card fade-up">
+          <div class="feature-card__icon" aria-hidden="true">🔄</div>
+          <h3 class="feature-card__title">热重载</h3>
+          <p class="feature-card__desc">文件保存即刷新，保留运行状态，UI 与后端代码均支持增量更新。</p>
+        </article>
+        <article class="feature-card fade-up">
+          <div class="feature-card__icon" aria-hidden="true">🌐</div>
+          <h3 class="feature-card__title">跨平台</h3>
+          <p class="feature-card__desc">Windows、macOS、Linux 原生支持，Docker 镜像开箱即用，CI/CD 无缝集成。</p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══ Stats ═══ -->
+  <section class="stats" id="stats">
+    <div class="container">
+      <div class="stats__grid">
+        <div class="stat fade-up">
+          <div class="stat__number gradient-text" data-count="50">50ms</div>
+          <div class="stat__label">冷启动时间</div>
+        </div>
+        <div class="stat fade-up">
+          <div class="stat__number gradient-text">12K+</div>
+          <div class="stat__label">GitHub Stars</div>
+        </div>
+        <div class="stat fade-up">
+          <div class="stat__number gradient-text">99.9%</div>
+          <div class="stat__label">正常运行率</div>
+        </div>
+        <div class="stat fade-up">
+          <div class="stat__number gradient-text">200+</div>
+          <div class="stat__label">官方插件</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══ Testimonials ═══ -->
+  <section class="testimonials" id="testimonials">
+    <div class="container">
+      <h2 class="section-title fade-up">开发者<span class="gradient-text">怎么说</span></h2>
+      <p class="section-subtitle fade-up">来自社区的真实反馈。</p>
+      <div class="testimonials__grid">
+        <article class="testimonial-card fade-up">
+          <blockquote class="testimonial-card__quote">
+            "迁移到 DRX 后，我们的 CI 构建时间缩短了 60%。模块系统的设计让大型 monorepo 也能轻松管理。"
+          </blockquote>
+          <div class="testimonial-card__author">
+            <div class="testimonial-card__avatar">L</div>
+            <div>
+              <div class="testimonial-card__name">李明远</div>
+              <div class="testimonial-card__role">高级架构师 · ByteForge</div>
+            </div>
+          </div>
+        </article>
+        <article class="testimonial-card fade-up">
+          <blockquote class="testimonial-card__quote">
+            "安全策略配置太贴心了。之前需要自己写的沙箱逻辑，现在一行配置搞定，审计日志也省了不少事。"
+          </blockquote>
+          <div class="testimonial-card__author">
+            <div class="testimonial-card__avatar">K</div>
+            <div>
+              <div class="testimonial-card__name">Karen Zhou</div>
+              <div class="testimonial-card__role">安全工程师 · CloudNine</div>
+            </div>
+          </div>
+        </article>
+        <article class="testimonial-card fade-up">
+          <blockquote class="testimonial-card__quote">
+            "热重载的体验接近完美。从前端组件到后端服务，改完保存就能看到结果，开发效率质的飞跃。"
+          </blockquote>
+          <div class="testimonial-card__author">
+            <div class="testimonial-card__avatar">W</div>
+            <div>
+              <div class="testimonial-card__name">王思涵</div>
+              <div class="testimonial-card__role">全栈开发 · Notion Labs</div>
+            </div>
+          </div>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══ Pricing ═══ -->
+  <section class="pricing" id="pricing">
+    <div class="container">
+      <h2 class="section-title fade-up">简单透明的<span class="gradient-text">定价</span></h2>
+      <p class="section-subtitle fade-up">开源核心永久免费，按需升级。</p>
+      <div class="pricing__grid">
+        <article class="pricing-card fade-up">
+          <div class="pricing-card__name">Free</div>
+          <div class="pricing-card__price">$0 <span>/ 月</span></div>
+          <p class="pricing-card__desc">适合个人开发与开源项目。</p>
+          <ul class="pricing-card__features">
+            <li class="pricing-card__feature">完整运行时核心</li>
+            <li class="pricing-card__feature">社区插件访问</li>
+            <li class="pricing-card__feature">基础诊断面板</li>
+            <li class="pricing-card__feature">Discord 社区支持</li>
+          </ul>
+          <a href="#cta" class="btn btn--outline">免费使用</a>
+        </article>
+        <article class="pricing-card pricing-card--featured fade-up">
+          <div class="pricing-card__name">Pro</div>
+          <div class="pricing-card__price">$19 <span>/ 月</span></div>
+          <p class="pricing-card__desc">适合专业开发者与小型团队。</p>
+          <ul class="pricing-card__features">
+            <li class="pricing-card__feature">Free 所有功能</li>
+            <li class="pricing-card__feature">高级诊断 + 性能分析</li>
+            <li class="pricing-card__feature">私有插件注册表</li>
+            <li class="pricing-card__feature">优先工单支持</li>
+            <li class="pricing-card__feature">团队协作空间</li>
+          </ul>
+          <a href="#cta" class="btn btn--primary">升级 Pro</a>
+        </article>
+        <article class="pricing-card fade-up">
+          <div class="pricing-card__name">Enterprise</div>
+          <div class="pricing-card__price">联系我们</div>
+          <p class="pricing-card__desc">适合大规模部署与合规需求。</p>
+          <ul class="pricing-card__features">
+            <li class="pricing-card__feature">Pro 所有功能</li>
+            <li class="pricing-card__feature">SSO / SAML 集成</li>
+            <li class="pricing-card__feature">自定义安全策略</li>
+            <li class="pricing-card__feature">SLA 保障 99.99%</li>
+            <li class="pricing-card__feature">专属客户成功经理</li>
+          </ul>
+          <a href="#cta" class="btn btn--outline">联系销售</a>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══ FAQ ═══ -->
+  <section class="faq" id="faq">
+    <div class="container">
+      <h2 class="section-title fade-up">常见<span class="gradient-text">问题</span></h2>
+      <p class="section-subtitle fade-up">快速解答你的疑惑。</p>
+      <div class="faq__list">
+        <div class="faq-item fade-up">
+          <button class="faq-item__question">
+            DRX 与 Node.js / Deno 有什么区别？
+            <span class="faq-item__icon">+</span>
+          </button>
+          <div class="faq-item__answer">
+            <div class="faq-item__answer-inner">
+              DRX 专注于全栈一体化开发体验，内置模块互操作、安全沙箱和诊断系统。无需额外工具链即可处理 ESM/CJS 混合依赖，并提供毫秒级热重载。
+            </div>
+          </div>
+        </div>
+        <div class="faq-item fade-up">
+          <button class="faq-item__question">
+            可以在生产环境使用吗？
+            <span class="faq-item__icon">+</span>
+          </button>
+          <div class="faq-item__answer">
+            <div class="faq-item__answer-inner">
+              当然。DRX 已在数百家企业的生产环境中稳定运行，正常运行率 99.9%+。Enterprise 计划还提供 SLA 保障和专属技术支持。
+            </div>
+          </div>
+        </div>
+        <div class="faq-item fade-up">
+          <button class="faq-item__question">
+            现有 Node.js 项目如何迁移？
+            <span class="faq-item__icon">+</span>
+          </button>
+          <div class="faq-item__answer">
+            <div class="faq-item__answer-inner">
+              DRX 兼容 npm 生态，大多数项目只需安装 DRX CLI 并运行 <code>drx migrate</code> 即可完成迁移。我们提供详细的迁移指南和自动化检测工具。
+            </div>
+          </div>
+        </div>
+        <div class="faq-item fade-up">
+          <button class="faq-item__question">
+            支持哪些编程语言？
+            <span class="faq-item__icon">+</span>
+          </button>
+          <div class="faq-item__answer">
+            <div class="faq-item__answer-inner">
+              核心运行时支持 TypeScript 和 JavaScript。通过插件系统可扩展 C#、C++ 等语言的互操作。所有语言均享受统一的模块解析和安全策略。
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══ CTA Banner ═══ -->
+  <section class="cta-banner" id="cta">
+    <div class="container">
+      <div class="cta-banner__inner fade-up">
+        <h2 class="cta-banner__title">准备好开始了吗？</h2>
+        <p class="cta-banner__desc">免费开始，几分钟内部署你的第一个项目。</p>
+        <a href="#" class="btn btn--white">免费创建账户 →</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══ Footer ═══ -->
+  <footer class="footer">
+    <div class="container">
+      <div class="footer__grid">
+        <div>
+          <div class="nav__brand"><span class="gradient-text">DRX</span></div>
+          <p class="footer__brand-desc">下一代开发者运行环境。让构建变得简单、安全、快速。</p>
+        </div>
+        <div>
+          <h4 class="footer__heading">产品</h4>
+          <ul class="footer__links">
+            <li><a href="#features" class="footer__link">功能特性</a></li>
+            <li><a href="#pricing" class="footer__link">定价方案</a></li>
+            <li><a href="#" class="footer__link">更新日志</a></li>
+            <li><a href="#" class="footer__link">路线图</a></li>
+          </ul>
+        </div>
+        <div>
+          <h4 class="footer__heading">资源</h4>
+          <ul class="footer__links">
+            <li><a href="#" class="footer__link">文档</a></li>
+            <li><a href="#" class="footer__link">API 参考</a></li>
+            <li><a href="#" class="footer__link">示例项目</a></li>
+            <li><a href="#" class="footer__link">博客</a></li>
+          </ul>
+        </div>
+        <div>
+          <h4 class="footer__heading">社区</h4>
+          <ul class="footer__links">
+            <li><a href="#" class="footer__link">GitHub</a></li>
+            <li><a href="#" class="footer__link">Discord</a></li>
+            <li><a href="#" class="footer__link">Twitter / X</a></li>
+            <li><a href="#" class="footer__link">贡献指南</a></li>
+          </ul>
+        </div>
+      </div>
+      <div class="footer__bottom">
+        <span>&copy; 2026 DRX. All rights reserved.</span>
+        <div class="footer__social">
+          <a href="#" aria-label="GitHub">GH</a>
+          <a href="#" aria-label="Discord">DC</a>
+          <a href="#" aria-label="Twitter">X</a>
+        </div>
+      </div>
+    </div>
+  </footer>
+
+  <script src="../js/html.js"></script>
+</body>
+</html>

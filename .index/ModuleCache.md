@@ -17,6 +17,9 @@
 | `Update(cacheKey, record)` | `string, ModuleRecord` | `void` | 状态转换后更新缓存。 |
 | `Contains(cacheKey)` | `string` | `bool` | 是否含指定键。 |
 | `IsLoading(cacheKey)` | `string` | `bool` | 指定键是否处于 Loading 状态。 |
+| `InvalidateModule(cacheKey)` | `string` | `bool` | 失效单模块（移除缓存与 in-flight）。 |
+| `InvalidateDependents(cacheKey)` | `string` | `IReadOnlyList<string>` | 失效直接/间接依赖指定模块的所有依赖者（不含自身）。 |
+| `InvalidateWithDependents(cacheKey)` | `string` | `IReadOnlyList<string>` | 失效指定模块及其全部依赖者。 |
 | `GetSnapshot()` | `-` | `IReadOnlyDictionary<string, ModuleRecord>` | 只读快照。 |
 | `GetStatistics()` | `-` | `ModuleCacheStatistics` | 缓存统计。 |
 | `Clear()` | `-` | `void` | 清空全部缓存与计数。 |
@@ -36,4 +39,7 @@ var record = cache.GetOrLoad(key, () => {
 
 var stats = cache.GetStatistics();
 // stats.HitRate, stats.LoadedCount
+
+// 增量失效
+cache.InvalidateWithDependents(key);
 ```

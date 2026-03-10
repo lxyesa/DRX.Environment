@@ -410,6 +410,22 @@ namespace Drx.Sdk.Network.Http
                 if (response == null)
                 {
                     responseStatusCode = context.Response.StatusCode > 0 ? context.Response.StatusCode : 204;
+                    if (context.Response.StatusCode <= 0)
+                    {
+                        context.Response.StatusCode = 204;
+                    }
+
+                    try
+                    {
+                        context.Response.ContentLength64 = 0;
+                    }
+                    catch { }
+
+                    try
+                    {
+                        context.Response.OutputStream.Close();
+                    }
+                    catch { }
                     return;
                 }
 

@@ -113,6 +113,25 @@ namespace Drx.Sdk.Network.Http
         }
 
         /// <summary>
+        /// 启用或关闭静默模式（NoLog）。
+        /// <para>
+        /// 开启时（true）：全局日志最低级别提升为 <see cref="LogLevel.Fail"/>，
+        /// 仅保留错误日志（Fail/Fatal），Info/Warn/Debug 全部静默，可大幅降低 I/O 开销并提升服务器吞吐量。
+        /// </para>
+        /// <para>
+        /// 关闭时（false，默认）：恢复日志最低级别为 <see cref="LogLevel.Dbug"/>，输出全部日志。
+        /// </para>
+        /// </summary>
+        /// <param name="enable">是否启用静默模式</param>
+        /// <returns>当前服务器实例（支持链式调用）</returns>
+        public DrxHttpServer NoLog(bool enable)
+        {
+            _noLog = enable;
+            Logger.MinimumLevel = enable ? LogLevel.Fail : LogLevel.Dbug;
+            return this;
+        }
+
+        /// <summary>
         /// 从指定起始目录向上递归查找包含 .csproj 或 .sln 文件的项目根目录。
         /// 找不到时返回起始目录本身。
         /// </summary>
@@ -212,6 +231,11 @@ namespace Drx.Sdk.Network.Http
         /// 是否处于调试模式。调试模式下，静态资源根目录的基础路径将从程序运行目录改为项目根目录。
         /// </summary>
         private bool _debugMode = false;
+
+        /// <summary>
+        /// 是否处于静默模式。启用后仅保留错误级别（Fail/Fatal）日志，其余全部静默，以大幅提升吞吐性能。
+        /// </summary>
+        private bool _noLog = false;
         private readonly List<RouteEntry> _routes = new();
         /// <summary>
         /// 路由表快照（不可变引用）。读取路径无锁——直接读 volatile 引用。

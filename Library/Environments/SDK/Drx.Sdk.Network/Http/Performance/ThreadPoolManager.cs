@@ -90,8 +90,6 @@ namespace Drx.Sdk.Network.Http.Performance
                 };
                 _workers[i].Start();
             }
-
-            Logger.Info($"ThreadPoolManager 已启动: workers={_workerCount}, affinity={_enableAffinity}");
         }
 
         private void WorkerLoop(int coreIndex)
@@ -100,11 +98,7 @@ namespace Drx.Sdk.Network.Http.Performance
             if (_enableAffinity)
             {
                 int targetCore = coreIndex % Environment.ProcessorCount;
-                if (CoreAffinityHelper.SetCurrentThreadAffinity(targetCore))
-                {
-                    Logger.Info($"Worker-{coreIndex} 已绑定到 CPU 核心 {targetCore}");
-                }
-                else
+                if (!CoreAffinityHelper.SetCurrentThreadAffinity(targetCore))
                 {
                     Logger.Warn($"Worker-{coreIndex} 绑定到 CPU 核心 {targetCore} 失败，将在所有核心上调度");
                 }

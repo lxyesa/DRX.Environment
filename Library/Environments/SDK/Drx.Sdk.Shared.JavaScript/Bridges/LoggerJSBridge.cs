@@ -61,6 +61,26 @@ namespace Drx.Sdk.Shared.JavaScript.Bridges
         [ScriptExport]
         public static Task logAsync(object message)
             => Task.Run(() => Logger.Info(message?.ToString() ?? "null"));
+
+        /// <summary>
+        /// 设置全局日志最低级别。
+        /// 支持字符串："debug"/"info"/"warn"/"error"/"fatal"/"none"。
+        /// 设为 "error" 可静默所有非错误日志，大幅提升服务器性能。
+        /// </summary>
+        [ScriptExport]
+        public static void setLevel(string level)
+        {
+            Logger.MinimumLevel = (level?.Trim().ToLowerInvariant()) switch
+            {
+                "debug" or "dbug" => LogLevel.Dbug,
+                "info"            => LogLevel.Info,
+                "warn" or "warning" => LogLevel.Warn,
+                "error" or "fail" => LogLevel.Fail,
+                "fatal"           => LogLevel.Fatal,
+                "none" or "off"   => LogLevel.None,
+                _ => LogLevel.Dbug
+            };
+        }
     }
 
     /// <summary>

@@ -1,5 +1,5 @@
 {
-  "updated": "2026-03-09",
+  "updated": "2026-03-10",
   "entries": [
     {
       "file": "Examples/PackageImportSystemTests/PackageImportSystemTests.csproj",
@@ -169,37 +169,17 @@
     {
       "file": "Library/Applications/Clients/Paperclip/Program.cs",
       "md_file": "PaperclipProgram.md",
-      "description": "Paperclip 脚本主机入口：EnsurePathRegistered（自注册 PATH/PAPERCLIP_HOME）、run/mrun/create 与 ts run/ts create 命令，默认脚手架目录统一为 paperclip_models。"
+      "description": "Paperclip CLI 主入口：命令解析与 run/repl/project/help/version 路由，统一异常格式化与退出码处理。"
     },
     {
-      "file": "Library/Applications/Clients/Paperclip/Program.Project.cs",
-      "md_file": "PaperclipProgram.md",
-      "description": "Program partial（项目与环境）：PATH 自注册、create/ts create 项目初始化，生成 main.js/main.ts 初始模板与 paperclip_models 下 JS/TS 友好导出模块。"
+      "file": "Library/Applications/Clients/Paperclip/Hosting/Project/ProjectHost.cs",
+      "md_file": "PaperclipProjectHost.md",
+      "description": "project 子命令处理器：创建/删除项目目录，从嵌入资源释放 global.d.ts，生成 project.json 与 main.ts 初始模板。"
     },
     {
-      "file": "Library/Applications/Clients/Paperclip/Program.Execution.cs",
-      "md_file": "PaperclipProgram.md",
-      "description": "Program partial（执行链路）：run/mrun 参数解析与脚本执行、ModuleRuntimeOptions 配置装载（CLI+paperclip.json，含 imports map）、安全边界校验与调试输出控制；预置模块预加载、宿主类型注册与 dynamic import() 全局函数注册。"
-    },
-    {
-      "file": "Library/Applications/Clients/Paperclip/Program.Resources.cs",
-      "md_file": "PaperclipProgram.md",
-      "description": "Program partial（资源发现）：嵌入模型资源扫描与 EmbeddedModelResource 记录类型定义。"
-    },
-    {
-      "file": "Library/Applications/Clients/Paperclip/TypeScriptCommandHandler.cs",
-      "md_file": "PaperclipProgram.md",
-      "description": "TypeScript 命令处理器：封装 ts run/ts create 子命令分发与执行，供 Program 仅做路由委托。"
-    },
-    {
-      "file": "Library/Applications/Clients/Paperclip/Models/paperclip.module.js",
-      "md_file": "PaperclipSdkModule.md",
-      "description": "Paperclip 单文件 SDK 模块：内置桥接兜底、核心模块系统与 log/fs/stream/dotnet 子模块注册，兼容旧 API 并提供 JS/TS 友好命名；末尾导出层为 @paperclip/sdk 包入口提供 ESM-compatible namespace。"
-    },
-    {
-      "file": "Library/Applications/Clients/Paperclip/Models/TypeScript/paperclip.module.d.ts",
-      "md_file": "PaperclipSdkModule.md",
-      "description": "Paperclip 单文件 TypeScript 声明：集中定义全局 Paperclip、模块上下文与 log/fs/stream/dotnet 全量类型；新增 declare module '@paperclip/sdk' 包入口类型映射。"
+      "file": "Library/Applications/Clients/Paperclip/Resources/global.d.ts",
+      "md_file": "PaperclipGlobalDts.md",
+      "description": "嵌入资源 TypeScript 全局声明：print/pause/HttpServer/DrxHttpServer/HttpServerFactory/HttpResponse + HttpRequest/HttpSession/SseClient 接口。"
     },
     {
       "file": "Library/Environments/SDK/Drx.Sdk.Shared.JavaScript/Bridges/LoggerJSBridge.cs",
@@ -233,7 +213,7 @@
     {
       "file": "Library/Environments/SDK/Drx.Sdk.Shared.JavaScript/Engine/ModuleCache.cs",
       "md_file": "ModuleCache.md",
-      "description": "线程安全模块实例缓存：规范化 URL 缓存键、ConcurrentDictionary 存储、single-flight 并发合并加载、缓存命中/未命中统计、循环依赖占位机制。"
+      "description": "线程安全模块实例缓存：规范化 URL 缓存键、ConcurrentDictionary 存储、single-flight 并发合并加载、缓存命中/未命中统计、循环依赖占位机制与增量失效 API。"
     },
     {
       "file": "Library/Environments/SDK/Drx.Sdk.Shared.JavaScript/Engine/ModuleLoader.cs",
@@ -258,12 +238,12 @@
     {
       "file": "Library/Applications/Clients/Paperclip/Cli/PaperclipOptions.cs",
       "md_file": "PaperclipCli.md",
-      "description": "CLI 参数解析结果数据类：ScriptPath、IsRepl、IsHelp、IsVersion、Debug、NoModules、TypeScriptPath、AllowPaths、PluginPaths、ErrorMessage 属性，纯数据持有无逻辑。"
+      "description": "CLI 参数解析结果数据类：ScriptPath、IsRepl、IsHelp、IsVersion、Debug、Watch、NoCache、NoModules、TypeScriptPath、AllowPaths、PluginPaths、ErrorMessage 属性，纯数据持有无逻辑。"
     },
     {
       "file": "Library/Applications/Clients/Paperclip/Cli/CliParser.cs",
       "md_file": "PaperclipCli.md",
-      "description": "手写 CLI 参数解析器：Parse(string[]) 静态方法，解析 run/repl 子命令及 --help/--version/--debug/--no-modules/--allow-path/--plugin/--typescript-path 标志，返回 PaperclipOptions。未识别参数设置 ErrorMessage。"
+      "description": "手写 CLI 参数解析器：Parse(string[]) 静态方法，解析 run/repl 子命令及 --help/-h、--version/-v、--debug、--watch/-w、--no-cache、--no-modules、--allow-path、--plugin、--typescript-path 标志，返回 PaperclipOptions。未识别参数设置 ErrorMessage。"
     },
     {
       "file": "Library/Applications/Clients/Paperclip/Cli/HelpText.cs",
@@ -276,7 +256,7 @@
       "description": "异常格式化静态类：Format(Exception) 将 SDK 异常（JavaScriptException/ModuleLoadException/ModuleResolutionException/ImportSecurityException）格式化为 Error [{code}]: {message} + Hint 格式；GetExitCode(Exception) 返回 NFR-3 退出码映射。"
     },
     {
-      "file": "Library/Applications/Clients/Paperclip/Hosting/PluginLoader.cs",
+      "file": "Library/Applications/Clients/Paperclip/Hosting/Plugins/PluginLoader.cs",
       "md_file": "PaperclipPluginLoader.md",
       "description": "插件动态加载静态类：Load(IReadOnlyList<string>) 加载用户指定 DLL，扫描 IJavaScriptPlugin 实现并实例化返回。仅加载显式指定 DLL，不自动扫描目录。"
     },
@@ -286,19 +266,124 @@
       "description": "诊断输出管道类：封装 ModuleDiagnosticCollector 事件到 stderr 的实时输出；Flush() 增量输出新事件；PrintSummary(ModuleCache) 输出缓存统计与诊断摘要。仅 --debug 模式激活。"
     },
     {
-      "file": "Library/Applications/Clients/Paperclip/Hosting/EngineBootstrap.cs",
+      "file": "Library/Applications/Clients/Paperclip/Hosting/Bootstrap/EngineBootstrap.cs",
       "md_file": "PaperclipEngineBootstrap.md",
-      "description": "引擎启动器（IDisposable）：根据 PaperclipOptions 配置 ModuleRuntimeOptions/ImportSecurityPolicy/ModuleResolver/ModuleCache/ModuleLoader/DiagnosticCollector 全栈，通过 JavaScriptEngineBuilder 创建引擎实例，暴露 Engine/ModuleLoader/DiagnosticOutput 属性。"
+      "description": "引擎启动器（IDisposable）：根据 PaperclipOptions 配置 ModuleRuntimeOptions/ImportSecurityPolicy/ModuleResolver/ModuleCache/ModuleLoader/TranspileCache/DiagnosticCollector 全栈，通过 JavaScriptEngineBuilder 创建引擎实例并注册内置全局桥接。"
     },
     {
-      "file": "Library/Applications/Clients/Paperclip/Hosting/ScriptHost.cs",
+      "file": "Library/Applications/Clients/Paperclip/Hosting/Runtime/ScriptHost.cs",
       "md_file": "PaperclipScriptHost.md",
-      "description": "脚本执行器静态类：入口检测（文件/目录+project.json/index.js/index.ts）、TypeScript 转译、模块图加载或直接执行，返回退出码。"
+      "description": "脚本执行器静态类：入口检测（文件/目录+project.json/index.js/index.ts）、TypeScript 转译缓存命中/回写、模块图加载或直接执行，返回退出码。"
     },
     {
-      "file": "Library/Applications/Clients/Paperclip/Hosting/ReplHost.cs",
+      "file": "Library/Applications/Clients/Paperclip/Hosting/Caching/TranspileCache.cs",
+      "md_file": "TranspileCache.md",
+      "description": "TS 转译缓存组件：按源哈希/TS版本/格式版本做命中校验，支持磁盘持久化与损坏缓存自动降级。"
+    },
+    {
+      "file": "Library/Applications/Clients/Paperclip/Hosting/Repl/ReplHost.cs",
       "md_file": "PaperclipReplHost.md",
       "description": "REPL 交互宿主：支持多行输入、.exit/.help/.clear/.load 命令、错误不中断循环与 Ctrl+C/Ctrl+D 处理。"
+    },
+    {
+      "file": "Library/Applications/Clients/Paperclip/Hosting/Bridges/HttpServerFactoryBridge.cs",
+      "md_file": "PaperclipHttpServerFactoryBridge.md",
+      "description": "DrxHttpServer 脚本友好工厂桥接：提供 Create/CreateFromPrefix 单点入口、函数对象/函数名路由与中间件注册、路由级限流回调与扩展 HTTP 方法映射。"
+    },
+    {
+      "file": "Library/Applications/Clients/Paperclip/Hosting/Bridges/BuiltinFunctionsBridge.cs",
+      "md_file": "PaperclipEngineBootstrap.md",
+      "description": "Paperclip 内置全局函数桥接：提供 print/pause 并由 EngineBootstrap 注册到脚本全局。"
+    },
+    {
+      "file": "Library/Applications/Clients/Paperclip/Hosting/Bridges/ScriptHttpServer.cs",
+      "md_file": "PaperclipHttpServerFactoryBridge.md",
+      "description": "脚本友好 HTTP 服务器实例包装：支持 new HttpServer(prefix)、链式 map/use、路由级限流回调设置及更多 HTTP 动词快捷方法。"
+    },
+    {
+      "file": "Library/Applications/Clients/Paperclip/Hosting/Bridges/ScriptHttpResponse.cs",
+      "md_file": "PaperclipScriptHttpResponse.md",
+      "description": "脚本友好 HTTP 响应工厂：提供 file/download/json/text/html/redirect/status 等静态方法快速构建 HttpResponse。"
+    },
+    {
+      "file": "Library/Applications/Clients/Paperclip/Hosting/Bridges/HttpClientBridge.cs",
+      "md_file": "PaperclipHttpClientBridge.md",
+      "description": "HTTP 客户端脚本桥接层：提供 fetch 风格静态 API（get/post/put/del/downloadFile/uploadFile）及独立实例操作代理。"
+    },
+    {
+      "file": "Library/Applications/Clients/Paperclip/Hosting/Bridges/TcpClientBridge.cs",
+      "md_file": "PaperclipTcpClientBridge.md",
+      "description": "TCP/UDP 客户端脚本桥接层：提供 createTcp/createUdp/connect/sendText/sendBytes/disconnect 等静态 API。"
+    },
+    {
+      "file": "Library/Applications/Clients/Paperclip/Hosting/Bridges/EmailBridge.cs",
+      "md_file": "PaperclipEmailBridge.md",
+      "description": "邮件发送脚本桥接层：提供 createSender/send/sendHtml/sendMarkdown/trySend 静态 API。"
+    },
+    {
+      "file": "Library/Applications/Clients/Paperclip/Hosting/Bridges/DatabaseBridge.cs",
+      "md_file": "PaperclipDatabaseBridge.md",
+      "description": "SQLite 数据库脚本桥接层：原始 SQL（open/execute/query/scalar/transaction/tables/close）+ 便利 CRUD（insert/insertBatch/update/deleteWhere/upsert/queryOne/count/exists）+ DDL（createTable/dropTable/addColumn/columns/createIndex）。"
+    },
+    {
+      "file": "Library/Applications/Clients/Paperclip/Hosting/Bridges/JsonBridge.cs",
+      "md_file": "PaperclipJsonBridge.md",
+      "description": "JSON 序列化脚本桥接层：提供 stringify/parse/readFile/writeFile .NET 侧 JSON 操作。"
+    },
+    {
+      "file": "Library/Applications/Clients/Paperclip/Hosting/Bridges/CryptoBridge.cs",
+      "md_file": "PaperclipCryptoBridge.md",
+      "description": "加密与哈希脚本桥接层：提供 AES 加解密、SHA256/MD5 哈希、HMAC、Base64 编解码、UUID 生成。"
+    },
+    {
+      "file": "Library/Applications/Clients/Paperclip/Hosting/Bridges/DirectoryBridge.cs",
+      "md_file": "PaperclipDirectoryBridge.md",
+      "description": "目录操作脚本桥接层：提供目录创建/删除/枚举/移动/复制/大小计算等静态 API。"
+    },
+    {
+      "file": "Library/Applications/Clients/Paperclip/Hosting/Bridges/PathBridge.cs",
+      "md_file": "PaperclipPathBridge.md",
+      "description": "路径操作脚本桥接层：提供路径拼接/解析/扩展名/相对路径/规范化等静态 API。"
+    },
+    {
+      "file": "Library/Applications/Clients/Paperclip/Hosting/Bridges/EnvironmentBridge.cs",
+      "md_file": "PaperclipEnvironmentBridge.md",
+      "description": "环境信息脚本桥接层：提供环境变量读写、OS信息、特殊目录路径、进程信息等静态 API。"
+    },
+    {
+      "file": "Library/Applications/Clients/Paperclip/Hosting/Bridges/ProcessBridge.cs",
+      "md_file": "PaperclipProcessBridge.md",
+      "description": "进程操作脚本桥接层：提供启动外部进程、shell 命令执行、后台进程管理等静态 API。"
+    },
+    {
+      "file": "Library/Applications/Clients/Paperclip/Hosting/Bridges/RegexBridge.cs",
+      "md_file": "PaperclipRegexBridge.md",
+      "description": ".NET 正则表达式脚本桥接层：提供 isMatch/match/matches/replace/split 等静态 API。"
+    },
+    {
+      "file": "Library/Applications/Clients/Paperclip/Hosting/Bridges/ConvertBridge.cs",
+      "md_file": "PaperclipConvertBridge.md",
+      "description": "类型转换脚本桥接层：提供数值/进制/日期时间转换与安全解析等静态 API。"
+    },
+    {
+      "file": "Library/Applications/Clients/Paperclip/Hosting/Bridges/TimerBridge.cs",
+      "md_file": "PaperclipTimerBridge.md",
+      "description": "计时器脚本桥接层：提供 Stopwatch 高精度计时、延时等待等静态 API。"
+    },
+    {
+      "file": "Library/Applications/Clients/Paperclip/Hosting/Watch/ScriptFileWatcher.cs",
+      "md_file": "PaperclipScriptFileWatcher.md",
+      "description": "脚本文件监听适配层：复用 DevFileChangeService，聚合并过滤 JS/TS 脚本变更，输出去抖后的变更路径集合。"
+    },
+    {
+      "file": "Library/Applications/Clients/Paperclip/Hosting/Watch/WatchHost.cs",
+      "md_file": "PaperclipWatchHost.md",
+      "description": "run --watch 宿主：实现首轮执行、变更触发重载、HTTP 服务器热重载（ActiveServerTracker 停止旧实例）、错误容错与 Ctrl+C 优雅退出。"
+    },
+    {
+      "file": "Library/Applications/Clients/Paperclip/Hosting/Watch/ActiveServerTracker.cs",
+      "md_file": "PaperclipWatchHost.md",
+      "description": "HTTP 服务器生命周期追踪器：静态类，watch 模式下在重载前批量停止上一轮所有 HTTP 服务器实例以释放端口。"
     }
   ]
 }

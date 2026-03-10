@@ -10,6 +10,25 @@
   <ItemGroup>
     <ProjectReference Include="..\..\..\Environments\SDK\Drx.Sdk.Shared.JavaScript\Drx.Sdk.Shared.JavaScript.csproj" />
     <ProjectReference Include="..\..\..\Environments\SDK\Drx.Sdk.Shared\Drx.Sdk.Shared.csproj" />
+    <ProjectReference Include="..\..\..\Environments\SDK\Drx.Sdk.Network\Drx.Sdk.Network.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Resources\global.d.ts">
+      <LogicalName>DrxPaperclip.Resources.global.d.ts</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Resources\templates\http_server\main.ts">
+      <LogicalName>DrxPaperclip.Resources.templates.http_server.main.ts</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Resources\templates\http_server\project.json">
+      <LogicalName>DrxPaperclip.Resources.templates.http_server.project.json</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Resources\templates\http_server\tsconfig.json">
+      <LogicalName>DrxPaperclip.Resources.templates.http_server.tsconfig.json</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Resources\templates\http_server\public\index.html">
+      <LogicalName>DrxPaperclip.Resources.templates.http_server.public.index.html</LogicalName>
+    </EmbeddedResource>
   </ItemGroup>
 
 </Project>

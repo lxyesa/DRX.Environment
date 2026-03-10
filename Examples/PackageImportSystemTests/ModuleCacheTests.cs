@@ -178,6 +178,84 @@ namespace PackageImportSystemTests
 
         #endregion
 
+        #region 增量失效 API (FR-3)
+
+        [Fact]
+        public void InvalidateDependents_ShouldKeepRoot_AndInvalidateDependentsOnly()
+        {
+            var cache = new ModuleCache();
+            var keyA = "module-a";
+            var keyB = "module-b";
+            var keyC = "module-c";
+            var keyU = "module-unrelated";
+
+            cache.Update(keyA, CreateLoadedRecord(keyA, Array.Empty<string>()));
+            cache.Update(keyB, CreateLoadedRecord(keyB, new[] { keyA }));
+            cache.Update(keyC, CreateLoadedRecord(keyC, new[] { keyB }));
+            cache.Update(keyU, CreateLoadedRecord(keyU, Array.Empty<string>()));
+
+            var invalidated = cache.InvalidateDependents(keyA);
+
+            invalidated.Should().BeEquivalentTo(new[] { keyB, keyC });
+            cache.Contains(keyA).Should().BeTrue("根模块不应被 InvalidateDependents 移除");
+            cache.Contains(keyB).Should().BeFalse();
+            cache.Contains(keyC).Should().BeFalse();
+            cache.Contains(keyU).Should().BeTrue("无关模块应保持命中");
+        }
+
+        [Fact]
+        public void InvalidateWithDependents_ShouldInvalidateRootAndDependents_KeepUnrelated()
+        {
+            var cache = new ModuleCache();
+            var keyA = "module-a";
+            var keyB = "module-b";
+            var keyC = "module-c";
+            var keyU = "module-unrelated";
+
+            cache.Update(keyA, CreateLoadedRecord(keyA, Array.Empty<string>()));
+            cache.Update(keyB, CreateLoadedRecord(keyB, new[] { keyA }));
+            cache.Update(keyC, CreateLoadedRecord(keyC, new[] { keyB }));
+            cache.Update(keyU, CreateLoadedRecord(keyU, Array.Empty<string>()));
+
+            var invalidated = cache.InvalidateWithDependents(keyA);
+
+            invalidated.Should().BeEquivalentTo(new[] { keyA, keyB, keyC });
+            cache.Contains(keyA).Should().BeFalse();
+            cache.Contains(keyB).Should().BeFalse();
+            cache.Contains(keyC).Should().BeFalse();
+            cache.Contains(keyU).Should().BeTrue("无关模块应保持命中");
+        }
+
+        [Fact]
+        public void InvalidateWithDependents_CycleGraph_ShouldNotLoop()
+        {
+            var cache = new ModuleCache();
+            var keyA = "cycle-a";
+            var keyB = "cycle-b";
+
+            cache.Update(keyA, CreateLoadedRecord(keyA, new[] { keyB }));
+            cache.Update(keyB, CreateLoadedRecord(keyB, new[] { keyA }));
+
+            var act = () => cache.InvalidateWithDependents(keyA);
+
+            act.Should().NotThrow();
+            cache.Contains(keyA).Should().BeFalse();
+            cache.Contains(keyB).Should().BeFalse();
+        }
+
+        private static ModuleRecord CreateLoadedRecord(string cacheKey, IReadOnlyList<string> dependencies)
+        {
+            var record = new ModuleRecord(cacheKey, cacheKey, ModuleKind.Esm);
+            record.MarkLoaded(
+                moduleNamespace: null,
+                exports: new Dictionary<string, object?>(),
+                dependencies: dependencies,
+                loadDuration: TimeSpan.Zero);
+            return record;
+        }
+
+        #endregion
+
         #region Clear / GetSnapshot
 
         [Fact]

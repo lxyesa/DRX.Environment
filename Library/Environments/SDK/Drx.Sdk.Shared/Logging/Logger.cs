@@ -53,6 +53,12 @@ public static partial class Logger
     public static LogLevel MinimumLevel { get; set; } = LogLevel.Dbug;
 
     /// <summary>
+    /// 是否在日志中显示调用方代码行信息（ClassName:LineNumber）。
+    /// 默认关闭以节省性能（避免 CallerFilePath/CallerLineNumber 的字符串处理开销）。
+    /// </summary>
+    public static bool ShowCallerInfo { get; set; } = false;
+
+    /// <summary>
     /// 日志输出回调钩子，每条日志格式化后会调用此委托（若不为 null）。
     /// 参数：(格式化后的日志字符串, 日志级别, 时间戳)
     /// </summary>
@@ -214,11 +220,18 @@ public static partial class Logger
         sb.Clear();
         sb.Append('[')
           .Append(log.Time.ToString(DateTimeFormat))
-          .Append("][")
-          .Append(log.ClassName)
-          .Append(':')
-          .Append(log.LineNumber)
-          .Append("][")
+          .Append(']');
+
+        if (ShowCallerInfo)
+        {
+            sb.Append('[')
+              .Append(log.ClassName)
+              .Append(':')
+              .Append(log.LineNumber)
+              .Append(']');
+        }
+
+        sb.Append('[')
           .Append(LevelNames.TryGetValue(log.Level, out var lvlName) ? lvlName : log.Level.ToString().ToUpper())
           .Append(']');
 

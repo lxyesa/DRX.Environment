@@ -10,10 +10,17 @@
 | Property | Type | Default | Description |
 |---|---|---|---|
 | `ScriptPath` | `string?` | `null` | run 子命令的目标路径 |
+| `RunFunctionName` | `string?` | `null` | run 子命令的可选入口函数名 |
 | `IsRepl` | `bool` | `false` | 是否为 repl 子命令 |
+| `IsProjectCreate` | `bool` | `false` | 是否为 `project cr` 子命令 |
+| `IsHttpTemplate` | `bool` | `false` | `project cr -http` 使用 HTTP 服务器模板 |
+| `IsProjectDelete` | `bool` | `false` | 是否为 `project de` 子命令 |
+| `ProjectName` | `string?` | `null` | `project cr/de` 的项目名 |
 | `IsHelp` | `bool` | `false` | --help 标志 |
 | `IsVersion` | `bool` | `false` | --version 标志 |
 | `Debug` | `bool` | `false` | --debug 诊断输出标志 |
+| `Watch` | `bool` | `false` | --watch / -w 启用 run 监听模式 |
+| `NoCache` | `bool` | `false` | --no-cache 禁用 TS 转译缓存 |
 | `NoModules` | `bool` | `false` | --no-modules 禁用模块系统 |
 | `TypeScriptPath` | `string?` | `null` | --typescript-path 自定义 TS 编译器路径 |
 | `AllowPaths` | `List<string>` | `[]` | --allow-path 安全白名单目录（可多次） |
@@ -39,11 +46,12 @@
 
 ### Parsing Rules
 1. 无参数 → `IsHelp = true`
-2. 第一个非 `-` 参数识别子命令：`run` / `repl`
-3. `run` 后下一个非 `-` 参数为 `ScriptPath`
-4. 非 `run`/`repl` 的首个参数视为 `run <path>` 简写
+2. 第一个非 `-` 参数识别子命令：`run` / `repl` / `project`
+3. `run` 后第一个非 `-` 参数为 `ScriptPath`，第二个非 `-` 参数为可选 `RunFunctionName`
+4. `project cr [-http] <name>` / `project de <name>` 映射为项目创建/删除
+5. 非已知子命令的首个参数视为 `run <path>` 简写
 5. `--key value` 配对解析（`--allow-path`、`--plugin`、`--typescript-path`）
-6. 布尔标志：`--help`/`-h`、`--version`/`-v`、`--debug`、`--no-modules`
+6. 布尔标志：`--help`/`-h`、`--version`/`-v`、`--debug`、`--watch`/`-w`、`--no-cache`、`--no-modules`
 7. 未识别参数 → 设置 `ErrorMessage` 返回
 8. 缺少必需值 → 设置 `ErrorMessage` 返回
 
@@ -66,8 +74,8 @@
 | `GetVersion` | `static string GetVersion()` | 返回版本字符串 |
 
 ### Help Text Coverage
-- 子命令：`run <path>`、`repl`
-- 选项：`--help`/`-h`、`--version`/`-v`、`--debug`、`--no-modules`、`--allow-path <dir>`、`--plugin <path>`、`--typescript-path <dir>`
+- 子命令：`run <path> [function]`、`repl`、`project cr <name>`、`project de <name>`
+- 选项：`--help`/`-h`、`--version`/`-v`、`--debug`、`--watch`/`-w`、`--no-cache`、`--no-modules`、`--allow-path <dir>`、`--plugin <path>`、`--typescript-path <dir>`
 
 ### Spec Traceability
 - **Requirement**: FR-5 (CLI 参数体系) — `paperclip --help` 显示所有子命令和参数

@@ -8,8 +8,23 @@ public sealed class PaperclipOptions
     /// <summary>run 子命令的目标路径（文件或目录）。</summary>
     public string? ScriptPath { get; set; }
 
+    /// <summary>run 子命令的可选入口函数名。</summary>
+    public string? RunFunctionName { get; set; }
+
     /// <summary>是否为 repl 子命令。</summary>
     public bool IsRepl { get; set; }
+
+    /// <summary>是否为 project cr 子命令。</summary>
+    public bool IsProjectCreate { get; set; }
+
+    /// <summary>project cr 是否使用 HTTP 服务器模板 (-http)。</summary>
+    public bool IsHttpTemplate { get; set; }
+
+    /// <summary>是否为 project de 子命令。</summary>
+    public bool IsProjectDelete { get; set; }
+
+    /// <summary>project cr/de 的目标项目名。</summary>
+    public string? ProjectName { get; set; }
 
     /// <summary>是否请求帮助信息 (--help)。</summary>
     public bool IsHelp { get; set; }
@@ -19,6 +34,12 @@ public sealed class PaperclipOptions
 
     /// <summary>是否启用调试诊断输出 (--debug)。</summary>
     public bool Debug { get; set; }
+
+    /// <summary>是否启用 run 监听模式 (--watch/-w)。</summary>
+    public bool Watch { get; set; }
+
+    /// <summary>是否禁用 TS 转译缓存 (--no-cache)。</summary>
+    public bool NoCache { get; set; }
 
     /// <summary>是否禁用模块系统 (--no-modules)。</summary>
     public bool NoModules { get; set; }

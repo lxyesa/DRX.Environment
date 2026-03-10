@@ -32,10 +32,6 @@ namespace Drx.Sdk.Network.Http.Commands
             
             Logger.Info("========== 命令控制台已启动 ==========");
             Logger.Info("输入命令或 'help' 获取帮助, 'exit' 退出");
-            // 绿色提示符
-            Console.ForegroundColor = ConsoleColor.Green;
-            Console.Write("[USER_INPUT] > ");
-            Console.ResetColor();
 
             try
             {

@@ -1,6 +1,7 @@
 ﻿using DrxPaperclip.Cli;
 using DrxPaperclip.Formatting;
 using DrxPaperclip.Hosting;
+using DrxPaperclip.Hosting.Watch;
 
 namespace DrxPaperclip;
 
@@ -40,15 +41,35 @@ public partial class Program
                 using var bootstrap = EngineBootstrap.Create(options);
                 exitCode = ReplHost.Start(bootstrap);
             }
+            else if (options.IsProjectCreate)
+            {
+                if (options.IsHttpTemplate)
+                {
+                    ProjectHost.CreateHttpProject(options.ProjectName!);
+                    Console.WriteLine($"HTTP 服务器项目已创建: {options.ProjectName}");
+                }
+                else
+                {
+                    ProjectHost.CreateProject(options.ProjectName!);
+                    Console.WriteLine($"项目已创建: {options.ProjectName}");
+                }
+            }
+            else if (options.IsProjectDelete)
+            {
+                ProjectHost.DeleteProject(options.ProjectName!);
+                Console.WriteLine($"项目已删除: {options.ProjectName}");
+            }
             else if (!string.IsNullOrWhiteSpace(options.ScriptPath))
             {
                 using var bootstrap = EngineBootstrap.Create(options);
-                exitCode = ScriptHost.Run(options, bootstrap);
+                exitCode = options.Watch
+                    ? WatchHost.Run(options, bootstrap)
+                    : ScriptHost.Run(options, bootstrap);
             }
             else
             {
                 Console.Error.WriteLine("Error [CLI_INVALID]: 缺少脚本路径或子命令。");
-                Console.Error.WriteLine("Hint: 使用 run <path> 或 repl，或执行 --help 查看说明。");
+                Console.Error.WriteLine("Hint: 使用 run <path>、repl 或 project <cr|de> <name>，或执行 --help 查看说明。");
                 exitCode = 2;
             }
         }

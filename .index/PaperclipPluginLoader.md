@@ -1,7 +1,7 @@
 # PaperclipPluginLoader
 
 ## PluginLoader.cs
-- **Path**: `Library/Applications/Clients/Paperclip/Hosting/PluginLoader.cs`
+- **Path**: `Library/Applications/Clients/Paperclip/Hosting/Plugins/PluginLoader.cs`
 - **Namespace**: `DrxPaperclip.Hosting`
 - **Type**: `public static class PluginLoader`
 - **Description**: 插件动态加载器，将 `--plugin <path>` 指定的 DLL 加载为 `IJavaScriptPlugin` 实例。
