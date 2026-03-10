@@ -1,0 +1,735 @@
+/* ================================================================
+   KaxHub — 服务器控制台样式
+   模拟终端的深色风格，与全局主题一致
+   ================================================================ */
+
+/* ================================================================
+   布局容器
+   ================================================================ */
+.console-container {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 32px 20px 48px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    min-height: calc(100vh - var(--topbar-height));
+}
+
+/* ================================================================
+   控制台标题栏
+   ================================================================ */
+.console-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+}
+
+.console-header-left {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+}
+
+.console-logo {
+    width: 44px;
+    height: 44px;
+    border-radius: 10px;
+    background: rgba(59, 130, 246, 0.12);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.console-logo .material-icons {
+    color: var(--btn-accent);
+    font-size: 22px;
+}
+
+.console-header h1 {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: var(--white);
+    line-height: 1.3;
+}
+
+.console-lead {
+    font-size: 0.82rem;
+    color: rgba(255, 255, 255, 0.45);
+    margin-top: 2px;
+}
+
+.console-header-right {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.console-status {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.82rem;
+    color: rgba(255, 255, 255, 0.55);
+}
+
+.status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.status-dot.online {
+    background: #34d399;
+    box-shadow: 0 0 6px rgba(52, 211, 153, 0.5);
+}
+
+.status-dot.offline {
+    background: #ef4444;
+    box-shadow: 0 0 6px rgba(239, 68, 68, 0.5);
+}
+
+.status-dot.connecting {
+    background: #fbbf24;
+    box-shadow: 0 0 6px rgba(251, 191, 36, 0.5);
+    animation: statusPulse 1s ease-in-out infinite;
+}
+
+@keyframes statusPulse {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: 0.35; }
+}
+
+/* ================================================================
+   终端主体
+   ================================================================ */
+.terminal-wrapper {
+    border-radius: 10px;
+    overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    background: #0a0a0a;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 480px;
+}
+
+/* 终端工具栏（macOS 风格小圆点） */
+.terminal-toolbar {
+    display: flex;
+    align-items: center;
+    height: 40px;
+    padding: 0 14px;
+    background: rgba(255, 255, 255, 0.03);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+    flex-shrink: 0;
+}
+
+.terminal-dots {
+    display: flex;
+    gap: 7px;
+    align-items: center;
+}
+
+.terminal-dots .dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+}
+
+.terminal-dots .dot.red {
+    background: #ff5f57;
+}
+
+.terminal-dots .dot.yellow {
+    background: #febc2e;
+}
+
+.terminal-dots .dot.green {
+    background: #28c840;
+}
+
+.terminal-title {
+    flex: 1;
+    text-align: center;
+    font-size: 0.78rem;
+    color: rgba(255, 255, 255, 0.35);
+    font-family: 'JetBrains Mono', 'Consolas', monospace;
+    user-select: none;
+}
+
+.terminal-actions {
+    display: flex;
+    gap: 4px;
+}
+
+.toolbar-btn {
+    background: transparent;
+    border: none;
+    color: rgba(255, 255, 255, 0.35);
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s, color 0.15s;
+}
+
+.toolbar-btn:hover {
+    background: rgba(255, 255, 255, 0.06);
+    color: rgba(255, 255, 255, 0.7);
+}
+
+.toolbar-btn .material-icons {
+    font-size: 18px;
+}
+
+/* 终端内容区域 */
+.terminal-body {
+    flex: 1;
+    padding: 16px;
+    overflow-y: auto;
+    font-family: 'JetBrains Mono', 'Consolas', 'Courier New', monospace;
+    font-size: 0.85rem;
+    line-height: 1.65;
+    display: flex;
+    flex-direction: column;
+    cursor: text;
+}
+
+.terminal-output {
+    flex: 1;
+    white-space: pre-wrap;
+    word-break: break-all;
+}
+
+/* 输出行样式 */
+.output-line {
+    padding: 1px 0;
+    animation: fadeInLine 0.12s ease;
+}
+
+@keyframes fadeInLine {
+    from {
+        opacity: 0;
+        transform: translateY(2px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.output-line.info {
+    color: rgba(255, 255, 255, 0.82);
+}
+
+.output-line.success {
+    color: #34d399;
+}
+
+.output-line.error {
+    color: #f87171;
+}
+
+.output-line.warn {
+    color: #fbbf24;
+}
+
+.output-line.system {
+    color: #60a5fa;
+}
+
+.output-line.muted {
+    color: rgba(255, 255, 255, 0.35);
+}
+
+.output-line.command-echo {
+    color: #a78bfa;
+}
+
+/* 欢迎 Banner */
+.output-banner {
+    color: #60a5fa;
+    margin-bottom: 8px;
+    font-weight: 500;
+}
+
+/* 分隔线 */
+.output-separator {
+    border: none;
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+    margin: 8px 0;
+}
+
+/* ================================================================
+   输入行
+   ================================================================ */
+.terminal-input-line {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    flex-shrink: 0;
+    position: relative;
+}
+
+.terminal-prompt {
+    flex-shrink: 0;
+    user-select: none;
+    font-size: 0.85rem;
+    line-height: 1;
+}
+
+.prompt-user {
+    color: #34d399;
+    font-weight: 500;
+}
+
+.prompt-at {
+    color: rgba(255, 255, 255, 0.3);
+}
+
+.prompt-host {
+    color: #60a5fa;
+    font-weight: 500;
+}
+
+.prompt-colon {
+    color: rgba(255, 255, 255, 0.3);
+}
+
+.prompt-path {
+    color: #a78bfa;
+}
+
+.prompt-dollar {
+    color: rgba(255, 255, 255, 0.5);
+    margin-right: 8px;
+}
+
+.terminal-input {
+    flex: 1;
+    background: transparent;
+    border: none;
+    outline: none;
+    color: rgba(255, 255, 255, 0.92);
+    font-family: 'JetBrains Mono', 'Consolas', 'Courier New', monospace;
+    font-size: 0.85rem;
+    line-height: 1.65;
+    caret-color: #34d399;
+}
+
+.terminal-input::placeholder {
+    color: rgba(255, 255, 255, 0.15);
+}
+
+/* 执行中光标闪烁 */
+.terminal-input.busy {
+    pointer-events: none;
+    opacity: 0.5;
+}
+
+/* ================================================================
+   自动补全下拉
+   ================================================================ */
+.autocomplete-dropdown {
+    position: absolute;
+    left: 0;
+    bottom: 100%;
+    margin-bottom: 4px;
+    background: #1a1a1a;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 6px;
+    max-height: 200px;
+    overflow-y: auto;
+    min-width: 240px;
+    z-index: 100;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+
+.autocomplete-dropdown.hidden {
+    display: none;
+}
+
+.autocomplete-item {
+    padding: 6px 12px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.8rem;
+    transition: background 0.1s;
+}
+
+.autocomplete-item:hover,
+.autocomplete-item.active {
+    background: rgba(59, 130, 246, 0.15);
+}
+
+.autocomplete-item .ac-name {
+    color: #60a5fa;
+    font-weight: 500;
+}
+
+.autocomplete-item .ac-desc {
+    color: rgba(255, 255, 255, 0.35);
+    font-size: 0.72rem;
+    margin-left: auto;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 180px;
+}
+
+/* ================================================================
+   命令参考面板
+   ================================================================ */
+.command-reference {
+    border-radius: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    background: rgba(255, 255, 255, 0.015);
+    overflow: hidden;
+}
+
+.reference-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 16px;
+    cursor: pointer;
+    user-select: none;
+    font-size: 0.88rem;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.7);
+    transition: color 0.15s;
+}
+
+.reference-header:hover {
+    color: var(--white);
+}
+
+.reference-icon {
+    font-size: 18px;
+    color: var(--btn-accent);
+}
+
+.reference-caret {
+    margin-left: auto;
+    font-size: 20px;
+    transition: transform 0.2s ease;
+}
+
+.reference-caret.rotated {
+    transform: rotate(180deg);
+}
+
+.reference-body {
+    padding: 0 16px 16px;
+}
+
+.reference-body.hidden {
+    display: none;
+}
+
+.command-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 8px;
+}
+
+.command-list .hint {
+    color: rgba(255, 255, 255, 0.3);
+    font-size: 0.82rem;
+}
+
+.cmd-card {
+    background: rgba(255, 255, 255, 0.025);
+    border: 1px solid rgba(255, 255, 255, 0.04);
+    border-radius: 6px;
+    padding: 10px 14px;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+}
+
+.cmd-card:hover {
+    background: rgba(59, 130, 246, 0.06);
+    border-color: rgba(59, 130, 246, 0.15);
+}
+
+.cmd-card-name {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.82rem;
+    color: #60a5fa;
+    font-weight: 500;
+    margin-bottom: 4px;
+}
+
+.cmd-card-desc {
+    font-size: 0.76rem;
+    color: rgba(255, 255, 255, 0.4);
+    line-height: 1.4;
+}
+
+.cmd-card-category {
+    display: inline-block;
+    font-size: 0.68rem;
+    color: rgba(255, 255, 255, 0.3);
+    background: rgba(255, 255, 255, 0.04);
+    padding: 2px 6px;
+    border-radius: 3px;
+    margin-top: 6px;
+}
+
+/* ================================================================
+   全屏模式
+   ================================================================ */
+.console-container.fullscreen {
+    position: fixed;
+    top: var(--topbar-height);
+    left: 0;
+    right: 0;
+    bottom: 0;
+    max-width: none;
+    padding: 0;
+    margin: 0;
+    z-index: 500;
+    background: var(--bg);
+    border-radius: 0;
+}
+
+.console-container.fullscreen .console-header {
+    padding: 12px 20px;
+}
+
+.console-container.fullscreen .terminal-wrapper {
+    border-radius: 0;
+    border: none;
+    min-height: unset;
+}
+
+.console-container.fullscreen .command-reference {
+    display: none;
+}
+
+/* ================================================================
+   加载与提示
+   ================================================================ */
+#loading {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--bg);
+    z-index: 9999;
+}
+
+#loading .spinner {
+    width: 36px;
+    height: 36px;
+    border: 3px solid rgba(255, 255, 255, 0.1);
+    border-top-color: var(--btn-accent);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* ================================================================
+   日志格式化样式
+   ================================================================ */
+.output-line.log-entry {
+    font-size: 0.78rem;
+    line-height: 1.5;
+    padding: 2px 0;
+    border-left: 2px solid rgba(255, 255, 255, 0.04);
+    padding-left: 8px;
+    margin-left: 2px;
+}
+
+.log-time {
+    color: rgba(255, 255, 255, 0.3);
+    margin-right: 2px;
+}
+
+.log-source {
+    color: #818cf8;
+    margin-right: 2px;
+}
+
+.log-level-info {
+    color: #34d399;
+    font-weight: 500;
+    margin-right: 4px;
+}
+
+.log-level-warn {
+    color: #fbbf24;
+    font-weight: 500;
+    margin-right: 4px;
+}
+
+.log-level-error {
+    color: #f87171;
+    font-weight: 600;
+    margin-right: 4px;
+}
+
+.log-level-fatal {
+    color: #ef4444;
+    font-weight: 700;
+    margin-right: 4px;
+    text-shadow: 0 0 6px rgba(239, 68, 68, 0.4);
+}
+
+.log-level-debug {
+    color: rgba(255, 255, 255, 0.35);
+    margin-right: 4px;
+}
+
+.log-text {
+    color: rgba(255, 255, 255, 0.72);
+}
+
+/* 工具栏按钮激活状态 */
+.toolbar-btn.active {
+    background: rgba(59, 130, 246, 0.15);
+    color: #60a5fa;
+}
+
+/* ================================================================
+   日志时间分组样式
+   ================================================================ */
+
+/* 分组容器 */
+.log-group {
+    margin: 4px 0;
+    border-left: 2px solid rgba(255, 255, 255, 0.04);
+    margin-left: 2px;
+}
+
+/* 分组标题行（可点击折叠） */
+.log-group-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 8px;
+    cursor: pointer;
+    font-size: 0.72rem;
+    color: rgba(255, 255, 255, 0.28);
+    user-select: none;
+    transition: color 0.15s, background 0.15s;
+    border-radius: 2px;
+}
+
+.log-group-header:hover {
+    color: rgba(255, 255, 255, 0.5);
+    background: rgba(255, 255, 255, 0.03);
+}
+
+/* 折叠箭头 */
+.log-group-caret {
+    font-size: 14px;
+    transition: transform 0.18s ease;
+    flex-shrink: 0;
+    color: rgba(255, 255, 255, 0.2);
+}
+
+.log-group.collapsed .log-group-caret {
+    transform: rotate(-90deg);
+}
+
+/* 分组时间标签 */
+.log-group-time {
+    font-family: 'JetBrains Mono', monospace;
+    letter-spacing: 0.02em;
+}
+
+/* 分组内条目数量 */
+.log-group-count {
+    font-size: 0.68rem;
+    color: rgba(255, 255, 255, 0.2);
+    margin-left: 4px;
+}
+
+/* 分组内容区域 */
+.log-group-body {
+    overflow: hidden;
+    transition: max-height 0.2s ease;
+}
+
+.log-group.collapsed .log-group-body {
+    display: none;
+}
+
+/* ================================================================
+   日志条目（精简版，去掉来源行号）
+   ================================================================ */
+
+/* 覆盖原来 log-entry 里的左边框（现在 border 由 .log-group 提供） */
+.log-group .output-line.log-entry {
+    border-left: none;
+    padding-left: 8px;
+    margin-left: 0;
+}
+
+/* 重复日志的去重角标 */
+.log-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 255, 255, 0.07);
+    color: rgba(255, 255, 255, 0.45);
+    font-size: 0.65rem;
+    font-family: 'JetBrains Mono', monospace;
+    padding: 0 5px;
+    border-radius: 10px;
+    margin-left: 5px;
+    min-width: 20px;
+    line-height: 16px;
+    vertical-align: middle;
+    transition: background 0.15s;
+}
+
+/* 数量较多时加重显示 */
+.log-count.many {
+    background: rgba(251, 191, 36, 0.12);
+    color: #fbbf24;
+}
+
+/* ================================================================
+   响应式调整
+   ================================================================ */
+@media (max-width: 768px) {
+    .console-container {
+        padding: 16px 10px 32px;
+    }
+
+    .console-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 12px;
+    }
+
+    .terminal-wrapper {
+        min-height: 360px;
+    }
+
+    .command-list {
+        grid-template-columns: 1fr;
+    }
+
+    .terminal-body {
+        font-size: 0.78rem;
+    }
+}

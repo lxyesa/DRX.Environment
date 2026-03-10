@@ -1,0 +1,355 @@
+(function(){
+    'use strict';
+
+    const template = document.createElement('template');
+    template.innerHTML = `
+    <style>
+            :host{display:block; width: var(--_width, auto); height: var(--_height, auto);} 
+        .field{ border-radius:4px; border:1px solid rgba(255,255,255,0.06); padding:10px 12px; background: rgba(255,255,255,0.01); box-sizing:border-box; min-height: var(--field-min-height, auto); height: var(--field-height, auto); }
+      .label{ display:block; font-size:0.82rem; color:rgba(255,255,255,0.72); margin-bottom:6px; }
+      .label-divider{ height:1px; background:rgba(255,255,255,0.03); margin:6px 0 8px; border-radius:1px; }
+    :host(:not([label])) .label,
+    :host(:not([label])) .label-divider{ display:none; }
+      .input-row{ display:flex; align-items:center; gap:8px; }
+      input, textarea{ flex:1; min-width:0; border:none; background:transparent; color:var(--muted-strong, rgba(255,255,255,0.92)); font-size:0.95rem; padding:6px 0; outline:none; font-family:inherit; }
+      input:disabled, textarea:disabled{ opacity:0.6; }
+      /* 抵消浏览器自动填充注入的白色背景：使用超长过渡延迟让系统样式不可见 */
+      input:-webkit-autofill,
+      input:-webkit-autofill:hover,
+      input:-webkit-autofill:focus,
+      input:-webkit-autofill:active{
+        -webkit-box-shadow: 0 0 0 1000px transparent inset !important;
+        -webkit-text-fill-color: var(--muted-strong, rgba(255,255,255,0.92)) !important;
+        caret-color: var(--muted-strong, rgba(255,255,255,0.92)) !important;
+        transition: background-color 99999s ease-in-out 0s !important;
+        background-color: transparent !important;
+      }
+      textarea{ resize:vertical; }
+      :host(:focus-within) .field{ border-color: rgba(59,130,246,0.95); box-shadow: 0 0 0 4px rgba(59,130,246,0.04); }
+      :host([compact]) .field{ padding:8px 10px; }
+
+      /* size 档位：large */
+      :host([size="large"]) .field{ padding:14px 16px; }
+      :host([size="large"]) .label{ font-size:0.92rem; margin-bottom:8px; }
+      :host([size="large"]) input,
+      :host([size="large"]) textarea{ font-size:1.08rem; padding:8px 0; }
+
+      /* size 档位：small */
+      :host([size="small"]) .field{ padding:6px 8px; }
+      :host([size="small"]) .label{ font-size:0.75rem; margin-bottom:4px; }
+      :host([size="small"]) .label-divider{ margin:4px 0 5px; }
+      :host([size="small"]) input,
+      :host([size="small"]) textarea{ font-size:0.85rem; padding:4px 0; }
+
+      /* size 档位：headerless — 隐藏 label 和分割线 */
+      :host([size="headerless"]) .label,
+      :host([size="headerless"]) .label-divider{ display:none; }
+      :host([size="headerless"]) .field{ padding:6px 10px; }
+
+      /* size 档位：small-headerless — small模式的无header */
+      :host([size="small-headerless"]) .label,
+      :host([size="small-headerless"]) .label-divider{ display:none; }
+      :host([size="small-headerless"]) .field{ padding:6px 8px; }
+      :host([size="small-headerless"]) input,
+      :host([size="small-headerless"]) textarea{ font-size:0.85rem; padding:4px 0; }
+
+      /* 图标：默认隐藏，有 icon 属性时显示 */
+            .field-icon{
+                display:none;
+                flex-shrink:0;
+                align-items:center;
+                justify-content:center;
+                margin-right:8px;
+                color:rgba(255,255,255,0.45);
+                font-size:18px;
+                line-height:1;
+                font-family: 'Material Icons';
+                font-weight: normal;
+                font-style: normal;
+                letter-spacing: normal;
+                text-transform: none;
+                white-space: nowrap;
+                word-wrap: normal;
+                direction: ltr;
+                font-feature-settings: 'liga';
+                -webkit-font-feature-settings: 'liga';
+                -webkit-font-smoothing: antialiased;
+            }
+      :host([icon]) .field-icon{ display:flex; }
+      :host([size="large"]) .field-icon{ font-size:22px; }
+      :host([size="small"]) .field-icon,
+      :host([size="small-headerless"]) .field-icon{ font-size:15px; margin-right:6px; }
+
+      /* 操作按钮槽位：默认隐藏，show-action 时显示 */
+      .action-slot{ flex-shrink:0; display:none; }
+      :host([show-action]) .action-slot{ display:flex; align-items:center; }
+
+      /* 强制槽位内按钮样式：由组件统一控制，外部不可覆盖 */
+      ::slotted(*){
+        all: unset !important;
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        padding: 4px 10px !important;
+        border-radius: 3px !important;
+        background: var(--button-bg, rgba(255,255,255,0.06)) !important;
+        color: var(--button-color, rgba(255,255,255,0.7)) !important;
+        font-size: 0.82rem !important;
+        font-weight: 600 !important;
+        cursor: pointer !important;
+        white-space: nowrap !important;
+        transition: background 0.14s ease, color 0.14s ease !important;
+        line-height: 1.4 !important;
+        font-family: inherit !important;
+        box-sizing: border-box !important;
+        height: var(--button-height, auto) !important;
+        width: var(--button-width, auto) !important;
+      }
+      ::slotted(*:hover){
+        background: var(--button-hover-bg, rgba(59,130,246,0.15)) !important;
+        color: var(--button-hover-color, #60a5fa) !important;
+      }
+    </style>
+    <div class="field">
+      <label class="label" part="label"></label>
+      <div class="label-divider" part="divider" aria-hidden="true"></div>
+      <div class="input-row">
+        <span class="field-icon material-icons" part="icon" aria-hidden="true"></span>
+        <input part="input" />
+        <textarea part="textarea" style="display:none;"></textarea>
+        <div class="action-slot" part="action">
+          <slot name="action"></slot>
+        </div>
+      </div>
+    </div>
+    `;
+
+    class InputBox extends HTMLElement {
+        static get observedAttributes(){ return ['label','placeholder','type','value','readonly','disabled','minlength','maxlength','name','autocomplete','textarea','rows','show-action','size','icon','button-height','button-width','button-color','width','height']; }
+        constructor(){
+            super();
+            this._shadow = this.attachShadow({mode:'open'});
+            this._shadow.appendChild(template.content.cloneNode(true));
+            this._labelEl = this._shadow.querySelector('.label');
+            this._inputEl = this._shadow.querySelector('input');
+            this._textareaEl = this._shadow.querySelector('textarea');
+            this._iconEl = this._shadow.querySelector('.field-icon');
+            this._isTextarea = this.hasAttribute('textarea');
+            this._setupElement();
+
+            // Proxy native events so consumers can listen on the host
+            ['input','change','focus','blur','keydown','keyup'].forEach(ev=>{
+                const el = this._isTextarea ? this._textareaEl : this._inputEl;
+                el.addEventListener(ev, (e)=>{
+                    const ne = new e.constructor(e.type, e);
+                    this.dispatchEvent(ne);
+                });
+            });
+        }
+
+        _setupElement(){
+            if (this._isTextarea) {
+                this._inputEl.style.display = 'none';
+                this._textareaEl.style.display = '';
+            } else {
+                this._inputEl.style.display = '';
+                this._textareaEl.style.display = 'none';
+            }
+        }
+
+        connectedCallback(){
+            // initialize from attributes
+            this._upgradeProperty('value');
+            this._syncAttributesToInput();
+        }
+
+        attributeChangedCallback(name, oldVal, newVal){
+            if (oldVal === newVal) return;
+            this._syncAttribute(name, newVal);
+        }
+
+        // allow setting properties before element is defined
+        _upgradeProperty(prop){
+            if (this.hasOwnProperty(prop)){
+                let val = this[prop];
+                delete this[prop];
+                this[prop] = val;
+            }
+        }
+
+        _syncAttributesToInput(){
+            InputBox.observedAttributes.forEach(a=> this._syncAttribute(a, this.getAttribute(a)));
+            // if host has id, keep it on host; internal input gets a stable internal id for accessibility
+            const hostId = this.getAttribute('id');
+            if (hostId && !this._inputEl.id) this._inputEl.id = hostId + '_native';
+            if (hostId && !this._textareaEl.id) this._textareaEl.id = hostId + '_native';
+            // wrap label click focusing already works because label is in shadow DOM and contains input
+        }
+
+        _syncAttribute(name, val){
+            switch(name){
+                case 'label':
+                    this._labelEl.textContent = val || '';
+                    break;
+                case 'placeholder':
+                    this._inputEl.placeholder = val || '';
+                    this._textareaEl.placeholder = val || '';
+                    break;
+                case 'type':
+                    this._inputEl.type = val || 'text';
+                    break;
+                case 'value':
+                    if (this._inputEl.value !== (val || '')) this._inputEl.value = val || '';
+                    if (this._textareaEl.value !== (val || '')) this._textareaEl.value = val || '';
+                    break;
+                case 'readonly':
+                    if (val === null) {
+                        this._inputEl.removeAttribute('readonly');
+                        this._textareaEl.removeAttribute('readonly');
+                    } else {
+                        this._inputEl.setAttribute('readonly','');
+                        this._textareaEl.setAttribute('readonly','');
+                    }
+                    break;
+                case 'disabled':
+                    if (val === null) {
+                        this._inputEl.removeAttribute('disabled');
+                        this._textareaEl.removeAttribute('disabled');
+                    } else {
+                        this._inputEl.setAttribute('disabled','');
+                        this._textareaEl.setAttribute('disabled','');
+                    }
+                    break;
+                case 'minlength':
+                    if (val==null) {
+                        this._inputEl.removeAttribute('minlength');
+                        this._textareaEl.removeAttribute('minlength');
+                    } else {
+                        this._inputEl.setAttribute('minlength', val);
+                        this._textareaEl.setAttribute('minlength', val);
+                    }
+                    break;
+                case 'maxlength':
+                    if (val==null) {
+                        this._inputEl.removeAttribute('maxlength');
+                        this._textareaEl.removeAttribute('maxlength');
+                    } else {
+                        this._inputEl.setAttribute('maxlength', val);
+                        this._textareaEl.setAttribute('maxlength', val);
+                    }
+                    break;
+                case 'name':
+                    if (val==null) {
+                        this._inputEl.removeAttribute('name');
+                        this._textareaEl.removeAttribute('name');
+                    } else {
+                        this._inputEl.setAttribute('name', val);
+                        this._textareaEl.setAttribute('name', val);
+                    }
+                    break;
+                case 'autocomplete':
+                    if (val==null) this._inputEl.removeAttribute('autocomplete'); else this._inputEl.setAttribute('autocomplete', val);
+                    break;
+                case 'rows':
+                    if (val==null) this._textareaEl.removeAttribute('rows'); else this._textareaEl.setAttribute('rows', val);
+                    break;
+                case 'textarea':
+                    this._isTextarea = val !== null;
+                    this._setupElement();
+                    break;
+                case 'show-action':
+                    // 'show-action' 属性只需要反映到 host 上即可
+                    // CSS 中已经通过 :host([show-action]) 来控制显示/隐藏
+                    break;
+                case 'size':
+                    // size 属性通过 CSS :host([size="..."]) 选择器控制样式
+                    // 合法值：large / small / headerless，不设置时为默认尺寸
+                    break;
+                case 'icon':
+                    // 图标名称使用 Material Icons 字体连字
+                    if (this._iconEl) this._iconEl.textContent = val || '';
+                    break;
+                case 'button-height':
+                    // 按钮高度：支持任何 CSS 尺寸单位 (px, em, rem, etc.)
+                    if (val) {
+                        this._shadow.host.style.setProperty('--button-height', val);
+                    } else {
+                        this._shadow.host.style.removeProperty('--button-height');
+                    }
+                    break;
+                case 'button-width':
+                    // 按钮宽度：支持任何 CSS 尺寸单位 (px, em, rem, etc.)
+                    if (val) {
+                        this._shadow.host.style.setProperty('--button-width', val);
+                    } else {
+                        this._shadow.host.style.removeProperty('--button-width');
+                    }
+                    break;
+                case 'button-color':
+                    // 按钮颜色：支持 CSS 颜色值 (hex, rgb, color-name, etc.)
+                    if (val) {
+                        this._shadow.host.style.setProperty('--button-color', val);
+                        // 如果没有设置 hover 颜色，自动生成一个稍亮的版本
+                        if (!this.hasAttribute('button-hover-color')) {
+                            this._shadow.host.style.setProperty('--button-hover-color', val);
+                        }
+                    } else {
+                        this._shadow.host.style.removeProperty('--button-color');
+                        this._shadow.host.style.removeProperty('--button-hover-color');
+                    }
+                    break;
+                case 'width':
+                    if (val) {
+                        this._shadow.host.style.setProperty('--_width', val);
+                    } else {
+                        this._shadow.host.style.removeProperty('--_width');
+                    }
+                    break;
+                case 'height':
+                    if (val) {
+                        this._shadow.host.style.setProperty('--_height', val);
+                        this._shadow.host.style.setProperty('--field-height', '100%');
+                    } else {
+                        this._shadow.host.style.removeProperty('--_height');
+                        this._shadow.host.style.removeProperty('--field-height');
+                    }
+                    break;
+            }
+        }
+
+        // proxy value property
+        get value(){ 
+            const el = this._isTextarea ? this._textareaEl : this._inputEl;
+            return el.value; 
+        }
+        set value(v){ 
+            this.setAttribute('value', v == null ? '' : String(v)); 
+            this._inputEl.value = v == null ? '' : String(v);
+            this._textareaEl.value = v == null ? '' : String(v);
+        }
+
+        // proxy disabled/readonly
+        get disabled(){ return this._inputEl.disabled; }
+        set disabled(v){ if (v) this.setAttribute('disabled',''); else this.removeAttribute('disabled'); }
+
+        get readOnly(){ return this._inputEl.readOnly; }
+        set readOnly(v){ if (v) this.setAttribute('readonly',''); else this.removeAttribute('readonly'); }
+
+        // proxy focus
+        focus(options){ 
+            const el = this._isTextarea ? this._textareaEl : this._inputEl;
+            el.focus(options); 
+        }
+        blur(){ 
+            const el = this._isTextarea ? this._textareaEl : this._inputEl;
+            el.blur(); 
+        }
+
+        // expose the internal input for advanced use (not enumerable)
+        get input(){ return this._inputEl; }
+        get textarea(){ return this._textareaEl; }
+    }
+
+    if (!customElements.get('input-box')) customElements.define('input-box', InputBox);
+    window.InputBox = InputBox;
+})();

@@ -59,12 +59,12 @@ public static class ScriptHost
 
         if (options.NoModules)
         {
-            var executionResult = ExecuteWithoutModules(entryFile, projectRoot, bootstrap, options.Debug);
+            var executionResult = ExecuteWithoutModules(entryFile, projectRoot, bootstrap, options.Debug, entryFunction);
             WaitForPendingTask(executionResult, "入口脚本执行结果", cancellationToken);
         }
         else
         {
-            var executionResult = ExecuteWithModules(entryFile, projectRoot, bootstrap, options.Debug);
+            var executionResult = ExecuteWithModules(entryFile, projectRoot, bootstrap, options.Debug, entryFunction);
             WaitForPendingTask(executionResult, "模块入口执行结果", cancellationToken);
         }
 
@@ -408,14 +408,20 @@ public static class ScriptHost
     /// <summary>
     /// 非模块模式执行（--no-modules）。
     /// </summary>
-    private static object? ExecuteWithoutModules(string entryFile, string projectRoot, EngineBootstrap bootstrap, bool debug)
+    private static object? ExecuteWithoutModules(string entryFile, string projectRoot, EngineBootstrap bootstrap, bool debug, string? entryFunction = null)
     {
         if (IsTypeScript(entryFile))
         {
-            return ExecuteTypeScriptWithOptionalCache(entryFile, projectRoot, bootstrap, debug);
+            return ExecuteTypeScriptWithOptionalCache(entryFile, projectRoot, bootstrap, debug, entryFunctionBinding: entryFunction);
         }
         else
         {
+            if (!string.IsNullOrWhiteSpace(entryFunction))
+            {
+                var source = InjectEntryFunctionBinding(File.ReadAllText(entryFile), entryFunction!);
+                return bootstrap.Engine.Execute(source);
+            }
+
             return bootstrap.Engine.ExecuteFile(entryFile);
         }
     }
@@ -423,7 +429,7 @@ public static class ScriptHost
     /// <summary>
     /// 模块模式执行：通过 ModuleLoader 加载模块图。
     /// </summary>
-    private static object? ExecuteWithModules(string entryFile, string projectRoot, EngineBootstrap bootstrap, bool debug)
+    private static object? ExecuteWithModules(string entryFile, string projectRoot, EngineBootstrap bootstrap, bool debug, string? entryFunction = null)
     {
         var moduleLoader = bootstrap.ModuleLoader
             ?? throw new InvalidOperationException("模块系统未初始化，但未指定 --no-modules。");
@@ -470,6 +476,11 @@ public static class ScriptHost
         var entryRecord = moduleLoader.LoadModuleGraph(entryFile, (filePath, source) =>
         {
             currentExecutingFile = filePath;
+            var isEntryFile = string.Equals(
+                Path.GetFullPath(filePath), Path.GetFullPath(entryFile),
+                StringComparison.OrdinalIgnoreCase);
+            var bindingName = isEntryFile ? entryFunction : null;
+
             if (IsTypeScript(filePath))
             {
                 return ExecuteTypeScriptWithOptionalCache(
@@ -477,10 +488,14 @@ public static class ScriptHost
                     projectRoot,
                     bootstrap,
                     debug,
-                    sourceContentOverride: source);
+                    sourceContentOverride: source,
+                    entryFunctionBinding: bindingName);
             }
 
-            return bootstrap.Engine.Execute(source);
+            var effectiveSource = !string.IsNullOrWhiteSpace(bindingName)
+                ? InjectEntryFunctionBinding(source, bindingName!)
+                : source;
+            return bootstrap.Engine.Execute(effectiveSource);
         });
 
         return entryRecord.Namespace;
@@ -494,7 +509,8 @@ public static class ScriptHost
         string projectRoot,
         EngineBootstrap bootstrap,
         bool debug,
-        string? sourceContentOverride = null)
+        string? sourceContentOverride = null,
+        string? entryFunctionBinding = null)
     {
         var sourceContent = sourceContentOverride ?? File.ReadAllText(filePath);
         var transpileCache = bootstrap.TranspileCache;
@@ -505,6 +521,12 @@ public static class ScriptHost
             if (debug)
             {
                 Console.Error.WriteLine($"[precompile] HIT  {filePath} -> {precompiledJsFile}");
+            }
+
+            if (!string.IsNullOrWhiteSpace(entryFunctionBinding))
+            {
+                var precompiledSource = InjectEntryFunctionBinding(File.ReadAllText(precompiledJsFile), entryFunctionBinding!);
+                return bootstrap.Engine.Execute(precompiledSource);
             }
 
             return bootstrap.Engine.ExecuteFile(precompiledJsFile);
@@ -522,10 +544,19 @@ public static class ScriptHost
             var jsOutputPath = PersistPrecompiledJs(filePath, cachedCode, sourceContent, typeScriptVersion, projectRoot);
             if (!string.IsNullOrEmpty(jsOutputPath) && File.Exists(jsOutputPath))
             {
+                if (!string.IsNullOrWhiteSpace(entryFunctionBinding))
+                {
+                    var cached = InjectEntryFunctionBinding(File.ReadAllText(jsOutputPath), entryFunctionBinding!);
+                    return bootstrap.Engine.Execute(cached);
+                }
+
                 return bootstrap.Engine.ExecuteFile(jsOutputPath);
             }
 
-            return bootstrap.Engine.Execute(cachedCode);
+            return bootstrap.Engine.Execute(
+                !string.IsNullOrWhiteSpace(entryFunctionBinding)
+                    ? InjectEntryFunctionBinding(cachedCode, entryFunctionBinding!)
+                    : cachedCode);
         }
 
         if (debug && transpileCache != null)
@@ -543,10 +574,49 @@ public static class ScriptHost
                 Console.Error.WriteLine($"[precompile] BUILD {filePath} -> {outputPath}");
             }
 
+            if (!string.IsNullOrWhiteSpace(entryFunctionBinding))
+            {
+                var built = InjectEntryFunctionBinding(File.ReadAllText(outputPath), entryFunctionBinding!);
+                return bootstrap.Engine.Execute(built);
+            }
+
             return bootstrap.Engine.ExecuteFile(outputPath);
         }
 
-        return bootstrap.Engine.Execute(jsSource);
+        return bootstrap.Engine.Execute(
+            !string.IsNullOrWhiteSpace(entryFunctionBinding)
+                ? InjectEntryFunctionBinding(jsSource, entryFunctionBinding!)
+                : jsSource);
+    }
+
+    /// <summary>
+    /// 生成入口函数自动绑定脚本片段，将同名函数声明挂载到 globalThis。
+    /// </summary>
+    private static string GenerateEntryFunctionBinding(string functionName)
+    {
+        var escaped = functionName
+            .Replace("\\", "\\\\", StringComparison.Ordinal)
+            .Replace("\"", "\\\"", StringComparison.Ordinal)
+            .Replace("\n", "", StringComparison.Ordinal)
+            .Replace("\r", "", StringComparison.Ordinal);
+        return $"\ntry {{ if (typeof {escaped} === 'function') globalThis[\"{escaped}\"] = {escaped}; }} catch(e) {{}}\n";
+    }
+
+    /// <summary>
+    /// 将入口函数绑定片段注入到 JS 源码中。
+    /// 若源码包含 CJS 包装（<c>return module.exports;</c>），则在其前方注入，保证在 IIFE 作用域内；
+    /// 否则追加到末尾。
+    /// </summary>
+    private static string InjectEntryFunctionBinding(string jsSource, string functionName)
+    {
+        var binding = GenerateEntryFunctionBinding(functionName);
+        const string cjsReturnMarker = "return module.exports;";
+        var insertIndex = jsSource.LastIndexOf(cjsReturnMarker, StringComparison.Ordinal);
+        if (insertIndex >= 0)
+        {
+            return jsSource.Insert(insertIndex, binding);
+        }
+        return jsSource + binding;
     }
 
     private static bool TryGetPrecompiledJs(

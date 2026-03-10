@@ -1,0 +1,300 @@
+/* ================================================================
+   KaxHub — 开发者中心基础样式
+   包含：CSS 变量、body、header、container、tabs、toolbar、
+         status badge、empty state、pagination
+   依赖 global.css 的 :root 变量、button、topbar 样式
+   ================================================================ */
+
+:root {
+    --dev-bg: var(--bg, #0f0f0f);
+    --dev-text-primary: var(--white, #ffffff);
+    --dev-text-strong: var(--muted-strong, rgba(255, 255, 255, 0.9));
+    --dev-text-secondary: rgba(255, 255, 255, 0.68);
+    --dev-text-muted: rgba(255, 255, 255, 0.42);
+    --dev-text-subtle: rgba(255, 255, 255, 0.3);
+    --dev-card-bg: rgba(255, 255, 255, 0.025);
+    --dev-card-border: rgba(255, 255, 255, 0.05);
+    --dev-card-hover-bg: rgba(255, 255, 255, 0.045);
+    --dev-card-hover-border: rgba(255, 255, 255, 0.1);
+    --dev-surface-soft: rgba(255, 255, 255, 0.02);
+    --dev-surface-strong: rgba(255, 255, 255, 0.04);
+    --dev-line-soft: rgba(255, 255, 255, 0.05);
+    --dev-line-strong: rgba(255, 255, 255, 0.1);
+    --dev-accent: var(--btn-accent, #638cff);
+    --dev-accent-dim: rgba(99, 140, 255, 0.1);
+    --dev-radius: 6px;
+    --dev-status-pending: #f59e0b;
+    --dev-status-rejected: #ef4444;
+    --dev-status-approved: #3b82f6;
+    --dev-status-active: #22c55e;
+}
+
+body {
+    padding-bottom: 100px;
+}
+
+/* ================================================================
+   Header
+   ================================================================ */
+.dev-header {
+    position: relative;
+    min-height: 200px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    overflow: hidden;
+    border-bottom: 1px solid var(--dev-line-soft);
+    padding: 52px 24px 40px;
+}
+
+.dev-header::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background:
+        radial-gradient(ellipse 70% 80% at 30% 30%, rgba(99, 140, 255, 0.06) 0%, transparent 60%),
+        radial-gradient(ellipse 60% 65% at 72% 58%, rgba(255, 255, 255, 0.03) 0%, transparent 60%);
+    pointer-events: none;
+}
+
+.dev-header-content {
+    position: relative;
+    z-index: 1;
+    max-width: 560px;
+}
+
+.dev-header-eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--dev-accent);
+    opacity: 0.9;
+    margin-bottom: 12px;
+}
+
+.dev-header-eyebrow .material-icons {
+    font-size: 16px;
+}
+
+.dev-header h1 {
+    font-size: 1.7rem;
+    font-weight: 700;
+    color: var(--dev-text-primary);
+    margin-bottom: 8px;
+}
+
+.dev-header p {
+    color: var(--dev-text-secondary);
+    font-size: 0.92rem;
+}
+
+/* ================================================================
+   Container
+   ================================================================ */
+.dev-container {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 24px 20px 48px;
+}
+
+/* ================================================================
+   Tabs
+   ================================================================ */
+.dev-tabs {
+    display: flex;
+    gap: 2px;
+    border-bottom: 1px solid var(--dev-line-soft);
+    margin-bottom: 24px;
+    overflow-x: auto;
+}
+
+.dev-tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 12px 18px;
+    background: transparent;
+    border: none;
+    color: var(--dev-text-muted);
+    font-size: 0.88rem;
+    font-weight: 600;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: color .16s ease, border-color .16s ease, background .16s ease;
+    white-space: nowrap;
+}
+
+.dev-tab .material-icons {
+    font-size: 18px;
+    opacity: 0.6;
+}
+
+.dev-tab:hover {
+    color: var(--dev-text-secondary);
+    background: var(--dev-surface-soft);
+}
+
+.dev-tab.active {
+    color: var(--dev-text-primary);
+    border-bottom-color: var(--dev-accent);
+}
+
+.dev-tab.active .material-icons {
+    opacity: 1;
+    color: var(--dev-accent);
+}
+
+.dev-tab-content {
+    display: none;
+}
+
+.dev-tab-content.active {
+    display: block;
+}
+
+/* ================================================================
+   Toolbar
+   ================================================================ */
+.dev-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+}
+
+.dev-toolbar-left,
+.dev-toolbar-right {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.dev-stat-pills {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.dev-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 5px 12px;
+    border-radius: 999px;
+    background: var(--dev-surface-strong);
+    color: var(--dev-text-secondary);
+    font-size: 0.78rem;
+    font-weight: 500;
+    border: 1px solid var(--dev-line-soft);
+    cursor: default;
+}
+
+.dev-pill b {
+    color: var(--dev-text-strong);
+    font-weight: 700;
+}
+
+/* ================================================================
+   Status Badge
+   ================================================================ */
+.dev-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 10px;
+    border-radius: 999px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    line-height: 1.8;
+}
+
+.dev-status[data-status="0"] {
+    background: rgba(245, 158, 11, 0.12);
+    color: var(--dev-status-pending);
+}
+
+.dev-status[data-status="1"] {
+    background: rgba(239, 68, 68, 0.12);
+    color: var(--dev-status-rejected);
+}
+
+.dev-status[data-status="2"] {
+    background: rgba(59, 130, 246, 0.12);
+    color: var(--dev-status-approved);
+}
+
+.dev-status[data-status="3"] {
+    background: rgba(34, 197, 94, 0.12);
+    color: var(--dev-status-active);
+}
+
+/* ================================================================
+   Empty State
+   ================================================================ */
+.dev-empty {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--dev-text-muted);
+}
+
+.dev-empty .material-icons {
+    font-size: 48px;
+    opacity: 0.3;
+    margin-bottom: 12px;
+}
+
+.dev-empty h3 {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--dev-text-secondary);
+    margin-bottom: 6px;
+}
+
+.dev-empty p {
+    font-size: 0.85rem;
+}
+
+/* ================================================================
+   Pagination
+   ================================================================ */
+.dev-pagination {
+    display: flex;
+    justify-content: center;
+    gap: 4px;
+    margin-top: 24px;
+}
+
+.dev-page-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 34px;
+    height: 34px;
+    padding: 0 8px;
+    border-radius: 4px;
+    border: 1px solid var(--dev-line-soft);
+    background: transparent;
+    color: var(--dev-text-secondary);
+    font-size: 0.82rem;
+    cursor: pointer;
+    transition: background .14s ease, border-color .14s ease;
+}
+
+.dev-page-btn:hover {
+    background: var(--dev-surface-strong);
+    border-color: var(--dev-line-strong);
+}
+
+.dev-page-btn.active {
+    background: var(--dev-accent);
+    color: var(--dev-text-primary);
+    border-color: var(--dev-accent);
+}

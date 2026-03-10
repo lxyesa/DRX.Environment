@@ -1,0 +1,772 @@
+/* ================================================================
+   KaxHub — 创建/编辑资源表单样式
+   包含：dev-form-card、dev-field、dev-form-grid、
+         dev-pricing-panel、dev-price-item、
+         create-* 新布局样式
+   ================================================================ */
+
+/* ================================================================
+   Form Card (Create / Edit Asset)
+   ================================================================ */
+.dev-form-card {
+    background: var(--dev-card-bg);
+    border: 1px solid var(--dev-card-border);
+    border-radius: var(--dev-radius);
+    padding: 28px 24px;
+}
+
+.dev-form-title {
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: var(--dev-text-primary);
+    margin-bottom: 20px;
+}
+
+.dev-form-subtitle {
+    font-size: 0.92rem;
+    font-weight: 600;
+    color: var(--dev-text-secondary);
+    margin: 24px 0 12px;
+    padding-top: 16px;
+    border-top: 1px solid var(--dev-line-soft);
+}
+
+.dev-form-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+}
+
+.dev-form-grid .full-width {
+    grid-column: 1 / -1;
+}
+
+.dev-field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.dev-field label {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--dev-text-secondary);
+    letter-spacing: 0.02em;
+}
+
+.dev-field .required {
+    color: var(--dev-status-rejected);
+}
+
+.dev-field input,
+.dev-field textarea,
+.dev-field select {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 10px 12px;
+    border: 1px solid var(--dev-line-soft);
+    border-radius: 6px;
+    background: var(--dev-surface-soft);
+    color: var(--dev-text-strong);
+    font-size: 0.88rem;
+    font-family: inherit;
+    outline: none;
+    transition: border-color .2s ease, background .2s ease;
+}
+
+.dev-field input:focus,
+.dev-field textarea:focus,
+.dev-field select:focus {
+    border-color: rgba(99, 140, 255, 0.35);
+    background: var(--dev-surface-strong);
+}
+
+.dev-field input::placeholder,
+.dev-field textarea::placeholder {
+    color: var(--dev-text-subtle);
+}
+
+.dev-form-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 24px;
+    padding-top: 16px;
+    border-top: 1px solid var(--dev-line-soft);
+}
+
+/* ================================================================
+   Price Panel (Plan-card Style)
+   ================================================================ */
+.dev-pricing-panel {
+    border: 1px solid var(--dev-line-soft);
+    border-radius: 6px;
+    background: var(--dev-surface-soft);
+    overflow: hidden;
+    margin-bottom: 12px;
+}
+
+.dev-pricing-top {
+    padding: 14px 16px 12px;
+    border-bottom: 1px solid var(--dev-line-soft);
+    background: var(--dev-surface-soft);
+}
+
+.dev-pricing-top-title {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    margin-bottom: 6px;
+    color: var(--dev-text-primary);
+    font-size: 0.92rem;
+    font-weight: 700;
+}
+
+.dev-pricing-top-title .material-icons {
+    font-size: 18px;
+    color: var(--dev-accent);
+}
+
+.dev-pricing-top p {
+    margin: 0;
+    color: var(--dev-text-secondary);
+    font-size: 0.8rem;
+    line-height: 1.65;
+}
+
+.dev-pricing-hints {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--dev-line-soft);
+    background: rgba(255, 255, 255, 0.018);
+}
+
+.dev-pricing-hints > span {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.75rem;
+    color: var(--dev-text-muted);
+}
+
+.dev-pricing-hints .material-icons {
+    font-size: 14px;
+    color: var(--dev-accent);
+    opacity: 0.9;
+}
+
+.dev-prices-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 12px;
+}
+
+.dev-price-item {
+    border: 1px solid var(--dev-line-soft);
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.018);
+    padding: 12px;
+    transition: none;
+}
+
+.dev-price-item:hover {
+    border-color: var(--dev-line-soft);
+    background: rgba(255, 255, 255, 0.018);
+    transform: none;
+}
+
+.dev-price-item-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+.dev-price-chip {
+    display: inline-flex;
+    align-items: center;
+    padding: 3px 10px;
+    border-radius: 999px;
+    border: 1px solid rgba(99, 140, 255, 0.28);
+    background: rgba(99, 140, 255, 0.1);
+    color: #9bb7ff;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+}
+
+.dev-price-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+}
+
+.dev-price-grid .dev-field {
+    min-width: 0;
+}
+
+.dev-price-grid .full-width {
+    grid-column: 1 / -1;
+}
+
+.dev-price-grid .dev-field label {
+    font-size: 0.74rem;
+}
+
+.dev-price-grid .dev-field input {
+    background: rgba(255, 255, 255, 0.02);
+}
+
+.dev-price-grid .dev-field input:focus {
+    box-shadow: 0 0 0 3px rgba(99, 140, 255, 0.14);
+}
+
+.dev-input-affix {
+    display: flex;
+    align-items: center;
+    border: 1px solid var(--dev-line-soft);
+    border-radius: 6px;
+    overflow: hidden;
+    background: rgba(255, 255, 255, 0.02);
+    transition: border-color .2s ease, box-shadow .2s ease;
+}
+
+.dev-input-affix > span {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    padding: 0 10px;
+    color: var(--dev-text-secondary);
+    border-right: 1px solid var(--dev-line-soft);
+    font-size: 0.8rem;
+    font-weight: 600;
+}
+
+.dev-input-affix input {
+    border: none !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+}
+
+.dev-input-affix:focus-within {
+    border-color: rgba(99, 140, 255, 0.42);
+    box-shadow: 0 0 0 3px rgba(99, 140, 255, 0.14);
+}
+
+.dev-price-remove {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 30px;
+    width: 30px;
+    border: 1px solid rgba(239, 68, 68, 0.22);
+    border-radius: 4px;
+    background: rgba(239, 68, 68, 0.08);
+    color: rgba(255, 120, 120, 0.95);
+    cursor: pointer;
+    transition: transform .14s ease, border-color .14s ease, background .14s ease, color .14s ease;
+    flex-shrink: 0;
+}
+
+.dev-price-remove .material-icons {
+    font-size: 17px;
+}
+
+.dev-price-remove:hover {
+    color: #ff8f8f;
+    background: rgba(239, 68, 68, 0.16);
+    border-color: rgba(239, 68, 68, 0.34);
+    transform: translateY(-1px);
+}
+
+.dev-pricing-actions {
+    padding: 0 12px 12px;
+}
+
+/* ================================================================
+   Language Support Panel
+   ================================================================ */
+.dev-lang-panel {
+    border: 1px solid var(--dev-line-soft);
+    border-radius: 6px;
+    background: var(--dev-surface-soft);
+    overflow: hidden;
+}
+
+.dev-lang-top {
+    padding: 14px 16px 12px;
+    border-bottom: 1px solid var(--dev-line-soft);
+    background: rgba(255, 255, 255, 0.018);
+}
+
+.dev-lang-top-title {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    margin-bottom: 6px;
+    color: var(--dev-text-primary);
+    font-size: 0.92rem;
+    font-weight: 700;
+}
+
+.dev-lang-top-title .material-icons {
+    font-size: 18px;
+    color: var(--dev-accent);
+}
+
+.dev-lang-top p {
+    margin: 0;
+    color: var(--dev-text-secondary);
+    font-size: 0.8rem;
+    line-height: 1.6;
+}
+
+.dev-lang-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px;
+}
+
+.dev-lang-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    border: 1px solid var(--dev-line-soft);
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.015);
+    padding: 10px;
+}
+
+.dev-lang-item-main {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    min-width: 0;
+}
+
+.dev-lang-icon {
+    color: var(--dev-accent);
+    font-size: 17px;
+    opacity: 0.9;
+}
+
+.dev-lang-name {
+    width: 100%;
+    min-width: 0;
+    padding: 8px 10px;
+    border: 1px solid var(--dev-line-soft);
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.02);
+    color: var(--dev-text-strong);
+    font-size: 0.83rem;
+    outline: none;
+}
+
+.dev-lang-name:focus {
+    border-color: rgba(99, 140, 255, 0.35);
+}
+
+.dev-lang-check {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--dev-text-secondary);
+    font-size: 0.78rem;
+    user-select: none;
+    white-space: nowrap;
+}
+
+.dev-lang-check input {
+    accent-color: var(--dev-accent);
+    width: 15px;
+    height: 15px;
+}
+
+.dev-lang-remove {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 30px;
+    width: 30px;
+    border: 1px solid rgba(239, 68, 68, 0.22);
+    border-radius: 4px;
+    background: rgba(239, 68, 68, 0.08);
+    color: rgba(255, 120, 120, 0.95);
+    cursor: pointer;
+}
+
+.dev-lang-remove .material-icons {
+    font-size: 17px;
+}
+
+.dev-lang-actions {
+    padding: 0 12px 12px;
+}
+
+/* ================================================================
+   Create Asset — 新提交资源布局
+   ================================================================ */
+
+/* 顶部标题栏 */
+.create-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 20px 24px;
+    background: var(--dev-card-bg);
+    border: 1px solid var(--dev-card-border);
+    border-radius: 4px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+}
+
+.create-header-left {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    min-width: 0;
+}
+
+.create-header-icon {
+    width: 44px;
+    height: 44px;
+    border-radius: 4px;
+    background: var(--dev-accent-dim);
+    border: 1px solid rgba(99, 140, 255, 0.22);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.create-header-icon .material-icons {
+    font-size: 22px;
+    color: var(--dev-accent);
+}
+
+.create-header-title {
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: var(--dev-text-primary);
+    margin-bottom: 3px;
+}
+
+.create-header-sub {
+    font-size: 0.78rem;
+    color: var(--dev-text-muted);
+    line-height: 1.4;
+}
+
+.create-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+.create-header-actions .btn .material-icons,
+.create-header-actions .btn.ghost .material-icons {
+    font-size: 16px;
+    vertical-align: middle;
+    margin-right: 4px;
+}
+
+/* 两栏布局 */
+.create-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 320px;
+    gap: 16px;
+    align-items: start;
+}
+
+/* 左侧主表单 */
+.create-main {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+/* 表单分区 */
+.create-section {
+    background: var(--dev-card-bg);
+    border: 1px solid var(--dev-card-border);
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.create-section-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 13px 18px;
+    border-bottom: 1px solid var(--dev-line-soft);
+    background: rgba(255, 255, 255, 0.018);
+    font-size: 0.82rem;
+    font-weight: 700;
+    color: var(--dev-text-secondary);
+    letter-spacing: 0.03em;
+    /* 折叠按钮样式覆盖 */
+    width: 100%;
+    text-align: left;
+    border: none;
+    border-bottom: 1px solid var(--dev-line-soft);
+    border-radius: 0;
+    font-family: inherit;
+    cursor: pointer;
+    user-select: none;
+    transition: background 0.15s ease, color 0.15s ease;
+}
+
+.create-section-header:hover {
+    background: rgba(255, 255, 255, 0.03);
+    color: var(--dev-text-primary);
+}
+
+.create-section-header:focus-visible {
+    outline: 2px solid rgba(99, 140, 255, 0.6);
+    outline-offset: -2px;
+}
+
+/* 折叠态：header 无底边框（内容隐藏时不需要分割线） */
+.create-section.is-collapsed .create-section-header {
+    border-bottom-color: transparent;
+}
+
+.create-section-header .material-icons {
+    font-size: 17px;
+    color: var(--dev-accent);
+    opacity: 0.85;
+    flex-shrink: 0;
+}
+
+/* 折叠箭头 */
+.create-section-chevron {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+    color: rgba(255, 255, 255, 0.3);
+    transition: transform 0.22s ease, color 0.15s ease;
+}
+
+.create-section-chevron svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+}
+
+.create-section-header:hover .create-section-chevron {
+    color: rgba(255, 255, 255, 0.55);
+}
+
+/* 折叠时箭头朝右 */
+.create-section.is-collapsed .create-section-chevron {
+    transform: rotate(-90deg);
+}
+
+/* 折叠动画体 */
+.create-section-body {
+    display: grid;
+    grid-template-rows: 1fr;
+    transition: grid-template-rows 0.24s ease;
+}
+
+.create-section.is-collapsed .create-section-body {
+    grid-template-rows: 0fr;
+}
+
+.create-section-body-inner {
+    overflow: hidden;
+}
+
+/* 描述区域字段 */
+.create-section-body-inner > .dev-field {
+    padding: 18px;
+}
+
+.create-section-body-inner > .dev-field textarea {
+    resize: vertical;
+    min-height: 112px;
+}
+
+/* 网格字段布局 */
+.create-fields-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+    padding: 18px;
+}
+
+.create-field-span2 {
+    grid-column: 1 / -1;
+}
+
+/* 垂直堆叠字段布局 */
+.create-fields-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding: 18px;
+}
+
+/* 字段辅助信息 */
+.create-field-hint {
+    display: block;
+    margin-top: 5px;
+    font-size: 0.72rem;
+    color: var(--dev-text-muted);
+}
+
+.create-field-tag {
+    display: inline-flex;
+    align-items: center;
+    height: 18px;
+    padding: 0 7px;
+    border-radius: 999px;
+    background: var(--dev-accent-dim);
+    border: 1px solid rgba(99, 140, 255, 0.22);
+    color: var(--dev-accent);
+    font-size: 0.66rem;
+    font-weight: 700;
+    margin-left: 4px;
+    vertical-align: middle;
+}
+
+/* URL 输入框（带图标前缀） */
+.create-url-field {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    border: 1px solid var(--dev-line-soft);
+    border-radius: 6px;
+    background: var(--dev-surface-soft);
+    overflow: hidden;
+    transition: border-color .2s ease;
+}
+
+.create-url-field:focus-within {
+    border-color: rgba(99, 140, 255, 0.35);
+    background: var(--dev-surface-strong);
+}
+
+.create-url-field > .material-icons {
+    flex-shrink: 0;
+    width: 38px;
+    text-align: center;
+    font-size: 16px;
+    color: var(--dev-text-muted);
+    border-right: 1px solid var(--dev-line-soft);
+}
+
+.create-url-field input {
+    flex: 1;
+    min-width: 0;
+    padding: 10px 12px;
+    border: none !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    color: var(--dev-text-strong);
+    font-size: 0.88rem;
+    outline: none;
+}
+
+.create-url-field input::placeholder {
+    color: var(--dev-text-subtle);
+}
+
+/* 右侧面板 */
+.create-aside {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    position: sticky;
+    top: 16px;
+}
+
+/* 提交操作卡片 */
+.create-submit-card {
+    background: var(--dev-card-bg);
+    border: 1px solid var(--dev-card-border);
+    border-radius: 4px;
+    padding: 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.create-submit-card-title {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: var(--dev-text-primary);
+}
+
+.create-submit-card-title .material-icons {
+    font-size: 18px;
+    color: var(--dev-accent);
+}
+
+.create-submit-card-desc {
+    font-size: 0.78rem;
+    color: var(--dev-text-muted);
+    line-height: 1.6;
+    margin: 0;
+}
+
+.create-submit-checklist {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    padding: 10px 12px;
+    background: var(--dev-surface-soft);
+    border: 1px solid var(--dev-line-soft);
+    border-radius: 6px;
+}
+
+.create-submit-checklist span {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.76rem;
+    color: var(--dev-text-secondary);
+}
+
+.create-submit-checklist .material-icons {
+    font-size: 14px;
+    color: var(--dev-status-active);
+    opacity: 0.7;
+}
+
+.create-submit-btn {
+    width: 100%;
+    justify-content: center;
+    gap: 6px;
+}
+
+.create-submit-btn .material-icons {
+    font-size: 17px;
+}
+
+.create-cancel-btn {
+    width: 100%;
+    justify-content: center;
+    gap: 5px;
+    margin-top: -4px;
+}

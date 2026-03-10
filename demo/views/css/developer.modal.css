@@ -1,0 +1,206 @@
+/* ================================================================
+   KaxHub — 弹窗基础样式
+   包含：dev-modal-overlay、dev-modal、dev-modal-header/body/footer、
+         dev-detail-* 弹窗内详情展示
+   ================================================================ */
+
+/* ================================================================
+   Modal Base (小弹窗共用，如拒绝原因窗)
+   ================================================================ */
+.dev-modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.55);
+    z-index: 2000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    -webkit-backdrop-filter: blur(4px);
+    backdrop-filter: blur(4px);
+}
+
+/* 拒绝原因小弹窗（保留旧样式） */
+.dev-modal {
+    background: rgba(18, 18, 20, 0.97);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 6px;
+    width: 100%;
+    max-width: 700px;
+    max-height: 85vh;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+}
+
+.dev-modal.dev-modal-sm {
+    max-width: 440px;
+}
+
+.dev-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 18px 22px 14px;
+    border-bottom: 1px solid var(--dev-line-soft);
+}
+
+.dev-modal-header h2 {
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--dev-text-primary);
+}
+
+.dev-modal-close {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    background: transparent;
+    border: none;
+    color: var(--dev-text-muted);
+    cursor: pointer;
+    border-radius: 4px;
+    transition: color .14s ease, background .14s ease;
+}
+
+.dev-modal-close:hover {
+    color: var(--dev-text-primary);
+    background: var(--dev-surface-strong);
+}
+
+.dev-modal-body {
+    padding: 18px 22px;
+    overflow-y: auto;
+    flex: 1;
+}
+
+.dev-modal-body textarea {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 10px 12px;
+    border: 1px solid var(--dev-line-soft);
+    border-radius: 6px;
+    background: var(--dev-surface-soft);
+    color: var(--dev-text-strong);
+    font-size: 0.88rem;
+    font-family: inherit;
+    outline: none;
+    resize: vertical;
+}
+
+.dev-modal-body textarea:focus {
+    border-color: rgba(99, 140, 255, 0.35);
+    background: var(--dev-surface-strong);
+}
+
+.dev-modal-footer {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    padding: 14px 22px 18px;
+    border-top: 1px solid var(--dev-line-soft);
+    gap: 8px;
+}
+
+.dev-modal-review-actions {
+    display: flex;
+    gap: 8px;
+}
+
+/* ================================================================
+   Modal Detail Sections
+   ================================================================ */
+.dev-detail-section {
+    margin-bottom: 18px;
+}
+
+.dev-detail-section h4 {
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: var(--dev-text-secondary);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+}
+
+.dev-detail-row {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 6px;
+}
+
+.dev-detail-label {
+    color: var(--dev-text-muted);
+    font-size: 0.82rem;
+    min-width: 80px;
+}
+
+.dev-detail-value {
+    color: var(--dev-text-strong);
+    font-size: 0.82rem;
+    word-break: break-all;
+}
+
+.dev-detail-desc {
+    color: var(--dev-text-secondary);
+    font-size: 0.85rem;
+    line-height: 1.6;
+    padding: 10px 14px;
+    background: var(--dev-surface-soft);
+    border-radius: 6px;
+    border: 1px solid var(--dev-line-soft);
+}
+
+.dev-detail-screenshots {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.dev-detail-screenshots img {
+    width: 120px;
+    height: 70px;
+    border-radius: 4px;
+    object-fit: cover;
+    border: 1px solid var(--dev-line-soft);
+}
+
+.dev-detail-prices {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.dev-detail-price-row {
+    display: flex;
+    gap: 12px;
+    padding: 8px 12px;
+    background: var(--dev-surface-soft);
+    border-radius: 4px;
+    font-size: 0.82rem;
+    color: var(--dev-text-secondary);
+}
+
+.dev-detail-price-row span {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+/* ── 弃用兼容：preserve old btn classes for reject modal ── */
+.dev-btn-approve {
+    background: var(--dev-status-active) !important;
+    color: #fff !important;
+}
+
+.dev-btn-approve:hover { opacity: 0.85; }
+
+.dev-btn-reject {
+    background: var(--dev-status-rejected) !important;
+    color: #fff !important;
+}
+
+.dev-btn-reject:hover { opacity: 0.85; }

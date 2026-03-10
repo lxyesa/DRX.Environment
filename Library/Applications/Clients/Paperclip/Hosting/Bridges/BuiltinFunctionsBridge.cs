@@ -2,10 +2,19 @@ namespace DrxPaperclip.Hosting;
 
 /// <summary>
 /// Paperclip 内置全局函数。由 <see cref="EngineBootstrap"/> 在引擎初始化后
-/// 通过 RegisterGlobal 注册为 JS 顶层 print() / pause() 函数。
+/// 通过 RegisterGlobal 注册为 JS 顶层 print() / pause() / getdir() 函数。
 /// </summary>
 public static class BuiltinFunctionsBridge
 {
+    /// <summary>当前脚本运行的项目根目录，由 <see cref="EngineBootstrap"/> 初始化时设置。</summary>
+    internal static string ProjectRoot { get; set; } = Directory.GetCurrentDirectory();
+
+    /// <summary>
+    /// 返回当前脚本运行的项目根目录。
+    /// JS/TS 调用：<c>getdir()</c>
+    /// </summary>
+    public static string getdir() => ProjectRoot;
+
     /// <summary>
     /// 向控制台输出空字符串。
     /// JS/TS 调用：<c>print()</c>

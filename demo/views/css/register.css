@@ -1,0 +1,258 @@
+/* 与 login.html 保持一致的主题变量与样式 */
+        :root {
+            --bg: #0f0f0f;
+            --muted: rgba(255, 255, 255, 0.75);
+            --panel-grad-start: rgba(255, 255, 255, 0.03);
+            --panel-grad-end: rgba(255, 255, 255, 0.02);
+            --accent: #3b82f6;
+            --white: #ffffff;
+            --card-border: rgba(255, 255, 255, 0.05);
+            --glass: rgba(255, 255, 255, 0.00);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0
+        }
+
+        html,
+        body {
+            height: 100%
+        }
+
+        body {
+            font-family: 'Poppins', sans-serif;
+            background: var(--bg);
+            color: var(--white);
+            -webkit-font-smoothing: antialiased;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 32px;
+            background-image: radial-gradient(rgba(59, 130, 246, 0.03) 0.5px, transparent 1px), linear-gradient(180deg, rgba(255, 255, 255, 0.01), transparent 60%);
+            background-size: 16px 16px, cover
+        }
+
+        /* 字段线框分组 */
+        form .field {
+            margin-bottom: 12px;
+            border-radius: 8px;
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            padding: 10px 12px;
+            background: rgba(255, 255, 255, 0.01);
+        }
+
+        .field>label {
+            display: block;
+            font-size: 0.82rem;
+            color: rgba(255, 255, 255, 0.72);
+            margin-bottom: 6px
+        }
+
+        .field>input[type=text],
+        .field>input[type=password] {
+            width: 100%;
+            border: none;
+            background: transparent;
+            color: var(--white);
+            font-size: 0.95rem;
+            padding: 6px 0;
+            outline: none
+        }
+
+        .field:focus-within {
+            border-color: rgba(59, 130, 246, 0.95);
+            box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.04)
+        }
+
+        .logo {
+            width: 44px;
+            height: 44px;
+            border-radius: 8px;
+            background: linear-gradient(135deg, var(--accent), #60a5fa);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            color: #fff;
+            font-size: 1rem;
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.08)
+        }
+
+        h1 {
+            font-size: 1.35rem;
+            margin: 0;
+            color: var(--white);
+            font-weight: 700
+        }
+
+        p.lead {
+            margin-top: 6px;
+            margin-bottom: 16px;
+            color: var(--muted);
+            font-weight: 300
+        }
+
+        form .field {
+            margin-bottom: 14px
+        }
+
+        label {
+            display: block;
+            font-size: 0.82rem;
+            color: rgba(255, 255, 255, 0.72);
+            margin-bottom: 6px
+        }
+
+        input[type=text],
+        input[type=password] {
+            width: 100%;
+            padding: 12px 14px;
+            border-radius: 8px;
+            border: 1px solid rgba(255, 255, 255, 0.04);
+            background: var(--glass);
+            color: var(--white);
+            font-size: 0.95rem;
+            outline: none;
+            transition: box-shadow .12s ease, border-color .12s ease;
+        }
+
+        input:focus {
+            border-color: rgba(59, 130, 246, 0.85);
+            box-shadow: 0 6px 18px rgba(59, 130, 246, 0.04);
+        }
+
+        .hint {
+            font-size: 0.86rem;
+            color: rgba(255, 255, 255, 0.55);
+            margin-top: 6px
+        }
+
+        .btn {
+            display: inline-block;
+            width: 100%;
+            padding: 12px 14px;
+            border-radius: 8px;
+            background: var(--white);
+            color: var(--bg);
+            font-weight: 700;
+            text-align: center;
+            border: none;
+            cursor: pointer;
+            font-size: 1rem;
+            /* 与 ghost 保持一致的平滑过渡：背景/文字/位移/阴影 */
+            transition: background .12s ease, color .12s ease, transform .12s ease, box-shadow .12s ease;
+        }
+
+        /* hover 时轻微上浮并带阴影，和 ghost 保持一致 */
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 26px rgba(59, 130, 246, 0.06);
+        }
+
+        /* active 时回位，表现按下效果（不向下过分移动，避免突兀） */
+        .btn:active {
+            transform: translateY(0);
+        }
+
+        .btn:focus {
+            outline: none;
+            box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.06);
+        }
+
+        /* 简洁风格的 ghost 按钮：透明底 + 细边框，hover 时有轻微背景与上浮效果 */
+        .btn.ghost {
+            background: transparent;
+            color: var(--muted);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            padding: 10px 12px;
+            border-radius: 8px;
+            transition: background .12s ease, color .12s ease, transform .08s ease, box-shadow .12s ease;
+            margin-top: 10px;
+        }
+
+        .btn.ghost:hover {
+            background: rgba(255, 255, 255, 0.03);
+            color: var(--white);
+            transform: translateY(-2px);
+            box-shadow: 0 8px 26px rgba(59, 130, 246, 0.04);
+        }
+
+        .btn.ghost:active {
+            transform: translateY(0);
+        }
+
+        .btn.ghost:focus {
+            outline: none;
+            box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.06);
+        }
+
+        .register-meta {
+            margin-top: 12px;
+            text-align: center;
+            color: rgba(255, 255, 255, 0.6);
+            font-size: 0.92rem
+        }
+
+        .register-meta a {
+            color: var(--accent);
+            text-decoration: underline
+        }
+
+        .spinner {
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            border: 2px solid rgba(0, 0, 0, 0.08);
+            border-top-color: var(--bg);
+            margin: 0 auto;
+            display: inline-block;
+            vertical-align: middle;
+            animation: spin .9s linear infinite
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg)
+            }
+        }
+
+        /* 覆盖浏览器自动填充样式，使用主题变量避免白底（Chromium / Firefox） */
+        input:-webkit-autofill,
+        textarea:-webkit-autofill,
+        select:-webkit-autofill,
+        input:-webkit-autofill:hover,
+        textarea:-webkit-autofill:hover,
+        select:-webkit-autofill:hover,
+        input:-webkit-autofill:focus,
+        textarea:-webkit-autofill:focus,
+        select:-webkit-autofill:focus {
+            /* 用巨大 inset box-shadow 覆盖浏览器的填充背景，保证和页面玻璃效果一致 */
+            -webkit-box-shadow: 0 0 0 1000px var(--glass) inset !important;
+            box-shadow: 0 0 0 1000px var(--glass) inset !important;
+            /* 覆盖文字颜色 */
+            -webkit-text-fill-color: var(--white) !important;
+            /* 防止浏览器的背景色动画闪烁 */
+            transition: background-color 5000s ease-in-out 0s !important;
+        }
+
+        /* Firefox autofill */
+        input:-moz-autofill,
+        textarea:-moz-autofill,
+        select:-moz-autofill {
+            box-shadow: 0 0 0 1000px var(--glass) inset !important;
+            -moz-text-fill-color: var(--white) !important;
+        }
+
+        @media(max-width:600px) {
+            .card {
+                padding: 20px
+            }
+
+            .logo {
+                width: 40px;
+                height: 40px
+            }
+        }

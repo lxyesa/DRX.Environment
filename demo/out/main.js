@@ -8,20 +8,21 @@
     throw new Error('[CJS] require() is not available in this context: ' + id);
   };
 // ─────────────────────────────────────────────────────────────────────────────
-// Paperclip HTTP Server Demo
-// 使用实例方法 + 直接函数引用的简洁 API
+// Paperclip HTTP 
+// KaxHub
 // ─────────────────────────────────────────────────────────────────────────────
 async function main() {
     // 创建服务器实例（直接 new + 单前缀）
-    const server = new HttpServer("http://localhost:8080/");
+    const server = new HttpServer("http://localhost:8462/");
+    print(getdir() + "\n");
     // 链式配置
     server
         .debugMode(true)
-        .setFileRoot("d:/Code/demo")
-        .setViewRoot("d:/Code/demo/views")
+        .setFileRoot(getdir())
+        .setViewRoot(getdir() + "/views/html")
         .setRateLimit(120, 1, "minutes");
     server.get("/index", (req) => {
-        return HttpResponse.file("html/index.html");
+        return HttpResponse.file("index.html");
     });
     // 启动服务器
     try {

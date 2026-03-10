@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KaxHub - 管理用户</title>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <link href="/views/css/global.css" rel="stylesheet">
+    <link href="/views/css/developer.base.css" rel="stylesheet">
+    <link href="/views/css/developer.modal.css" rel="stylesheet">
+    <link href="/views/css/developer.review-modal.css" rel="stylesheet">
+    <link href="/views/css/developer.system.css" rel="stylesheet">
+    <link href="/views/css/developer.responsive.css" rel="stylesheet">
+    <link href="/views/css/manage-users.css" rel="stylesheet">
+    <script src="/views/js/global.js"></script>
+    <script src="/views/js/core/auth-state.js" defer></script>
+    <script src="/views/js/core/api-client.js" defer></script>
+    <script src="/views/js/topbar.js" defer></script>
+    <script src="/views/components/inputbox.js" defer></script>
+    <script src="/views/components/select-box.js" defer></script>
+    <script src="/views/components/action-btn.js" defer></script>
+    <script src="/views/components/section-card.js" defer></script>
+    <script src="/views/components/collapsible-card.js" defer></script>
+    <script src="/views/js/manage-users.js" defer></script>
+</head>
+
+<body class="has-global-topbar">
+    <section class="dev-header">
+        <div class="dev-header-content">
+            <div class="dev-header-eyebrow">
+                <span class="material-icons">manage_accounts</span>
+                User Management
+            </div>
+            <h1>管理用户</h1>
+            <p>管理用户状态、权限分组与账号操作</p>
+        </div>
+    </section>
+
+    <div class="dev-container">
+        <div class="dev-tabs" role="tablist" aria-label="管理用户功能选项卡">
+            <button class="dev-tab active" data-tab="user-list" role="tab" aria-selected="true">
+                <span class="material-icons">groups</span>
+                用户列表
+            </button>
+            <button class="dev-tab" data-tab="permission-management" role="tab" aria-selected="false">
+                <span class="material-icons">admin_panel_settings</span>
+                权限管理
+            </button>
+            <button class="dev-tab" data-tab="operation-audit" role="tab" aria-selected="false">
+                <span class="material-icons">history</span>
+                操作审计
+            </button>
+        </div>
+
+        <section class="dev-tab-content active" id="tab-user-list">
+            <section-card class="manage-users-filter-card" icon="filter_alt" title="用户检索" desc="按用户信息与权限组快速筛选">
+                <div class="manage-users-filter-grid">
+                    <div class="manage-users-filter-item keyword-item">
+                        <input-box id="userListKeyword" size="headerless" icon="search" placeholder="搜索用户名 / 显示名 / 邮箱"></input-box>
+                    </div>
+                    <div class="manage-users-filter-item permission-item">
+                        <select-box id="userListPermissionFilter" size="headerless" icon="admin_panel_settings"
+                            options='[{"value":"","label":"全部权限组"},{"value":"0","label":"System"},{"value":"2","label":"Console"},{"value":"3","label":"Admin"},{"value":"999","label":"User"}]'>
+                        </select-box>
+                    </div>
+                    <div class="manage-users-filter-item action-item">
+                        <action-btn id="userListSearchBtn" label="检索" icon="search" height="49px" padding="0 14px" radius="4px"></action-btn>
+                    </div>
+                </div>
+            </section-card>
+
+            <div id="userListState" class="manage-users-state" style="display:none;">加载中...</div>
+
+            <section-card class="manage-users-list-card" icon="groups" title="用户列表" desc="System 级别账号数据视图">
+                <div class="manage-users-table-wrap" id="userListTableWrap" style="display:none;">
+                    <table class="manage-users-table" aria-label="用户列表">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>用户名</th>
+                                <th>显示名</th>
+                                <th>邮箱</th>
+                                <th>权限组</th>
+                                <th>账号状态</th>
+                                <th>最近登录</th>
+                            </tr>
+                        </thead>
+                        <tbody id="userListBody"></tbody>
+                    </table>
+                </div>
+
+                <div class="dev-empty manage-users-empty" id="userListEmpty" style="display:none;">
+                    <span class="material-icons">inbox</span>
+                    <h3>暂无用户</h3>
+                    <p>请调整筛选条件后重试。</p>
+                </div>
+
+                <div class="dev-pagination" id="userListPagination"></div>
+            </section-card>
+        </section>
+
+        <section class="dev-tab-content" id="tab-permission-management">
+            <div class="dev-toolbar">
+                <div class="dev-toolbar-left">
+                    <h3 class="manage-users-panel-title">权限管理</h3>
+                </div>
+            </div>
+
+            <div class="dev-empty manage-users-empty">
+                <span class="material-icons">construction</span>
+                <h3>页面建设中</h3>
+                <p>该区域将用于权限组调整、授权与回收操作。</p>
+            </div>
+        </section>
+
+        <section class="dev-tab-content" id="tab-operation-audit">
+            <div class="dev-toolbar">
+                <div class="dev-toolbar-left">
+                    <h3 class="manage-users-panel-title">操作审计</h3>
+                </div>
+            </div>
+
+            <div class="dev-empty manage-users-empty">
+                <span class="material-icons">construction</span>
+                <h3>页面建设中</h3>
+                <p>该区域将用于查看用户管理相关操作日志与审计记录。</p>
+            </div>
+        </section>
+    </div>
+
+    <!-- 用户详情/操作弹窗 -->
+    <div class="dev-modal-overlay" id="userDetailModal" style="display:none;"
+         role="dialog" aria-modal="true"
+         aria-labelledby="userModalTitle">
+        <div class="dev-modal rv-modal user-rv-modal">
+            <!-- 顶栏 -->
+            <div class="rv-header">
+                <div class="rv-header-left">
+                    <div class="rv-header-icon" id="userModalIcon">
+                        <span class="material-icons">person</span>
+                    </div>
+                    <div class="rv-header-meta">
+                        <h2 id="userModalTitle">用户详情</h2>
+                        <div class="rv-header-sub" id="userModalSub">—</div>
+                    </div>
+                </div>
+                <div class="rv-header-right">
+                    <div id="userModalStatusBadge"></div>
+                    <button class="dev-modal-close" id="closeUserModal" title="关闭">
+                        <span class="material-icons">close</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- 主体 -->
+            <div class="rv-body user-rv-body">
+                <!-- 左侧信息栏 -->
+                <aside class="rv-sidebar user-rv-sidebar">
+                    <div class="rv-info-list" id="userModalInfoList"></div>
+                </aside>
+
+                <!-- 右侧 Tab 内容 -->
+                <div class="rv-content">
+                    <div class="rv-tabs" id="userModalTabs">
+                        <button class="rv-tab active" data-panel="overview">概要</button>
+                        <button class="rv-tab" data-panel="stats">数据</button>
+                        <button class="rv-tab" data-panel="actions">操作</button>
+                    </div>
+                    <div class="rv-panels user-rv-panels" id="userModalPanels">
+                        <!-- 概要面板 -->
+                        <div class="rv-panel active" data-panel="overview">
+                            <div id="userModalOverview"></div>
+                        </div>
+                        <!-- 数据面板 -->
+                        <div class="rv-panel" data-panel="stats">
+                            <div id="userModalStats"></div>
+                        </div>
+                        <!-- 操作面板 -->
+                        <div class="rv-panel" data-panel="actions">
+                            <div id="userModalActions"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 底栏 -->
+            <div class="rv-footer user-rv-footer">
+                <span class="rv-footer-author" id="userModalFooterInfo"></span>
+                <div class="rv-footer-actions">
+                    <action-btn id="userModalBanBtn" label="封禁" icon="block" variant="danger" height="38px" padding="0 18px" radius="4px" font-size="0.86rem" icon-size="17px" gap="6px" style="display:none;"></action-btn>
+                    <action-btn id="userModalUnbanBtn" label="解封" icon="check_circle" height="38px" padding="0 18px" radius="4px" font-size="0.86rem" icon-size="17px" gap="6px" style="display:none;"></action-btn>
+                    <action-btn id="userModalForceLogoutBtn" label="强制登出" icon="logout" height="38px" padding="0 18px" radius="4px" font-size="0.86rem" icon-size="17px" gap="6px"></action-btn>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 封禁原因弹窗 -->
+    <div class="dev-modal-overlay" id="userBanModal" style="display:none;">
+        <div class="dev-modal dev-modal-sm">
+            <div class="dev-modal-header">
+                <h2>封禁用户</h2>
+                <button class="dev-modal-close" id="closeUserBanModal">
+                    <span class="material-icons">close</span>
+                </button>
+            </div>
+            <div class="dev-modal-body">
+                <div class="user-ban-field">
+                    <input-box id="banReason" label="封禁原因" textarea rows="3" placeholder="请填写封禁原因..."></input-box>
+                </div>
+                <div class="user-ban-field">
+                    <input-box id="banDuration" label="封禁时长（小时）" placeholder="0 表示永久封禁" type="number"></input-box>
+                </div>
+            </div>
+            <div class="dev-modal-footer">
+                <action-btn id="cancelBanBtn" height="38px" padding="0 18px" radius="4px" font-size="0.86rem" icon-size="17px" gap="6px" label="取消"></action-btn>
+                <action-btn id="confirmBanBtn" variant="danger" height="38px" padding="0 18px" radius="4px" font-size="0.86rem" icon-size="17px" gap="6px" label="确认封禁"></action-btn>
+            </div>
+        </div>
+    </div>
+</body>
+
+</html>

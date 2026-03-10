@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KaxHub 开发者中心</title>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <link href="/views/css/global.css" rel="stylesheet">
+    <script src="/views/js/global.js"></script>
+    <script src="/views/js/core/auth-state.js" defer></script>
+    <script src="/views/js/core/api-client.js" defer></script>
+    <script src="/views/js/core/error-presenter.js" defer></script>
+    <script src="/views/js/topbar.js" defer></script>
+    <script src="/views/components/inputbox.js?v=3" defer></script>
+    <script src="/views/components/action-btn.js" defer></script>
+    <link href="/views/css/developer.base.css" rel="stylesheet">
+    <link href="/views/css/developer.asset-card.css" rel="stylesheet">
+    <link href="/views/css/developer.form.css" rel="stylesheet">
+    <link href="/views/css/developer.modal.css" rel="stylesheet">
+    <link href="/views/css/developer.review-modal.css" rel="stylesheet">
+    <link href="/views/css/developer.system.css" rel="stylesheet">
+    <link href="/views/css/developer.responsive.css" rel="stylesheet">
+</head>
+
+<body class="has-global-topbar">
+    <section class="dev-header">
+        <div class="dev-header-content">
+            <div class="dev-header-eyebrow">
+                <span class="material-icons">code</span>
+                Developer Center
+            </div>
+            <h1>开发者中心</h1>
+            <p>管理你的资源、提交审核、追踪发布状态</p>
+        </div>
+    </section>
+
+    <div class="dev-container">
+        <!-- Tab 导航 -->
+        <div class="dev-tabs" role="tablist">
+            <button class="dev-tab active" data-tab="my-assets" role="tab" aria-selected="true">
+                <span class="material-icons">inventory_2</span>
+                我的资源
+            </button>
+            <button class="dev-tab" data-tab="create-asset" role="tab" aria-selected="false">
+                <span class="material-icons">add_circle</span>
+                提交资源
+            </button>
+            <button class="dev-tab" data-tab="asset-management" role="tab" aria-selected="false" id="assetManagementTab" style="display:none;">
+                <span class="material-icons">inventory</span>
+                资产管理
+            </button>
+            <button class="dev-tab" data-tab="review-panel" role="tab" aria-selected="false" id="reviewTab" style="display:none;">
+                <span class="material-icons">fact_check</span>
+                审核管理
+            </button>
+        </div>
+
+        <!-- Tab 内容：我的资源 -->
+        <div class="dev-tab-content active" id="tab-my-assets">
+            <div class="dev-toolbar">
+                <div class="dev-toolbar-left">
+                    <div class="dev-stat-pills">
+                        <span class="dev-pill" id="pillAll">全部 <b>0</b></span>
+                        <span class="dev-pill" id="pillPending">审核中 <b>0</b></span>
+                        <span class="dev-pill" id="pillRejected">已拒绝 <b>0</b></span>
+                        <span class="dev-pill" id="pillActive">已上线 <b>0</b></span>
+                    </div>
+                </div>
+                <div class="dev-toolbar-right">
+                    <select id="statusFilter" data-custom-select aria-label="我的资源状态筛选" title="我的资源状态筛选">
+                        <option value="">全部状态</option>
+                        <option value="0">审核中</option>
+                        <option value="1">已拒绝</option>
+                        <option value="2">待发布</option>
+                        <option value="3">已上线</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="dev-asset-list" id="assetList">
+                <!-- 资产卡片由 JS 动态生成 -->
+            </div>
+            <div class="dev-empty" id="assetEmpty" style="display:none;">
+                <span class="material-icons">inbox</span>
+                <h3>暂无资源</h3>
+                <p>点击「提交资源」开始创建你的第一个资源吧</p>
+            </div>
+            <div class="dev-pagination" id="assetPagination"></div>
+        </div>
+
+        <!-- Tab 内容：提交资源（编辑表单） -->
+        <div class="dev-tab-content" id="tab-create-asset">
+            <input type="hidden" id="editAssetId" value="">
+
+            <!-- 表单顶部标题栏 -->
+            <div class="create-header">
+                <div class="create-header-left">
+                    <div class="create-header-icon">
+                        <span class="material-icons">add_box</span>
+                    </div>
+                    <div>
+                        <h2 class="create-header-title" id="formTitle">提交新资源</h2>
+                        <p class="create-header-sub">填写资源信息并配置授权方案，提交后将进入人工审核</p>
+                    </div>
+                </div>
+                <div class="create-header-actions">
+                    <button class="btn ghost" id="cancelEditBtn" type="button" style="display:none;">
+                        <span class="material-icons">close</span>取消编辑
+                    </button>
+                    <button class="btn" id="submitAssetBtn" type="button">
+                        <span class="material-icons">send</span>提交资源
+                    </button>
+                </div>
+            </div>
+
+            <!-- 两栏布局 -->
+            <div class="create-layout">
+
+                <!-- 左侧主表单 -->
+                <div class="create-main">
+
+                    <!-- 分区：基本信息 -->
+                    <div class="create-section" data-section>
+                        <button class="create-section-header" type="button" aria-expanded="true">
+                            <span class="material-icons">tune</span>
+                            <span>基本信息</span>
+                            <span class="create-section-chevron" aria-hidden="true">
+                                <svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4 6l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                            </span>
+                        </button>
+                        <div class="create-section-body">
+                            <div class="create-section-body-inner">
+                                <div class="create-fields-grid">
+                                    <div class="dev-field create-field-span2">
+                                        <input-box id="assetName" label="资源名称 *" placeholder="例如：超级模组包" maxlength="100"></input-box>
+                                    </div>
+                                    <div class="dev-field">
+                                        <input-box id="assetVersion" label="版本号 *" placeholder="1.0.0" maxlength="50"></input-box>
+                                    </div>
+                                    <div class="dev-field">
+                                        <input-box id="assetCategory" label="分类" placeholder="例如：工具 / 模组" maxlength="50"></input-box>
+                                    </div>
+                                    <div class="dev-field create-field-span2">
+                                        <input-box id="assetTags" label="标签" placeholder="逗号分隔，例如：高性能,安全,开源" maxlength="500"></input-box>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 分区：描述 -->
+                    <div class="create-section" data-section>
+                        <button class="create-section-header" type="button" aria-expanded="true">
+                            <span class="material-icons">article</span>
+                            <span>资源描述</span>
+                            <span class="create-section-chevron" aria-hidden="true">
+                                <svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4 6l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                            </span>
+                        </button>
+                        <div class="create-section-body">
+                            <div class="create-section-body-inner">
+                                <div class="dev-field">
+                                    <input-box id="assetDescription" label="资源描述" textarea rows="5" placeholder="介绍你的资源功能、亮点以及典型使用场景，清晰的描述能大幅提升审核通过与转化率…" maxlength="500"></input-box>
+                                    <span class="create-field-hint">最多 500 字，建议覆盖核心功能与使用场景</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 分区：媒体资源 -->
+                    <div class="create-section" data-section>
+                        <button class="create-section-header" type="button" aria-expanded="true">
+                            <span class="material-icons">perm_media</span>
+                            <span>媒体资源</span>
+                            <span class="create-section-chevron" aria-hidden="true">
+                                <svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4 6l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                            </span>
+                        </button>
+                        <div class="create-section-body">
+                            <div class="create-section-body-inner">
+                                <div class="create-fields-stack">
+                                    <div class="dev-field">
+                                        <input-box id="assetCoverImage" label="封面 URL" icon="image" placeholder="https://example.com/cover.png"></input-box>
+                                    </div>
+                                    <div class="dev-field">
+                                        <input-box id="assetIconImage" label="图标 URL" icon="photo_size_select_small" placeholder="https://example.com/icon.png"></input-box>
+                                    </div>
+                                    <div class="dev-field">
+                                        <input-box id="assetScreenshots" label="截图 URL（分号分隔）" icon="photo_library" placeholder="https://img1.png;https://img2.png"></input-box>
+                                    </div>
+                                    <div class="dev-field create-field-span2">
+                                        <input-box id="assetDownloadUrl" label="下载 URL" icon="download" placeholder="https://example.com/asset.zip"></input-box>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+
+                <!-- 右侧面板：价格与操作 -->
+                <div class="create-aside">
+
+                    <!-- 价格方案面板 -->
+                    <div class="dev-pricing-panel" aria-label="价格方案编辑面板">
+                        <div class="dev-pricing-top">
+                            <div class="dev-pricing-top-title">
+                                <span class="material-icons">sell</span>
+                                <strong>授权计划</strong>
+                            </div>
+                            <p>每个方案会以「可选计划卡片」形式展示在商店详情页，建议按时长与权益清晰命名。</p>
+                        </div>
+                        <div class="dev-pricing-hints" aria-hidden="true">
+                            <span><span class="material-icons">lightbulb</span> 示例：基础版 / 专业版 / 团队版</span>
+                            <span><span class="material-icons">schedule</span> 时长为 0 表示永久授权</span>
+                        </div>
+                        <div class="dev-prices-list" id="pricesList">
+                            <!-- 动态生成 -->
+                        </div>
+                        <div class="dev-pricing-actions">
+                            <button class="btn ghost small" id="addPriceBtn" type="button">
+                                <span class="material-icons" style="font-size:16px;vertical-align:middle;">add</span>
+                                添加价格方案
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- 语言支持表面板 -->
+                    <div class="dev-lang-panel" aria-label="语言支持表编辑面板">
+                        <div class="dev-lang-top">
+                            <div class="dev-lang-top-title">
+                                <span class="material-icons">translate</span>
+                                <strong>语言支持表</strong>
+                            </div>
+                            <p>可新增多个语言条目，每行可修改显示名，并勾选是否支持该语言。</p>
+                        </div>
+                        <div class="dev-lang-list" id="languageSupportList">
+                            <!-- 动态生成 -->
+                        </div>
+                        <div class="dev-lang-actions">
+                            <button class="btn ghost small" id="addLanguageSupportBtn" type="button">
+                                <span class="material-icons" style="font-size:16px;vertical-align:middle;">add</span>
+                                添加语言条目
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- 提交操作卡片 -->
+                    <div class="create-submit-card">
+                        <div class="create-submit-card-title">
+                            <span class="material-icons">rocket_launch</span>
+                            提交审核
+                        </div>
+                        <p class="create-submit-card-desc">提交后资源进入人工审核队列，审核通过后可选择发布上线。</p>
+                        <div class="create-submit-checklist">
+                            <span><span class="material-icons">check_circle</span>已填写名称与版本</span>
+                            <span><span class="material-icons">check_circle</span>已添加资源描述</span>
+                            <span><span class="material-icons">check_circle</span>已配置媒体资源</span>
+                        </div>
+                        <button class="btn create-submit-btn" id="submitAssetBtnAside" type="button"
+                            onclick="document.getElementById('submitAssetBtn').click()">
+                            <span class="material-icons">send</span>提交资源
+                        </button>
+                        <button class="btn ghost small create-cancel-btn" id="cancelEditBtnAside" type="button"
+                            style="display:none;"
+                            onclick="document.getElementById('cancelEditBtn').click()">
+                            取消编辑
+                        </button>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+
+        <!-- Tab 内容：资产管理（仅 System） -->
+        <div class="dev-tab-content" id="tab-asset-management">
+            <div class="dev-toolbar system-asset-toolbar">
+                <div class="dev-toolbar-left system-asset-toolbar-left">
+                    <input id="systemAssetKeyword" class="dev-input system-asset-search-input" type="text" placeholder="搜索名称 / 版本 / 描述 / 作者ID">
+                    <input id="systemAssetAuthorId" class="dev-input system-asset-author-input" type="text" placeholder="开发者ID">
+                </div>
+                <div class="dev-toolbar-right system-asset-toolbar-right">
+                    <select id="systemAssetStatusFilter" data-custom-select aria-label="资产管理状态筛选" title="资产管理状态筛选">
+                        <option value="">全部状态</option>
+                        <option value="0">审核中</option>
+                        <option value="1">已拒绝</option>
+                        <option value="2">待发布</option>
+                        <option value="3">已上线</option>
+                        <option value="4">已下架</option>
+                    </select>
+                    <button class="btn ghost small" id="systemAssetSearchBtn" type="button">
+                        <span class="material-icons">search</span>检索
+                    </button>
+                </div>
+            </div>
+            <div class="dev-asset-list" id="systemAssetList">
+                <!-- System资产由 JS 动态生成 -->
+            </div>
+            <div class="dev-empty" id="systemAssetEmpty" style="display:none;">
+                <span class="material-icons">inventory_2</span>
+                <h3>暂无资产</h3>
+                <p>请调整筛选条件后重试</p>
+            </div>
+            <div class="dev-pagination" id="systemAssetPagination"></div>
+        </div>
+
+        <!-- Tab 内容：审核管理（管理员专用） -->
+        <div class="dev-tab-content" id="tab-review-panel">
+            <div class="dev-toolbar">
+                <div class="dev-toolbar-left">
+                    <h3 style="color:#fff;font-size:1rem;font-weight:600;">待审核资源</h3>
+                </div>
+                <div class="dev-toolbar-right">
+                    <select id="reviewStatusFilter" data-custom-select aria-label="审核列表状态筛选" title="审核列表状态筛选">
+                        <option value="0">审核中</option>
+                        <option value="1">已拒绝</option>
+                        <option value="3">已上线</option>
+                    </select>
+                </div>
+            </div>
+            <div class="dev-review-list" id="reviewList">
+                <!-- 审核项由 JS 动态生成 -->
+            </div>
+            <div class="dev-empty" id="reviewEmpty" style="display:none;">
+                <span class="material-icons">check_circle</span>
+                <h3>暂无待审核资源</h3>
+            </div>
+            <div class="dev-pagination" id="reviewPagination"></div>
+        </div>
+    </div>
+
+    <!-- 审核详情弹窗 -->
+    <div class="dev-modal-overlay" id="reviewModal" style="display:none;">
+        <div class="dev-modal rv-modal">
+            <!-- 弹窗顶栏 -->
+            <div class="rv-header">
+                <div class="rv-header-left">
+                    <div class="rv-header-icon" id="modalHeaderIcon">
+                        <span class="material-icons">inventory_2</span>
+                    </div>
+                    <div class="rv-header-meta">
+                        <h2 id="modalAssetName">资源详情</h2>
+                        <div class="rv-header-sub" id="modalAssetSub">— / —</div>
+                    </div>
+                </div>
+                <div class="rv-header-right">
+                    <div id="modalStatusBadge"></div>
+                    <button class="dev-modal-close" id="closeModal" title="关闭">
+                        <span class="material-icons">close</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- 弹窗主体：左栏 + 右侧内容 -->
+            <div class="rv-body">
+                <!-- 左侧信息栏 -->
+                <aside class="rv-sidebar" id="modalSidebar">
+                    <div class="rv-sidebar-thumb" id="modalThumb">
+                        <span class="material-icons">image</span>
+                    </div>
+                    <div class="rv-info-list" id="modalInfoList">
+                        <!-- JS 填充 -->
+                    </div>
+                </aside>
+
+                <!-- 右侧 Tab 内容 -->
+                <div class="rv-content">
+                    <div class="rv-tabs" id="modalTabs">
+                        <button class="rv-tab active" data-panel="overview">概要</button>
+                        <button class="rv-tab" data-panel="prices">价格方案</button>
+                        <button class="rv-tab" data-panel="screenshots">截图</button>
+                        <button class="rv-tab" data-panel="specs">数据</button>
+                    </div>
+                    <div class="rv-panels" id="modalBody">
+                        <!-- JS 填充 -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- 弹窗底栏 -->
+            <div class="rv-footer" id="modalFooter">
+                <div class="rv-footer-left">
+                    <span class="rv-footer-author" id="modalFooterAuthor"></span>
+                </div>
+                <div class="rv-footer-actions dev-modal-review-actions">
+                    <button class="rv-btn-reject" id="modalRejectBtn" type="button">
+                        <span class="material-icons">thumb_down</span>
+                        拒绝
+                    </button>
+                    <button class="rv-btn-approve" id="modalApproveBtn" type="button">
+                        <span class="material-icons">thumb_up</span>
+                        通过审核
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 拒绝原因弹窗 -->
+    <div class="dev-modal-overlay" id="rejectModal" style="display:none;">
+        <div class="dev-modal dev-modal-sm">
+            <div class="dev-modal-header">
+                <h2>拒绝原因</h2>
+                <button class="dev-modal-close" id="closeRejectModal">
+                    <span class="material-icons">close</span>
+                </button>
+            </div>
+            <div class="dev-modal-body">
+                <input-box id="rejectReason" label="拒绝原因" textarea rows="4" placeholder="请填写拒绝原因..."></input-box>
+            </div>
+            <div class="dev-modal-footer">
+                <button class="btn ghost" id="cancelRejectBtn" type="button">取消</button>
+                <button class="btn dev-btn-reject" id="confirmRejectBtn" type="button">确认拒绝</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- System 资产详情弹窗 -->
+    <div class="dev-modal-overlay" id="systemAssetModal" style="display:none;"
+         role="dialog" aria-modal="true"
+         aria-labelledby="systemAssetModalTitle" aria-describedby="systemAssetModalDesc">
+        <div class="dev-modal rv-modal system-rv-modal">
+            <div class="rv-header">
+                <div class="rv-header-left">
+                    <div class="rv-header-icon" id="systemAssetModalThumb">
+                        <span class="material-icons">inventory_2</span>
+                    </div>
+                    <div class="rv-header-meta">
+                        <h2 id="systemAssetModalTitle">资产详情</h2>
+                        <div class="rv-header-sub">System Asset Control Panel</div>
+                    </div>
+                </div>
+                <div class="rv-header-right">
+                    <button class="dev-modal-close" id="closeSystemAssetModal" title="关闭">
+                        <span class="material-icons">close</span>
+                    </button>
+                </div>
+            </div>
+
+            <div class="rv-body system-rv-body">
+                <aside class="rv-sidebar system-rv-sidebar">
+                    <div id="systemAssetModalMeta" class="rv-info-list system-rv-meta"></div>
+                </aside>
+
+                <div class="rv-content system-rv-content">
+                    <div class="rv-tabs" id="systemModalTabs">
+                        <button class="rv-tab active" data-panel="overview">概要</button>
+                        <button class="rv-tab" data-panel="fields">字段编辑</button>
+                    </div>
+                    <div class="rv-panels system-rv-panels" id="systemModalPanels">
+                        <div class="rv-panel active" data-panel="overview">
+                            <div class="rv-overview-desc" id="systemAssetModalDesc"></div>
+                        </div>
+                        <div class="rv-panel" data-panel="fields">
+                            <p class="system-field-editor-hint">字段将以卡片形式展示，可直接编辑并单独保存。禁止修改 DeveloperId / AssetId。</p>
+                            <div id="systemFieldCards" class="system-field-cards" aria-live="polite"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="rv-footer system-rv-footer">
+                <input-box id="systemActionReason" placeholder="动作原因（除审核通过外必填）" size="small"></input-box>
+                <div class="rv-footer-actions system-rv-actions">
+                    <button class="btn ghost small" id="systemReturnBtn" type="button">
+                        <span class="material-icons">undo</span>退回
+                    </button>
+                    <button class="btn danger small" id="systemOffShelfBtn" type="button">
+                        <span class="material-icons">visibility_off</span>下架
+                    </button>
+                    <button class="btn small" id="systemForceReviewBtn" type="button">
+                        <span class="material-icons">refresh</span>强制重审
+                    </button>
+                    <button class="btn danger small" id="systemHardDeleteBtn" type="button">
+                        <span class="material-icons">delete_forever</span>彻底删除
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/views/js/developer.utils.js" defer></script>
+    <script src="/views/js/developer.renderer.js" defer></script>
+    <script src="/views/js/developer.api.js" defer></script>
+    <script src="/views/js/developer.actions.js" defer></script>
+    <script src="/views/js/developer.js" defer></script>
+    <script src="/views/components/collapsible-section.js"></script>
+</body>
+
+</html>

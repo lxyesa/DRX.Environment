@@ -179,7 +179,7 @@
     {
       "file": "Library/Applications/Clients/Paperclip/Resources/global.d.ts",
       "md_file": "PaperclipGlobalDts.md",
-      "description": "嵌入资源 TypeScript 全局声明：print/pause/HttpServer/DrxHttpServer/HttpServerFactory/HttpResponse + HttpRequest/HttpSession/SseClient 接口。"
+      "description": "嵌入资源 TypeScript 全局声明：print/pause/HttpServer/DrxHttpServer/HttpServerFactory/HttpResponse 及 HttpServer 事件钩子（onStart/onStop/onRequest/onResponse/onError/on）。"
     },
     {
       "file": "Library/Environments/SDK/Drx.Sdk.Shared.JavaScript/Bridges/LoggerJSBridge.cs",
@@ -298,7 +298,7 @@
     {
       "file": "Library/Applications/Clients/Paperclip/Hosting/Bridges/ScriptHttpServer.cs",
       "md_file": "PaperclipHttpServerFactoryBridge.md",
-      "description": "脚本友好 HTTP 服务器实例包装：支持 new HttpServer(prefix)、链式 map/use、路由级限流回调设置及更多 HTTP 动词快捷方法。"
+      "description": "脚本友好 HTTP 服务器实例包装：支持 new HttpServer(prefix)、链式 map/use、路由级限流回调、SSE 与统一服务器事件钩子注册（start/stop/request/response/error）。"
     },
     {
       "file": "Library/Applications/Clients/Paperclip/Hosting/Bridges/ScriptHttpResponse.cs",

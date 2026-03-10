@@ -1,3 +1,3 @@
 @echo off
-paperclip run .
+paperclip run . -w
 pause

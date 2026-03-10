@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KaxHub - OAuth 授权</title>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <link href="/views/css/global.css" rel="stylesheet">
+    <script src="/views/js/global.js"></script>
+    <script src="/views/js/topbar.js" defer></script>
+    <link href="/views/css/oauth_authorize.css" rel="stylesheet">
+</head>
+
+<body class="has-global-topbar">
+    <main class="oauth-layout" role="main" aria-labelledby="oauthTitle">
+        <section class="card hero-card" aria-hidden="false">
+            <div class="brand">
+                <span class="badge">OAuth 2.0</span>
+                <h1 id="oauthTitle">授权登录 KaxHub</h1>
+                <p class="lead" id="oauthLead">正在读取授权请求...</p>
+            </div>
+
+            <ul class="hero-points" aria-label="授权说明">
+                <li>
+                    <span class="material-icons" aria-hidden="true">verified_user</span>
+                    仅共享你授权的基础身份信息
+                </li>
+                <li>
+                    <span class="material-icons" aria-hidden="true">shield</span>
+                    不会将你的密码提供给第三方应用
+                </li>
+                <li>
+                    <span class="material-icons" aria-hidden="true">bolt</span>
+                    你可以随时在账号设置中撤销授权
+                </li>
+            </ul>
+        </section>
+
+        <section class="card request-card" aria-label="授权请求详情">
+            <div class="panel" id="oauthPanel">
+                <div class="row">
+                    <span class="label">应用</span>
+                    <span class="value" id="appName">--</span>
+                </div>
+                <div class="row">
+                    <span class="label">客户端</span>
+                    <span class="value mono" id="clientId">--</span>
+                </div>
+                <div class="row">
+                    <span class="label">权限范围</span>
+                    <span class="value" id="scopeText">基础登录信息</span>
+                </div>
+                <div class="row">
+                    <span class="label">回调地址</span>
+                    <span class="value mono" id="redirectUri">--</span>
+                </div>
+                <div class="row">
+                    <span class="label">状态参数</span>
+                    <span class="value mono" id="stateText">(无)</span>
+                </div>
+                <div class="row" id="descRow" style="display:none;">
+                    <span class="label">应用说明</span>
+                    <span class="value" id="appDesc">--</span>
+                </div>
+            </div>
+
+            <div id="error" class="hint error" aria-live="polite" style="display:none"></div>
+
+            <div class="actions">
+                <button type="button" class="btn" id="approveBtn">同意并继续</button>
+                <button type="button" class="btn ghost" id="rejectBtn">拒绝</button>
+                <button type="button" class="btn ghost" id="goLoginBtn">前往登录</button>
+            </div>
+
+            <p class="tips">提示：点击“同意并继续”后，将跳转回请求方应用完成登录。</p>
+        </section>
+    </main>
+
+    <script src="/views/js/oauth_authorize.js"></script>
+</body>
+
+</html>

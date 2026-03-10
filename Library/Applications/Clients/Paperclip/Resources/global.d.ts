@@ -12,6 +12,12 @@ declare function print(value?: any): void;
  */
 declare function pause(prompt?: string): void;
 
+/**
+ * 获取当前脚本运行的项目根目录。
+ * @returns 项目根目录的绝对路径。
+ */
+declare function getdir(): string;
+
 // Paperclip host types
 
 /**
@@ -52,6 +58,45 @@ declare class HttpServer {
 
 	/** 异步释放服务器占用的所有资源。 */
 	disposeAsync(): Promise<void>;
+
+	// ── 事件钩子（链式调用） ──────────────────────────
+
+	/**
+	 * 注册启动完成钩子。
+	 * @param handler - 回调签名支持：`() => any` / `(server) => any`。
+	 */
+	onStart(handler: (server?: DrxHttpServer) => any): HttpServer;
+
+	/**
+	 * 注册停止钩子。
+	 * @param handler - 回调签名支持：`() => any` / `(server) => any`。
+	 */
+	onStop(handler: (server?: DrxHttpServer) => any): HttpServer;
+
+	/**
+	 * 注册请求进入钩子。
+	 * @param handler - 回调签名支持：`(request, server?) => any`。
+	 */
+	onRequest(handler: (request: any, server?: DrxHttpServer) => any): HttpServer;
+
+	/**
+	 * 注册响应输出钩子。
+	 * @param handler - 回调签名支持：`(request, response, server?) => any`。
+	 */
+	onResponse(handler: (request: any, response: any, server?: DrxHttpServer) => any): HttpServer;
+
+	/**
+	 * 注册错误钩子。
+	 * @param handler - 回调签名支持：`(request, error, server?) => any`。
+	 */
+	onError(handler: (request: any | null, error: any, server?: DrxHttpServer) => any): HttpServer;
+
+	/**
+	 * 通用事件注册。
+	 * @param eventName - 事件名：`"start" | "stop" | "request" | "response" | "error"`。
+	 * @param handler - 对应事件回调函数。
+	 */
+	on(eventName: "start" | "stop" | "request" | "response" | "error", handler: (...args: any[]) => any): HttpServer;
 
 	// ── 配置（链式调用） ──────────────────────────────
 

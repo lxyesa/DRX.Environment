@@ -12,6 +12,14 @@ declare function print(value?: any): void;
  */
 declare function pause(prompt?: string): void;
 
+/**
+ * 获取当前脚本所在目录的绝对路径。
+ * @param none - 无参数。
+ * 
+ * @returns 当前脚本目录的绝对路径字符串。
+ */
+declare function getdir(): string;
+
 // Paperclip host types
 
 /**

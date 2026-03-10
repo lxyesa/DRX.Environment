@@ -1,6 +1,7 @@
 using Drx.Sdk.Network.Http;
 using Drx.Sdk.Network.Http.Configs;
 using Drx.Sdk.Network.Http.Protocol;
+using Drx.Sdk.Shared;
 using DrxPaperclip.Hosting.Watch;
 using System.Net.Http;
 
@@ -20,6 +21,8 @@ namespace DrxPaperclip.Hosting;
 public sealed class ScriptHttpServer
 {
     private readonly DrxHttpServer _server;
+    private readonly object _eventHooksLock = new();
+    private readonly Dictionary<string, List<object>> _eventHooks = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// 使用单前缀创建 HTTP 服务器。
@@ -46,6 +49,23 @@ public sealed class ScriptHttpServer
         _server = new DrxHttpServer(new[] { prefix }, staticFileRoot, sessionTimeoutMinutes);
         ScriptHttpResponse.BoundServer = _server;
         ActiveServerTracker.Register(_server);
+
+        _server.AddMiddleware(async (req, next, _) =>
+        {
+            await InvokeEventHooksAsync("request", req, _server).ConfigureAwait(false);
+
+            try
+            {
+                var response = await next(req).ConfigureAwait(false);
+                await InvokeEventHooksAsync("response", req, response, _server).ConfigureAwait(false);
+                return response;
+            }
+            catch (Exception ex)
+            {
+                await InvokeEventHooksAsync("error", req, ex, _server).ConfigureAwait(false);
+                throw;
+            }
+        }, priority: int.MinValue);
     }
 
     /// <summary>
@@ -59,14 +79,115 @@ public sealed class ScriptHttpServer
     public Task startAsync()
     {
         ScriptHttpResponse.BoundServer = _server;
-        return _server.StartAsync();
+
+        return StartAndNotifyAsync();
+    }
+
+    private async Task StartAndNotifyAsync()
+    {
+        try
+        {
+            await _server.StartAsync().ConfigureAwait(false);
+            await InvokeEventHooksAsync("start", _server).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            await InvokeEventHooksAsync("error", null, ex, _server).ConfigureAwait(false);
+            throw;
+        }
     }
 
     /// <summary>停止服务器。</summary>
-    public void stop() => _server.Stop();
+    public void stop()
+    {
+        try
+        {
+            _server.Stop();
+            InvokeEventHooksBlocking("stop", _server);
+        }
+        catch (Exception ex)
+        {
+            InvokeEventHooksBlocking("error", null, ex, _server);
+            throw;
+        }
+    }
 
     /// <summary>异步释放服务器资源。</summary>
     public Task disposeAsync() => _server.DisposeAsync().AsTask();
+
+    // ───────────────────────────── 事件钩子 ─────────────────────────────
+
+    /// <summary>
+    /// 注册服务器启动成功事件钩子。
+    /// </summary>
+    public ScriptHttpServer onStart(object handler) => RegisterEventHook("start", handler);
+
+    /// <summary>
+    /// 注册服务器停止事件钩子。
+    /// </summary>
+    public ScriptHttpServer onStop(object handler) => RegisterEventHook("stop", handler);
+
+    /// <summary>
+    /// 注册请求进入事件钩子。
+    /// </summary>
+    public ScriptHttpServer onRequest(object handler) => RegisterEventHook("request", handler);
+
+    /// <summary>
+    /// 注册响应输出事件钩子。
+    /// </summary>
+    public ScriptHttpServer onResponse(object handler) => RegisterEventHook("response", handler);
+
+    /// <summary>
+    /// 注册错误事件钩子。
+    /// </summary>
+    public ScriptHttpServer onError(object handler) => RegisterEventHook("error", handler);
+
+    /// <summary>
+    /// 通用事件注册。
+    /// 支持：start/stop/request/response/error。
+    /// </summary>
+    public ScriptHttpServer on(string eventName, object handler)
+    {
+        var key = NormalizeEventName(eventName);
+        return RegisterEventHook(key, handler);
+    }
+
+    private ScriptHttpServer RegisterEventHook(string eventName, object handler)
+    {
+        ArgumentNullException.ThrowIfNull(handler);
+
+        lock (_eventHooksLock)
+        {
+            if (!_eventHooks.TryGetValue(eventName, out var handlers))
+            {
+                handlers = new List<object>();
+                _eventHooks[eventName] = handlers;
+            }
+
+            handlers.Add(handler);
+        }
+
+        return this;
+    }
+
+    private static string NormalizeEventName(string eventName)
+    {
+        if (string.IsNullOrWhiteSpace(eventName))
+        {
+            throw new ArgumentException("eventName 不能为空。", nameof(eventName));
+        }
+
+        var normalized = eventName.Trim().ToLowerInvariant();
+        return normalized switch
+        {
+            "start" or "started" => "start",
+            "stop" or "stopped" => "stop",
+            "request" or "req" => "request",
+            "response" or "resp" => "response",
+            "error" or "err" or "exception" => "error",
+            _ => throw new ArgumentOutOfRangeException(nameof(eventName), eventName, "仅支持 start/stop/request/response/error 事件。")
+        };
+    }
 
     // ───────────────────────────── 配置 ─────────────────────────────
 
@@ -457,5 +578,94 @@ public sealed class ScriptHttpServer
         }
 
         throw new InvalidOperationException($"调用速率限制回调失败: {last?.Message}", last);
+    }
+
+    private async Task InvokeEventHooksAsync(string eventName, params object?[] args)
+    {
+        List<object>? snapshot;
+        lock (_eventHooksLock)
+        {
+            if (!_eventHooks.TryGetValue(eventName, out var handlers) || handlers.Count == 0)
+            {
+                return;
+            }
+
+            snapshot = new List<object>(handlers);
+        }
+
+        foreach (var handler in snapshot)
+        {
+            try
+            {
+                var result = InvokeFlexibleCallback(handler, args);
+                if (result is Task task)
+                {
+                    await task.ConfigureAwait(false);
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Warn($"执行事件钩子 {eventName} 失败: {ex.Message}");
+            }
+        }
+    }
+
+    private void InvokeEventHooksBlocking(string eventName, params object?[] args)
+    {
+        try
+        {
+            InvokeEventHooksAsync(eventName, args).GetAwaiter().GetResult();
+        }
+        catch (Exception ex)
+        {
+            Logger.Warn($"执行事件钩子 {eventName} 失败: {ex.Message}");
+        }
+    }
+
+    private static object? InvokeFlexibleCallback(object callback, params object?[] args)
+    {
+        if (callback is Delegate del)
+        {
+            var parameters = del.Method.GetParameters().Length;
+            return parameters switch
+            {
+                0 => del.DynamicInvoke(),
+                1 => del.DynamicInvoke(args.Length > 0 ? args[0] : null),
+                2 => del.DynamicInvoke(args.Length > 0 ? args[0] : null, args.Length > 1 ? args[1] : null),
+                _ => del.DynamicInvoke(
+                    args.Length > 0 ? args[0] : null,
+                    args.Length > 1 ? args[1] : null,
+                    args.Length > 2 ? args[2] : null)
+            };
+        }
+
+        var candidates = new object?[][]
+        {
+            args,
+            args.Take(2).ToArray(),
+            args.Take(1).ToArray(),
+            Array.Empty<object?>()
+        };
+
+        Exception? last = null;
+        foreach (var candidate in candidates)
+        {
+            try
+            {
+                return candidate.Length switch
+                {
+                    0 => ((dynamic)callback)(),
+                    1 => ((dynamic)callback)(candidate[0]),
+                    2 => ((dynamic)callback)(candidate[0], candidate[1]),
+                    _ => ((dynamic)callback)(candidate[0], candidate[1], candidate[2])
+                };
+            }
+            catch (Exception ex)
+            {
+                last = ex;
+            }
+        }
+
+        throw new InvalidOperationException($"调用事件钩子失败: {last?.Message}", last);
     }
 }

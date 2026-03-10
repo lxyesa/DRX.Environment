@@ -134,11 +134,15 @@ public sealed class EngineBootstrap : IDisposable
 
         HttpServerFactoryBridge.BindEngine(engine);
 
+        // 设置内置函数的项目根目录
+        BuiltinFunctionsBridge.ProjectRoot = runtimeOptions.ProjectRoot;
+
         // 注册 Paperclip 内置全局函数（兼容无参/单参调用）
         engine.RegisterGlobal("__pc_print0", (Action)BuiltinFunctionsBridge.print);
         engine.RegisterGlobal("__pc_print1", (Action<object?>)BuiltinFunctionsBridge.print);
         engine.RegisterGlobal("__pc_pause0", (Action)BuiltinFunctionsBridge.pause);
         engine.RegisterGlobal("__pc_pause1", (Action<object?>)BuiltinFunctionsBridge.pause);
+        engine.RegisterGlobal("getdir", (Func<string>)BuiltinFunctionsBridge.getdir);
         engine.Execute(
             "globalThis.print = function(value) {\n" +
             "  if (arguments.length === 0) { return globalThis.__pc_print0(); }\n" +
@@ -154,8 +158,6 @@ public sealed class EngineBootstrap : IDisposable
         engine.RegisterHostType("HttpServerFactory", typeof(HttpServerFactoryBridge));
         engine.RegisterHostType("HttpServer", typeof(ScriptHttpServer));
         engine.RegisterHostType("HttpResponse", typeof(ScriptHttpResponse));
-
-        // 注册 Drx.Sdk.Network 扩展桥接
         engine.RegisterHostType("HttpClient", typeof(HttpClientBridge));
         engine.RegisterHostType("TcpClient", typeof(TcpClientBridge));
         engine.RegisterHostType("Email", typeof(EmailBridge));

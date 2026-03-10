@@ -1,0 +1,999 @@
+/* ================================================================
+   KaxHub  �̳�ҳ��ʽ
+   ���� global.css �� :root ������button��topbar ��ʽ
+   ���ļ��������̳�ר�������������ȫ����ʽ�ظ�
+   ================================================================ */
+
+/* ================================================================
+   商城专属变量 — 精致暗调极简风格
+   ================================================================ */
+:root {
+    /* 卡片表层 */
+    --shop-card-bg: rgba(255, 255, 255, 0.018);
+    --shop-card-border: rgba(255, 255, 255, 0.04);
+    --shop-card-hover-bg: rgba(255, 255, 255, 0.032);
+    --shop-card-hover-border: rgba(255, 255, 255, 0.07);
+    --shop-card-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
+    --shop-card-focus-ring: rgba(255, 255, 255, 0.08);
+
+    /* 主题色 — 低饱和度白调 */
+    --shop-accent: rgba(255, 255, 255, 0.88);
+    --shop-accent-dim: rgba(255, 255, 255, 0.06);
+    --shop-accent-hover: rgba(255, 255, 255, 0.96);
+    --shop-price-color: rgba(255, 255, 255, 0.75);
+
+    /* 圆角 */
+    --shop-radius: 8px;
+    --shop-radius-sm: 5px;
+
+    /* 间距 */
+    --shop-card-pad: 14px;
+    --shop-card-pad-mobile: 12px;
+
+    /* 图标 Wrap */
+    --shop-icon-wrap-size: 56px;
+    --shop-icon-wrap-size-mobile: 36px;
+    --shop-icon-wrap-radius: 6px;
+    --shop-icon-wrap-bg: rgba(255, 255, 255, 0.03);
+    --shop-icon-wrap-border: rgba(255, 255, 255, 0.05);
+    --shop-icon-image-scale: 1.0;
+    --shop-icon-backdrop-scale: 1.38;
+    --shop-icon-backdrop-blur: 12px;
+    --shop-icon-fill-blur: 10px;
+    --shop-icon-fill-opacity: 0.28;
+    --shop-icon-fill-sheen: rgba(255, 255, 255, 0.22);
+    --shop-card-ambient-scale: 2.2;
+    --shop-card-ambient-blur: 30px;
+    --shop-card-ambient-opacity: 0.5;
+    --shop-card-ambient-fill-opacity: 0.72;
+    --shop-card-ambient-sheen: rgba(255, 255, 255, 0.12);
+    --shop-card-ambient-vignette: rgba(0, 0, 0, 0.48);
+    --shop-icon-placeholder-size: 1.4rem;
+    --shop-icon-placeholder-size-mobile: 1.2rem;
+
+    /* 小按钮 */
+    --shop-icon-btn-size: 30px;
+    --shop-icon-btn-radius: 5px;
+    --shop-icon-btn-glyph-size: 17px;
+    --shop-icon-btn-size-mobile: 28px;
+    --shop-icon-btn-glyph-size-mobile: 16px;
+    --shop-icon-btn-bg: transparent;
+    --shop-icon-btn-bg-hover: rgba(255, 255, 255, 0.05);
+    --shop-icon-btn-text: rgba(255, 255, 255, 0.4);
+    --shop-icon-btn-text-hover: rgba(255, 255, 255, 0.7);
+
+    /* 标签 */
+    --shop-tag-bg: rgba(255, 255, 255, 0.045);
+    --shop-tag-border: rgba(255, 255, 255, 0.06);
+    --shop-tag-text: rgba(255, 255, 255, 0.52);
+    --shop-tag-radius: 4px;
+
+    /* 文本 */
+    --shop-text-primary: rgba(255, 255, 255, 0.88);
+    --shop-text-secondary: rgba(255, 255, 255, 0.5);
+    --shop-text-muted: rgba(255, 255, 255, 0.32);
+}
+
+/* ================================================================
+   ҳ�� body������ global.css ��������׷�ӵײ���ࣩ
+   ================================================================ */
+body {
+    padding-bottom: 100px;
+}
+
+/* ================================================================
+   �̳� hero ����
+   ================================================================ */
+.shop-header {
+    position: relative;
+    min-height: 240px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    overflow: hidden;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.045);
+    padding: 60px 24px 48px;
+}
+
+.shop-header::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background:
+        radial-gradient(ellipse 70% 80% at 20% 30%, rgba(99, 140, 255, 0.07) 0%, transparent 60%),
+        radial-gradient(ellipse 60% 70% at 80% 70%, rgba(139, 92, 246, 0.05) 0%, transparent 55%);
+    pointer-events: none;
+}
+
+.shop-header::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='4' height='4'%3E%3Crect x='0' y='0' width='1' height='1' fill='rgba(255,255,255,0.025)'/%3E%3C/svg%3E");
+    pointer-events: none;
+    opacity: 0.6;
+}
+
+.shop-header-content {
+    position: relative;
+    z-index: 1;
+    max-width: 560px;
+}
+
+.shop-header-eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--shop-accent);
+    opacity: 0.9;
+    margin-bottom: 14px;
+}
+
+.shop-header-eyebrow .material-icons {
+    font-size: 14px;
+}
+
+.shop-header h1 {
+    font-size: clamp(1.8rem, 4vw, 2.6rem);
+    font-weight: 700;
+    letter-spacing: -0.04em;
+    color: #ffffff;
+    line-height: 1.15;
+    margin-bottom: 12px;
+}
+
+.shop-header p {
+    font-size: 0.9rem;
+    color: rgba(255, 255, 255, 0.5);
+    line-height: 1.65;
+    font-weight: 300;
+}
+
+/* ================================================================
+   �̳�������
+   ================================================================ */
+.shop-container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 36px 24px 60px;
+}
+
+/* ================================================================
+   ������������ + ɸѡ��
+   ================================================================ */
+.shop-controls {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 28px;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+.search-box {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: var(--shop-radius);
+    height: 40px;
+    padding: 0 14px;
+    flex: 1;
+    min-width: 200px;
+    transition: border-color .16s ease, background .16s ease;
+}
+
+.search-box:focus-within {
+    border-color: rgba(99, 140, 255, 0.28);
+    background: rgba(99, 140, 255, 0.03);
+}
+
+.search-box input {
+    flex: 1;
+    height: 100%;
+    background: transparent;
+    border: none;
+    color: #ffffff;
+    font-family: 'Poppins', sans-serif;
+    font-size: 0.88rem;
+    outline: none;
+    padding: 0;
+}
+
+.search-box input::placeholder {
+    color: rgba(255, 255, 255, 0.3);
+}
+
+.search-box .material-icons {
+    font-size: 18px;
+    color: rgba(255, 255, 255, 0.35);
+    flex-shrink: 0;
+}
+
+.shop-filters {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+.filter-group {
+    display: flex;
+    gap: 7px;
+    align-items: center;
+}
+
+.filter-group label {
+    font-size: 0.8rem;
+    color: rgba(255, 255, 255, 0.45);
+    white-space: nowrap;
+}
+
+.filter-group select {
+    min-width: 130px;
+    height: 40px;
+    padding: 0 10px;
+    border-radius: var(--shop-radius);
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    color: #ffffff;
+    font-family: 'Poppins', sans-serif;
+    font-size: 0.88rem;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+}
+
+/* ================================================================
+   ��Ʒ����
+   ================================================================ */
+.shop-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(295px, 1fr));
+    align-items: start;
+    gap: 20px;
+    margin-bottom: 40px;
+}
+
+/* ================================================================
+   商品卡片 — 精致极简
+   ================================================================ */
+.product-card {
+    background: var(--shop-card-bg);
+    border: 1px solid var(--shop-card-border);
+    border-radius: var(--shop-radius);
+    overflow: hidden;
+    position: relative;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    min-height: 100%;
+    cursor: pointer;
+    transition: border-color .16s ease, background .16s ease, box-shadow .16s ease;
+    isolation: isolate;
+}
+
+.pc-card-ambient {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    overflow: hidden;
+}
+
+.pc-card-ambient-copy {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    transform: scale(var(--shop-card-ambient-scale));
+    transform-origin: center;
+    filter: blur(var(--shop-card-ambient-blur)) saturate(1.25) brightness(0.9);
+    opacity: var(--shop-card-ambient-opacity);
+}
+
+.pc-card-ambient-fill {
+    position: absolute;
+    inset: 0;
+    -webkit-backdrop-filter: blur(14px);
+    backdrop-filter: blur(14px);
+    background:
+        radial-gradient(circle at 22% 18%, var(--shop-card-ambient-sheen) 0%, transparent 56%),
+        linear-gradient(180deg, transparent 0%, var(--shop-card-ambient-vignette) 100%),
+        rgba(10, 10, 10, var(--shop-card-ambient-fill-opacity));
+}
+
+.product-card > :not(.pc-card-ambient) {
+    position: relative;
+    z-index: 1;
+}
+
+.product-card:hover {
+    background: var(--shop-card-hover-bg);
+    border-color: var(--shop-card-hover-border);
+    box-shadow: var(--shop-card-shadow);
+}
+
+.product-card:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px var(--shop-card-focus-ring), var(--shop-card-shadow);
+}
+
+/* ---- pc-header ---- */
+.pc-header {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: var(--shop-card-pad);
+}
+
+.pc-icon-wrap {
+    flex-shrink: 0;
+    width: var(--shop-icon-wrap-size);
+    height: var(--shop-icon-wrap-size);
+    position: relative;
+    border-radius: var(--shop-icon-wrap-radius);
+    overflow: hidden;
+    border: 1px solid var(--shop-icon-wrap-border);
+    background: var(--shop-icon-wrap-bg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--shop-text-muted);
+    font-size: 1rem;
+    isolation: isolate;
+}
+
+.pc-icon-backdrop,
+.pc-icon-fill {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+}
+
+.pc-icon-backdrop {
+    z-index: 0;
+}
+
+.pc-icon-backdrop .pc-icon-copy {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    transform: scale(var(--shop-icon-backdrop-scale));
+    transform-origin: center;
+    filter: blur(var(--shop-icon-backdrop-blur)) saturate(1.18) brightness(0.95);
+    opacity: 0.95;
+}
+
+.pc-icon-fill {
+    z-index: 1;
+    -webkit-backdrop-filter: blur(var(--shop-icon-fill-blur));
+    backdrop-filter: blur(var(--shop-icon-fill-blur));
+    background:
+        radial-gradient(circle at 26% 24%, var(--shop-icon-fill-sheen) 0%, transparent 52%),
+        rgba(0, 0, 0, var(--shop-icon-fill-opacity));
+}
+
+.pc-icon {
+    position: relative;
+    z-index: 2;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    transform: scale(var(--shop-icon-image-scale));
+    transform-origin: center;
+}
+
+.pc-icon-placeholder {
+    position: relative;
+    z-index: 2;
+    font-size: var(--shop-icon-placeholder-size);
+    line-height: 1;
+}
+
+.pc-title-block {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding-top: 2px;
+}
+
+.pc-name {
+    font-size: 0.88rem;
+    font-weight: 500;
+    color: var(--shop-text-primary);
+    line-height: 1.35;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    letter-spacing: -0.01em;
+}
+
+.pc-author {
+    font-size: 0.75rem;
+    color: var(--shop-text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    letter-spacing: 0.01em;
+}
+
+/* ── 卡片标签徽章行 ── */
+.pc-card-tag-row {
+    padding: 0 var(--shop-card-pad) 12px;
+}
+
+.pc-tag-badges {
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 4px;
+    margin-top: 0;
+    overflow: hidden;
+    max-height: 22px;
+}
+
+.pc-tag-badges.pc-tag-badges-expanded {
+    flex-wrap: wrap;
+    max-height: none;
+    overflow: visible;
+}
+
+.pc-tag-badge {
+    display: inline-flex;
+    align-items: center;
+    height: 18px;
+    padding: 0 7px;
+    border-radius: 999px;
+    background: rgba(99, 140, 255, 0.12);
+    color: rgba(99, 140, 255, 0.88);
+    font-size: 0.65rem;
+    font-weight: 600;
+    white-space: nowrap;
+    flex-shrink: 0;
+    line-height: 1;
+}
+
+.pc-tag-more {
+    display: inline-flex;
+    align-items: center;
+    height: 18px;
+    padding: 0 7px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--shop-text-muted);
+    font-size: 0.65rem;
+    font-weight: 500;
+    white-space: nowrap;
+    flex-shrink: 0;
+    cursor: pointer;
+    transition: background 0.14s ease, color 0.14s ease;
+    line-height: 1;
+}
+
+.pc-tag-more:hover {
+    background: rgba(99, 140, 255, 0.15);
+    color: rgba(99, 140, 255, 0.9);
+}
+
+.pc-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-left: auto;
+    flex-shrink: 0;
+}
+
+.pc-header-actions .btn.icon {
+    width: var(--shop-icon-btn-size);
+    height: var(--shop-icon-btn-size);
+    min-width: var(--shop-icon-btn-size);
+    border-radius: var(--shop-icon-btn-radius);
+    background: var(--shop-icon-btn-bg);
+    color: var(--shop-icon-btn-text);
+    border: none;
+    transition: background .15s ease, color .15s ease;
+}
+
+.pc-header-actions .btn.icon .material-icons {
+    font-size: var(--shop-icon-btn-glyph-size);
+}
+
+.pc-header-actions .btn.icon:hover {
+    background: var(--shop-icon-btn-bg-hover);
+    color: var(--shop-icon-btn-text-hover);
+}
+
+.pc-header-actions .btn.icon.active:not(.cart-icon) {
+    color: rgba(248, 113, 113, 0.85);
+    background: rgba(248, 113, 113, 0.08);
+}
+
+.pc-header-actions .btn.icon.cart-icon.active {
+    color: var(--shop-text-secondary);
+    background: var(--shop-accent-dim);
+}
+
+/* ---- price badge ---- */
+.pc-price-badge {
+    display: inline-flex;
+    align-items: center;
+    height: 22px;
+    padding: 0 9px;
+    border-radius: var(--shop-tag-radius);
+    background: var(--shop-accent-dim);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    color: var(--shop-text-secondary);
+    font-family: inherit;
+    font-size: 0.72rem;
+    font-weight: 500;
+    white-space: nowrap;
+    letter-spacing: 0.02em;
+    pointer-events: none;
+    user-select: none;
+}
+
+/* ---- tags ---- */
+.pc-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    padding: 0 var(--shop-card-pad) 10px;
+}
+
+.pc-tag {
+    display: inline-flex;
+    align-items: center;
+    height: 20px;
+    padding: 0 8px;
+    border-radius: var(--shop-tag-radius);
+    background: var(--shop-tag-bg);
+    border: 1px solid var(--shop-tag-border);
+    font-size: 0.7rem;
+    font-weight: 500;
+    letter-spacing: 0.03em;
+    color: var(--shop-tag-text);
+}
+
+/* ---- desc ---- */
+.pc-desc {
+    padding: 0 var(--shop-card-pad) 12px;
+    font-size: 0.78rem;
+    color: var(--shop-text-muted);
+    line-height: 1.55;
+    display: -webkit-box;
+    /* stylelint-disable-next-line */
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-height: calc(1.55em * 2);
+    word-break: break-all;
+}
+
+/* ---- cover（底部大图） ---- */
+.pc-cover-wrap {
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    background: rgba(255, 255, 255, 0.015);
+    overflow: hidden;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-top: 1px solid rgba(255, 255, 255, 0.03);
+    margin-top: auto;
+}
+
+.pc-cover-wrap .product-cover {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    opacity: 0.92;
+}
+
+.pc-cover-empty {
+    font-size: 1.6rem;
+    opacity: 0.2;
+}
+
+.product-stock {
+    font-size: 0.78rem;
+}
+
+.product-stock.low {
+    color: #f87171;
+    font-weight: 600;
+    opacity: 1;
+}
+
+.product-actions {
+    display: flex;
+    gap: 7px;
+    align-items: center;
+    padding-top: 10px;
+    border-top: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.product-actions .btn {
+    flex: 1;
+    height: 36px;
+    padding: 0 10px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 255, 255, 0.06);
+    color: rgba(255, 255, 255, 0.85);
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    border-radius: var(--shop-radius);
+    transition: background .14s ease, color .12s ease, border-color .14s ease;
+}
+
+.product-actions .btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: #ffffff;
+    border-color: rgba(255, 255, 255, 0.14);
+}
+
+.product-actions .btn.icon {
+    flex: 0 0 auto;
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 255, 255, 0.04);
+    color: rgba(255, 255, 255, 0.5);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: var(--shop-radius);
+    font-size: 0;
+    transition: background .14s ease, color .14s ease, border-color .14s ease;
+}
+
+.product-actions .btn.icon .material-icons {
+    font-size: 17px;
+}
+
+.product-actions .btn.icon:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: rgba(255, 255, 255, 0.8);
+    border-color: rgba(255, 255, 255, 0.1);
+}
+
+.product-actions .btn.icon.cart-icon.active {
+    background: var(--shop-accent-dim);
+    color: var(--shop-accent);
+    border-color: rgba(99, 140, 255, 0.22);
+}
+
+.product-actions .btn.icon.cart-icon.active .material-icons {
+    color: var(--shop-accent);
+}
+
+.product-actions .btn.icon.active:not(.cart-icon) {
+    background: rgba(239, 68, 68, 0.1);
+    color: #f87171;
+    border-color: rgba(239, 68, 68, 0.18);
+}
+
+.product-actions .btn.icon.active:not(.cart-icon) .material-icons {
+    color: #f87171;
+}
+
+@media (min-width: 769px) {
+    .shop-grid {
+        overflow: visible;
+    }
+
+    .product-card {
+        justify-self: stretch;
+    }
+}
+
+/* ================================================================
+   骨架屏 shimmer 效果
+   ================================================================ */
+@keyframes shimmer {
+    0%   { background-position: -600px 0; }
+    100% { background-position:  600px 0; }
+}
+
+.skeleton-card {
+    background: var(--shop-card-bg);
+    border: 1px solid var(--shop-card-border);
+    border-radius: var(--shop-radius);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+.skeleton-image {
+    width: 100%;
+    height: 150px;
+    background: linear-gradient(90deg,
+        rgba(255, 255, 255, 0.02) 25%,
+        rgba(255, 255, 255, 0.045) 50%,
+        rgba(255, 255, 255, 0.02) 75%);
+    background-size: 600px 100%;
+    animation: shimmer 1.5s infinite linear;
+}
+
+.skeleton-content {
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.skeleton-line {
+    border-radius: 3px;
+    background: linear-gradient(90deg,
+        rgba(255, 255, 255, 0.02) 25%,
+        rgba(255, 255, 255, 0.045) 50%,
+        rgba(255, 255, 255, 0.02) 75%);
+    background-size: 600px 100%;
+    animation: shimmer 1.5s infinite linear;
+}
+
+.skeleton-line.title   { height: 12px; width: 55%; }
+.skeleton-line.desc    { height: 10px; width: 85%; }
+.skeleton-line.desc2   { height: 10px; width: 60%; }
+.skeleton-line.price   { height: 14px; width: 32%; margin-top: 4px; }
+.skeleton-line.meta    { height: 9px; width: 68%; }
+.skeleton-line.actions { height: 32px; width: 100%; margin-top: 6px; border-radius: var(--shop-radius); }
+
+/* ================================================================
+   空状态
+   ================================================================ */
+.empty-state {
+    text-align: center;
+    padding: 80px 20px;
+    color: var(--shop-text-muted);
+}
+
+.empty-state .material-icons {
+    font-size: 2.2rem;
+    display: block;
+    margin-bottom: 14px;
+    opacity: 0.25;
+}
+
+.empty-state h3 {
+    font-size: 0.95rem;
+    font-weight: 500;
+    margin-bottom: 6px;
+    color: var(--shop-text-secondary);
+}
+
+.empty-state p {
+    font-size: 0.8rem;
+}
+
+/* ================================================================
+   分页
+   ================================================================ */
+.pagination {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 5px;
+    margin-top: 44px;
+    flex-wrap: wrap;
+}
+
+.pagination .btn {
+    min-width: 34px;
+    height: 34px;
+    padding: 0 10px;
+    font-size: 0.8rem;
+    font-weight: 500;
+    background: transparent;
+    color: var(--shop-text-muted);
+    border: 1px solid rgba(255, 255, 255, 0.04);
+    border-radius: var(--shop-radius-sm);
+    transition: background .15s ease, color .15s ease, border-color .15s ease;
+}
+
+.pagination .btn:hover {
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--shop-text-secondary);
+    border-color: rgba(255, 255, 255, 0.06);
+}
+
+.pagination .btn.active {
+    background: var(--shop-accent-dim);
+    color: var(--shop-text-primary);
+    border-color: rgba(255, 255, 255, 0.08);
+}
+
+/* ================================================================
+   购物车浮动按钮
+   ================================================================ */
+.cart-button {
+    position: fixed;
+    bottom: 28px;
+    right: 28px;
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--shop-text-secondary);
+    padding: 10px 16px 10px 14px;
+    border-radius: var(--shop-radius);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    font-weight: 500;
+    font-size: 0.82rem;
+    cursor: pointer;
+    z-index: 100;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+    transition: transform var(--btn-press-duration) var(--btn-press-ease),
+                background .16s ease,
+                border-color .16s ease,
+                color .16s ease;
+    -webkit-backdrop-filter: blur(12px);
+    backdrop-filter: blur(12px);
+}
+
+.cart-button:hover {
+    background: rgba(255, 255, 255, 0.12);
+    border-color: rgba(255, 255, 255, 0.12);
+    color: var(--shop-text-primary);
+}
+
+.cart-button:active {
+    transform: scale(var(--btn-press-scale));
+}
+
+.cart-button:focus-visible {
+    outline: 1px solid rgba(255, 255, 255, 0.2);
+    outline-offset: 2px;
+}
+
+.cart-button .material-icons {
+    font-size: 17px;
+}
+
+#cartCount {
+    background: rgba(255, 255, 255, 0.12);
+    min-width: 18px;
+    height: 18px;
+    border-radius: 9px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.68rem;
+    font-weight: 600;
+    padding: 0 5px;
+    line-height: 1;
+}
+
+/* ================================================================
+   响应式
+   ================================================================ */
+@media (max-width: 768px) {
+    .shop-header {
+        min-height: 180px;
+        padding: 48px 20px 36px;
+    }
+
+    .shop-header h1 {
+        font-size: 1.65rem;
+    }
+
+    .shop-controls {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .shop-filters {
+        flex-direction: column;
+        width: 100%;
+    }
+
+    .filter-group {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .filter-group select,
+    .search-box {
+        width: 100%;
+    }
+
+    .shop-grid {
+        grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+        gap: 12px;
+    }
+
+    .pc-header {
+        gap: 8px;
+        padding: var(--shop-card-pad-mobile);
+    }
+
+    .pc-icon-wrap {
+        width: var(--shop-icon-wrap-size-mobile);
+        height: var(--shop-icon-wrap-size-mobile);
+    }
+
+    .pc-card-ambient-copy {
+        transform: scale(1.95);
+        filter: blur(24px) saturate(1.18) brightness(0.92);
+        opacity: 0.42;
+    }
+
+    .pc-card-ambient-fill {
+        -webkit-backdrop-filter: blur(10px);
+        backdrop-filter: blur(10px);
+    }
+
+    .pc-icon-placeholder {
+        font-size: var(--shop-icon-placeholder-size-mobile);
+    }
+
+    .pc-name {
+        font-size: 0.82rem;
+    }
+
+    .pc-author {
+        font-size: 0.7rem;
+    }
+
+    .pc-header-actions {
+        gap: 3px;
+    }
+
+    .pc-header-actions .btn.icon {
+        width: var(--shop-icon-btn-size-mobile);
+        height: var(--shop-icon-btn-size-mobile);
+        min-width: var(--shop-icon-btn-size-mobile);
+    }
+
+    .pc-header-actions .btn.icon .material-icons {
+        font-size: var(--shop-icon-btn-glyph-size-mobile);
+    }
+
+    .pc-tags {
+        padding: 0 var(--shop-card-pad-mobile) 8px;
+    }
+
+    .pc-card-tag-row {
+        padding: 0 var(--shop-card-pad-mobile) 10px;
+    }
+
+    .pc-tag {
+        height: 18px;
+        padding: 0 7px;
+        font-size: 0.65rem;
+    }
+
+    .pc-desc {
+        padding: 0 var(--shop-card-pad-mobile) 10px;
+        font-size: 0.72rem;
+        -webkit-line-clamp: 2;
+        line-clamp: 2;
+    }
+
+    .cart-button {
+        bottom: 18px;
+        right: 18px;
+        padding: 9px 14px 9px 12px;
+        font-size: 0.78rem;
+    }
+}
